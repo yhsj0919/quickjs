@@ -23,8 +23,8 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
-# Third-party source checkouts are local only.
-/third_party/
+# QuickJS-NG submodule checkout is tracked; build artifacts are not.
+third_party/quickjs-ng/build/
 
 # Flutter/Dart/Pub related
 # Libraries should not include pubspec.lock, per https://dart.dev/guides/libraries/private-files#pubspeclock.
