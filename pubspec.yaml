@@ -1,0 +1,53 @@
+name: quickjs
+description: "QuickJS JavaScript engine for Flutter — cross-platform FFI and WebAssembly."
+version: 0.1.0
+homepage: https://github.com/quickjs-ng/quickjs
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  ffi: ^2.2.0
+  web: ^1.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  assets:
+    - assets/web/quickjs.wasm
+    - assets/web/quickjs_wasi.js
+    - assets/web/wasi-shim.js
+    - assets/web/extensions.js
+    - assets/web/version.js
+    - assets/web/quickjs_bridge.mjs
+    - assets/web/quickjs_web.js
+
+  plugin:
+    platforms:
+      android:
+        package: xyz.yhsj.quickjs
+        pluginClass: QuickjsPlugin
+        ffiPlugin: true
+      ios:
+        pluginClass: QuickjsPlugin
+        ffiPlugin: true
+      linux:
+        pluginClass: QuickjsPlugin
+        ffiPlugin: true
+      macos:
+        pluginClass: QuickjsPlugin
+        ffiPlugin: true
+      windows:
+        pluginClass: QuickjsPluginCApi
+        ffiPlugin: true
+      web:
+        pluginClass: QuickjsWeb
+        fileName: quickjs_web.dart
