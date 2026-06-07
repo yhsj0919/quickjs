@@ -29,6 +29,7 @@ flutter:
     - assets/web/version.js
     - assets/web/quickjs_bridge.mjs
     - assets/web/quickjs_web.js
+    - assets/web/quickjs_web_worker.js
 
   plugin:
     platforms:

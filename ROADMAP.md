@@ -41,6 +41,8 @@
 
 将公开 API 统一成异步执行入口：
 
+状态：已完成。
+
 ```dart
 final engine = await Quickjs.create();
 final result = await engine.eval('1 + 2');
@@ -55,16 +57,20 @@ final result = await engine.eval('1 + 2');
 
 验收：
 
-- Flutter 页面点击按钮执行 `while (Date.now() < start + 3000) {}` 时，UI 仍可响应。
-- 多次并发 `eval()` 要么串行排队，要么明确拒绝并发，不能产生 native runtime 重入。
+- [x] Flutter 页面点击按钮执行 `while (Date.now() < start + 3000) {}` 时，UI 仍可响应。
+  - example 已提供 `Runtime Worker` 页面；native 使用 Dart isolate，web 使用 Web Worker。
+- [x] 多次并发 `eval()` 要么串行排队，要么明确拒绝并发，不能产生 native runtime 重入。
+  - 当前策略为同一 `Quickjs` 实例 FIFO 串行排队。
 
 ### 2. Native FFI Worker
 
 native 平台增加 runtime worker isolate：
 
-- UI isolate 负责 API、Future、状态管理。
-- worker isolate 负责持有 `DynamicLibrary`、`QuickjsRuntime*` 和所有 FFI 调用。
-- 每个 `QuickjsJsRuntime` 对应一个 worker 或一个 worker 内的独立 runtime。
+状态：已完成。
+
+- [x] UI isolate 负责 API、Future、状态管理。
+- [x] worker isolate 负责持有 `DynamicLibrary`、`QuickjsRuntime*` 和所有 FFI 调用。
+- [x] 每个 `QuickjsJsRuntime` 对应一个 worker 或一个 worker 内的独立 runtime。
 
 建议消息协议：
 
@@ -86,41 +92,50 @@ final class DisposeCommand {}
 
 验收：
 
-- `quickjs_eval()` 不再从 UI isolate 直接调用。
-- runtime 指针只存在于 worker isolate。
-- dispose 后继续 eval 必须抛出明确的 `StateError` 或自定义 closed error。
+- [x] `quickjs_eval()` 不再从 UI isolate 直接调用。
+- [x] runtime 指针只存在于 worker isolate。
+- [x] dispose 后继续 eval 必须抛出明确的 `StateError` 或自定义 closed error。
 
 ### 3. Web Worker 执行模型
 
 web 平台不能在主线程直接跑 WASM QuickJS。需要把 `quickjs_web.js` / WASM bridge 移入 Web Worker，主线程只做消息转发。
 
+状态：已完成。
+
 要求：
 
-- 主线程加载 worker script。
-- worker 内初始化 WASM 和 QuickJS runtime。
-- `eval`、`dispose`、后续 `pumpJobs`、`callFunction` 都通过 `postMessage`。
-- 对浏览器不支持 Worker 的场景给出明确 fallback 或 unsupported error。
+- [x] 主线程加载 worker script。
+- [x] worker 内初始化 WASM 和 QuickJS runtime。
+- [x] `eval`、`dispose`、后续 `pumpJobs`、`callFunction` 都通过 `postMessage`。
+  - 当前已覆盖 `eval` / `runtimeEval` / `runtimeNew` / `runtimeDispose`；`pumpJobs`、`callFunction` 后续新增时必须继续走同一消息通道。
+- [x] 对浏览器不支持 Worker 的场景给出明确 fallback 或 unsupported error。
 
 验收：
 
-- Web demo 执行长耗时 JS 时页面仍能点击、输入、重绘。
-- Worker crash / 初始化失败能传播为 Dart Future error。
+- [x] Web demo 执行长耗时 JS 时页面仍能点击、输入、重绘。
+  - example 已提供 `Runtime Worker` 页面。
+- [x] Worker crash / 初始化失败能传播为 Dart Future error。
+  - 初始化失败、worker error、message error 会传播到 pending Future。
 
 ### 4. 执行队列与重入策略
 
 QuickJS runtime 通常不应被多个线程同时进入。每个 runtime 要有单线程执行队列。
 
+状态：部分完成。
+
 策略：
 
-- 同一 runtime 内命令默认 FIFO 串行执行。
-- 当前命令运行时，后续命令排队。
-- `dispose()` 优先级高于普通 eval，会取消队列并释放资源。
-- `cancel(requestId)` 只能取消排队任务；正在执行的任务通过 interrupt handler 中断。
+- [x] 同一 runtime 内命令默认 FIFO 串行执行。
+- [x] 当前命令运行时，后续命令排队。
+- [ ] `dispose()` 优先级高于普通 eval，会取消队列并释放资源。
+  - 当前实现为 dispose 等已提交队列收尾后释放，新请求被拒绝；取消排队任务尚未实现。
+- [ ] `cancel(requestId)` 只能取消排队任务；正在执行的任务通过 interrupt handler 中断。
 
 验收：
 
-- 同一 runtime 连续 100 次 eval 顺序稳定。
-- eval 执行中调用 dispose 不会崩溃、不泄漏、不返回悬挂 Future。
+- [ ] 同一 runtime 连续 100 次 eval 顺序稳定。
+  - 已有 3 次并发 FIFO 测试；100 次压力测试待补。
+- [x] eval 执行中调用 dispose 不会崩溃、不泄漏、不返回悬挂 Future。
 
 ### 5. 超时与取消
 
@@ -676,22 +691,22 @@ final engine = await Quickjs.create(
 
 ### 必须优先补齐的测试
 
-1. UI 不阻塞测试。
+1. [x] UI 不阻塞测试。
    长耗时 JS 执行时 Flutter UI 仍可响应。
 
-2. timeout / stop 测试。
+2. [ ] timeout / stop 测试。
    `while (true) {}` 必须可停止。
 
-3. runtime 隔离测试。
+3. [ ] runtime 隔离测试。
    globals、callbacks、timers、module cache 互不影响。
 
-4. dispose 测试。
+4. [x] dispose 测试。
    eval 中 dispose、排队中 dispose、重复 dispose 都不能崩溃。
 
-5. worker crash 测试。
+5. [ ] worker crash 测试。
    worker 异常退出后 Future 必须完成为 error。
 
-6. native / web 行为一致性测试。
+6. [ ] native / web 行为一致性测试。
    同一组 JS 用例在 native FFI 和 Web Worker WASM 下语义一致。
 
 ### 建议测试分层
@@ -703,29 +718,33 @@ final engine = await Quickjs.create(
 
 ## 实施顺序
 
-1. 重构 Dart runtime API 为异步消息模型。
-2. native 增加 runtime worker isolate，迁移所有 FFI 调用。
-3. native 增加 interrupt handler、timeout、stop。
-4. web 增加 Web Worker bridge，迁移 WASM QuickJS 到 worker。
-5. 建立 runtime 状态机、执行队列、dispose 语义。
-6. 补齐 UI 不阻塞、timeout、runtime 隔离测试。
-7. 通过后再做结构化类型互转和 `JsException`。
-8. 再做 callback、Promise job pump、timer。
-9. 再做 module、asset、CommonJS。
-10. 最后推进对象桥接、调试工具和生态兼容。
+1. [x] 重构 Dart runtime API 为异步消息模型。
+2. [x] native 增加 runtime worker isolate，迁移所有 FFI 调用。
+3. [ ] native 增加 interrupt handler、timeout、stop。
+4. [x] web 增加 Web Worker bridge，迁移 WASM QuickJS 到 worker。
+5. [~] 建立 runtime 状态机、执行队列、dispose 语义。
+   - FIFO 队列与 dispose 不悬挂已完成；dispose 优先级、取消排队任务、完整状态机待补。
+6. [~] 补齐 UI 不阻塞、timeout、runtime 隔离测试。
+   - UI 不阻塞测试已完成；timeout、runtime 隔离测试待补。
+7. [ ] 通过后再做结构化类型互转和 `JsException`。
+8. [ ] 再做 callback、Promise job pump、timer。
+9. [ ] 再做 module、asset、CommonJS。
+10. [ ] 最后推进对象桥接、调试工具和生态兼容。
 
 ## 下一版本范围
 
 `0.2.0` 只做执行安全基础，不做类型系统和生态功能：
 
-- 异步 runtime worker。
-- UI isolate / Web UI thread 解耦。
-- 单 runtime FIFO 执行队列。
-- `timeout`。
-- `stop()`。
-- `dispose()` 状态机。
-- 基础错误类型。
-- native 与 web 的长任务不阻塞测试。
+- [x] 异步 runtime worker。
+- [x] UI isolate / Web UI thread 解耦。
+- [x] 单 runtime FIFO 执行队列。
+- [ ] `timeout`。
+- [ ] `stop()`。
+- [~] `dispose()` 状态机。
+  - dispose 后拒绝新请求、eval 中 dispose 不悬挂已完成；取消队列和完整状态机待补。
+- [ ] 基础错误类型。
+- [~] native 与 web 的长任务不阻塞测试。
+  - native 自动测试已完成；example demo 覆盖 native/web；Chrome 自动测试仍需稳定化。
 
 `0.3.0` 只做运行时隔离和资源限制：
 

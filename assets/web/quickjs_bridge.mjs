@@ -88,6 +88,19 @@ export async function evalCode(code) {
   }
 }
 
+/** @returns {Promise<string>} */
+export async function quickjsVersion() {
+  if (!wasmModule) {
+    throw new Error('quickjs: WASM not initialized');
+  }
+  const vm = await QuickJS.create({ wasm: wasmModule });
+  try {
+    return vm.versions.quickjs;
+  } finally {
+    vm[Symbol.dispose]();
+  }
+}
+
 /** @returns {Promise<number>} */
 export async function runtimeNew() {
   if (!wasmModule) {

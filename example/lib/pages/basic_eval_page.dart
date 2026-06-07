@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
@@ -28,7 +30,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
       final result = await quickjs.evaluate(_code);
 
       if (_disposed) {
-        quickjs.dispose();
+        await quickjs.dispose();
         return;
       }
 
@@ -51,7 +53,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
   @override
   void dispose() {
     _disposed = true;
-    _quickjs?.dispose();
+    unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
     super.dispose();
   }

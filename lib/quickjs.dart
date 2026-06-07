@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'src/quickjs_backend.dart';
 import 'src/quickjs_backend_factory.dart';
 import 'src/quickjs_runtime_base.dart';
@@ -9,6 +11,8 @@ class Quickjs {
   final QuickjsBackend _backend;
   final QuickjsJsRuntimeBase _runtime;
   bool _closed = false;
+  Future<void> _tail = Future<void>.value();
+  Future<void>? _disposeFuture;
 
   /// Creates a [Quickjs] instance for the current platform.
   ///
@@ -22,23 +26,36 @@ class Quickjs {
   String get quickjsVersion => _backend.quickjsVersion;
 
   /// Evaluates [code] in this QuickJS instance.
-  Future<String> evaluate(String code) async {
-    _ensureOpen();
-    return _runtime.evaluate(code);
+  Future<String> eval(String code) {
+    final request = _enqueue(() => _runtime.evaluate(code));
+    return request;
+  }
+
+  /// Evaluates [code] in this QuickJS instance.
+  Future<String> evaluate(String code) {
+    return eval(code);
   }
 
   /// Releases the runtime owned by this QuickJS instance.
-  void dispose() {
-    if (_closed) {
-      return;
+  Future<void> dispose() {
+    if (_disposeFuture != null) {
+      return _disposeFuture!;
     }
-    _runtime.dispose();
     _closed = true;
+    _disposeFuture = _tail.catchError((Object _) {}).then((_) {
+      return _runtime.dispose();
+    });
+    return _disposeFuture!;
   }
 
-  void _ensureOpen() {
+  Future<T> _enqueue<T>(Future<T> Function() execute) {
     if (_closed) {
-      throw StateError('QuickJS runtime is closed');
+      return Future<T>.error(StateError('QuickJS runtime is closed'));
     }
+    final request = _tail.then((_) {
+      return execute();
+    });
+    _tail = request.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return request;
   }
 }

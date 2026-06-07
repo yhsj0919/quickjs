@@ -5,24 +5,17 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/app.dart';
-
-import 'package:quickjs_example/main.dart';
+import 'package:quickjs_example/example_pages.dart';
 
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('renders example index', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is Text && widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
-    );
+    for (final page in examplePages) {
+      expect(find.text(page.title), findsOneWidget);
+      expect(find.text(page.description), findsOneWidget);
+    }
   });
 }

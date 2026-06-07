@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-/* Returns the bundled QuickJS version string (e.g. "0.14.0"). */
+/* Returns the bundled QuickJS version string (e.g. "0.15.1"). */
 QJS_BRIDGE_EXPORT const char *quickjs_version(void);
 
 typedef struct QuickjsRuntime QuickjsRuntime;

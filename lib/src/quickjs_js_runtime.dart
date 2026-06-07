@@ -10,8 +10,8 @@ class QuickjsJsRuntime implements QuickjsJsRuntimeBase {
       QuickjsJsRuntime._(delegate);
 
   @override
-  String evaluate(String code) => _delegate.evaluate(code);
+  Future<String> evaluate(String code) => _delegate.evaluate(code);
 
   @override
-  void dispose() => _delegate.dispose();
+  Future<void> dispose() => _delegate.dispose();
 }

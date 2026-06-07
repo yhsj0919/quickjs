@@ -4,14 +4,12 @@ import '../quickjs_backend.dart';
 import '../quickjs_runtime_base.dart';
 import 'quickjs_web_loader.dart';
 
-/// QuickJS version in the WASM build (quickjs-wasi / quickjs).
-const String kWebQuickjsVersion = '0.14.0';
-
 /// WASM backend for Flutter web (via [quickjs-wasi](https://www.npmjs.com/package/quickjs-wasi)).
 class WebQuickjsBackend implements QuickjsBackend {
-  WebQuickjsBackend._(this._host);
+  WebQuickjsBackend._(this._host, this._quickjsVersion);
 
   final QuickjsWebHost _host;
+  final String _quickjsVersion;
 
   static WebQuickjsBackend? _instance;
 
@@ -29,14 +27,25 @@ class WebQuickjsBackend implements QuickjsBackend {
         quickjsNgPackageAssetUrl('assets/web/quickjs_bridge.mjs');
     final resolvedWasm =
         wasmUrl ?? quickjsNgPackageAssetUrl('assets/web/quickjs.wasm');
+    final resolvedWorker = quickjsNgPackageAssetUrl(
+      'assets/web/quickjs_web_worker.js',
+    );
 
-    await host.ensureInitialized(resolvedWasm.toJS, resolvedBridge.toJS).toDart;
-    _instance = WebQuickjsBackend._(host);
+    final quickjsVersion =
+        (await host
+                .ensureInitialized(
+                  resolvedWasm.toJS,
+                  resolvedBridge.toJS,
+                  resolvedWorker.toJS,
+                )
+                .toDart)
+            .toDart;
+    _instance = WebQuickjsBackend._(host, quickjsVersion);
     return _instance!;
   }
 
   @override
-  String get quickjsVersion => kWebQuickjsVersion;
+  String get quickjsVersion => _quickjsVersion;
 
   @override
   Future<QuickjsJsRuntimeBase> createRuntime() async {
@@ -58,17 +67,17 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   bool _closed = false;
 
   @override
-  String evaluate(String code) {
+  Future<String> evaluate(String code) async {
     _ensureOpen();
-    return _host.runtimeEval(_id.toJS, code.toJS).toDart;
+    return (await _host.runtimeEval(_id.toJS, code.toJS).toDart).toDart;
   }
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
     if (_closed) {
       return;
     }
-    _host.runtimeDispose(_id.toJS);
+    await _host.runtimeDispose(_id.toJS).toDart;
     _closed = true;
   }
 

@@ -13,14 +13,16 @@ extension type _JSObjectStatic(JSObject _) implements JSObject {
 
 @JS('quickjsNgWeb')
 extension type QuickjsWebHost(JSObject _) implements JSObject {
-  external JSPromise<JSAny?> ensureInitialized(
+  external JSPromise<JSString> ensureInitialized(
     JSString wasmUrl,
     JSString bridgeModuleUrl,
+    JSString workerScriptUrl,
   );
+  external JSString quickjsVersion();
   external JSPromise<JSString> evalCode(JSString code);
   external JSPromise<JSNumber> runtimeNew();
-  external JSString runtimeEval(JSNumber id, JSString code);
-  external void runtimeDispose(JSNumber id);
+  external JSPromise<JSString> runtimeEval(JSNumber id, JSString code);
+  external JSPromise<JSAny?> runtimeDispose(JSNumber id);
 }
 
 @JS('quickjsNgWeb')

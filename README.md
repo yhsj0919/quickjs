@@ -16,10 +16,10 @@ Future<void> main() async {
   final engine = await Quickjs.create();
   try {
     print(engine.quickjsVersion);
-    print(await engine.evaluate('1 + 2 * 3')); // 7
-    print(await engine.evaluate('"hello"'));
+    print(await engine.eval('1 + 2 * 3')); // 7
+    print(await engine.eval('"hello"'));
   } finally {
-    engine.dispose();
+    await engine.dispose();
   }
 }
 ```
@@ -27,7 +27,7 @@ Future<void> main() async {
 ## 更新 QuickJS（原生）
 
 ```powershell
-.\tool\update_quickjs.ps1 v0.14.0
+.\tool\update_quickjs.ps1 v0.15.1
 ```
 
 ## 更新 Web WASM 资源
