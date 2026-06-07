@@ -27,6 +27,12 @@
 6. JS API 形状要和实现解耦。
    允许通过宿主能力注入把部分 JS API 替换为 Dart / Flutter native / 平台原生实现，例如 crypto、hash、压缩、编解码等高开销能力；也允许在桌面端 / native 端补齐浏览器或 Node 风格 API，例如 `window`、`location`、`localStorage`、`navigator` 等。用户侧 JS 写法应保持稳定，替换和补齐策略必须受 runtime 隔离、权限配置和一致性测试约束。
 
+7. 公开 API 只保留 `Quickjs` 一个系统入口。
+   功能创建、执行、停止、销毁都必须从 `Quickjs` 实例进入；不要为了局部功能新增并列入口或要求用户直接管理底层 runtime 类型。
+
+8. 每个新功能必须同步补齐 example 测试页面。
+   example 页面必须能独立运行，进入页面时简单创建自己的 `Quickjs` 实例，退出页面时销毁该实例；页面之间不能共享 runtime 状态。
+
 ## 0.2.0：执行模型与 UI 线程解耦
 
 目标：任何 JS 执行都不能阻塞 Flutter UI。当前 native 侧 `quickjs_eval()` 是同步 `JS_Eval`，必须改造成后台执行模型。

@@ -14,14 +14,12 @@ import 'package:quickjs/quickjs.dart';
 
 Future<void> main() async {
   final engine = await Quickjs.create();
-  print(engine.quickjsVersion);
-  print(await engine.evaluate('1 + 2 * 3')); // 7
-
-  final rt = await engine.createRuntime();
   try {
-    print(rt.evaluate('"hello"'));
+    print(engine.quickjsVersion);
+    print(await engine.evaluate('1 + 2 * 3')); // 7
+    print(await engine.evaluate('"hello"'));
   } finally {
-    rt.dispose();
+    engine.dispose();
   }
 }
 ```

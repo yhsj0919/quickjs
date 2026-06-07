@@ -6,15 +6,24 @@ void main() {
 
   test('create and evaluate', () async {
     final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
     expect(engine.quickjsVersion, isNotEmpty);
     expect(await engine.evaluate('1 + 2'), '3');
   });
 
-  test('runtime can be reused', () async {
+  test('quickjs instance can be reused', () async {
     final engine = await Quickjs.create();
-    final runtime = await engine.createRuntime();
-    addTearDown(runtime.dispose);
-    expect(runtime.evaluate('"a" + "b"'), 'ab');
-    expect(runtime.evaluate('2 ** 10'), '1024');
+    addTearDown(engine.dispose);
+    expect(await engine.evaluate('"a" + "b"'), 'ab');
+    expect(await engine.evaluate('2 ** 10'), '1024');
+  });
+
+  test('disposed quickjs instance rejects evaluation', () async {
+    final engine = await Quickjs.create();
+    engine.dispose();
+    expect(
+      engine.evaluate('1 + 1'),
+      throwsA(isA<StateError>()),
+    );
   });
 }
