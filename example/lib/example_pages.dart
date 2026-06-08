@@ -2,6 +2,7 @@ import 'example_page_spec.dart';
 import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
 import 'pages/native_worker_page.dart';
+import 'pages/queue_reentry_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
@@ -15,6 +16,11 @@ final List<ExamplePageSpec> examplePages = [
     title: '异步 API',
     description: '提交排队 eval 请求，并验证 runtime 销毁后的错误行为。',
     builder: (_) => const AsyncApiPage(),
+  ),
+  ExamplePageSpec(
+    title: '执行队列与重入策略',
+    description: '验证 100 次 eval 的 FIFO 顺序，以及 dispose 对排队任务的取消语义。',
+    builder: (_) => const QueueReentryPage(),
   ),
   ExamplePageSpec(
     title: '运行时 Worker',

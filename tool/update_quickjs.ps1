@@ -35,8 +35,19 @@ function Test-GitWorkTree {
         return $false
     }
 
-    & git -C $Path rev-parse --is-inside-work-tree *> $null
-    return $LASTEXITCODE -eq 0
+    $GitDir = Join-Path $Path ".git"
+    if (-not (Test-Path $GitDir)) {
+        return $false
+    }
+
+    $WorkTreeRoot = (& git -C $Path rev-parse --show-toplevel 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    $ResolvedPath = (Resolve-Path $Path).Path.TrimEnd("\", "/")
+    $ResolvedWorkTreeRoot = (Resolve-Path $WorkTreeRoot).Path.TrimEnd("\", "/")
+    return $ResolvedPath -eq $ResolvedWorkTreeRoot
 }
 
 if (-not $Tag) {
@@ -75,7 +86,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Invoke-Git @("-C", $SubmodulePath, "checkout", "--detach", $Tag)
-Invoke-Git @("-C", $Root, "submodule", "update", "--init", "--recursive", "third_party/quickjs")
+Invoke-Git @("-C", $SubmodulePath, "submodule", "update", "--init", "--recursive")
 
 Set-Content -Path $VersionFile -Value $Tag -NoNewline
 Add-Content -Path $VersionFile -Value ""

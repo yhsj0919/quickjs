@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'src/quickjs_backend.dart';
 import 'src/quickjs_backend_factory.dart';
@@ -10,8 +11,9 @@ class Quickjs {
 
   final QuickjsBackend _backend;
   final QuickjsJsRuntimeBase _runtime;
+  final Queue<_QueuedEval> _queue = Queue<_QueuedEval>();
   bool _closed = false;
-  Future<void> _tail = Future<void>.value();
+  Future<void>? _running;
   Future<void>? _disposeFuture;
 
   /// Creates a [Quickjs] instance for the current platform.
@@ -42,20 +44,64 @@ class Quickjs {
       return _disposeFuture!;
     }
     _closed = true;
-    _disposeFuture = _tail.catchError((Object _) {}).then((_) {
-      return _runtime.dispose();
-    });
+    _cancelQueued(StateError('QuickJS runtime is closed'));
+    _disposeFuture = (_running ?? Future<void>.value()).then(
+      (_) {
+        return _runtime.dispose();
+      },
+      onError: (Object _, StackTrace _) {
+        return _runtime.dispose();
+      },
+    );
     return _disposeFuture!;
   }
 
-  Future<T> _enqueue<T>(Future<T> Function() execute) {
+  Future<String> _enqueue(Future<String> Function() execute) {
     if (_closed) {
-      return Future<T>.error(StateError('QuickJS runtime is closed'));
+      return Future<String>.error(StateError('QuickJS runtime is closed'));
     }
-    final request = _tail.then((_) {
-      return execute();
-    });
-    _tail = request.then<void>((_) {}, onError: (Object _, StackTrace _) {});
-    return request;
+    final request = _QueuedEval(execute);
+    _queue.add(request);
+    _drainQueue();
+    return request.completer.future;
   }
+
+  void _drainQueue() {
+    if (_running != null || _closed || _queue.isEmpty) {
+      return;
+    }
+
+    final request = _queue.removeFirst();
+    final running = Future<String>.sync(request.execute);
+    _running = running.then<void>(
+      request.completer.complete,
+      onError: request.completer.completeError,
+    );
+    _running!.then<void>(
+      (_) {
+        _running = null;
+        _drainQueue();
+      },
+      onError: (Object _, StackTrace _) {
+        _running = null;
+        _drainQueue();
+      },
+    );
+  }
+
+  void _cancelQueued(Object error) {
+    while (_queue.isNotEmpty) {
+      final request = _queue.removeFirst();
+      if (!request.completer.isCompleted) {
+        request.completer.completeError(error);
+      }
+    }
+  }
+}
+
+final class _QueuedEval {
+  _QueuedEval(this.execute);
+
+  final Future<String> Function() execute;
+  final Completer<String> completer = Completer<String>();
 }

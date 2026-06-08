@@ -120,7 +120,7 @@ export const Intrinsics = {
     TYPED_ARRAYS: (1 << 6),
     /** `Promise`, `async`/`await`. */
     PROMISE: (1 << 7),
-    /** `BigInt`. Note: BigInt is part of BaseObjects in quickjs and cannot be fully removed. */
+    /** `BigInt`. Note: BigInt is part of BaseObjects in quickjs-ng and cannot be fully removed. */
     BIG_INT: (1 << 8),
     /** `WeakRef` and `FinalizationRegistry`. */
     WEAK_REF: (1 << 9),

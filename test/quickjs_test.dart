@@ -31,6 +31,26 @@ void main() {
     expect(results, ['a', 'ab', 'abc']);
   });
 
+  test('one hundred concurrent evaluations are queued in order', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    final results = await Future.wait([
+      for (var i = 0; i < 100; i++)
+        engine.eval(
+          'globalThis.queue = (globalThis.queue || "") + "$i,"; globalThis.queue',
+        ),
+    ]);
+
+    final expected = <String>[];
+    var value = '';
+    for (var i = 0; i < 100; i++) {
+      value += '$i,';
+      expected.add(value);
+    }
+    expect(results, expected);
+  });
+
   test('long evaluation does not block the Dart isolate', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
@@ -68,6 +88,29 @@ void main() {
     expect(await evalFuture, 'done');
     await disposeFuture.timeout(const Duration(seconds: 1));
     expect(engine.eval('1 + 1'), throwsA(isA<StateError>()));
+  });
+
+  test('dispose cancels queued evaluations', () async {
+    final engine = await Quickjs.create();
+    final running = engine.eval('''
+      (() => {
+        const start = Date.now();
+        while (Date.now() - start < 100) {}
+        return "running";
+      })();
+    ''');
+    final queuedA = engine.eval('globalThis.disposedQueue = "a"');
+    final queuedB = engine.eval('globalThis.disposedQueue = "b"');
+    final queuedAFailure = expectLater(queuedA, throwsA(isA<StateError>()));
+    final queuedBFailure = expectLater(queuedB, throwsA(isA<StateError>()));
+
+    final disposeFuture = engine.dispose();
+
+    expect(await running, 'running');
+    await queuedAFailure;
+    await queuedBFailure;
+    await disposeFuture.timeout(const Duration(seconds: 1));
+    expect(engine.eval('globalThis.disposedQueue'), throwsA(isA<StateError>()));
   });
 
   test('disposed quickjs instance rejects evaluation', () async {
