@@ -9,5 +9,5 @@ abstract class QuickjsBackend {
   Future<QuickjsJsRuntimeBase> createRuntime();
 
   /// Evaluates [code] in a short-lived runtime.
-  Future<String> evaluate(String code);
+  Future<String> evaluate(String code, {Duration? timeout});
 }

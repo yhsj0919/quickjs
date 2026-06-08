@@ -19,9 +19,14 @@ extension type QuickjsWebHost(JSObject _) implements JSObject {
     JSString workerScriptUrl,
   );
   external JSString quickjsVersion();
-  external JSPromise<JSString> evalCode(JSString code);
+  external JSPromise<JSString> evalCode(JSString code, [JSNumber? timeoutMs]);
   external JSPromise<JSNumber> runtimeNew();
-  external JSPromise<JSString> runtimeEval(JSNumber id, JSString code);
+  external JSPromise<JSString> runtimeEval(
+    JSNumber id,
+    JSString code, [
+    JSNumber? timeoutMs,
+  ]);
+  external JSPromise<JSAny?> runtimeStop();
   external JSPromise<JSAny?> runtimeDispose(JSNumber id);
 }
 

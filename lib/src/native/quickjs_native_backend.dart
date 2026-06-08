@@ -17,10 +17,10 @@ class NativeQuickjsBackend implements QuickjsBackend {
   }
 
   @override
-  Future<String> evaluate(String code) async {
+  Future<String> evaluate(String code, {Duration? timeout}) async {
     final runtime = await createRuntime();
     try {
-      return await runtime.evaluate(code);
+      return await runtime.evaluate(code, timeout: timeout);
     } finally {
       await runtime.dispose();
     }

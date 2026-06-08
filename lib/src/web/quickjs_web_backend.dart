@@ -1,6 +1,7 @@
 import 'dart:js_interop';
 
 import '../quickjs_backend.dart';
+import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
 import 'quickjs_web_loader.dart';
 
@@ -54,8 +55,15 @@ class WebQuickjsBackend implements QuickjsBackend {
   }
 
   @override
-  Future<String> evaluate(String code) async {
-    return (await _host.evalCode(code.toJS).toDart).toDart;
+  Future<String> evaluate(String code, {Duration? timeout}) async {
+    try {
+      return (await _host
+              .evalCode(code.toJS, timeout?.inMilliseconds.toJS)
+              .toDart)
+          .toDart;
+    } catch (error) {
+      throw _mapWebError(error);
+    }
   }
 }
 
@@ -63,13 +71,25 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   WebQuickjsJsRuntime(this._host, this._id);
 
   final QuickjsWebHost _host;
-  final int _id;
+  int _id;
   bool _closed = false;
+  Future<void>? _recovering;
 
   @override
-  Future<String> evaluate(String code) async {
+  Future<String> evaluate(String code, {Duration? timeout}) async {
     _ensureOpen();
-    return (await _host.runtimeEval(_id.toJS, code.toJS).toDart).toDart;
+    try {
+      return await _evaluateCurrentRuntime(code, timeout: timeout);
+    } catch (error) {
+      final mapped = _mapWebError(error);
+      if (mapped is JsTimeoutException) {
+        await _recoverRuntime();
+      } else if (mapped is JsRuntimeClosedException) {
+        await _recoverRuntime();
+        return _evaluateCurrentRuntime(code, timeout: timeout);
+      }
+      throw mapped;
+    }
   }
 
   @override
@@ -81,9 +101,55 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
     _closed = true;
   }
 
+  @override
+  Future<void> stop() async {
+    _ensureOpen();
+    await _host.runtimeStop().toDart;
+    await _recoverRuntime();
+  }
+
   void _ensureOpen() {
     if (_closed) {
-      throw StateError('QuickJS runtime is closed');
+      throw JsRuntimeClosedException();
     }
   }
+
+  Future<void> _recoverRuntime() {
+    final current = _recovering;
+    if (current != null) {
+      return current;
+    }
+    final recovering = _host.runtimeNew().toDart.then((id) {
+      _id = id.toDartInt;
+    });
+    _recovering = recovering.whenComplete(() {
+      _recovering = null;
+    });
+    return _recovering!;
+  }
+
+  Future<String> _evaluateCurrentRuntime(
+    String code, {
+    Duration? timeout,
+  }) async {
+    return (await _host
+            .runtimeEval(_id.toJS, code.toJS, timeout?.inMilliseconds.toJS)
+            .toDart)
+        .toDart;
+  }
+}
+
+Object _mapWebError(Object error) {
+  final message = '$error';
+  if (message.contains('QuickJS evaluation timed out')) {
+    return const JsTimeoutException();
+  }
+  if (message.contains('QuickJS evaluation was cancelled')) {
+    return JsCancelledException();
+  }
+  if (message.contains('QuickJS runtime is closed') ||
+      message.contains('invalid runtime id')) {
+    return JsRuntimeClosedException();
+  }
+  return StateError(message);
 }

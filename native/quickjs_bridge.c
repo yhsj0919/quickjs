@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "quickjs-libc.h"
 #include "quickjs.h"
@@ -14,7 +15,15 @@
 struct QuickjsRuntime {
   JSRuntime *rt;
   JSContext *ctx;
+  volatile int32_t *cancel_flag;
 };
+
+typedef struct QuickjsEvalInterrupt {
+  int timed_out;
+  int cancelled;
+  int has_deadline;
+  clock_t deadline;
+} QuickjsEvalInterrupt;
 
 static char *qjs_strdup(const char *src) {
   size_t len;
@@ -64,6 +73,26 @@ static char *qjs_value_to_string(JSContext *ctx, JSValue val) {
   return result;
 }
 
+static int qjs_interrupt_handler(JSRuntime *rt, void *opaque) {
+  QuickjsEvalInterrupt *interrupt = (QuickjsEvalInterrupt *)opaque;
+  QuickjsRuntime *runtime;
+  (void)rt;
+  if (!interrupt) {
+    return 0;
+  }
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(rt);
+  if (runtime && runtime->cancel_flag && *runtime->cancel_flag) {
+    interrupt->cancelled = 1;
+    return 1;
+  }
+  if (interrupt->has_deadline &&
+      (clock_t)(clock() - interrupt->deadline) >= 0) {
+    interrupt->timed_out = 1;
+    return 1;
+  }
+  return 0;
+}
+
 const char *quickjs_version(void) {
 #if defined(QJS_VERSION_SUFFIX)
   static char version[32];
@@ -90,6 +119,7 @@ QuickjsRuntime *quickjs_runtime_new(void) {
     free(runtime);
     return NULL;
   }
+  JS_SetRuntimeOpaque(runtime->rt, runtime);
 
   js_std_init_handlers(runtime->rt);
   runtime->ctx = JS_NewContext(runtime->rt);
@@ -121,14 +151,46 @@ void quickjs_runtime_free(QuickjsRuntime *runtime) {
 }
 
 char *quickjs_eval(QuickjsRuntime *runtime, const char *code) {
+  return quickjs_eval_timeout(runtime, code, 0);
+}
+
+void quickjs_runtime_set_cancel_flag(QuickjsRuntime *runtime,
+                                     int32_t *cancel_flag) {
+  if (!runtime) {
+    return;
+  }
+  runtime->cancel_flag = cancel_flag;
+}
+
+char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
+                           int64_t timeout_ms) {
   JSValue result;
+  QuickjsEvalInterrupt interrupt = {0, 0, 0, 0};
 
   if (!runtime || !runtime->ctx || !code) {
     return qjs_strdup("invalid arguments");
   }
 
+  if (timeout_ms > 0 || runtime->cancel_flag) {
+    interrupt.has_deadline = timeout_ms > 0;
+    interrupt.deadline =
+        clock() + (clock_t)((timeout_ms * CLOCKS_PER_SEC) / 1000);
+    JS_SetInterruptHandler(runtime->rt, qjs_interrupt_handler, &interrupt);
+  }
+
   result = JS_Eval(runtime->ctx, code, strlen(code), "<eval>",
                    JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT);
+  if (timeout_ms > 0 || runtime->cancel_flag) {
+    JS_SetInterruptHandler(runtime->rt, NULL, NULL);
+  }
+  if (interrupt.cancelled) {
+    JS_FreeValue(runtime->ctx, result);
+    return qjs_strdup("\x1eQuickJS_CANCELLED");
+  }
+  if (interrupt.timed_out) {
+    JS_FreeValue(runtime->ctx, result);
+    return qjs_strdup("\x1eQuickJS_TIMEOUT");
+  }
   char *output = qjs_value_to_string(runtime->ctx, result);
   JS_FreeValue(runtime->ctx, result);
   return output;

@@ -14,10 +14,20 @@ typedef QuickjsRuntimeNew = Pointer<QuickjsRuntime> Function();
 typedef QuickjsRuntimeFreeNative = Void Function(Pointer<QuickjsRuntime>);
 typedef QuickjsRuntimeFree = void Function(Pointer<QuickjsRuntime>);
 
+typedef QuickjsRuntimeSetCancelFlagNative =
+    Void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
+typedef QuickjsRuntimeSetCancelFlag =
+    void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
+
 typedef QuickjsEvalNative =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
 typedef QuickjsEval =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
+
+typedef QuickjsEvalTimeoutNative =
+    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, Int64);
+typedef QuickjsEvalTimeout =
+    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, int);
 
 typedef QuickjsFreeStringNative = Void Function(Pointer<Utf8>);
 typedef QuickjsFreeString = void Function(Pointer<Utf8>);
@@ -35,7 +45,16 @@ class QuickjsBindings {
           .lookupFunction<QuickjsRuntimeFreeNative, QuickjsRuntimeFree>(
             'quickjs_runtime_free',
           ),
+      runtimeSetCancelFlag =
+          lib.lookupFunction<
+            QuickjsRuntimeSetCancelFlagNative,
+            QuickjsRuntimeSetCancelFlag
+          >('quickjs_runtime_set_cancel_flag'),
       eval = lib.lookupFunction<QuickjsEvalNative, QuickjsEval>('quickjs_eval'),
+      evalTimeout =
+          lib.lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
+            'quickjs_eval_timeout',
+          ),
       freeString = lib
           .lookupFunction<QuickjsFreeStringNative, QuickjsFreeString>(
             'quickjs_free_string',
@@ -44,7 +63,9 @@ class QuickjsBindings {
   final QuickjsVersion version;
   final QuickjsRuntimeNew runtimeNew;
   final QuickjsRuntimeFree runtimeFree;
+  final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
   final QuickjsEval eval;
+  final QuickjsEvalTimeout evalTimeout;
   final QuickjsFreeString freeString;
 
   static DynamicLibrary open() {

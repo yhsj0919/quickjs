@@ -3,6 +3,7 @@ import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
+import 'pages/runtime_isolation_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
@@ -19,12 +20,17 @@ final List<ExamplePageSpec> examplePages = [
   ),
   ExamplePageSpec(
     title: '执行队列与重入策略',
-    description: '验证 100 次 eval 的 FIFO 顺序，以及 dispose 对排队任务的取消语义。',
+    description: '验证 100 次 eval 的 FIFO 顺序，以及 dispose / timeout 对排队任务的取消语义。',
     builder: (_) => const QueueReentryPage(),
   ),
   ExamplePageSpec(
     title: '运行时 Worker',
-    description: '执行长耗时 JS 忙循环，同时观察 Dart UI 计数器是否继续变化。',
+    description: '执行长耗时 JS 忙循环，验证 UI 不阻塞、timeout 和 stop。',
     builder: (_) => const NativeWorkerPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Runtime 隔离',
+    description: '验证多个 Quickjs 实例的 globals 隔离，以及 dispose 一个不影响另一个。',
+    builder: (_) => const RuntimeIsolationPage(),
   ),
 ];

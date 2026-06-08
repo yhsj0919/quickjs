@@ -72,6 +72,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
     });
 
     try {
+      await quickjs.eval('globalThis.queue = ""');
       final results = await Future.wait([
         for (var i = 0; i < 100; i += 1)
           quickjs.eval(
@@ -170,6 +171,62 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
     }
   }
 
+  Future<void> _runQueuedTimeoutTest() async {
+    final quickjs = _quickjs;
+    if (quickjs == null) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = '正在验证排队任务 timeout 取消...';
+      _log.clear();
+    });
+
+    final running = quickjs.eval('''
+      (() => {
+        const start = Date.now();
+        while (Date.now() - start < 300) {}
+        return "running finished";
+      })();
+    ''');
+    final queued = quickjs.eval(
+      'globalThis.queuedTimeout = "should not run"',
+      timeout: const Duration(milliseconds: 30),
+    );
+
+    try {
+      final queuedResult = await queued.then(
+        (value) => '排队请求意外执行：$value',
+        onError: (Object error) => '排队请求已 timeout：${error.runtimeType}',
+      );
+      final runningResult = await running;
+      final marker = await quickjs.eval('globalThis.queuedTimeout');
+
+      if (!mounted || _disposed) {
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _status = marker == 'undefined'
+            ? '排队 timeout 已取消任务，runtime 仍可继续使用'
+            : '排队 timeout 测试异常';
+        _log
+          ..add('正在执行的 eval：$runningResult')
+          ..add(queuedResult)
+          ..add('排队任务副作用：$marker');
+      });
+    } catch (error) {
+      if (!mounted || _disposed) {
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _status = '排队 timeout 测试失败：$error';
+      });
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -206,6 +263,12 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
                       ? null
                       : _runDisposePriorityTest,
                   child: const Text('验证 dispose 取消队列'),
+                ),
+                OutlinedButton(
+                  onPressed: _busy || !hasRuntime
+                      ? null
+                      : _runQueuedTimeoutTest,
+                  child: const Text('验证 timeout 取消队列'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _createRuntime,
