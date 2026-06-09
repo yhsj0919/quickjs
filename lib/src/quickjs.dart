@@ -6,6 +6,8 @@ import 'quickjs_backend_factory.dart';
 import 'quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
 
+enum _QuickjsRuntimeState { ready, running, stopping, closed, failed }
+
 /// QuickJS 的公开 Dart 入口。
 ///
 /// 这个类只负责管理请求队列和 runtime 生命周期；真正的执行发生在平台 backend
@@ -16,7 +18,8 @@ class Quickjs {
   final QuickjsBackend _backend;
   QuickjsJsRuntimeBase _runtime;
   final Queue<_QueuedEval> _queue = Queue<_QueuedEval>();
-  bool _closed = false;
+  _QuickjsRuntimeState _state = _QuickjsRuntimeState.ready;
+  Object? _failure;
   Future<void>? _running;
   Future<void>? _disposeFuture;
   Future<void>? _stopFuture;
@@ -51,7 +54,7 @@ class Quickjs {
       return currentDispose;
     }
 
-    _closed = true;
+    _state = _QuickjsRuntimeState.closed;
     _cancelQueued(JsRuntimeClosedException());
     _disposeFuture = (_running ?? Future<void>.value()).then(
       (_) => _runtime.dispose(),
@@ -64,8 +67,9 @@ class Quickjs {
   ///
   /// 完成后会重新创建底层 runtime，因此同一个 [Quickjs] 实例仍可继续使用。
   Future<void> stop() {
-    if (_closed) {
-      return Future<void>.error(JsRuntimeClosedException());
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<void>.error(terminalError);
     }
 
     final currentStop = _stopFuture;
@@ -79,6 +83,7 @@ class Quickjs {
       return Future<void>.value();
     }
 
+    _state = _QuickjsRuntimeState.stopping;
     final stopped = _runtime
         .stop()
         .then<void>(
@@ -87,8 +92,9 @@ class Quickjs {
         )
         .catchError((Object _) {})
         .then<void>((_) async {
-          if (!_closed) {
+          if (!_isTerminal) {
             _runtime = await _backend.createRuntime();
+            _state = _QuickjsRuntimeState.ready;
           }
         })
         .whenComplete(() {
@@ -100,8 +106,9 @@ class Quickjs {
   }
 
   Future<String> _enqueue(String code, {Duration? timeout}) {
-    if (_closed) {
-      return Future<String>.error(JsRuntimeClosedException());
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<String>.error(terminalError);
     }
 
     final request = _QueuedEval(code, timeout);
@@ -117,7 +124,10 @@ class Quickjs {
   }
 
   void _drainQueue() {
-    if (_running != null || _stopFuture != null || _closed || _queue.isEmpty) {
+    if (_state != _QuickjsRuntimeState.ready ||
+        _running != null ||
+        _stopFuture != null ||
+        _queue.isEmpty) {
       return;
     }
 
@@ -134,13 +144,18 @@ class Quickjs {
     final running = Future<String>.sync(
       () => _runtime.evaluate(request.code, timeout: timeout),
     );
+    _state = _QuickjsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime
     // 不会被并发重入。
     _running = running.then<void>(
       request.complete,
       onError: (Object error, StackTrace stackTrace) {
-        if (error is JsRuntimeClosedException) {
-          _closed = true;
+        if (error is JsRuntimeClosedException ||
+            error is JsRuntimeCrashException) {
+          _state = error is JsRuntimeCrashException
+              ? _QuickjsRuntimeState.failed
+              : _QuickjsRuntimeState.closed;
+          _failure = error;
           _cancelQueued(error);
         }
         request.completeError(error, stackTrace);
@@ -151,10 +166,16 @@ class Quickjs {
       _running!.then<void>(
         (_) {
           _running = null;
+          if (_state == _QuickjsRuntimeState.running) {
+            _state = _QuickjsRuntimeState.ready;
+          }
           _drainQueue();
         },
         onError: (Object _, StackTrace _) {
           _running = null;
+          if (_state == _QuickjsRuntimeState.running) {
+            _state = _QuickjsRuntimeState.ready;
+          }
           _drainQueue();
         },
       ),
@@ -167,6 +188,18 @@ class Quickjs {
       request.cancelQueueTimer();
       request.completeError(error);
     }
+  }
+
+  bool get _isTerminal =>
+      _state == _QuickjsRuntimeState.closed ||
+      _state == _QuickjsRuntimeState.failed;
+
+  Object? get _terminalError {
+    return switch (_state) {
+      _QuickjsRuntimeState.closed => JsRuntimeClosedException(),
+      _QuickjsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
+      _ => null,
+    };
   }
 }
 

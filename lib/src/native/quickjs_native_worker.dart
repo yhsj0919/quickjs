@@ -21,6 +21,7 @@ const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
 const String _readyMessage = 'ready';
 const String _evalMessage = 'eval';
 const String _disposeMessage = 'dispose';
+const String _debugCrashMessage = 'debugCrash';
 const String _errorMessage = 'error';
 const String _responseMessage = 'response';
 
@@ -187,6 +188,10 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     if (_disposeFuture != null) {
       return _disposeFuture!;
     }
+    if (_closed) {
+      _disposeFuture = _closePorts();
+      return _disposeFuture!;
+    }
     _closed = true;
     // dispose 作为普通 worker 命令发送，让 worker 自己释放 QuickJS runtime。
     _disposeFuture = _sendRequest<void>(
@@ -210,6 +215,14 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     await _closePorts();
   }
 
+  /// 仅供测试使用：让 worker isolate 抛出未捕获错误，模拟 worker crash。
+  Future<void> debugCrashForTest() async {
+    if (_closed) {
+      return;
+    }
+    await _sendRequest<void>(_debugCrashMessage);
+  }
+
   Future<T> _sendRequest<T>(
     String type, [
     Map<String, Object?> payload = const <String, Object?>{},
@@ -231,6 +244,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 
   void _handleWorkerFailure(Object error) {
+    _closed = true;
     _failAll(error);
     unawaited(_closePorts());
   }
@@ -335,6 +349,9 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
       _messageTypeKey: final String type,
       _messageIdKey: final int requestId,
     }) {
+      if (type == _debugCrashMessage) {
+        throw StateError('QuickJS worker debug crash');
+      }
       try {
         if (closed) {
           throw StateError('QuickJS runtime is closed');

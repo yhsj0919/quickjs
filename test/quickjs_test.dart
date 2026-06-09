@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
+import 'package:quickjs/src/native/quickjs_native_worker.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -235,6 +236,30 @@ void main() {
     expect(engine.eval('1 + 1'), throwsA(isA<JsRuntimeClosedException>()));
   });
 
+  // 重复 dispose 应共用同一个关闭流程，不能重复释放 runtime 或悬挂。
+  test('repeated dispose calls during evaluation complete', () async {
+    final engine = await Quickjs.create();
+    final evalFuture = engine.eval('''
+      (() => {
+        const start = Date.now();
+        while (Date.now() - start < 100) {}
+        return "done";
+      })();
+    ''');
+
+    final disposeA = engine.dispose();
+    final disposeB = engine.dispose();
+    final disposeC = engine.dispose();
+
+    expect(await evalFuture, 'done');
+    await Future.wait([
+      disposeA,
+      disposeB,
+      disposeC,
+    ]).timeout(const Duration(seconds: 1));
+    expect(engine.eval('1 + 1'), throwsA(isA<JsRuntimeClosedException>()));
+  });
+
   // dispose 会取消队列任务，并让它们以 closed error 完成。
   test('dispose cancels queued evaluations', () async {
     final engine = await Quickjs.create();
@@ -273,6 +298,55 @@ void main() {
     final engine = await Quickjs.create();
     await engine.dispose();
     expect(engine.eval('1 + 1'), throwsA(isA<JsRuntimeClosedException>()));
+  });
+
+  // closed 状态下 stop 必须立即失败，不能重新打开 runtime。
+  test('disposed quickjs instance rejects stop', () async {
+    final engine = await Quickjs.create();
+    await engine.dispose();
+    await expectLater(engine.stop(), throwsA(isA<JsRuntimeClosedException>()));
+  });
+
+  // stop 进行中提交的新 eval 会等待 runtime 恢复后执行，不能永久 pending。
+  test('evaluation queued during stop runs after runtime recovery', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    final running = engine.eval('while (true) {}');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final stopFuture = engine.stop();
+    final queuedDuringStop = engine.eval('21 * 2');
+
+    await expectLater(running, throwsA(isA<JsCancelledException>()));
+    await stopFuture.timeout(const Duration(seconds: 2));
+    expect(await queuedDuringStop.timeout(const Duration(seconds: 2)), '42');
+  });
+
+  // worker crash 后 pending eval 必须完成为 crash error，不能永久 pending。
+  test('native worker crash completes pending request with error', () async {
+    final runtime = await NativeQuickjsWorkerRuntime.create();
+    addTearDown(runtime.dispose);
+
+    await expectLater(
+      runtime.debugCrashForTest().timeout(const Duration(seconds: 2)),
+      throwsA(isA<JsRuntimeCrashException>()),
+    );
+  });
+
+  // crash 后 runtime 进入 closed 状态，后续请求必须立即失败。
+  test('native worker crash closes runtime for later evaluations', () async {
+    final runtime = await NativeQuickjsWorkerRuntime.create();
+    addTearDown(runtime.dispose);
+
+    await expectLater(
+      runtime.debugCrashForTest(),
+      throwsA(isA<JsRuntimeCrashException>()),
+    );
+
+    await expectLater(
+      runtime.evaluate('1 + 1'),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
   });
 }
 

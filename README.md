@@ -41,10 +41,15 @@ runtime，并覆盖 native FFI 与 Web WASM。
 - [x] 长耗时 JavaScript 不阻塞 Dart isolate / Flutter UI。
 - [x] `dispose()` 会拒绝新请求、取消队列任务，并等待运行中的任务收尾后释放
   runtime。
+- [x] 重复 `dispose()`、closed 后 `stop()`、stop 过程中入队 eval 等状态边界已有测试。
 - [x] 多 runtime 的基础 global 状态已隔离。
 - [x] dispose 一个 runtime 不影响另一个 runtime 继续 eval。
 - [x] 已有基础异常类型：`JsException`、`JsTimeoutException`、
   `JsCancelledException`、`JsRuntimeClosedException`、`JsRuntimeCrashException`。
+- [x] native worker crash 后 pending Future 会完成为 `JsRuntimeCrashException`，
+  后续请求返回 closed error。
+- [x] native / web 基础一致性测试已覆盖 eval、throw、FIFO、runtime 隔离、
+  timeout、stop、dispose。
 - [x] example 已覆盖 basic eval、async API、runtime worker、队列与重入、
   runtime 隔离、异常模型等页面。
 
@@ -54,10 +59,10 @@ runtime，并覆盖 native FFI 与 Web WASM。
   WASM 时通过 terminate worker / 重建 runtime 兜底。
 - [~] `stop()`：已能取消当前 eval 与队列 eval，并在后台重建 runtime；公开
   `cancel(requestId)` 尚未实现。
-- [~] runtime 状态机：队列、stop、dispose、closed 语义已有覆盖；完整
-  `creating -> ready -> running -> stopping -> closed / failed` 状态模型待补。
-- [~] 错误模型：timeout、cancel、closed、基础 JS throw 映射已有覆盖；结构化
-  JS exception 元数据、worker crash 覆盖、OOM 错误仍待完善。
+- [~] runtime 状态机：内部已使用显式 `ready / running / stopping / closed / failed`
+  状态枚举管理队列、stop、dispose、closed、crash；`creating` 阶段和公开状态观测仍待补。
+- [~] 错误模型：timeout、cancel、closed、基础 JS throw、native worker crash
+  映射已有覆盖；结构化 JS exception 元数据、OOM 错误仍待完善。
 - [~] runtime 隔离：globals 与 dispose 隔离已有测试；callbacks、timers、
   modules、handles、资源限制边界仍待实现。
 
@@ -79,6 +84,7 @@ runtime，并覆盖 native FFI 与 Web WASM。
 ```powershell
 flutter analyze
 flutter test
+flutter test test\quickjs_consistency_test.dart -d chrome
 cd example
 flutter test
 ```
