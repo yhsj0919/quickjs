@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+/// C 侧 QuickjsRuntime 的不透明指针。
 final class QuickjsRuntime extends Opaque {}
 
 typedef QuickjsVersionNative = Pointer<Utf8> Function();
@@ -19,11 +20,6 @@ typedef QuickjsRuntimeSetCancelFlagNative =
 typedef QuickjsRuntimeSetCancelFlag =
     void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
 
-typedef QuickjsEvalNative =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
-typedef QuickjsEval =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
-
 typedef QuickjsEvalTimeoutNative =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, Int64);
 typedef QuickjsEvalTimeout =
@@ -32,6 +28,9 @@ typedef QuickjsEvalTimeout =
 typedef QuickjsFreeStringNative = Void Function(Pointer<Utf8>);
 typedef QuickjsFreeString = void Function(Pointer<Utf8>);
 
+/// QuickJS native 动态库的 Dart FFI 绑定。
+///
+/// 这里只声明 ABI 函数，不持有 runtime 状态；runtime 生命周期由 worker 管理。
 class QuickjsBindings {
   QuickjsBindings(DynamicLibrary lib)
     : version = lib.lookupFunction<QuickjsVersionNative, QuickjsVersion>(
@@ -45,14 +44,13 @@ class QuickjsBindings {
           .lookupFunction<QuickjsRuntimeFreeNative, QuickjsRuntimeFree>(
             'quickjs_runtime_free',
           ),
-      runtimeSetCancelFlag =
-          lib.lookupFunction<
+      runtimeSetCancelFlag = lib
+          .lookupFunction<
             QuickjsRuntimeSetCancelFlagNative,
             QuickjsRuntimeSetCancelFlag
           >('quickjs_runtime_set_cancel_flag'),
-      eval = lib.lookupFunction<QuickjsEvalNative, QuickjsEval>('quickjs_eval'),
-      evalTimeout =
-          lib.lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
+      evalTimeout = lib
+          .lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
             'quickjs_eval_timeout',
           ),
       freeString = lib
@@ -64,7 +62,6 @@ class QuickjsBindings {
   final QuickjsRuntimeNew runtimeNew;
   final QuickjsRuntimeFree runtimeFree;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
-  final QuickjsEval eval;
   final QuickjsEvalTimeout evalTimeout;
   final QuickjsFreeString freeString;
 
@@ -89,6 +86,7 @@ class QuickjsBindings {
     final candidates = <String>[
       dllName,
       ?configuredDllPath,
+      // Flutter 测试进程和 example 构建产物的 DLL 位置不固定，这里按常见路径兜底查找。
       '${File(Platform.resolvedExecutable).parent.path}\\$dllName',
       '${Directory.current.path}\\$dllName',
       ..._windowsBuildOutputCandidates(dllName),

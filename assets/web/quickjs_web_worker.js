@@ -1,4 +1,5 @@
-// QuickJS Web Worker entry. Owns the WASM bridge and every runtime instance.
+// QuickJS Web Worker 入口。
+// Worker 持有 WASM bridge 和所有 runtime 实例，主线程只通过 postMessage 访问。
 (function () {
   /** @type {import('./quickjs_bridge.mjs') | null} */
   let bridge = null;
@@ -7,6 +8,7 @@
   let draining = false;
 
   self.onmessage = (event) => {
+    // 所有消息进入 FIFO 队列，避免同一个 Worker 内的 QuickJS runtime 被并发重入。
     queue.push(event);
     void drainQueue();
   };
@@ -36,13 +38,10 @@
       let result = null;
       switch (type) {
         case 'init':
+          // 动态 import bridge，避免主线程直接加载 WASM 执行逻辑。
           bridge = await import(message.bridgeModuleUrl);
           await bridge.init(message.wasmUrl);
           result = String(await bridge.quickjsVersion());
-          break;
-        case 'eval':
-          ensureBridge();
-          result = await bridge.evalCode(message.code);
           break;
         case 'runtimeNew':
           ensureBridge();
@@ -62,6 +61,7 @@
 
       self.postMessage({ id, ok: true, result });
     } catch (error) {
+      // 错误必须通过响应返回给 Dart pending Future，不能只写 console。
       self.postMessage({
         id,
         ok: false,

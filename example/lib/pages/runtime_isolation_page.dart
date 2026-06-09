@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
+/// 多 runtime 隔离演示：验证 globals 隔离和 dispose 隔离。
 class RuntimeIsolationPage extends StatefulWidget {
   const RuntimeIsolationPage({super.key});
 
@@ -77,6 +78,7 @@ class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
 
     try {
       final firstSet = await first.eval('globalThis.sharedName = "first"');
+      // 第二个 runtime 初次读取应为 undefined，证明 globalThis 没有共享。
       final secondBefore = await second.eval('globalThis.sharedName');
       final secondSet = await second.eval('globalThis.sharedName = "second"');
       final firstAfter = await first.eval('globalThis.sharedName');
@@ -131,10 +133,13 @@ class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
       await first.dispose();
       _first = null;
 
-      final firstClosed = await first.eval('1 + 1').then(
-        (value) => 'runtime A 意外执行：$value',
-        onError: (Object error) => 'runtime A 已关闭：${error.runtimeType}',
-      );
+      // A 已关闭应报错；B 必须保留自己的状态并继续可用。
+      final firstClosed = await first
+          .eval('1 + 1')
+          .then(
+            (value) => 'runtime A 意外执行：$value',
+            onError: (Object error) => 'runtime A 已关闭：${error.runtimeType}',
+          );
       final secondValue = await second.eval('globalThis.alivePeer');
       final secondEval = await second.eval('40 + 2');
       final isolated = secondValue == '2' && secondEval == '42';
@@ -164,6 +169,7 @@ class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
   @override
   void dispose() {
     _disposed = true;
+    // 两个 runtime 都归属当前页面，退出时一起释放。
     unawaited(_first?.dispose() ?? Future<void>.value());
     unawaited(_second?.dispose() ?? Future<void>.value());
     _first = null;

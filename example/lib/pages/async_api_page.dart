@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
+/// 异步 API 演示：队列 eval、销毁 runtime、销毁后错误语义。
 class AsyncApiPage extends StatefulWidget {
   const AsyncApiPage({super.key});
 
@@ -33,6 +34,7 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
     try {
       final previous = _quickjs;
       _quickjs = null;
+      // 重新创建前先释放旧 runtime，避免 example 页面里残留状态。
       if (previous != null) {
         await previous.dispose();
       }
@@ -76,6 +78,7 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
     });
 
     final futures = <Future<String>>[
+      // 三个请求立即提交，底层应按 FIFO 串行进入同一个 runtime。
       quickjs.eval('globalThis.queue = (globalThis.queue || "") + "A"'),
       quickjs.eval('globalThis.queue = (globalThis.queue || "") + "B"'),
       quickjs.eval('globalThis.queue = (globalThis.queue || "") + "C"'),
@@ -121,6 +124,7 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
 
     await quickjs.dispose();
     try {
+      // 销毁后继续 eval 应返回 closed error，用于展示生命周期语义。
       await quickjs.eval('1 + 1');
     } catch (error) {
       _log.add('销毁后继续 eval：${error.runtimeType}');
@@ -140,6 +144,7 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
   @override
   void dispose() {
     _disposed = true;
+    // 页面退出时释放 runtime；不等待释放完成以免阻塞 Navigator pop。
     unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
     super.dispose();

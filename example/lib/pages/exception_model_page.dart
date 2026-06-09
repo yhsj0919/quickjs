@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
+/// 异常模型演示：手动触发并展示公开异常类型。
 class ExceptionModelPage extends StatefulWidget {
   const ExceptionModelPage({super.key});
 
@@ -77,10 +78,10 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
   Future<void> _runStop() async {
     await _capture('stop / cancel', () async {
       final quickjs = _requireRuntime();
-      final running = quickjs.eval('while (true) {}').then<Object?>(
-        (_) => null,
-        onError: (Object error) => error,
-      );
+      final running = quickjs
+          .eval('while (true) {}')
+          // 先把 running eval 的错误捕获下来，避免 stop 前后出现未处理错误。
+          .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await quickjs.stop();
       final error = await running;
@@ -121,6 +122,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
         _log.insert(0, '$name => no error');
       });
     } catch (error) {
+      // 页面统一展示异常类型，便于核对 ROADMAP 中的错误模型要求。
       if (!mounted || _disposed) {
         return;
       }
@@ -141,6 +143,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
   }
 
   String _describeError(Object error) {
+    // 公开 QuickjsException 都有 message，可以比普通 Object 输出更稳定。
     if (error is QuickjsException) {
       return '${error.runtimeType}: ${error.message}';
     }
@@ -150,6 +153,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
   @override
   void dispose() {
     _disposed = true;
+    // 页面退出时释放 runtime，避免后续页面复用到异常状态。
     unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
     super.dispose();

@@ -1,5 +1,5 @@
-// Flutter Web entry. Runs QuickJS inside a Web Worker and exposes a stable
-// global API for dart:js_interop.
+// Flutter Web 主线程入口。
+// 这里只负责加载 Worker、转发消息、维护 pending Promise；QuickJS 不在主线程执行。
 (function () {
   /** @type {Worker | null} */
   let worker = null;
@@ -24,6 +24,7 @@
       return;
     }
 
+    // 初始化只允许一个流程在路上，避免并发 create 重复拉起 Worker。
     worker = createWorker(config.workerScriptUrl);
     initializing = postRaw('init', {
       wasmUrl: config.wasmUrl,
@@ -59,6 +60,7 @@
       }
     };
     instance.onerror = (event) => {
+      // Worker 级错误会失败所有 pending 请求，并让下一次调用重新创建 Worker。
       rejectAll(new Error(event.message || 'QuickJS worker crashed'));
     };
     instance.onmessageerror = () => {
@@ -88,6 +90,7 @@
           }
           pending.delete(id);
           callbacks.reject(new Error(timeoutMessage));
+          // 同步 WASM 无法被主线程打断时，terminate Worker 是当前 web 兜底策略。
           rejectAll(new Error(timeoutMessage));
         }, timeoutMs);
       }
@@ -126,11 +129,6 @@
       return quickjsVersion;
     },
 
-    /** @param {string} code */
-    async evalCode(code, timeoutMs = 0) {
-      return post('eval', { code }, timeoutMs);
-    },
-
     async runtimeNew() {
       return post('runtimeNew');
     },
@@ -141,6 +139,7 @@
     },
 
     async runtimeStop() {
+      // stop 在 web 侧等价于终止 Worker；Dart backend 会随后重建 runtime。
       rejectAll(new Error(cancelledMessage));
     },
 

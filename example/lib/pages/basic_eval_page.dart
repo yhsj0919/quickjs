@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
+/// 最小用法演示：创建 runtime、执行一段 JS、页面销毁时释放 runtime。
 class BasicEvalPage extends StatefulWidget {
   const BasicEvalPage({super.key});
 
@@ -29,6 +30,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
       final quickjs = await Quickjs.create();
       final result = await quickjs.evaluate(_code);
 
+      // 页面可能在 async create/eval 完成前被关闭，必须及时释放刚创建的 runtime。
       if (_disposed) {
         await quickjs.dispose();
         return;
@@ -53,6 +55,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
   @override
   void dispose() {
     _disposed = true;
+    // dispose 不阻塞 Flutter 页面销毁流程，但必须触发底层 runtime 释放。
     unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
     super.dispose();

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
+/// runtime worker 演示：长耗时 JS 不阻塞 UI，并展示 timeout / stop 恢复能力。
 class NativeWorkerPage extends StatefulWidget {
   const NativeWorkerPage({super.key});
 
@@ -22,6 +23,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
   @override
   void initState() {
     super.initState();
+    // UI 计数器用于直观看到长耗时 eval 期间 Flutter 仍在刷新。
     _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
       if (mounted && !_disposed) {
         setState(() {
@@ -137,6 +139,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
         return;
       }
       final recoveryResult = error is JsTimeoutException
+          // timeout 后同一个 Quickjs 实例应可继续执行。
           ? await quickjs.eval('40 + 2')
           : null;
       if (!mounted || _disposed) {
@@ -173,6 +176,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     final beforeTicks = _ticks;
     final stopwatch = Stopwatch()..start();
     final evalFuture = quickjs.eval('while (true) {}');
+    // 稍后触发 stop，模拟用户主动取消正在执行的 JS。
     final stopFuture = Future<void>.delayed(
       const Duration(milliseconds: 100),
       quickjs.stop,
@@ -193,6 +197,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
         return;
       }
       final recoveryResult = error is JsCancelledException
+          // stop 后同一个 Quickjs 实例应可继续执行。
           ? await quickjs.eval('6 * 7')
           : null;
       if (!mounted || _disposed) {
@@ -284,6 +289,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
   void dispose() {
     _disposed = true;
     _ticker?.cancel();
+    // 页面退出时释放 runtime，避免 worker 留在后台。
     unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
     super.dispose();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../example_pages.dart';
 
+/// example 页面索引，用于集中进入各个手动验收页面。
 class ExampleIndexPage extends StatelessWidget {
   const ExampleIndexPage({super.key});
 

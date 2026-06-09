@@ -7,7 +7,9 @@ import 'quickjs_web_loader.dart';
 
 const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
 
-/// WASM backend for Flutter web (via [quickjs-wasi](https://www.npmjs.com/package/quickjs-wasi)).
+/// Flutter Web 使用的 QuickJS WASM backend。
+///
+/// Dart 侧只通过 `quickjsNgWeb` 全局对象发消息，实际 QuickJS 执行在 Web Worker 中。
 class WebQuickjsBackend implements QuickjsBackend {
   WebQuickjsBackend._(this._host, this._quickjsVersion);
 
@@ -16,6 +18,9 @@ class WebQuickjsBackend implements QuickjsBackend {
 
   static WebQuickjsBackend? _instance;
 
+  /// 初始化 web host，并缓存 backend。
+  ///
+  /// WASM module 和 worker script 是包资源，必须转换成 Flutter Web 的 package asset URL。
   static Future<WebQuickjsBackend> create({
     String? bridgeModuleUrl,
     String? wasmUrl,
@@ -55,21 +60,6 @@ class WebQuickjsBackend implements QuickjsBackend {
     final id = (await _host.runtimeNew().toDart).toDartInt;
     return WebQuickjsJsRuntime(_host, id);
   }
-
-  @override
-  Future<String> evaluate(String code, {Duration? timeout}) async {
-    try {
-      return _mapWebEvalResult(
-        (await _host.evalCode(code.toJS, timeout?.inMilliseconds.toJS).toDart)
-            .toDart,
-      );
-    } catch (error) {
-      if (error is QuickjsException) {
-        rethrow;
-      }
-      throw _mapWebError(error);
-    }
-  }
 }
 
 final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
@@ -91,8 +81,10 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
       }
       final mapped = _mapWebError(error);
       if (mapped is JsTimeoutException) {
+        // 同步 WASM 无法真正 interrupt 时，JS 层会 terminate worker；这里重建 runtime。
         await _recoverRuntime();
       } else if (mapped is JsRuntimeClosedException) {
+        // worker 重启后旧 runtime id 会失效，重建 id 后重试一次当前 eval。
         await _recoverRuntime();
         return _evaluateCurrentRuntime(code, timeout: timeout);
       }
@@ -127,6 +119,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
     if (current != null) {
       return current;
     }
+    // 并发恢复只允许一个 runtimeNew 在路上，避免多个新 id 互相覆盖。
     final recovering = _host.runtimeNew().toDart.then((id) {
       _id = id.toDartInt;
     });
@@ -171,6 +164,7 @@ Object _mapWebError(Object error) {
 }
 
 String _mapWebEvalResult(String result) {
+  // web bridge 与 native bridge 使用同一个 JS exception sentinel。
   if (result.startsWith(_exceptionSentinel)) {
     throw JsException(result.substring(_exceptionSentinel.length));
   }

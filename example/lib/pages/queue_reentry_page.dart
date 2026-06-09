@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
+/// 执行队列演示：验证 FIFO、dispose 取消队列、排队 timeout。
 class QueueReentryPage extends StatefulWidget {
   const QueueReentryPage({super.key});
 
@@ -74,6 +75,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
     try {
       await quickjs.eval('globalThis.queue = ""');
       final results = await Future.wait([
+        // 100 个 eval 同时提交，期望底层严格按提交顺序串行执行。
         for (var i = 0; i < 100; i += 1)
           quickjs.eval(
             'globalThis.queue = (globalThis.queue || "") + "$i,"; globalThis.queue',
@@ -132,6 +134,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
       })();
     ''');
     final queued = [
+      // 这些请求应被 dispose 取消，不能继续进入 runtime 修改 globalThis。
       quickjs.eval('globalThis.disposeQueue = "A"'),
       quickjs.eval('globalThis.disposeQueue = "B"'),
     ];
@@ -191,6 +194,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
       })();
     ''');
     final queued = quickjs.eval(
+      // timeout 小于前一个任务耗时，因此它应在队列中被取消。
       'globalThis.queuedTimeout = "should not run"',
       timeout: const Duration(milliseconds: 30),
     );
@@ -230,6 +234,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
   @override
   void dispose() {
     _disposed = true;
+    // 页面级 runtime 退出时必须释放，保持 example 页面之间互不污染。
     unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
     super.dispose();

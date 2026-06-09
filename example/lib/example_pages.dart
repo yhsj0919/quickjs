@@ -8,6 +8,8 @@ import 'pages/runtime_isolation_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
+// 页面注册表：每个新功能都应该在这里新增一个独立 example 页面。
+// 页面之间不能共享 Quickjs runtime，避免状态污染手动验收结果。
 final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '基础执行',

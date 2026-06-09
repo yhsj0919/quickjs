@@ -1,7 +1,9 @@
+/// QuickJS 插件对外暴露的异常基类。
 sealed class QuickjsException implements Exception {
   String get message;
 }
 
+/// JavaScript 代码主动 throw 或求值异常时的错误。
 final class JsException implements QuickjsException {
   const JsException(
     this.message, {
@@ -22,6 +24,7 @@ final class JsException implements QuickjsException {
   String toString() => message;
 }
 
+/// JS 执行超过调用方指定的 timeout。
 final class JsTimeoutException implements QuickjsException {
   const JsTimeoutException([this.message = 'QuickJS evaluation timed out']);
 
@@ -32,6 +35,7 @@ final class JsTimeoutException implements QuickjsException {
   String toString() => message;
 }
 
+/// JS 执行被 `stop()` 或后续取消机制中断。
 final class JsCancelledException implements QuickjsException {
   const JsCancelledException([
     this.message = 'QuickJS evaluation was cancelled',
@@ -44,6 +48,7 @@ final class JsCancelledException implements QuickjsException {
   String toString() => message;
 }
 
+/// runtime 已经关闭后继续调用 API。
 final class JsRuntimeClosedException implements QuickjsException {
   const JsRuntimeClosedException([this.message = 'QuickJS runtime is closed']);
 
@@ -54,6 +59,7 @@ final class JsRuntimeClosedException implements QuickjsException {
   String toString() => message;
 }
 
+/// runtime worker 崩溃或异常退出。
 final class JsRuntimeCrashException implements QuickjsException {
   const JsRuntimeCrashException([
     this.message = 'QuickJS runtime worker crashed',

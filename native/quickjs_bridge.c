@@ -15,9 +15,11 @@
 struct QuickjsRuntime {
   JSRuntime *rt;
   JSContext *ctx;
+  /* Dart worker 写入这个共享标记，interrupt handler 读取后中断 JS。 */
   volatile int32_t *cancel_flag;
 };
 
+/* 单次 eval 的中断状态。timeout 和 stop 都通过 QuickJS interrupt handler 收敛。 */
 typedef struct QuickjsEvalInterrupt {
   int timed_out;
   int cancelled;
@@ -57,6 +59,7 @@ static char *qjs_value_to_string(JSContext *ctx, JSValue val) {
     return qjs_strdup(JS_ToBool(ctx, val) ? "true" : "false");
   }
   if (JS_IsException(val)) {
+    /* JS throw 不能和普通字符串混淆，前面加 sentinel 交给 Dart 映射成 JsException。 */
     JSValue exception = JS_GetException(ctx);
     str = JS_ToCString(ctx, exception);
     message = str ? str : "JavaScript exception";
@@ -131,6 +134,7 @@ QuickjsRuntime *quickjs_runtime_new(void) {
   }
   JS_SetRuntimeOpaque(runtime->rt, runtime);
 
+  /* std/os helpers 先保留，后续 module 和宿主能力设计时再收紧暴露边界。 */
   js_std_init_handlers(runtime->rt);
   runtime->ctx = JS_NewContext(runtime->rt);
   if (!runtime->ctx) {
@@ -182,6 +186,7 @@ char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
   }
 
   if (timeout_ms > 0 || runtime->cancel_flag) {
+    /* timeout 和 stop 都依赖 JS_SetInterruptHandler；无 timeout 时仍允许 cancel_flag 中断。 */
     interrupt.has_deadline = timeout_ms > 0;
     interrupt.deadline =
         clock() + (clock_t)((timeout_ms * CLOCKS_PER_SEC) / 1000);

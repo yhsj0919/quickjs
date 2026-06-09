@@ -1,5 +1,6 @@
 /**
- * Thin bridge for Flutter web — wraps quickjs-wasi (QuickJS WASM).
+ * Flutter Web 的 QuickJS WASM 薄桥接层。
+ * 这里直接调用 quickjs-wasi，并维护 worker 内的 runtime registry。
  * @see https://www.npmjs.com/package/quickjs-wasi
  */
 import { QuickJS } from './quickjs_wasi.js';
@@ -13,12 +14,15 @@ let nextRuntimeId = 1;
 const exceptionSentinel = '\x1eQuickJS_EXCEPTION';
 
 /**
+ * 初始化 WASM module。
+ *
  * @param {string} wasmUrl
  */
 export async function init(wasmUrl) {
   if (wasmModule) {
     return;
   }
+  // WASM module 只编译一次，后续 runtime 复用同一个 module 创建 VM。
   const response = await fetch(wasmUrl);
   if (!response.ok) {
     throw new Error(`Failed to load QuickJS WASM: ${response.status}`);
@@ -28,6 +32,8 @@ export async function init(wasmUrl) {
 }
 
 /**
+ * 将 quickjs-wasi 的 JSValueHandle 转成当前阶段对外暴露的字符串结果。
+ *
  * @param {import('./quickjs_wasi.js').QuickJS} vm
  * @param {import('./quickjs_wasi.js').JSValueHandle} handle
  */
@@ -41,6 +47,7 @@ function valueToString(vm, handle) {
     return 'null';
   }
   if (handle.promiseState === 0) {
+    // Promise job pump 尚未实现，先返回占位文本，避免 handle 泄漏。
     handle.dispose();
     return '[Promise]';
   }
@@ -55,6 +62,8 @@ function valueToString(vm, handle) {
 }
 
 /**
+ * 在指定 VM 中执行 JS，并用 sentinel 区分 JS throw 和普通字符串结果。
+ *
  * @param {import('./quickjs_wasi.js').QuickJS} vm
  * @param {string} code
  */
@@ -67,25 +76,11 @@ function evalOnVm(vm, code) {
     if (handle) {
       handle.dispose();
     }
+    // 与 native bridge 对齐：JS throw 用 sentinel 返回给 Dart 映射成 JsException。
     if (err && typeof err === 'object' && 'message' in err) {
       return `${exceptionSentinel}${String(err.message)}`;
     }
     return `${exceptionSentinel}${String(err)}`;
-  }
-}
-
-/**
- * @param {string} code
- */
-export async function evalCode(code) {
-  if (!wasmModule) {
-    throw new Error('quickjs: WASM not initialized');
-  }
-  const vm = await QuickJS.create({ wasm: wasmModule });
-  try {
-    return evalOnVm(vm, code);
-  } finally {
-    vm[Symbol.dispose]();
   }
 }
 
@@ -109,11 +104,14 @@ export async function runtimeNew() {
   }
   const vm = await QuickJS.create({ wasm: wasmModule });
   const id = nextRuntimeId++;
+  // runtime id 是 Dart 侧唯一可见的 handle，真实 VM 只保存在 Worker 内。
   runtimes.set(id, vm);
   return id;
 }
 
 /**
+ * 在指定 runtime 中执行 JS。
+ *
  * @param {number} id
  * @param {string} code
  */
@@ -125,10 +123,15 @@ export function runtimeEval(id, code) {
   return evalOnVm(vm, code);
 }
 
-/** @param {number} id */
+/**
+ * 释放指定 runtime。
+ *
+ * @param {number} id
+ */
 export function runtimeDispose(id) {
   const vm = runtimes.get(id);
   if (vm) {
+    // runtime 必须显式 dispose，避免 WASM 侧 handle 和内存泄漏。
     vm[Symbol.dispose]();
     runtimes.delete(id);
   }

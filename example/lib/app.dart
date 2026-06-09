@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'pages/example_index_page.dart';
 
+/// example 应用根组件。
 class ExampleApp extends StatelessWidget {
   const ExampleApp({super.key});
 

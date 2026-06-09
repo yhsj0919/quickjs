@@ -26,6 +26,10 @@ const String _responseMessage = 'response';
 
 typedef _WorkerReady = ({SendPort sendPort, String quickjsVersion});
 
+/// native 平台的 QuickJS runtime。
+///
+/// 这个对象运行在调用方 isolate 中，只持有 worker isolate 的端口和 pending Future。
+/// 真正的 `QuickjsRuntime*` 指针只存在于 [_nativeQuickjsWorkerMain]。
 final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   NativeQuickjsWorkerRuntime._(
     this._isolate,
@@ -60,6 +64,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     final responsePort = ReceivePort();
     final errorPort = ReceivePort();
     final exitPort = ReceivePort();
+    // cancelFlag 是跨 isolate 共享给 C interrupt handler 的最小取消信号。
     final cancelFlag = calloc<Int32>();
     final ready = Completer<_WorkerReady>();
 
@@ -92,6 +97,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     });
 
     errorSubscription = errorPort.listen((dynamic message) {
+      // isolate 初始化完成前的错误要失败 create；初始化后则失败所有 pending 请求。
       final error = JsRuntimeCrashException('QuickJS worker failed: $message');
       final currentRuntime = runtime;
       if (currentRuntime == null) {
@@ -117,6 +123,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     });
 
     try {
+      // worker isolate 持有 DynamicLibrary 和 QuickJS runtime，避免 UI isolate 直接进 FFI。
       isolate = await Isolate.spawn(
         _nativeQuickjsWorkerMain,
         <String, Object>{
@@ -166,6 +173,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     if (_closed) {
       throw JsRuntimeClosedException();
     }
+    // 每次 eval 开始前清空取消标记，避免上一次 stop 影响后续任务。
     _cancelFlag.value = 0;
     final result = await _sendRequest<String>(_evalMessage, <String, Object?>{
       _messageCodeKey: code,
@@ -180,6 +188,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       return _disposeFuture!;
     }
     _closed = true;
+    // dispose 作为普通 worker 命令发送，让 worker 自己释放 QuickJS runtime。
     _disposeFuture = _sendRequest<void>(
       _disposeMessage,
     ).whenComplete(_closePorts);
@@ -191,11 +200,12 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     if (_closed) {
       return;
     }
+    // C interrupt handler 会读取这个标记并中断正在执行的 JS。
     _cancelFlag.value = 1;
     final pending = _pending.values.map((completer) => completer.future);
-    await Future.wait<void>(
-      [for (final future in pending) future.then<void>((_) {}, onError: (_) {})],
-    );
+    await Future.wait<void>([
+      for (final future in pending) future.then<void>((_) {}, onError: (_) {}),
+    ]);
     _closed = true;
     await _closePorts();
   }
@@ -207,6 +217,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     final requestId = _nextRequestId++;
     final completer = Completer<String?>();
     _pending[requestId] = completer;
+    // 所有 worker 命令都带 requestId，响应回来后用它完成对应 Future。
     _sendPort.send(<String, Object?>{
       _messageTypeKey: type,
       _messageIdKey: requestId,
@@ -238,6 +249,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
         completer.complete(message['result'] as String?);
       } else {
         final error = '${message['error']}';
+        // C bridge 和 web bridge 都通过 sentinel / 文本协议把错误还原为 Dart 异常。
         if (error == _timeoutErrorMessage) {
           completer.completeError(JsTimeoutException());
         } else if (error.contains(_cancelledErrorMessage)) {
@@ -269,6 +281,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       return;
     }
     _portsClosed = true;
+    // 端口和 cancelFlag 只释放一次，避免 stop/dispose/crash 并发收尾时 double free。
     _isolate.kill(priority: Isolate.immediate);
     await _responseSubscription?.cancel();
     await _errorSubscription.cancel();
@@ -280,6 +293,9 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 }
 
+/// worker isolate 入口。
+///
+/// 这里创建并持有 QuickJS runtime，监听主 isolate 发来的 eval / dispose 命令。
 void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
   final readySendPort = ports['readyPort']! as SendPort;
   final responseSendPort = ports['responsePort']! as SendPort;
@@ -330,6 +346,7 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             final result = _eval(bindings, runtime, code, timeoutMs);
             _sendOk(responseSendPort, requestId, result);
           case _disposeMessage:
+            // runtime 必须在持有它的 worker isolate 中释放。
             closed = true;
             bindings.runtimeFree(runtime);
             runtime = nullptr;
@@ -352,15 +369,14 @@ String _eval(
   int? timeoutMs,
 ) {
   final codePtr = code.toNativeUtf8();
-  final resultPtr = timeoutMs == null || timeoutMs <= 0
-      ? bindings.eval(runtime, codePtr)
-      : bindings.evalTimeout(runtime, codePtr, timeoutMs);
+  final resultPtr = bindings.evalTimeout(runtime, codePtr, timeoutMs ?? 0);
   calloc.free(codePtr);
   if (resultPtr == nullptr) {
     throw StateError('QuickJS eval returned null');
   }
   try {
     final result = resultPtr.toDartString();
+    // C bridge 用不可见前缀区分普通字符串结果和特殊错误。
     if (result == _cancelledSentinel) {
       throw JsCancelledException();
     }
@@ -386,6 +402,7 @@ void _sendOk(SendPort sendPort, int requestId, String? result) {
 }
 
 void _sendError(SendPort sendPort, int requestId, Object error) {
+  // Dart 侧异常跨 isolate 发送时统一压成字符串，再由主 isolate 映射回异常类型。
   final message = switch (error) {
     JsException(:final message) => '$_exceptionSentinel$message',
     _ => '$error',

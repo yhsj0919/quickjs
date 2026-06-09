@@ -2,7 +2,9 @@ import '../quickjs_backend.dart';
 import '../quickjs_runtime_base.dart';
 import 'quickjs_native_worker.dart';
 
-/// FFI backend for mobile and desktop.
+/// mobile / desktop 平台使用的 FFI backend。
+///
+/// 每次创建 runtime 都会启动一个持有 QuickJS 指针的 Dart isolate worker。
 class NativeQuickjsBackend implements QuickjsBackend {
   String _quickjsVersion = 'unknown';
 
@@ -14,15 +16,5 @@ class NativeQuickjsBackend implements QuickjsBackend {
     final runtime = await NativeQuickjsWorkerRuntime.create();
     _quickjsVersion = runtime.quickjsVersion;
     return runtime;
-  }
-
-  @override
-  Future<String> evaluate(String code, {Duration? timeout}) async {
-    final runtime = await createRuntime();
-    try {
-      return await runtime.evaluate(code, timeout: timeout);
-    } finally {
-      await runtime.dispose();
-    }
   }
 }
