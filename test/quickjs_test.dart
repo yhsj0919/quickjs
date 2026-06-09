@@ -20,6 +20,22 @@ void main() {
     expect(await engine.evaluate('2 ** 10'), '1024');
   });
 
+  test('javascript throw is reported as JsException', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    await expectLater(
+      engine.eval('throw new Error("boom")'),
+      throwsA(
+        isA<JsException>().having(
+          (error) => error.message,
+          'message',
+          contains('boom'),
+        ),
+      ),
+    );
+  });
+
   test('concurrent evaluations are queued in order', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
@@ -182,7 +198,10 @@ void main() {
 
     await first.dispose();
 
-    await expectLater(first.eval('1 + 1'), throwsA(isA<StateError>()));
+    await expectLater(
+      first.eval('1 + 1'),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
     expect(await second.eval('globalThis.alivePeer'), '2');
     expect(await second.eval('40 + 2'), '42');
   });
@@ -201,7 +220,7 @@ void main() {
 
     expect(await evalFuture, 'done');
     await disposeFuture.timeout(const Duration(seconds: 1));
-    expect(engine.eval('1 + 1'), throwsA(isA<StateError>()));
+    expect(engine.eval('1 + 1'), throwsA(isA<JsRuntimeClosedException>()));
   });
 
   test('dispose cancels queued evaluations', () async {
@@ -215,8 +234,14 @@ void main() {
     ''');
     final queuedA = engine.eval('globalThis.disposedQueue = "a"');
     final queuedB = engine.eval('globalThis.disposedQueue = "b"');
-    final queuedAFailure = expectLater(queuedA, throwsA(isA<StateError>()));
-    final queuedBFailure = expectLater(queuedB, throwsA(isA<StateError>()));
+    final queuedAFailure = expectLater(
+      queuedA,
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
+    final queuedBFailure = expectLater(
+      queuedB,
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
 
     final disposeFuture = engine.dispose();
 
@@ -224,13 +249,16 @@ void main() {
     await queuedAFailure;
     await queuedBFailure;
     await disposeFuture.timeout(const Duration(seconds: 1));
-    expect(engine.eval('globalThis.disposedQueue'), throwsA(isA<StateError>()));
+    expect(
+      engine.eval('globalThis.disposedQueue'),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
   });
 
   test('disposed quickjs instance rejects evaluation', () async {
     final engine = await Quickjs.create();
     await engine.dispose();
-    expect(engine.eval('1 + 1'), throwsA(isA<StateError>()));
+    expect(engine.eval('1 + 1'), throwsA(isA<JsRuntimeClosedException>()));
   });
 }
 

@@ -10,6 +10,7 @@ let wasmModule;
 /** @type {Map<number, import('./quickjs_wasi.js').QuickJS>} */
 const runtimes = new Map();
 let nextRuntimeId = 1;
+const exceptionSentinel = '\x1eQuickJS_EXCEPTION';
 
 /**
  * @param {string} wasmUrl
@@ -67,9 +68,9 @@ function evalOnVm(vm, code) {
       handle.dispose();
     }
     if (err && typeof err === 'object' && 'message' in err) {
-      return String(err.message);
+      return `${exceptionSentinel}${String(err.message)}`;
     }
-    return String(err);
+    return `${exceptionSentinel}${String(err)}`;
   }
 }
 

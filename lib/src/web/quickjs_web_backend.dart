@@ -5,6 +5,8 @@ import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
 import 'quickjs_web_loader.dart';
 
+const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
+
 /// WASM backend for Flutter web (via [quickjs-wasi](https://www.npmjs.com/package/quickjs-wasi)).
 class WebQuickjsBackend implements QuickjsBackend {
   WebQuickjsBackend._(this._host, this._quickjsVersion);
@@ -57,11 +59,14 @@ class WebQuickjsBackend implements QuickjsBackend {
   @override
   Future<String> evaluate(String code, {Duration? timeout}) async {
     try {
-      return (await _host
-              .evalCode(code.toJS, timeout?.inMilliseconds.toJS)
-              .toDart)
-          .toDart;
+      return _mapWebEvalResult(
+        (await _host.evalCode(code.toJS, timeout?.inMilliseconds.toJS).toDart)
+            .toDart,
+      );
     } catch (error) {
+      if (error is QuickjsException) {
+        rethrow;
+      }
       throw _mapWebError(error);
     }
   }
@@ -81,6 +86,9 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
     try {
       return await _evaluateCurrentRuntime(code, timeout: timeout);
     } catch (error) {
+      if (error is QuickjsException) {
+        rethrow;
+      }
       final mapped = _mapWebError(error);
       if (mapped is JsTimeoutException) {
         await _recoverRuntime();
@@ -132,15 +140,23 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
     String code, {
     Duration? timeout,
   }) async {
-    return (await _host
-            .runtimeEval(_id.toJS, code.toJS, timeout?.inMilliseconds.toJS)
-            .toDart)
-        .toDart;
+    return _mapWebEvalResult(
+      (await _host
+              .runtimeEval(_id.toJS, code.toJS, timeout?.inMilliseconds.toJS)
+              .toDart)
+          .toDart,
+    );
   }
 }
 
 Object _mapWebError(Object error) {
   final message = '$error';
+  final sentinelIndex = message.indexOf(_exceptionSentinel);
+  if (sentinelIndex >= 0) {
+    return JsException(
+      message.substring(sentinelIndex + _exceptionSentinel.length),
+    );
+  }
   if (message.contains('QuickJS evaluation timed out')) {
     return const JsTimeoutException();
   }
@@ -152,4 +168,11 @@ Object _mapWebError(Object error) {
     return JsRuntimeClosedException();
   }
   return StateError(message);
+}
+
+String _mapWebEvalResult(String result) {
+  if (result.startsWith(_exceptionSentinel)) {
+    throw JsException(result.substring(_exceptionSentinel.length));
+  }
+  return result;
 }

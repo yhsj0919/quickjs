@@ -16,6 +16,7 @@ const String _timeoutErrorMessage = 'QuickJS evaluation timed out';
 const String _timeoutSentinel = '\u001eQuickJS_TIMEOUT';
 const String _cancelledErrorMessage = 'QuickJS evaluation was cancelled';
 const String _cancelledSentinel = '\u001eQuickJS_CANCELLED';
+const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
 
 const String _readyMessage = 'ready';
 const String _evalMessage = 'eval';
@@ -91,7 +92,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     });
 
     errorSubscription = errorPort.listen((dynamic message) {
-      final error = StateError('QuickJS worker failed: $message');
+      final error = JsRuntimeCrashException('QuickJS worker failed: $message');
       final currentRuntime = runtime;
       if (currentRuntime == null) {
         failCreate(error);
@@ -103,10 +104,14 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     exitSubscription = exitPort.listen((dynamic _) {
       final currentRuntime = runtime;
       if (currentRuntime == null) {
-        failCreate(StateError('QuickJS worker exited before it was ready'));
+        failCreate(
+          const JsRuntimeCrashException(
+            'QuickJS worker exited before it was ready',
+          ),
+        );
       } else {
         currentRuntime._handleWorkerFailure(
-          StateError('QuickJS worker exited'),
+          const JsRuntimeCrashException('QuickJS worker exited'),
         );
       }
     });
@@ -239,6 +244,10 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
           completer.completeError(JsCancelledException());
         } else if (error.contains('QuickJS runtime is closed')) {
           completer.completeError(JsRuntimeClosedException());
+        } else if (error.startsWith(_exceptionSentinel)) {
+          completer.completeError(
+            JsException(error.substring(_exceptionSentinel.length)),
+          );
         } else {
           completer.completeError(StateError(error));
         }
@@ -358,6 +367,9 @@ String _eval(
     if (result == _timeoutSentinel) {
       throw const JsTimeoutException();
     }
+    if (result.startsWith(_exceptionSentinel)) {
+      throw JsException(result.substring(_exceptionSentinel.length));
+    }
     return result;
   } finally {
     bindings.freeString(resultPtr);
@@ -374,10 +386,14 @@ void _sendOk(SendPort sendPort, int requestId, String? result) {
 }
 
 void _sendError(SendPort sendPort, int requestId, Object error) {
+  final message = switch (error) {
+    JsException(:final message) => '$_exceptionSentinel$message',
+    _ => '$error',
+  };
   sendPort.send(<String, Object?>{
     _messageTypeKey: _responseMessage,
     _messageIdKey: requestId,
     'ok': false,
-    'error': '$error',
+    'error': message,
   });
 }

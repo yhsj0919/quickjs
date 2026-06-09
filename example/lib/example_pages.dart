@@ -1,6 +1,7 @@
 import 'example_page_spec.dart';
 import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
+import 'pages/exception_model_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
@@ -32,5 +33,10 @@ final List<ExamplePageSpec> examplePages = [
     title: 'Runtime 隔离',
     description: '验证多个 Quickjs 实例的 globals 隔离，以及 dispose 一个不影响另一个。',
     builder: (_) => const RuntimeIsolationPage(),
+  ),
+  ExamplePageSpec(
+    title: '基础错误模型',
+    description: '触发 JS throw、timeout、stop 和 closed runtime，验证公开异常类型。',
+    builder: (_) => const ExceptionModelPage(),
   ),
 ];

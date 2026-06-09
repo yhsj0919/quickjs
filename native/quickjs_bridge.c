@@ -42,7 +42,10 @@ static char *qjs_strdup(const char *src) {
 
 static char *qjs_value_to_string(JSContext *ctx, JSValue val) {
   const char *str;
+  const char *message;
   char *result;
+  size_t prefix_len;
+  size_t message_len;
 
   if (JS_IsUndefined(val)) {
     return qjs_strdup("undefined");
@@ -56,7 +59,14 @@ static char *qjs_value_to_string(JSContext *ctx, JSValue val) {
   if (JS_IsException(val)) {
     JSValue exception = JS_GetException(ctx);
     str = JS_ToCString(ctx, exception);
-    result = qjs_strdup(str ? str : "JavaScript exception");
+    message = str ? str : "JavaScript exception";
+    prefix_len = strlen("\x1eQuickJS_EXCEPTION");
+    message_len = strlen(message);
+    result = (char *)malloc(prefix_len + message_len + 1);
+    if (result) {
+      memcpy(result, "\x1eQuickJS_EXCEPTION", prefix_len);
+      memcpy(result + prefix_len, message, message_len + 1);
+    }
     if (str) {
       JS_FreeCString(ctx, str);
     }
