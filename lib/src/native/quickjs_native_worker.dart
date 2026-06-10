@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
 
@@ -280,13 +281,17 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
         } else if (error.contains('QuickJS runtime is closed')) {
           completer.completeError(JsRuntimeClosedException());
         } else if (error.startsWith(_exceptionSentinel)) {
-          final message = error.substring(_exceptionSentinel.length);
-          if (message.toLowerCase().contains('out of memory')) {
-            completer.completeError(JsOutOfMemoryException(message));
-          } else if (_isStackOverflowMessage(message)) {
-            completer.completeError(JsStackOverflowException(message));
+          final exception = parseJsExceptionPayload(
+            error.substring(_exceptionSentinel.length),
+          );
+          if (exception.message.toLowerCase().contains('out of memory')) {
+            completer.completeError(JsOutOfMemoryException(exception.message));
+          } else if (_isStackOverflowMessage(exception.message)) {
+            completer.completeError(
+              JsStackOverflowException(exception.message),
+            );
           } else {
-            completer.completeError(JsException(message));
+            completer.completeError(exception);
           }
         } else {
           completer.completeError(StateError(error));
@@ -423,7 +428,9 @@ String _eval(
       throw const JsTimeoutException();
     }
     if (result.startsWith(_exceptionSentinel)) {
-      throw JsException(result.substring(_exceptionSentinel.length));
+      throw parseJsExceptionPayload(
+        result.substring(_exceptionSentinel.length),
+      );
     }
     return result;
   } finally {
@@ -443,7 +450,7 @@ void _sendOk(SendPort sendPort, int requestId, String? result) {
 void _sendError(SendPort sendPort, int requestId, Object error) {
   // Dart 侧异常跨 isolate 发送时统一压成字符串，再由主 isolate 映射回异常类型。
   final message = switch (error) {
-    JsException(:final message) => '$_exceptionSentinel$message',
+    JsException() => '$_exceptionSentinel${_encodeJsException(error)}',
     _ => '$error',
   };
   sendPort.send(<String, Object?>{
@@ -451,6 +458,17 @@ void _sendError(SendPort sendPort, int requestId, Object error) {
     _messageIdKey: requestId,
     'ok': false,
     'error': message,
+  });
+}
+
+String _encodeJsException(JsException error) {
+  return jsonEncode(<String, Object?>{
+    'message': error.message,
+    if (error.name != null) 'name': error.name,
+    if (error.stack != null) 'stack': error.stack,
+    if (error.fileName != null) 'fileName': error.fileName,
+    if (error.line != null) 'line': error.line,
+    if (error.column != null) 'column': error.column,
   });
 }
 

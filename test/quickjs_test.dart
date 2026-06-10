@@ -292,6 +292,46 @@ void main() {
     );
   });
 
+  test('javascript Error exposes structured exception fields', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    await expectLater(
+      engine.eval('throw new TypeError("structured boom")'),
+      throwsA(
+        isA<JsException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('structured boom'),
+            )
+            .having((error) => error.name, 'name', 'TypeError')
+            .having((error) => error.stack, 'stack', isNot(isEmpty)),
+      ),
+    );
+  });
+
+  test(
+    'non Error JavaScript throw still reports a useful JsException',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.eval('throw "plain boom"'),
+        throwsA(
+          isA<JsException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('plain boom'),
+              )
+              .having((error) => error.name, 'name', anyOf(isNull, isNotEmpty)),
+        ),
+      );
+    },
+  );
+
   // 并发提交的 eval 必须按 FIFO 顺序进入同一个 runtime。
   test('concurrent evaluations are queued in order', () async {
     final engine = await Quickjs.create();

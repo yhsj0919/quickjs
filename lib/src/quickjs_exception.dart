@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// QuickJS 插件对外暴露的异常基类。
 sealed class QuickjsException implements Exception {
   String get message;
@@ -7,6 +9,7 @@ sealed class QuickjsException implements Exception {
 final class JsException implements QuickjsException {
   const JsException(
     this.message, {
+    this.name,
     this.stack,
     this.fileName,
     this.line,
@@ -15,6 +18,7 @@ final class JsException implements QuickjsException {
 
   @override
   final String message;
+  final String? name;
   final String? stack;
   final String? fileName;
   final int? line;
@@ -22,6 +26,42 @@ final class JsException implements QuickjsException {
 
   @override
   String toString() => message;
+}
+
+/// Parses the payload after the JS exception sentinel.
+///
+/// Older bridges sent plain text after the sentinel. Newer bridges send a JSON
+/// object with optional structured fields. Keep both formats valid.
+JsException parseJsExceptionPayload(String payload) {
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is Map<String, Object?>) {
+      final message = _readString(decoded['message']);
+      return JsException(
+        message?.isNotEmpty == true ? message! : payload,
+        name: _readString(decoded['name']),
+        stack: _readString(decoded['stack']),
+        fileName: _readString(decoded['fileName']),
+        line: _readInt(decoded['line'] ?? decoded['lineNumber']),
+        column: _readInt(decoded['column'] ?? decoded['columnNumber']),
+      );
+    }
+  } catch (_) {
+    // Legacy payload: the whole payload is the message.
+  }
+  return JsException(payload);
+}
+
+String? _readString(Object? value) => value is String ? value : null;
+
+int? _readInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is double && value.isFinite) {
+    return value.toInt();
+  }
+  return null;
 }
 
 /// `evaluateValue()` 遇到无法直接映射为 Dart 值的 JS 值。

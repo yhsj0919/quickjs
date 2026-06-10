@@ -154,9 +154,16 @@ Object _mapWebError(Object error) {
   final message = '$error';
   final sentinelIndex = message.indexOf(_exceptionSentinel);
   if (sentinelIndex >= 0) {
-    return JsException(
+    final exception = parseJsExceptionPayload(
       message.substring(sentinelIndex + _exceptionSentinel.length),
     );
+    if (exception.message.toLowerCase().contains('out of memory')) {
+      return JsOutOfMemoryException(exception.message);
+    }
+    if (_isStackOverflowMessage(exception.message)) {
+      return JsStackOverflowException(exception.message);
+    }
+    return exception;
   }
   if (message.contains('QuickJS evaluation timed out')) {
     return const JsTimeoutException();
@@ -180,14 +187,16 @@ Object _mapWebError(Object error) {
 String _mapWebEvalResult(String result) {
   // web bridge 与 native bridge 使用同一个 JS exception sentinel。
   if (result.startsWith(_exceptionSentinel)) {
-    final message = result.substring(_exceptionSentinel.length);
-    if (message.toLowerCase().contains('out of memory')) {
-      throw JsOutOfMemoryException(message);
+    final exception = parseJsExceptionPayload(
+      result.substring(_exceptionSentinel.length),
+    );
+    if (exception.message.toLowerCase().contains('out of memory')) {
+      throw JsOutOfMemoryException(exception.message);
     }
-    if (_isStackOverflowMessage(message)) {
-      throw JsStackOverflowException(message);
+    if (_isStackOverflowMessage(exception.message)) {
+      throw JsStackOverflowException(exception.message);
     }
-    throw JsException(message);
+    throw exception;
   }
   return result;
 }

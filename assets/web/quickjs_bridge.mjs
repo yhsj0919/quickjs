@@ -61,6 +61,37 @@ function valueToString(vm, handle) {
   }
 }
 
+function readStringProperty(value, property) {
+  if (!value || typeof value !== 'object' || !(property in value)) {
+    return null;
+  }
+  const propertyValue = value[property];
+  return typeof propertyValue === 'string' ? propertyValue : null;
+}
+
+function readNumberProperty(value, property) {
+  if (!value || typeof value !== 'object' || !(property in value)) {
+    return null;
+  }
+  const propertyValue = value[property];
+  return Number.isFinite(propertyValue) ? propertyValue : null;
+}
+
+function exceptionToPayload(err) {
+  const message =
+    err && typeof err === 'object' && 'message' in err
+      ? String(err.message)
+      : String(err);
+  return JSON.stringify({
+    message,
+    name: readStringProperty(err, 'name'),
+    stack: readStringProperty(err, 'stack'),
+    fileName: readStringProperty(err, 'fileName'),
+    line: readNumberProperty(err, 'lineNumber'),
+    column: readNumberProperty(err, 'columnNumber'),
+  });
+}
+
 /**
  * 在指定 VM 中执行 JS，并用 sentinel 区分 JS throw 和普通字符串结果。
  *
@@ -77,10 +108,7 @@ function evalOnVm(vm, code) {
       handle.dispose();
     }
     // 与 native bridge 对齐：JS throw 用 sentinel 返回给 Dart 映射成 JsException。
-    if (err && typeof err === 'object' && 'message' in err) {
-      return `${exceptionSentinel}${String(err.message)}`;
-    }
-    return `${exceptionSentinel}${String(err)}`;
+    return `${exceptionSentinel}${exceptionToPayload(err)}`;
   }
 }
 

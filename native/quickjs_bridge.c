@@ -42,12 +42,250 @@ static char *qjs_strdup(const char *src) {
   return copy;
 }
 
+typedef struct QjsStringBuilder {
+  char *data;
+  size_t length;
+  size_t capacity;
+  int failed;
+} QjsStringBuilder;
+
+static void qjs_sb_init(QjsStringBuilder *builder) {
+  builder->data = NULL;
+  builder->length = 0;
+  builder->capacity = 0;
+  builder->failed = 0;
+}
+
+static int qjs_sb_reserve(QjsStringBuilder *builder, size_t extra) {
+  size_t needed;
+  size_t capacity;
+  char *data;
+
+  if (builder->failed) {
+    return 0;
+  }
+  needed = builder->length + extra + 1;
+  if (needed <= builder->capacity) {
+    return 1;
+  }
+  capacity = builder->capacity ? builder->capacity : 128;
+  while (capacity < needed) {
+    capacity *= 2;
+  }
+  data = (char *)realloc(builder->data, capacity);
+  if (!data) {
+    free(builder->data);
+    builder->data = NULL;
+    builder->length = 0;
+    builder->capacity = 0;
+    builder->failed = 1;
+    return 0;
+  }
+  builder->data = data;
+  builder->capacity = capacity;
+  return 1;
+}
+
+static void qjs_sb_append(QjsStringBuilder *builder, const char *text) {
+  size_t len;
+
+  if (!text) {
+    return;
+  }
+  len = strlen(text);
+  if (!qjs_sb_reserve(builder, len)) {
+    return;
+  }
+  memcpy(builder->data + builder->length, text, len);
+  builder->length += len;
+  builder->data[builder->length] = '\0';
+}
+
+static void qjs_sb_append_char(QjsStringBuilder *builder, char ch) {
+  if (!qjs_sb_reserve(builder, 1)) {
+    return;
+  }
+  builder->data[builder->length++] = ch;
+  builder->data[builder->length] = '\0';
+}
+
+static void qjs_sb_append_json_string(QjsStringBuilder *builder,
+                                      const char *text) {
+  const unsigned char *cursor;
+  char escaped[7];
+
+  qjs_sb_append_char(builder, '"');
+  if (text) {
+    for (cursor = (const unsigned char *)text; *cursor; cursor++) {
+      switch (*cursor) {
+      case '\\':
+        qjs_sb_append(builder, "\\\\");
+        break;
+      case '"':
+        qjs_sb_append(builder, "\\\"");
+        break;
+      case '\n':
+        qjs_sb_append(builder, "\\n");
+        break;
+      case '\r':
+        qjs_sb_append(builder, "\\r");
+        break;
+      case '\t':
+        qjs_sb_append(builder, "\\t");
+        break;
+      default:
+        if (*cursor < 0x20) {
+          snprintf(escaped, sizeof(escaped), "\\u%04x", *cursor);
+          qjs_sb_append(builder, escaped);
+        } else {
+          qjs_sb_append_char(builder, (char)*cursor);
+        }
+        break;
+      }
+    }
+  }
+  qjs_sb_append_char(builder, '"');
+}
+
+static char *qjs_sb_take(QjsStringBuilder *builder) {
+  char *data;
+
+  if (builder->failed) {
+    return NULL;
+  }
+  if (!builder->data && !qjs_sb_reserve(builder, 0)) {
+    return NULL;
+  }
+  data = builder->data;
+  builder->data = NULL;
+  builder->length = 0;
+  builder->capacity = 0;
+  return data;
+}
+
+static char *qjs_get_string_prop(JSContext *ctx, JSValue obj,
+                                 const char *name) {
+  JSValue prop;
+  const char *str;
+  char *copy;
+
+  prop = JS_GetPropertyStr(ctx, obj, name);
+  if (JS_IsException(prop) || JS_IsUndefined(prop) || JS_IsNull(prop)) {
+    JS_FreeValue(ctx, prop);
+    return NULL;
+  }
+  str = JS_ToCString(ctx, prop);
+  if (!str) {
+    JS_FreeValue(ctx, prop);
+    return NULL;
+  }
+  copy = qjs_strdup(str);
+  JS_FreeCString(ctx, str);
+  JS_FreeValue(ctx, prop);
+  return copy;
+}
+
+static int qjs_get_int_prop(JSContext *ctx, JSValue obj, const char *name,
+                            int *out) {
+  JSValue prop;
+  int32_t value;
+
+  prop = JS_GetPropertyStr(ctx, obj, name);
+  if (JS_IsException(prop) || !JS_IsNumber(prop) ||
+      JS_ToInt32(ctx, &value, prop) < 0) {
+    JS_FreeValue(ctx, prop);
+    return 0;
+  }
+  JS_FreeValue(ctx, prop);
+  *out = value;
+  return 1;
+}
+
+static void qjs_append_json_string_field(QjsStringBuilder *builder,
+                                         const char *name, const char *value) {
+  qjs_sb_append_json_string(builder, name);
+  qjs_sb_append_char(builder, ':');
+  if (value) {
+    qjs_sb_append_json_string(builder, value);
+  } else {
+    qjs_sb_append(builder, "null");
+  }
+}
+
+static void qjs_append_json_int_field(QjsStringBuilder *builder,
+                                      const char *name, int has_value,
+                                      int value) {
+  char number[32];
+
+  qjs_sb_append_json_string(builder, name);
+  qjs_sb_append_char(builder, ':');
+  if (has_value) {
+    snprintf(number, sizeof(number), "%d", value);
+    qjs_sb_append(builder, number);
+  } else {
+    qjs_sb_append(builder, "null");
+  }
+}
+
+static char *qjs_exception_to_payload(JSContext *ctx, JSValue exception) {
+  const char *fallback_str;
+  char *fallback = NULL;
+  char *message;
+  char *name;
+  char *stack;
+  char *file_name;
+  int line = 0;
+  int column = 0;
+  int has_line;
+  int has_column;
+  QjsStringBuilder builder;
+  char *result;
+
+  message = qjs_get_string_prop(ctx, exception, "message");
+  name = qjs_get_string_prop(ctx, exception, "name");
+  stack = qjs_get_string_prop(ctx, exception, "stack");
+  file_name = qjs_get_string_prop(ctx, exception, "fileName");
+  has_line = qjs_get_int_prop(ctx, exception, "lineNumber", &line);
+  has_column = qjs_get_int_prop(ctx, exception, "columnNumber", &column);
+
+  if (!message || !*message) {
+    fallback_str = JS_ToCString(ctx, exception);
+    fallback = qjs_strdup(fallback_str ? fallback_str : "JavaScript exception");
+    if (fallback_str) {
+      JS_FreeCString(ctx, fallback_str);
+    }
+    free(message);
+    message = fallback;
+    fallback = NULL;
+  }
+
+  qjs_sb_init(&builder);
+  qjs_sb_append(&builder, "\x1eQuickJS_EXCEPTION");
+  qjs_sb_append_char(&builder, '{');
+  qjs_append_json_string_field(&builder, "message", message);
+  qjs_sb_append_char(&builder, ',');
+  qjs_append_json_string_field(&builder, "name", name);
+  qjs_sb_append_char(&builder, ',');
+  qjs_append_json_string_field(&builder, "stack", stack);
+  qjs_sb_append_char(&builder, ',');
+  qjs_append_json_string_field(&builder, "fileName", file_name);
+  qjs_sb_append_char(&builder, ',');
+  qjs_append_json_int_field(&builder, "line", has_line, line);
+  qjs_sb_append_char(&builder, ',');
+  qjs_append_json_int_field(&builder, "column", has_column, column);
+  qjs_sb_append_char(&builder, '}');
+  result = qjs_sb_take(&builder);
+
+  free(message);
+  free(name);
+  free(stack);
+  free(file_name);
+  return result;
+}
+
 static char *qjs_value_to_string(JSContext *ctx, JSValue val) {
   const char *str;
-  const char *message;
   char *result;
-  size_t prefix_len;
-  size_t message_len;
 
   if (JS_IsUndefined(val)) {
     return qjs_strdup("undefined");
@@ -61,18 +299,7 @@ static char *qjs_value_to_string(JSContext *ctx, JSValue val) {
   if (JS_IsException(val)) {
     /* JS throw 不能和普通字符串混淆，前面加 sentinel 交给 Dart 映射成 JsException。 */
     JSValue exception = JS_GetException(ctx);
-    str = JS_ToCString(ctx, exception);
-    message = str ? str : "JavaScript exception";
-    prefix_len = strlen("\x1eQuickJS_EXCEPTION");
-    message_len = strlen(message);
-    result = (char *)malloc(prefix_len + message_len + 1);
-    if (result) {
-      memcpy(result, "\x1eQuickJS_EXCEPTION", prefix_len);
-      memcpy(result + prefix_len, message, message_len + 1);
-    }
-    if (str) {
-      JS_FreeCString(ctx, str);
-    }
+    result = qjs_exception_to_payload(ctx, exception);
     JS_FreeValue(ctx, exception);
     return result;
   }

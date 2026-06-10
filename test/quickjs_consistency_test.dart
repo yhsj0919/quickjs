@@ -181,6 +181,25 @@ void main() {
       );
     });
 
+    test('maps JavaScript Error details consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.eval('throw new TypeError("consistent boom")'),
+        throwsA(
+          isA<JsException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('consistent boom'),
+              )
+              .having((error) => error.name, 'name', 'TypeError')
+              .having((error) => error.stack, 'stack', isNot(isEmpty)),
+        ),
+      );
+    });
+
     // 同一 runtime 内并发 eval 必须按 FIFO 顺序串行。
     test('queues concurrent evaluations in order', () async {
       final engine = await Quickjs.create();
