@@ -129,8 +129,8 @@
       return quickjsVersion;
     },
 
-    async runtimeNew() {
-      return post('runtimeNew');
+    async runtimeNew(memoryLimitBytes = 0) {
+      return post('runtimeNew', { memoryLimitBytes });
     },
 
     /** @param {number} id @param {string} code */

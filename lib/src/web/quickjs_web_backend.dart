@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import '../quickjs_backend.dart';
 import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
+import '../quickjs_runtime_options.dart';
 import 'quickjs_web_loader.dart';
 
 const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
@@ -56,16 +57,20 @@ class WebQuickjsBackend implements QuickjsBackend {
   String get quickjsVersion => _quickjsVersion;
 
   @override
-  Future<QuickjsJsRuntimeBase> createRuntime() async {
-    final id = (await _host.runtimeNew().toDart).toDartInt;
-    return WebQuickjsJsRuntime(_host, id);
+  Future<QuickjsJsRuntimeBase> createRuntime(
+    QuickjsRuntimeOptions options,
+  ) async {
+    final id = (await _host.runtimeNew(options.memoryLimitBytes?.toJS).toDart)
+        .toDartInt;
+    return WebQuickjsJsRuntime(_host, id, options);
   }
 }
 
 final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
-  WebQuickjsJsRuntime(this._host, this._id);
+  WebQuickjsJsRuntime(this._host, this._id, this._options);
 
   final QuickjsWebHost _host;
+  final QuickjsRuntimeOptions _options;
   int _id;
   bool _closed = false;
   Future<void>? _recovering;
@@ -120,9 +125,12 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
       return current;
     }
     // 并发恢复只允许一个 runtimeNew 在路上，避免多个新 id 互相覆盖。
-    final recovering = _host.runtimeNew().toDart.then((id) {
-      _id = id.toDartInt;
-    });
+    final recovering = _host
+        .runtimeNew(_options.memoryLimitBytes?.toJS)
+        .toDart
+        .then((id) {
+          _id = id.toDartInt;
+        });
     _recovering = recovering.whenComplete(() {
       _recovering = null;
     });
@@ -153,6 +161,12 @@ Object _mapWebError(Object error) {
   if (message.contains('QuickJS evaluation timed out')) {
     return const JsTimeoutException();
   }
+  if (message.toLowerCase().contains('out of memory')) {
+    return const JsOutOfMemoryException();
+  }
+  if (_isStackOverflowMessage(message)) {
+    return const JsStackOverflowException();
+  }
   if (message.contains('QuickJS evaluation was cancelled')) {
     return JsCancelledException();
   }
@@ -166,7 +180,20 @@ Object _mapWebError(Object error) {
 String _mapWebEvalResult(String result) {
   // web bridge 与 native bridge 使用同一个 JS exception sentinel。
   if (result.startsWith(_exceptionSentinel)) {
-    throw JsException(result.substring(_exceptionSentinel.length));
+    final message = result.substring(_exceptionSentinel.length);
+    if (message.toLowerCase().contains('out of memory')) {
+      throw JsOutOfMemoryException(message);
+    }
+    if (_isStackOverflowMessage(message)) {
+      throw JsStackOverflowException(message);
+    }
+    throw JsException(message);
   }
   return result;
+}
+
+bool _isStackOverflowMessage(String message) {
+  final lower = message.toLowerCase();
+  return lower.contains('stack overflow') ||
+      lower.contains('maximum call stack size exceeded');
 }

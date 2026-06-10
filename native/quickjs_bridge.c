@@ -164,6 +164,22 @@ void quickjs_runtime_free(QuickjsRuntime *runtime) {
   free(runtime);
 }
 
+void quickjs_runtime_set_memory_limit(QuickjsRuntime *runtime,
+                                      int64_t limit_bytes) {
+  if (!runtime || !runtime->rt || limit_bytes <= 0) {
+    return;
+  }
+  JS_SetMemoryLimit(runtime->rt, (size_t)limit_bytes);
+}
+
+void quickjs_runtime_set_stack_limit(QuickjsRuntime *runtime,
+                                     int64_t limit_bytes) {
+  if (!runtime || !runtime->rt || limit_bytes <= 0) {
+    return;
+  }
+  JS_SetMaxStackSize(runtime->rt, (size_t)limit_bytes);
+}
+
 char *quickjs_eval(QuickjsRuntime *runtime, const char *code) {
   return quickjs_eval_timeout(runtime, code, 0);
 }

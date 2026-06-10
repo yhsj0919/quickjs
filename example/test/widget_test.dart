@@ -18,4 +18,14 @@ void main() {
       expect(find.text(page.description), findsOneWidget);
     }
   });
+
+  testWidgets('registers resource limit example page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    expect(find.text('资源限制'), findsOneWidget);
+    expect(find.textContaining('memoryLimitBytes'), findsOneWidget);
+    expect(find.textContaining('stackLimitBytes'), findsOneWidget);
+  });
 }

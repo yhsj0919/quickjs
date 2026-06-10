@@ -97,12 +97,19 @@ export async function quickjsVersion() {
   }
 }
 
-/** @returns {Promise<number>} */
-export async function runtimeNew() {
+/**
+ * @param {number | undefined} memoryLimitBytes
+ * @returns {Promise<number>}
+ */
+export async function runtimeNew(memoryLimitBytes) {
   if (!wasmModule) {
     throw new Error('quickjs: WASM not initialized');
   }
-  const vm = await QuickJS.create({ wasm: wasmModule });
+  const options = { wasm: wasmModule };
+  if (Number.isFinite(memoryLimitBytes) && memoryLimitBytes > 0) {
+    options.memoryLimit = memoryLimitBytes;
+  }
+  const vm = await QuickJS.create(options);
   const id = nextRuntimeId++;
   // runtime id 是 Dart 侧唯一可见的 handle，真实 VM 只保存在 Worker 内。
   runtimes.set(id, vm);

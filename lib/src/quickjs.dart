@@ -5,33 +5,59 @@ import 'quickjs_backend.dart';
 import 'quickjs_backend_factory.dart';
 import 'quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
+import 'quickjs_runtime_options.dart';
 
-enum _QuickjsRuntimeState { ready, running, stopping, closed, failed }
+/// `Quickjs` 实例当前可观察的生命周期状态。
+enum QuickjsRuntimeState {
+  /// Runtime 正在创建中。
+  creating,
+
+  /// Runtime 可接受并执行新的请求。
+  ready,
+
+  /// Runtime 正在执行一个 eval 请求。
+  running,
+
+  /// Runtime 正在停止当前请求并恢复可用状态。
+  stopping,
+
+  /// Runtime 已被 dispose，不能再使用。
+  closed,
+
+  /// Runtime worker 已崩溃或进入不可恢复失败状态。
+  failed,
+}
 
 /// QuickJS 的公开 Dart 入口。
 ///
 /// 这个类只负责管理请求队列和 runtime 生命周期；真正的执行发生在平台 backend
 /// 里，native 侧是 Dart isolate + FFI，web 侧是 Web Worker + WASM。
 class Quickjs {
-  Quickjs._(this._backend, this._runtime);
+  Quickjs._(this._backend, this._runtime, this._options);
 
   final QuickjsBackend _backend;
   QuickjsJsRuntimeBase _runtime;
+  final QuickjsRuntimeOptions _options;
   final Queue<_QueuedEval> _queue = Queue<_QueuedEval>();
-  _QuickjsRuntimeState _state = _QuickjsRuntimeState.ready;
+  QuickjsRuntimeState _state = QuickjsRuntimeState.ready;
   Object? _failure;
   Future<void>? _running;
   Future<void>? _disposeFuture;
   Future<void>? _stopFuture;
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
-  static Future<Quickjs> create() async {
+  static Future<Quickjs> create({
+    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+  }) async {
     final backend = await createQuickjsBackend();
-    return Quickjs._(backend, await backend.createRuntime());
+    return Quickjs._(backend, await backend.createRuntime(options), options);
   }
 
   /// 当前打包进插件的 QuickJS 版本号。
   String get quickjsVersion => _backend.quickjsVersion;
+
+  /// 当前 runtime 生命周期状态。
+  QuickjsRuntimeState get state => _state;
 
   /// 在当前 runtime 中执行 [code]。
   ///
@@ -54,7 +80,7 @@ class Quickjs {
       return currentDispose;
     }
 
-    _state = _QuickjsRuntimeState.closed;
+    _state = QuickjsRuntimeState.closed;
     _cancelQueued(JsRuntimeClosedException());
     _disposeFuture = (_running ?? Future<void>.value()).then(
       (_) => _runtime.dispose(),
@@ -83,7 +109,7 @@ class Quickjs {
       return Future<void>.value();
     }
 
-    _state = _QuickjsRuntimeState.stopping;
+    _state = QuickjsRuntimeState.stopping;
     final stopped = _runtime
         .stop()
         .then<void>(
@@ -93,8 +119,8 @@ class Quickjs {
         .catchError((Object _) {})
         .then<void>((_) async {
           if (!_isTerminal) {
-            _runtime = await _backend.createRuntime();
-            _state = _QuickjsRuntimeState.ready;
+            _runtime = await _backend.createRuntime(_options);
+            _state = QuickjsRuntimeState.ready;
           }
         })
         .whenComplete(() {
@@ -124,7 +150,7 @@ class Quickjs {
   }
 
   void _drainQueue() {
-    if (_state != _QuickjsRuntimeState.ready ||
+    if (_state != QuickjsRuntimeState.ready ||
         _running != null ||
         _stopFuture != null ||
         _queue.isEmpty) {
@@ -144,7 +170,7 @@ class Quickjs {
     final running = Future<String>.sync(
       () => _runtime.evaluate(request.code, timeout: timeout),
     );
-    _state = _QuickjsRuntimeState.running;
+    _state = QuickjsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime
     // 不会被并发重入。
     _running = running.then<void>(
@@ -153,8 +179,8 @@ class Quickjs {
         if (error is JsRuntimeClosedException ||
             error is JsRuntimeCrashException) {
           _state = error is JsRuntimeCrashException
-              ? _QuickjsRuntimeState.failed
-              : _QuickjsRuntimeState.closed;
+              ? QuickjsRuntimeState.failed
+              : QuickjsRuntimeState.closed;
           _failure = error;
           _cancelQueued(error);
         }
@@ -166,15 +192,15 @@ class Quickjs {
       _running!.then<void>(
         (_) {
           _running = null;
-          if (_state == _QuickjsRuntimeState.running) {
-            _state = _QuickjsRuntimeState.ready;
+          if (_state == QuickjsRuntimeState.running) {
+            _state = QuickjsRuntimeState.ready;
           }
           _drainQueue();
         },
         onError: (Object _, StackTrace _) {
           _running = null;
-          if (_state == _QuickjsRuntimeState.running) {
-            _state = _QuickjsRuntimeState.ready;
+          if (_state == QuickjsRuntimeState.running) {
+            _state = QuickjsRuntimeState.ready;
           }
           _drainQueue();
         },
@@ -191,13 +217,13 @@ class Quickjs {
   }
 
   bool get _isTerminal =>
-      _state == _QuickjsRuntimeState.closed ||
-      _state == _QuickjsRuntimeState.failed;
+      _state == QuickjsRuntimeState.closed ||
+      _state == QuickjsRuntimeState.failed;
 
   Object? get _terminalError {
     return switch (_state) {
-      _QuickjsRuntimeState.closed => JsRuntimeClosedException(),
-      _QuickjsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
+      QuickjsRuntimeState.closed => JsRuntimeClosedException(),
+      QuickjsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
       _ => null,
     };
   }

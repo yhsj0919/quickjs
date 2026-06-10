@@ -19,8 +19,82 @@ void main() {
   test('quickjs instance can be reused', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
+    expect(engine.state, QuickjsRuntimeState.ready);
     expect(await engine.evaluate('"a" + "b"'), 'ab');
     expect(await engine.evaluate('2 ** 10'), '1024');
+    expect(engine.state, QuickjsRuntimeState.ready);
+  });
+
+  // 公开状态观测应反映 eval 占用 runtime 的过程。
+  test('runtime state is running during evaluation', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    final evalFuture = engine.eval('''
+      (() => {
+        const start = Date.now();
+        while (Date.now() - start < 200) {}
+        return "done";
+      })();
+    ''');
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(engine.state, QuickjsRuntimeState.running);
+    expect(await evalFuture, 'done');
+    expect(engine.state, QuickjsRuntimeState.ready);
+  });
+
+  // stop 期间公开状态应进入 stopping，恢复后回到 ready。
+  test('runtime state is stopping while stop is in progress', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    final running = engine.eval('while (true) {}');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final stopFuture = engine.stop();
+    expect(engine.state, QuickjsRuntimeState.stopping);
+
+    await expectLater(running, throwsA(isA<JsCancelledException>()));
+    await stopFuture.timeout(const Duration(seconds: 2));
+    expect(engine.state, QuickjsRuntimeState.ready);
+  });
+
+  // dispose 后公开状态应稳定为 closed。
+  test('runtime state is closed after dispose', () async {
+    final engine = await Quickjs.create();
+
+    await engine.dispose();
+
+    expect(engine.state, QuickjsRuntimeState.closed);
+  });
+
+  // memory limit 应把超限分配映射成稳定的 OOM 错误，并保持 runtime 可继续使用。
+  test('memory limit rejects oversized allocations', () async {
+    final engine = await Quickjs.create(
+      options: const QuickjsRuntimeOptions(memoryLimitBytes: 256 * 1024),
+    );
+    addTearDown(engine.dispose);
+
+    await expectLater(
+      engine.eval('new Array(1000000).fill("quickjs").join("")'),
+      throwsA(isA<JsOutOfMemoryException>()),
+    );
+    expect(await engine.eval('1 + 1'), '2');
+  });
+
+  // stack limit 应把递归栈溢出映射成稳定错误，并保持 runtime 可继续使用。
+  test('stack limit rejects deep recursion', () async {
+    final engine = await Quickjs.create(
+      options: const QuickjsRuntimeOptions(stackLimitBytes: 64 * 1024),
+    );
+    addTearDown(engine.dispose);
+
+    await expectLater(
+      engine.eval('function recurse() { return recurse() + 1; } recurse();'),
+      throwsA(isA<JsStackOverflowException>()),
+    );
+    expect(await engine.eval('1 + 1'), '2');
   });
 
   // JS throw 必须映射成公开的 JsException，而不是普通字符串结果。

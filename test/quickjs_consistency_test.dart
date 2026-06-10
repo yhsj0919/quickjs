@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 
@@ -77,6 +78,45 @@ void main() {
       );
 
       expect(await engine.eval('21 * 2'), '42');
+    });
+
+    // web 侧 timeout 会 terminate shared Worker；其它 runtime 下一次 eval 必须自动恢复。
+    // native 侧每个 runtime 独占 worker，因此 peer runtime 的 globals 不应丢失。
+    test('keeps peer runtime usable after timeout recovery', () async {
+      final first = await Quickjs.create();
+      final second = await Quickjs.create();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      expect(await second.eval('globalThis.peerValue = 2'), '2');
+      await expectLater(
+        first.eval(
+          'while (true) {}',
+          timeout: const Duration(milliseconds: 50),
+        ),
+        throwsA(isA<JsTimeoutException>()),
+      );
+
+      expect(await first.eval('1 + 1'), '2');
+      expect(
+        await second.eval('globalThis.peerValue'),
+        kIsWeb ? 'undefined' : '2',
+      );
+      expect(await second.eval('40 + 2'), '42');
+    });
+
+    // native 和 web 都应把 memory limit 超限映射成同一个公开错误类型。
+    test('maps memory limit failures consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(memoryLimitBytes: 256 * 1024),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.eval('new Array(1000000).fill("quickjs").join("")'),
+        throwsA(isA<JsOutOfMemoryException>()),
+      );
+      expect(await engine.eval('1 + 1'), '2');
     });
 
     // stop 后同一个 Quickjs 实例应恢复为可继续 eval 的状态。

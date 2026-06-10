@@ -1,5 +1,6 @@
 import '../quickjs_backend.dart';
 import '../quickjs_runtime_base.dart';
+import '../quickjs_runtime_options.dart';
 import 'quickjs_native_worker.dart';
 
 /// mobile / desktop 平台使用的 FFI backend。
@@ -12,8 +13,10 @@ class NativeQuickjsBackend implements QuickjsBackend {
   String get quickjsVersion => _quickjsVersion;
 
   @override
-  Future<QuickjsJsRuntimeBase> createRuntime() async {
-    final runtime = await NativeQuickjsWorkerRuntime.create();
+  Future<QuickjsJsRuntimeBase> createRuntime(
+    QuickjsRuntimeOptions options,
+  ) async {
+    final runtime = await NativeQuickjsWorkerRuntime.create(options: options);
     _quickjsVersion = runtime.quickjsVersion;
     return runtime;
   }

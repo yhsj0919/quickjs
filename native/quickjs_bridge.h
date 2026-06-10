@@ -25,6 +25,10 @@ typedef struct QuickjsRuntime QuickjsRuntime;
 
 QJS_BRIDGE_EXPORT QuickjsRuntime *quickjs_runtime_new(void);
 QJS_BRIDGE_EXPORT void quickjs_runtime_free(QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT void quickjs_runtime_set_memory_limit(
+    QuickjsRuntime *runtime, int64_t limit_bytes);
+QJS_BRIDGE_EXPORT void quickjs_runtime_set_stack_limit(
+    QuickjsRuntime *runtime, int64_t limit_bytes);
 QJS_BRIDGE_EXPORT void quickjs_runtime_set_cancel_flag(
     QuickjsRuntime *runtime, int32_t *cancel_flag);
 

@@ -17,11 +17,40 @@ Future<void> main() async {
   final engine = await Quickjs.create();
   try {
     print(engine.quickjsVersion);
+    print(engine.state); // QuickjsRuntimeState.ready
     print(await engine.eval('1 + 2 * 3')); // 7
     print(await engine.eval('"hello"'));
   } finally {
     await engine.dispose();
   }
+}
+```
+
+### 资源限制
+
+`QuickjsRuntimeOptions.memoryLimitBytes` 的单位是字节，限制作用于单个
+`Quickjs` 实例底层的 runtime。`null` 表示使用 QuickJS 默认限制；执行中超过限制时，
+Dart 侧会抛出 `JsOutOfMemoryException`。
+
+`QuickjsRuntimeOptions.stackLimitBytes` 的单位也是字节，例如 `64 * 1024`
+表示 64 KiB。native 侧基于 QuickJS `JS_SetMaxStackSize`，递归栈溢出会映射为
+`JsStackOverflowException`。Flutter Web 当前底层 `quickjs-wasi` 没有暴露等价
+stack limit 选项，因此该参数暂不影响 Web runtime。
+
+```dart
+final engine = await Quickjs.create(
+  options: const QuickjsRuntimeOptions(
+    memoryLimitBytes: 16 * 1024 * 1024, // 16 MiB
+    stackLimitBytes: 64 * 1024, // 64 KiB, native only for now
+  ),
+);
+
+try {
+  await engine.eval('new Array(1000000).fill("quickjs").join("")');
+} on JsOutOfMemoryException catch (error) {
+  print(error.message);
+} finally {
+  await engine.dispose();
 }
 ```
 
@@ -42,6 +71,11 @@ runtime，并覆盖 native FFI 与 Web WASM。
 - [x] `dispose()` 会拒绝新请求、取消队列任务，并等待运行中的任务收尾后释放
   runtime。
 - [x] 重复 `dispose()`、closed 后 `stop()`、stop 过程中入队 eval 等状态边界已有测试。
+- [x] `QuickjsRuntimeState` 与 `engine.state` 已公开，可观测 ready、running、
+  stopping、closed、failed 等生命周期状态。
+- [x] `QuickjsRuntimeOptions` 已支持单 runtime 资源限制：`memoryLimitBytes`
+  超限会映射为 `JsOutOfMemoryException`；native `stackLimitBytes` 超限会映射为
+  `JsStackOverflowException`。
 - [x] 多 runtime 的基础 global 状态已隔离。
 - [x] dispose 一个 runtime 不影响另一个 runtime 继续 eval。
 - [x] 已有基础异常类型：`JsException`、`JsTimeoutException`、
@@ -49,18 +83,19 @@ runtime，并覆盖 native FFI 与 Web WASM。
 - [x] native worker crash 后 pending Future 会完成为 `JsRuntimeCrashException`，
   后续请求返回 closed error。
 - [x] native / web 基础一致性测试已覆盖 eval、throw、FIFO、runtime 隔离、
-  timeout、stop、dispose。
+  timeout、stop、dispose、web worker terminate 后的 peer runtime 恢复。
 - [x] example 已覆盖 basic eval、async API、runtime worker、队列与重入、
-  runtime 隔离、异常模型等页面。
+  runtime 隔离、异常模型、资源限制等页面。
 
 ### 部分完成
 
 - [~] `timeout`：native 使用 QuickJS interrupt handler；web 在无法中断同步
-  WASM 时通过 terminate worker / 重建 runtime 兜底。
+  WASM 时通过 terminate worker / 重建 runtime 兜底。Web peer runtime 会在下一次
+  eval 时恢复可用，但 globals 会随 Worker 重建而丢失。
 - [~] `stop()`：已能取消当前 eval 与队列 eval，并在后台重建 runtime；公开
   `cancel(requestId)` 尚未实现。
-- [~] runtime 状态机：内部已使用显式 `ready / running / stopping / closed / failed`
-  状态枚举管理队列、stop、dispose、closed、crash；`creating` 阶段和公开状态观测仍待补。
+- [~] runtime 状态机：内部已使用显式状态枚举管理队列、stop、dispose、closed、
+  crash，并公开 `engine.state`；`creating` 阶段的实际可观测创建流程仍待补。
 - [~] 错误模型：timeout、cancel、closed、基础 JS throw、native worker crash
   映射已有覆盖；结构化 JS exception 元数据、OOM 错误仍待完善。
 - [~] runtime 隔离：globals 与 dispose 隔离已有测试；callbacks、timers、
@@ -73,7 +108,7 @@ runtime，并覆盖 native FFI 与 Web WASM。
 - [ ] Dart callback、Promise job pump、timer。
 - [ ] ES module、asset loader、最小 CommonJS 兼容层。
 - [ ] function/object handle 与 Dart object proxy。
-- [ ] memory limit 与 stack limit 配置。
+- [ ] Web stack limit 配置。
 - [ ] console、sourcemap、inspector。
 - [ ] `fetch`、`crypto`、`Buffer` 等 host capability / 生态兼容能力。
 

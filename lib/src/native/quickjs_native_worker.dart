@@ -7,11 +7,14 @@ import 'package:ffi/ffi.dart';
 import '../quickjs_bindings.dart';
 import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
+import '../quickjs_runtime_options.dart';
 
 const String _messageTypeKey = 'type';
 const String _messageIdKey = 'id';
 const String _messageCodeKey = 'code';
 const String _messageTimeoutMsKey = 'timeoutMs';
+const String _messageMemoryLimitBytesKey = 'memoryLimitBytes';
+const String _messageStackLimitBytesKey = 'stackLimitBytes';
 const String _timeoutErrorMessage = 'QuickJS evaluation timed out';
 const String _timeoutSentinel = '\u001eQuickJS_TIMEOUT';
 const String _cancelledErrorMessage = 'QuickJS evaluation was cancelled';
@@ -60,7 +63,9 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   bool _portsClosed = false;
   Future<void>? _disposeFuture;
 
-  static Future<NativeQuickjsWorkerRuntime> create() async {
+  static Future<NativeQuickjsWorkerRuntime> create({
+    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+  }) async {
     final readyPort = ReceivePort();
     final responsePort = ReceivePort();
     final errorPort = ReceivePort();
@@ -131,6 +136,10 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
           'readyPort': readyPort.sendPort,
           'responsePort': responsePort.sendPort,
           'cancelFlagAddress': cancelFlag.address,
+          if (options.memoryLimitBytes != null)
+            _messageMemoryLimitBytesKey: options.memoryLimitBytes!,
+          if (options.stackLimitBytes != null)
+            _messageStackLimitBytesKey: options.stackLimitBytes!,
         },
         errorsAreFatal: true,
         onError: errorPort.sendPort,
@@ -271,9 +280,14 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
         } else if (error.contains('QuickJS runtime is closed')) {
           completer.completeError(JsRuntimeClosedException());
         } else if (error.startsWith(_exceptionSentinel)) {
-          completer.completeError(
-            JsException(error.substring(_exceptionSentinel.length)),
-          );
+          final message = error.substring(_exceptionSentinel.length);
+          if (message.toLowerCase().contains('out of memory')) {
+            completer.completeError(JsOutOfMemoryException(message));
+          } else if (_isStackOverflowMessage(message)) {
+            completer.completeError(JsStackOverflowException(message));
+          } else {
+            completer.completeError(JsException(message));
+          }
         } else {
           completer.completeError(StateError(error));
         }
@@ -316,6 +330,8 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
   final cancelFlag = Pointer<Int32>.fromAddress(
     ports['cancelFlagAddress']! as int,
   );
+  final memoryLimitBytes = ports[_messageMemoryLimitBytesKey] as int?;
+  final stackLimitBytes = ports[_messageStackLimitBytesKey] as int?;
   final commandPort = ReceivePort();
 
   late final QuickjsBindings bindings;
@@ -328,6 +344,12 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
     runtime = bindings.runtimeNew();
     if (runtime == nullptr) {
       throw StateError('Failed to create QuickJS runtime');
+    }
+    if (memoryLimitBytes != null) {
+      bindings.runtimeSetMemoryLimit(runtime, memoryLimitBytes);
+    }
+    if (stackLimitBytes != null) {
+      bindings.runtimeSetStackLimit(runtime, stackLimitBytes);
     }
     bindings.runtimeSetCancelFlag(runtime, cancelFlag);
     readySendPort.send(<String, Object?>{
@@ -430,4 +452,10 @@ void _sendError(SendPort sendPort, int requestId, Object error) {
     'ok': false,
     'error': message,
   });
+}
+
+bool _isStackOverflowMessage(String message) {
+  final lower = message.toLowerCase();
+  return lower.contains('stack overflow') ||
+      lower.contains('maximum call stack size exceeded');
 }

@@ -1,4 +1,5 @@
 import 'quickjs_runtime_base.dart';
+import 'quickjs_runtime_options.dart';
 
 /// QuickJS 的平台 backend 抽象。
 ///
@@ -8,5 +9,5 @@ abstract class QuickjsBackend {
   String get quickjsVersion;
 
   /// 创建一个隔离的 JavaScript runtime。
-  Future<QuickjsJsRuntimeBase> createRuntime();
+  Future<QuickjsJsRuntimeBase> createRuntime(QuickjsRuntimeOptions options);
 }

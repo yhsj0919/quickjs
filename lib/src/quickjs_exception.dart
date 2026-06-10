@@ -71,3 +71,29 @@ final class JsRuntimeCrashException implements QuickjsException {
   @override
   String toString() => message;
 }
+
+/// runtime 分配内存超过配置限制。
+final class JsOutOfMemoryException implements QuickjsException {
+  const JsOutOfMemoryException([
+    this.message = 'QuickJS runtime out of memory',
+  ]);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// runtime 调用栈超过配置限制。
+final class JsStackOverflowException implements QuickjsException {
+  const JsStackOverflowException([
+    this.message = 'QuickJS runtime stack overflow',
+  ]);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}

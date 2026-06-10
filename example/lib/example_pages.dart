@@ -2,6 +2,7 @@ import 'example_page_spec.dart';
 import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
 import 'pages/exception_model_page.dart';
+import 'pages/memory_limit_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
@@ -40,5 +41,11 @@ final List<ExamplePageSpec> examplePages = [
     title: '基础错误模型',
     description: '触发 JS throw、timeout、stop 和 closed runtime，验证公开异常类型。',
     builder: (_) => const ExceptionModelPage(),
+  ),
+  ExamplePageSpec(
+    title: '资源限制',
+    description:
+        '使用 memoryLimitBytes / stackLimitBytes 创建受限 runtime，验证资源错误和恢复后的 eval。',
+    builder: (_) => const MemoryLimitPage(),
   ),
 ];

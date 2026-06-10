@@ -15,6 +15,16 @@ typedef QuickjsRuntimeNew = Pointer<QuickjsRuntime> Function();
 typedef QuickjsRuntimeFreeNative = Void Function(Pointer<QuickjsRuntime>);
 typedef QuickjsRuntimeFree = void Function(Pointer<QuickjsRuntime>);
 
+typedef QuickjsRuntimeSetMemoryLimitNative =
+    Void Function(Pointer<QuickjsRuntime>, Int64);
+typedef QuickjsRuntimeSetMemoryLimit =
+    void Function(Pointer<QuickjsRuntime>, int);
+
+typedef QuickjsRuntimeSetStackLimitNative =
+    Void Function(Pointer<QuickjsRuntime>, Int64);
+typedef QuickjsRuntimeSetStackLimit =
+    void Function(Pointer<QuickjsRuntime>, int);
+
 typedef QuickjsRuntimeSetCancelFlagNative =
     Void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
 typedef QuickjsRuntimeSetCancelFlag =
@@ -44,6 +54,16 @@ class QuickjsBindings {
           .lookupFunction<QuickjsRuntimeFreeNative, QuickjsRuntimeFree>(
             'quickjs_runtime_free',
           ),
+      runtimeSetMemoryLimit = lib
+          .lookupFunction<
+            QuickjsRuntimeSetMemoryLimitNative,
+            QuickjsRuntimeSetMemoryLimit
+          >('quickjs_runtime_set_memory_limit'),
+      runtimeSetStackLimit = lib
+          .lookupFunction<
+            QuickjsRuntimeSetStackLimitNative,
+            QuickjsRuntimeSetStackLimit
+          >('quickjs_runtime_set_stack_limit'),
       runtimeSetCancelFlag = lib
           .lookupFunction<
             QuickjsRuntimeSetCancelFlagNative,
@@ -61,6 +81,8 @@ class QuickjsBindings {
   final QuickjsVersion version;
   final QuickjsRuntimeNew runtimeNew;
   final QuickjsRuntimeFree runtimeFree;
+  final QuickjsRuntimeSetMemoryLimit runtimeSetMemoryLimit;
+  final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
   final QuickjsEvalTimeout evalTimeout;
   final QuickjsFreeString freeString;
