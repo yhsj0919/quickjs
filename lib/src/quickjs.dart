@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'quickjs_backend.dart';
 import 'quickjs_backend_factory.dart';
 import 'quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
+import 'quickjs_value.dart';
 
 /// `Quickjs` 实例当前可观察的生命周期状态。
 enum QuickjsRuntimeState {
@@ -62,13 +65,129 @@ class Quickjs {
   /// 在当前 runtime 中执行 [code]。
   ///
   /// 调用只会入队，不会在 Flutter UI isolate 中同步执行 JS。
-  Future<String> eval(String code, {Duration? timeout}) {
-    return _enqueue(code, timeout: timeout);
+  /// [globals] 会在本次执行期间临时注入到 JS `globalThis`，执行结束后恢复。
+  Future<String> eval(
+    String code, {
+    Duration? timeout,
+    Map<String, Object?> globals = const {},
+  }) {
+    return _enqueue(_wrapWithGlobals(code, globals), timeout: timeout);
   }
 
   /// [eval] 的兼容别名，保留给更自然的调用命名。
-  Future<String> evaluate(String code, {Duration? timeout}) {
-    return eval(code, timeout: timeout);
+  Future<String> evaluate(
+    String code, {
+    Duration? timeout,
+    Map<String, Object?> globals = const {},
+  }) {
+    return eval(code, timeout: timeout, globals: globals);
+  }
+
+  /// 在当前 runtime 中执行 [code]，并把基础 JS 值转换成 Dart 值。
+  ///
+  /// 当前阶段覆盖 number、boolean、string、null、undefined、BigInt、
+  /// ArrayBuffer、Uint8Array、array 和 plain object。
+  /// [globals] 会在本次执行期间临时注入到 JS `globalThis`，执行结束后恢复。
+  Future<Object?> evaluateValue(
+    String code, {
+    Duration? timeout,
+    Map<String, Object?> globals = const {},
+  }) async {
+    final encodedSource = jsonEncode(_wrapWithGlobals(code, globals));
+    final encodedValue = await eval('''
+(() => {
+  const unsupported = (reason) => ({
+    type: 'conversionError',
+    message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
+  });
+  const convert = (value, seen) => {
+    if (value === undefined) {
+      return { type: 'undefined' };
+    }
+    if (value === null) {
+      return { type: 'null' };
+    }
+    const valueType = typeof value;
+    if (valueType === 'bigint') {
+      return { type: 'bigint', value: value.toString() };
+    }
+    if (valueType === 'number' || valueType === 'boolean' || valueType === 'string') {
+      return { type: valueType, value };
+    }
+    if (valueType === 'symbol' || valueType === 'function') {
+      return unsupported(valueType);
+    }
+    if (value instanceof ArrayBuffer) {
+      return { type: 'bytes', value: Array.from(new Uint8Array(value)) };
+    }
+    if (value instanceof Uint8Array) {
+      return { type: 'bytes', value: Array.from(value) };
+    }
+    if (valueType !== 'object') {
+      return unsupported(valueType);
+    }
+    if (seen.has(value)) {
+      return unsupported('circular reference');
+    }
+    seen.add(value);
+    try {
+      if (Array.isArray(value)) {
+        const items = [];
+        for (const item of value) {
+          const converted = convert(item, seen);
+          if (converted.type === 'conversionError') {
+            return converted;
+          }
+          items.push(converted);
+        }
+        return { type: 'array', value: items };
+      }
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype === Object.prototype || prototype === null) {
+        const entries = {};
+        for (const key of Object.keys(value)) {
+          const converted = convert(value[key], seen);
+          if (converted.type === 'conversionError') {
+            return converted;
+          }
+          entries[key] = converted;
+        }
+        return { type: 'object', value: entries };
+      }
+      return unsupported(Object.prototype.toString.call(value));
+    } finally {
+      seen.delete(value);
+    }
+  };
+  const value = (0, eval)($encodedSource);
+  return JSON.stringify(convert(value, new WeakSet()));
+})()
+''', timeout: timeout);
+    final payload = jsonDecode(encodedValue) as Map<String, Object?>;
+    if (payload['type'] == 'conversionError') {
+      throw JsValueConversionException(payload['message']! as String);
+    }
+    return _normalizeStructuredValue(payload);
+  }
+
+  Object? _normalizeStructuredValue(Object? payload) {
+    final typedPayload = payload as Map<String, Object?>;
+    return switch (typedPayload['type']) {
+      'undefined' => JsUndefined.value,
+      'null' => null,
+      'number' || 'boolean' || 'string' => typedPayload['value'],
+      'bigint' => BigInt.parse(typedPayload['value']! as String),
+      'bytes' => _normalizeBytes(typedPayload['value']),
+      'array' => [
+        for (final item in typedPayload['value']! as List)
+          _normalizeStructuredValue(item),
+      ],
+      'object' => {
+        for (final entry in (typedPayload['value']! as Map).entries)
+          entry.key as String: _normalizeStructuredValue(entry.value),
+      },
+      final type => throw StateError('Unknown QuickJS value payload: $type'),
+    };
   }
 
   /// 释放当前实例持有的 runtime。
@@ -226,6 +345,169 @@ class Quickjs {
       QuickjsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
       _ => null,
     };
+  }
+}
+
+Uint8List _normalizeBytes(Object? value) {
+  final bytes = value as List;
+  return Uint8List.fromList([for (final byte in bytes) (byte as num).toInt()]);
+}
+
+String _wrapWithGlobals(String code, Map<String, Object?> globals) {
+  if (globals.isEmpty) {
+    return code;
+  }
+
+  final encodedSource = jsonEncode(code);
+  final encodedGlobals = jsonEncode(_encodeGlobals(globals));
+  return '''
+(() => {
+  const inflate = (payload) => {
+    switch (payload.type) {
+      case 'null':
+        return null;
+      case 'number':
+      case 'boolean':
+      case 'string':
+        return payload.value;
+      case 'bytes':
+        return new Uint8Array(payload.value);
+      case 'array':
+        return payload.value.map(inflate);
+      case 'object': {
+        const value = {};
+        for (const key of Object.keys(payload.value)) {
+          value[key] = inflate(payload.value[key]);
+        }
+        return value;
+      }
+      case 'date':
+        return new Date(payload.value);
+      default:
+        throw new TypeError('Unknown Dart value payload: ' + payload.type);
+    }
+  };
+  const globals = $encodedGlobals;
+  const missing = Symbol('quickjs.missingGlobal');
+  const previous = new Map();
+  try {
+    for (const key of Object.keys(globals)) {
+      previous.set(
+        key,
+        Object.prototype.hasOwnProperty.call(globalThis, key)
+          ? globalThis[key]
+          : missing
+      );
+      globalThis[key] = inflate(globals[key]);
+    }
+    return (0, eval)($encodedSource);
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === missing) {
+        delete globalThis[key];
+      } else {
+        globalThis[key] = value;
+      }
+    }
+  }
+})()
+''';
+}
+
+Map<String, Object?> _encodeGlobals(Map<String, Object?> globals) {
+  return {
+    for (final entry in globals.entries)
+      _validateGlobalName(entry.key): _encodeDartValue(
+        entry.value,
+        Set<Object>.identity(),
+      ),
+  };
+}
+
+String _validateGlobalName(String name) {
+  final isIdentifier = RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(name);
+  if (!isIdentifier) {
+    throw JsValueConversionException(
+      'QuickJS global name must be a JavaScript identifier: $name',
+    );
+  }
+  return name;
+}
+
+Object _encodeDartValue(Object? value, Set<Object> seen) {
+  if (value == null) {
+    return {'type': 'null'};
+  }
+  if (value is bool) {
+    return {'type': 'boolean', 'value': value};
+  }
+  if (value is int) {
+    return {'type': 'number', 'value': value};
+  }
+  if (value is double) {
+    if (!value.isFinite) {
+      throw JsValueConversionException(
+        'QuickJS global double value must be finite',
+      );
+    }
+    return {'type': 'number', 'value': value};
+  }
+  if (value is String) {
+    return {'type': 'string', 'value': value};
+  }
+  if (value is Uint8List) {
+    return {'type': 'bytes', 'value': value.toList()};
+  }
+  if (value is DateTime) {
+    return {'type': 'date', 'value': value.toUtc().toIso8601String()};
+  }
+  if (value is List) {
+    return _encodeWithCycleCheck(value, seen, () {
+      return {
+        'type': 'array',
+        'value': [for (final item in value) _encodeDartValue(item, seen)],
+      };
+    });
+  }
+  if (value is Map) {
+    return _encodeWithCycleCheck(value, seen, () {
+      return {'type': 'object', 'value': _encodeDartMap(value, seen)};
+    });
+  }
+  throw JsValueConversionException(
+    'QuickJS global value cannot be converted to JavaScript: ${value.runtimeType}',
+  );
+}
+
+Map<String, Object> _encodeDartMap(Map value, Set<Object> seen) {
+  final result = <String, Object>{};
+  for (final entry in value.entries) {
+    final key = entry.key;
+    if (key is! String) {
+      throw JsValueConversionException(
+        'QuickJS global map keys must be strings',
+      );
+    }
+    result[key] = _encodeDartValue(entry.value, seen);
+  }
+  return result;
+}
+
+Object _encodeWithCycleCheck(
+  Object value,
+  Set<Object> seen,
+  Object Function() encode,
+) {
+  if (seen.contains(value)) {
+    throw JsValueConversionException(
+      'QuickJS global value cannot contain circular references',
+    );
+  }
+  seen.add(value);
+  try {
+    return encode();
+  } finally {
+    seen.remove(value);
   }
 }
 

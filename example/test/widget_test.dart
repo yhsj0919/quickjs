@@ -28,4 +28,13 @@ void main() {
     expect(find.textContaining('memoryLimitBytes'), findsOneWidget);
     expect(find.textContaining('stackLimitBytes'), findsOneWidget);
   });
+
+  testWidgets('registers structured values example page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    expect(find.text('结构化返回'), findsOneWidget);
+    expect(find.textContaining('evaluateValue'), findsOneWidget);
+  });
 }

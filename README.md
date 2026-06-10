@@ -26,6 +26,33 @@ Future<void> main() async {
 }
 ```
 
+### 结构化返回
+
+`eval()` 和 `evaluate()` 继续返回字符串，保持兼容。需要 Dart 值时使用
+`evaluateValue()`；当前已覆盖 `number`、`boolean`、`string`、`null`、
+`undefined`、`bigint`、array、plain object、`ArrayBuffer` 和 `Uint8Array`。
+循环引用、symbol、function 等不可直接转换的值会抛出
+`JsValueConversionException`，避免 `JSON.stringify` 静默丢失数据。
+
+```dart
+print(await engine.evaluateValue('1 + 2')); // 3
+print(await engine.evaluateValue('true')); // true
+print(await engine.evaluateValue('null')); // null
+print(await engine.evaluateValue('undefined')); // JsUndefined.value
+print(await engine.evaluateValue('9007199254740993n')); // BigInt
+print(await engine.evaluateValue('new Uint8Array([1, 2, 255])')); // Uint8List
+print(await engine.evaluateValue('[1, "two"]')); // [1, two]
+print(await engine.evaluateValue('({ ok: true })')); // {ok: true}
+print(await engine.evaluateValue(
+  'count + price',
+  globals: {'count': 40, 'price': 2.5},
+)); // 42.5
+```
+
+`globals` 支持临时注入 `int`、`double`、`bool`、`String`、`null`、`Uint8List`、
+`List`、`Map<String, Object?>` 和 `DateTime`。注入值只在本次执行期间写入
+`globalThis`，执行结束后会恢复原有全局状态。
+
 ### 资源限制
 
 `QuickjsRuntimeOptions.memoryLimitBytes` 的单位是字节，限制作用于单个
@@ -79,13 +106,20 @@ runtime，并覆盖 native FFI 与 Web WASM。
 - [x] 多 runtime 的基础 global 状态已隔离。
 - [x] dispose 一个 runtime 不影响另一个 runtime 继续 eval。
 - [x] 已有基础异常类型：`JsException`、`JsTimeoutException`、
-  `JsCancelledException`、`JsRuntimeClosedException`、`JsRuntimeCrashException`。
+  `JsValueConversionException`、`JsCancelledException`、
+  `JsRuntimeClosedException`、`JsRuntimeCrashException`。
 - [x] native worker crash 后 pending Future 会完成为 `JsRuntimeCrashException`，
   后续请求返回 closed error。
 - [x] native / web 基础一致性测试已覆盖 eval、throw、FIFO、runtime 隔离、
   timeout、stop、dispose、web worker terminate 后的 peer runtime 恢复。
+- [x] `evaluateValue()` 已支持 JS primitives 到 Dart 值：number、boolean、string、
+  null、undefined、bigint、array、plain object、ArrayBuffer、Uint8Array。
+- [x] `evaluateValue()` 对循环引用、symbol、function 等不可直接转换值会抛出
+  `JsValueConversionException`。
+- [x] `eval()` / `evaluate()` / `evaluateValue()` 支持通过 `globals` 临时注入 Dart
+  值：int、double、bool、String、null、Uint8List、List、Map、DateTime。
 - [x] example 已覆盖 basic eval、async API、runtime worker、队列与重入、
-  runtime 隔离、异常模型、资源限制等页面。
+  runtime 隔离、异常模型、资源限制、结构化返回等页面。
 
 ### 部分完成
 
@@ -103,7 +137,7 @@ runtime，并覆盖 native FFI 与 Web WASM。
 
 ### 未开始
 
-- [ ] 结构化 JS-to-Dart / Dart-to-JS 值转换。
+- [~] 结构化 JS-to-Dart / Dart-to-JS 值转换。
 - [ ] 结构化 JS exception 元数据：stack、name、file、line、column。
 - [ ] Dart callback、Promise job pump、timer。
 - [ ] ES module、asset loader、最小 CommonJS 兼容层。

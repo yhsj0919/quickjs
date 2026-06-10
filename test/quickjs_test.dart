@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
@@ -23,6 +24,183 @@ void main() {
     expect(await engine.evaluate('"a" + "b"'), 'ab');
     expect(await engine.evaluate('2 ** 10'), '1024');
     expect(engine.state, QuickjsRuntimeState.ready);
+  });
+
+  // 结构化返回 API 不改变 eval 的字符串语义，先覆盖 JS primitives。
+  test('evaluateValue maps primitive JavaScript values', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    expect(await engine.evaluateValue('1 + 2'), 3);
+    expect(await engine.evaluateValue('1.5 + 2'), 3.5);
+    expect(await engine.evaluateValue('true'), true);
+    expect(await engine.evaluateValue('"hello"'), 'hello');
+    expect(await engine.evaluateValue('null'), isNull);
+    expect(await engine.evaluateValue('undefined'), isA<JsUndefined>());
+    expect(await engine.eval('undefined'), 'undefined');
+  });
+
+  // 结构化返回继续覆盖 JSON-compatible array 和 plain object。
+  test('evaluateValue maps arrays and plain objects', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    expect(await engine.evaluateValue('[1, "two", true, null]'), <Object?>[
+      1,
+      'two',
+      true,
+      null,
+    ]);
+    expect(await engine.evaluateValue('({ a: 1, b: "two", c: false })'), {
+      'a': 1,
+      'b': 'two',
+      'c': false,
+    });
+    expect(
+      await engine.evaluateValue('({ nested: [1, { ok: true }, null] })'),
+      {
+        'nested': [
+          1,
+          {'ok': true},
+          null,
+        ],
+      },
+    );
+  });
+
+  // ArrayBuffer / Uint8Array 应映射为 Dart Uint8List。
+  test('evaluateValue maps binary buffers to Uint8List', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    expect(
+      await engine.evaluateValue('new Uint8Array([1, 2, 255])'),
+      Uint8List.fromList([1, 2, 255]),
+    );
+    expect(
+      await engine.evaluateValue('new Uint8Array([3, 4, 5]).buffer'),
+      Uint8List.fromList([3, 4, 5]),
+    );
+  });
+
+  // JS bigint 应映射为 Dart BigInt，避免大整数精度丢失。
+  test('evaluateValue maps BigInt values', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    expect(
+      await engine.evaluateValue('9007199254740993n'),
+      BigInt.parse('9007199254740993'),
+    );
+  });
+
+  // 不可直接转换的 JS 值应给出明确的 Dart 错误，而不是静默丢值。
+  test('evaluateValue rejects unsupported JavaScript values', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    await expectLater(
+      engine.evaluateValue('Symbol("id")'),
+      throwsA(isA<JsValueConversionException>()),
+    );
+    await expectLater(
+      engine.evaluateValue('() => 1'),
+      throwsA(isA<JsValueConversionException>()),
+    );
+    await expectLater(
+      engine.evaluateValue('[1, Symbol("id")]'),
+      throwsA(isA<JsValueConversionException>()),
+    );
+    await expectLater(
+      engine.evaluateValue('const value = {}; value.self = value; value'),
+      throwsA(isA<JsValueConversionException>()),
+    );
+  });
+
+  // Dart values can be injected as temporary JS globals for one evaluation.
+  test('evaluateValue maps Dart globals to JavaScript values', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    final value = await engine.evaluateValue(
+      '''
+({
+  intValue,
+  doubleValue,
+  boolValue,
+  stringValue,
+  nullValue,
+  bytesValue: Array.from(bytesValue),
+  listValue,
+  mapValue,
+  dateValue: dateValue.toISOString(),
+})
+''',
+      globals: {
+        'intValue': 42,
+        'doubleValue': 1.5,
+        'boolValue': true,
+        'stringValue': 'hello',
+        'nullValue': null,
+        'bytesValue': Uint8List.fromList([1, 2, 255]),
+        'listValue': [1, 'two', false, null],
+        'mapValue': {
+          'nested': [
+            1,
+            {'ok': true},
+          ],
+        },
+        'dateValue': DateTime.utc(2026, 6, 10, 1, 2, 3, 4),
+      },
+    );
+
+    expect(value, {
+      'intValue': 42,
+      'doubleValue': 1.5,
+      'boolValue': true,
+      'stringValue': 'hello',
+      'nullValue': null,
+      'bytesValue': [1, 2, 255],
+      'listValue': [1, 'two', false, null],
+      'mapValue': {
+        'nested': [
+          1,
+          {'ok': true},
+        ],
+      },
+      'dateValue': '2026-06-10T01:02:03.004Z',
+    });
+  });
+
+  // Injected globals are temporary and should restore pre-existing runtime state.
+  test('eval globals are restored after evaluation', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    expect(await engine.eval('globalThis.answer = 1'), '1');
+    expect(
+      await engine.eval('answer + extra', globals: {'answer': 41, 'extra': 1}),
+      '42',
+    );
+    expect(await engine.eval('answer'), '1');
+    expect(await engine.eval('typeof extra'), 'undefined');
+  });
+
+  // Unsupported Dart globals should fail before entering JS execution.
+  test('eval rejects unsupported Dart globals', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    await expectLater(
+      engine.evaluateValue('value', globals: {'value': Object()}),
+      throwsA(isA<JsValueConversionException>()),
+    );
+    final cyclic = <Object?>[];
+    cyclic.add(cyclic);
+    await expectLater(
+      engine.evaluateValue('value', globals: {'value': cyclic}),
+      throwsA(isA<JsValueConversionException>()),
+    );
   });
 
   // 公开状态观测应反映 eval 占用 runtime 的过程。

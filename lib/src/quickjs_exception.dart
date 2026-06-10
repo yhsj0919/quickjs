@@ -24,6 +24,19 @@ final class JsException implements QuickjsException {
   String toString() => message;
 }
 
+/// `evaluateValue()` 遇到无法直接映射为 Dart 值的 JS 值。
+final class JsValueConversionException implements QuickjsException {
+  const JsValueConversionException([
+    this.message = 'QuickJS value cannot be converted to a Dart value',
+  ]);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// JS 执行超过调用方指定的 timeout。
 final class JsTimeoutException implements QuickjsException {
   const JsTimeoutException([this.message = 'QuickJS evaluation timed out']);

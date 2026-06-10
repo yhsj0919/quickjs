@@ -6,6 +6,7 @@ import 'pages/memory_limit_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
+import 'pages/structured_values_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
@@ -47,5 +48,11 @@ final List<ExamplePageSpec> examplePages = [
     description:
         '使用 memoryLimitBytes / stackLimitBytes 创建受限 runtime，验证资源错误和恢复后的 eval。',
     builder: (_) => const MemoryLimitPage(),
+  ),
+  ExamplePageSpec(
+    title: '结构化返回',
+    description:
+        '使用 evaluateValue 获取 number、boolean、string、null 和 undefined 的 Dart 值。',
+    builder: (_) => const StructuredValuesPage(),
   ),
 ];

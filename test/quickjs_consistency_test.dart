@@ -19,6 +19,151 @@ void main() {
       expect(await engine.eval('true'), 'true');
     });
 
+    // 结构化返回 API 在 native 和 web 上应保持基础 primitive 映射一致。
+    test('maps primitive JavaScript values to Dart values', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(await engine.evaluateValue('1 + 2'), 3);
+      expect(await engine.evaluateValue('1.5 + 2'), 3.5);
+      expect(await engine.evaluateValue('true'), true);
+      expect(await engine.evaluateValue('"hello"'), 'hello');
+      expect(await engine.evaluateValue('null'), isNull);
+      expect(await engine.evaluateValue('undefined'), isA<JsUndefined>());
+    });
+
+    // BigInt 在 native 和 web 上都应映射为 Dart BigInt。
+    test('maps BigInt values to Dart BigInt', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evaluateValue('9007199254740993n'),
+        BigInt.parse('9007199254740993'),
+      );
+    });
+
+    // JSON-compatible array / plain object 在 native 和 web 上保持同样结构。
+    test('maps arrays and plain objects to Dart values', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(await engine.evaluateValue('[1, "two", true, null]'), <Object?>[
+        1,
+        'two',
+        true,
+        null,
+      ]);
+      expect(await engine.evaluateValue('({ a: 1, b: "two", c: false })'), {
+        'a': 1,
+        'b': 'two',
+        'c': false,
+      });
+      expect(
+        await engine.evaluateValue('({ nested: [1, { ok: true }, null] })'),
+        {
+          'nested': [
+            1,
+            {'ok': true},
+            null,
+          ],
+        },
+      );
+    });
+
+    // ArrayBuffer / Uint8Array 在 native 和 web 上都应映射为 Uint8List。
+    test('maps binary buffers to Dart Uint8List', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evaluateValue('new Uint8Array([1, 2, 255])'),
+        Uint8List.fromList([1, 2, 255]),
+      );
+      expect(
+        await engine.evaluateValue('new Uint8Array([3, 4, 5]).buffer'),
+        Uint8List.fromList([3, 4, 5]),
+      );
+    });
+
+    // 不可直接转换值在 native 和 web 上都应返回同一类公开转换错误。
+    test('rejects unsupported JavaScript values consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      for (final code in <String>[
+        'Symbol("id")',
+        '() => 1',
+        '[1, Symbol("id")]',
+        'const value = {}; value.self = value; value',
+      ]) {
+        await expectLater(
+          engine.evaluateValue(code),
+          throwsA(isA<JsValueConversionException>()),
+        );
+      }
+    });
+
+    // Dart globals 注入在 native 和 web 上应保持同样的转换与恢复语义。
+    test('maps Dart globals to JavaScript values consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evaluateValue(
+          '''
+({
+  sum: intValue + doubleValue,
+  flag: boolValue,
+  text: stringValue,
+  missing: nullValue,
+  bytes: Array.from(bytesValue),
+  list: listValue,
+  nested: mapValue.nested[1].ok,
+  date: dateValue.toISOString(),
+})
+''',
+          globals: {
+            'intValue': 40,
+            'doubleValue': 2.5,
+            'boolValue': true,
+            'stringValue': 'hello',
+            'nullValue': null,
+            'bytesValue': Uint8List.fromList([1, 2, 255]),
+            'listValue': [1, 'two', false],
+            'mapValue': {
+              'nested': [
+                1,
+                {'ok': true},
+              ],
+            },
+            'dateValue': DateTime.utc(2026, 6, 10),
+          },
+        ),
+        {
+          'sum': 42.5,
+          'flag': true,
+          'text': 'hello',
+          'missing': null,
+          'bytes': [1, 2, 255],
+          'list': [1, 'two', false],
+          'nested': true,
+          'date': '2026-06-10T00:00:00.000Z',
+        },
+      );
+
+      expect(await engine.eval('globalThis.answer = 1'), '1');
+      expect(
+        await engine.eval(
+          'answer + extra',
+          globals: {'answer': 41, 'extra': 1},
+        ),
+        '42',
+      );
+      expect(await engine.eval('answer'), '1');
+      expect(await engine.eval('typeof extra'), 'undefined');
+    });
+
     // JS throw 不能被当成普通字符串结果。
     test('maps JavaScript throw to JsException', () async {
       final engine = await Quickjs.create();
