@@ -10,6 +10,8 @@ import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
 import 'quickjs_value.dart';
 
+typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
+
 /// `Quickjs` 实例当前可观察的生命周期状态。
 enum QuickjsRuntimeState {
   /// Runtime 正在创建中。
@@ -57,6 +59,7 @@ class Quickjs {
   Future<void>? _running;
   Future<void>? _disposeFuture;
   Future<void>? _stopFuture;
+  int _nextCallbackId = 1;
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
   static Future<Quickjs> create({
@@ -91,6 +94,46 @@ class Quickjs {
     Map<String, Object?> globals = const {},
   }) {
     return eval(code, timeout: timeout, globals: globals);
+  }
+
+  /// 在当前 runtime 中执行异步 JavaScript 函数体，并等待返回的 Promise。
+  ///
+  /// [code] 会包裹在 `async () => { ... }` 中执行；需要返回值时使用 `return`。
+  Future<String> evalAsync(
+    String code, {
+    Duration? timeout,
+    Map<String, Object?> globals = const {},
+  }) {
+    return _enqueue(
+      _wrapWithGlobals(_wrapAsyncFunctionBody(code), globals),
+      timeout: timeout,
+      async: true,
+    );
+  }
+
+  /// [evalAsync] 的兼容别名。
+  Future<String> evaluateAsync(
+    String code, {
+    Duration? timeout,
+    Map<String, Object?> globals = const {},
+  }) {
+    return evalAsync(code, timeout: timeout, globals: globals);
+  }
+
+  /// 在 JS `globalThis` 上绑定一个 Promise-based Dart callback。
+  ///
+  /// JS 侧调用绑定函数时会得到 Promise；Dart callback 的返回值会 resolve 该 Promise，
+  /// Dart callback 抛错会 reject 该 Promise。
+  Future<void> bind(String name, QuickjsCallback callback) {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<void>.error(terminalError);
+    }
+    final callbackId = _nextCallbackId++;
+    final validName = _validateGlobalName(name);
+    return _runtime.bindCallback(callbackId, validName, (args) async {
+      return callback(args);
+    });
   }
 
   /// 在当前 runtime 中执行 [code]，并把基础 JS 值转换成 Dart 值。
@@ -260,13 +303,17 @@ class Quickjs {
     return stopped;
   }
 
-  Future<String> _enqueue(String code, {Duration? timeout}) {
+  Future<String> _enqueue(
+    String code, {
+    Duration? timeout,
+    bool async = false,
+  }) {
     final terminalError = _terminalError;
     if (terminalError != null) {
       return Future<String>.error(terminalError);
     }
 
-    final request = _QueuedEval(code, timeout);
+    final request = _QueuedEval(code, timeout, async);
     _queue.add(request);
     // timeout 从入队开始计算，避免排队过久的任务进入 runtime 后才超时。
     request.startQueueTimer(() {
@@ -297,7 +344,9 @@ class Quickjs {
     }
 
     final running = Future<String>.sync(
-      () => _runtime.evaluate(request.code, timeout: timeout),
+      () => request.async
+          ? _runtime.evaluateAsync(request.code, timeout: timeout)
+          : _runtime.evaluate(request.code, timeout: timeout),
     );
     _state = QuickjsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime
@@ -424,6 +473,14 @@ String _wrapWithGlobals(String code, Map<String, Object?> globals) {
 ''';
 }
 
+String _wrapAsyncFunctionBody(String code) {
+  return '''
+(async () => {
+$code
+})()
+''';
+}
+
 Map<String, Object?> _encodeGlobals(Map<String, Object?> globals) {
   return {
     for (final entry in globals.entries)
@@ -522,10 +579,11 @@ Object _encodeWithCycleCheck(
 }
 
 final class _QueuedEval {
-  _QueuedEval(this.code, this.timeout);
+  _QueuedEval(this.code, this.timeout, this.async);
 
   final String code;
   final Duration? timeout;
+  final bool async;
   final Completer<String> _completer = Completer<String>();
   final Stopwatch _stopwatch = Stopwatch()..start();
   Timer? _queueTimer;

@@ -98,6 +98,24 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<String> evaluateAsync(String code, {Duration? timeout}) {
+    throw UnsupportedError(
+      'Promise-based callback bridge is not implemented for Web yet',
+    );
+  }
+
+  @override
+  Future<void> bindCallback(
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  ) {
+    throw UnsupportedError(
+      'Promise-based callback bridge is not implemented for Web yet',
+    );
+  }
+
+  @override
   Future<void> dispose() async {
     if (_closed) {
       return;

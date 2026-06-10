@@ -5,6 +5,7 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
@@ -14,6 +15,14 @@ void main() {
     await tester.pumpWidget(const ExampleApp());
 
     for (final page in examplePages) {
+      final title = find.text(page.title);
+      if (title.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(
+          title,
+          120,
+          scrollable: find.byType(Scrollable),
+        );
+      }
       expect(find.text(page.title), findsOneWidget);
       expect(find.text(page.description), findsOneWidget);
     }

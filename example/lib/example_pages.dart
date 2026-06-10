@@ -1,6 +1,7 @@
 import 'example_page_spec.dart';
 import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
+import 'pages/callback_bridge_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/memory_limit_page.dart';
 import 'pages/native_worker_page.dart';
@@ -54,5 +55,10 @@ final List<ExamplePageSpec> examplePages = [
     description:
         '使用 evaluateValue 获取 number、boolean、string、null 和 undefined 的 Dart 值。',
     builder: (_) => const StructuredValuesPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Callback Bridge',
+    description: '绑定 Dart 函数，JS 通过 Promise await 调用并接收返回值或错误。',
+    builder: (_) => const CallbackBridgePage(),
   ),
 ];

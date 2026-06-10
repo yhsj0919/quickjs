@@ -186,6 +186,37 @@ void main() {
     expect(await engine.eval('typeof extra'), 'undefined');
   });
 
+  test('bound Dart callback resolves JavaScript Promise', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    await engine.bind('hostAdd', (args) {
+      return (args[0] as num).toInt() + (args[1] as num).toInt();
+    });
+
+    expect(await engine.evalAsync('return await hostAdd(20, 22);'), '42');
+  });
+
+  test('bound Dart callback rejection is reported as JsException', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    await engine.bind('hostFail', (_) {
+      throw StateError('host failed');
+    });
+
+    await expectLater(
+      engine.evalAsync('return await hostFail();'),
+      throwsA(
+        isA<JsException>().having(
+          (error) => error.message,
+          'message',
+          contains('host failed'),
+        ),
+      ),
+    );
+  });
+
   // Unsupported Dart globals should fail before entering JS execution.
   test('eval rejects unsupported Dart globals', () async {
     final engine = await Quickjs.create();

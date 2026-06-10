@@ -16,20 +16,56 @@ const String _messageCodeKey = 'code';
 const String _messageTimeoutMsKey = 'timeoutMs';
 const String _messageMemoryLimitBytesKey = 'memoryLimitBytes';
 const String _messageStackLimitBytesKey = 'stackLimitBytes';
+const String _messageCallbackIdKey = 'callbackId';
+const String _messageCallbackNameKey = 'name';
+const String _messageCallbackRequestIdKey = 'callbackRequestId';
+const String _messageArgsJsonKey = 'argsJson';
+const String _messageSuccessKey = 'success';
+const String _messagePayloadJsonKey = 'payloadJson';
 const String _timeoutErrorMessage = 'QuickJS evaluation timed out';
 const String _timeoutSentinel = '\u001eQuickJS_TIMEOUT';
 const String _cancelledErrorMessage = 'QuickJS evaluation was cancelled';
 const String _cancelledSentinel = '\u001eQuickJS_CANCELLED';
 const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
+const String _pendingSentinel = '\u001eQuickJS_PENDING';
 
 const String _readyMessage = 'ready';
 const String _evalMessage = 'eval';
+const String _evalAsyncMessage = 'evalAsync';
+const String _bindCallbackMessage = 'bindCallback';
+const String _callbackRequestMessage = 'callbackRequest';
+const String _callbackResponseMessage = 'callbackResponse';
 const String _disposeMessage = 'dispose';
 const String _debugCrashMessage = 'debugCrash';
 const String _errorMessage = 'error';
 const String _responseMessage = 'response';
 
 typedef _WorkerReady = ({SendPort sendPort, String quickjsVersion});
+typedef _QuickjsCallback = Future<Object?> Function(List<Object?> args);
+
+SendPort? _nativeHostCallbackSendPort;
+int _nativeNextHostCallbackRequestId = 1;
+
+int _nativeHostCallback(int callbackId, Pointer<Utf8> argsJson) {
+  final sendPort = _nativeHostCallbackSendPort;
+  if (sendPort == null) {
+    return -1;
+  }
+  final requestId = _nativeNextHostCallbackRequestId++;
+  sendPort.send(<String, Object?>{
+    _messageTypeKey: _callbackRequestMessage,
+    _messageCallbackRequestIdKey: requestId,
+    _messageCallbackIdKey: callbackId,
+    _messageArgsJsonKey: argsJson.toDartString(),
+  });
+  return requestId;
+}
+
+final Pointer<NativeFunction<QuickjsHostCallbackNative>>
+_nativeHostCallbackPointer = Pointer.fromFunction<QuickjsHostCallbackNative>(
+  _nativeHostCallback,
+  -1,
+);
 
 /// native 平台的 QuickJS runtime。
 ///
@@ -58,6 +94,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   final Pointer<Int32> _cancelFlag;
   final String quickjsVersion;
   final Map<int, Completer<String?>> _pending = <int, Completer<String?>>{};
+  final Map<int, _QuickjsCallback> _callbacks = <int, _QuickjsCallback>{};
   StreamSubscription<dynamic>? _responseSubscription;
   int _nextRequestId = 1;
   bool _closed = false;
@@ -194,6 +231,36 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<String> evaluateAsync(String code, {Duration? timeout}) async {
+    if (_closed) {
+      throw JsRuntimeClosedException();
+    }
+    _cancelFlag.value = 0;
+    final result =
+        await _sendRequest<String>(_evalAsyncMessage, <String, Object?>{
+          _messageCodeKey: code,
+          if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
+        });
+    return result;
+  }
+
+  @override
+  Future<void> bindCallback(
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  ) async {
+    if (_closed) {
+      throw JsRuntimeClosedException();
+    }
+    _callbacks[callbackId] = callback;
+    await _sendRequest<void>(_bindCallbackMessage, <String, Object?>{
+      _messageCallbackIdKey: callbackId,
+      _messageCallbackNameKey: name,
+    });
+  }
+
+  @override
   Future<void> dispose() {
     if (_disposeFuture != null) {
       return _disposeFuture!;
@@ -297,6 +364,53 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
           completer.completeError(StateError(error));
         }
       }
+      return;
+    }
+    if (message case {
+      _messageTypeKey: _callbackRequestMessage,
+      _messageCallbackRequestIdKey: final int callbackRequestId,
+      _messageCallbackIdKey: final int callbackId,
+      _messageArgsJsonKey: final String argsJson,
+    }) {
+      unawaited(
+        _handleCallbackRequest(callbackRequestId, callbackId, argsJson),
+      );
+    }
+  }
+
+  Future<void> _handleCallbackRequest(
+    int callbackRequestId,
+    int callbackId,
+    String argsJson,
+  ) async {
+    final callback = _callbacks[callbackId];
+    if (callback == null) {
+      _sendPort.send(<String, Object?>{
+        _messageTypeKey: _callbackResponseMessage,
+        _messageCallbackRequestIdKey: callbackRequestId,
+        _messageSuccessKey: false,
+        _messagePayloadJsonKey: 'QuickJS callback $callbackId is not bound',
+      });
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(argsJson);
+      final args = decoded is List ? decoded.cast<Object?>() : <Object?>[];
+      final result = await callback(args);
+      _sendPort.send(<String, Object?>{
+        _messageTypeKey: _callbackResponseMessage,
+        _messageCallbackRequestIdKey: callbackRequestId,
+        _messageSuccessKey: true,
+        _messagePayloadJsonKey: jsonEncode(result),
+      });
+    } catch (error) {
+      _sendPort.send(<String, Object?>{
+        _messageTypeKey: _callbackResponseMessage,
+        _messageCallbackRequestIdKey: callbackRequestId,
+        _messageSuccessKey: false,
+        _messagePayloadJsonKey: '$error',
+      });
     }
   }
 
@@ -357,6 +471,7 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
       bindings.runtimeSetStackLimit(runtime, stackLimitBytes);
     }
     bindings.runtimeSetCancelFlag(runtime, cancelFlag);
+    _nativeHostCallbackSendPort = responseSendPort;
     readySendPort.send(<String, Object?>{
       _messageTypeKey: _readyMessage,
       'sendPort': commandPort.sendPort,
@@ -371,7 +486,23 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
     return;
   }
 
-  commandPort.listen((dynamic message) {
+  commandPort.listen((dynamic message) async {
+    if (message case {
+      _messageTypeKey: _callbackResponseMessage,
+      _messageCallbackRequestIdKey: final int callbackRequestId,
+      _messageSuccessKey: final bool success,
+      _messagePayloadJsonKey: final String payloadJson,
+    }) {
+      _resolveCallback(
+        bindings,
+        runtime,
+        callbackRequestId,
+        success,
+        payloadJson,
+      );
+      return;
+    }
+
     if (message case {
       _messageTypeKey: final String type,
       _messageIdKey: final int requestId,
@@ -389,10 +520,21 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
             final result = _eval(bindings, runtime, code, timeoutMs);
             _sendOk(responseSendPort, requestId, result);
+          case _evalAsyncMessage:
+            final code = message[_messageCodeKey] as String;
+            final timeoutMs = message[_messageTimeoutMsKey] as int?;
+            final result = await _evalAsync(bindings, runtime, code, timeoutMs);
+            _sendOk(responseSendPort, requestId, result);
+          case _bindCallbackMessage:
+            final callbackId = message[_messageCallbackIdKey] as int;
+            final name = message[_messageCallbackNameKey] as String;
+            _bindCallback(bindings, runtime, callbackId, name);
+            _sendOk(responseSendPort, requestId, null);
           case _disposeMessage:
             // runtime 必须在持有它的 worker isolate 中释放。
             closed = true;
             bindings.runtimeFree(runtime);
+            _nativeHostCallbackSendPort = null;
             runtime = nullptr;
             _sendOk(responseSendPort, requestId, null);
             commandPort.close();
@@ -404,6 +546,51 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
       }
     }
   });
+}
+
+void _bindCallback(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  int callbackId,
+  String name,
+) {
+  final namePtr = name.toNativeUtf8();
+  try {
+    final result = bindings.runtimeBindCallback(
+      runtime,
+      callbackId,
+      namePtr,
+      _nativeHostCallbackPointer,
+    );
+    if (result < 0) {
+      throw StateError('QuickJS callback binding failed');
+    }
+  } finally {
+    calloc.free(namePtr);
+  }
+}
+
+void _resolveCallback(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  int callbackRequestId,
+  bool success,
+  String payloadJson,
+) {
+  final payloadPtr = payloadJson.toNativeUtf8();
+  try {
+    final result = bindings.runtimeResolveCallback(
+      runtime,
+      callbackRequestId,
+      success ? 1 : 0,
+      payloadPtr,
+    );
+    if (result < 0) {
+      throw StateError('QuickJS callback resolution failed');
+    }
+  } finally {
+    calloc.free(payloadPtr);
+  }
 }
 
 String _eval(
@@ -421,6 +608,53 @@ String _eval(
   try {
     final result = resultPtr.toDartString();
     // C bridge 用不可见前缀区分普通字符串结果和特殊错误。
+    if (result == _cancelledSentinel) {
+      throw JsCancelledException();
+    }
+    if (result == _timeoutSentinel) {
+      throw const JsTimeoutException();
+    }
+    if (result.startsWith(_exceptionSentinel)) {
+      throw parseJsExceptionPayload(
+        result.substring(_exceptionSentinel.length),
+      );
+    }
+    return result;
+  } finally {
+    bindings.freeString(resultPtr);
+  }
+}
+
+Future<String> _evalAsync(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  String code,
+  int? timeoutMs,
+) async {
+  final codePtr = code.toNativeUtf8();
+  final stopwatch = Stopwatch()..start();
+  Pointer<Utf8> resultPtr = bindings.evalAsyncStart(runtime, codePtr);
+  calloc.free(codePtr);
+
+  while (true) {
+    final result = _takeResult(bindings, resultPtr);
+    if (result != _pendingSentinel) {
+      return result;
+    }
+    if (timeoutMs != null && stopwatch.elapsedMilliseconds >= timeoutMs) {
+      throw const JsTimeoutException();
+    }
+    await Future<void>.delayed(Duration.zero);
+    resultPtr = bindings.evalAsyncPoll(runtime);
+  }
+}
+
+String _takeResult(QuickjsBindings bindings, Pointer<Utf8> resultPtr) {
+  if (resultPtr == nullptr) {
+    throw StateError('QuickJS eval returned null');
+  }
+  try {
+    final result = resultPtr.toDartString();
     if (result == _cancelledSentinel) {
       throw JsCancelledException();
     }

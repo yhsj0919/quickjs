@@ -210,6 +210,18 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<String> evaluateAsync(String code, {Duration? timeout}) {
+    return evaluate(code, timeout: timeout);
+  }
+
+  @override
+  Future<void> bindCallback(
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  ) async {}
+
+  @override
   Future<void> stop() {
     _current?.completeError(JsCancelledException());
     _current = null;

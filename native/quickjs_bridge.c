@@ -12,11 +12,21 @@
 #include "quickjs-libc.h"
 #include "quickjs.h"
 
+typedef struct QuickjsPendingCallback {
+  int64_t request_id;
+  JSValue resolve;
+  JSValue reject;
+  struct QuickjsPendingCallback *next;
+} QuickjsPendingCallback;
+
 struct QuickjsRuntime {
   JSRuntime *rt;
   JSContext *ctx;
   /* Dart worker 写入这个共享标记，interrupt handler 读取后中断 JS。 */
   volatile int32_t *cancel_flag;
+  QuickjsHostCallback host_callback;
+  QuickjsPendingCallback *pending_callbacks;
+  JSValue async_promise;
 };
 
 /* 单次 eval 的中断状态。timeout 和 stop 都通过 QuickJS interrupt handler 收敛。 */
@@ -48,6 +58,9 @@ typedef struct QjsStringBuilder {
   size_t capacity;
   int failed;
 } QjsStringBuilder;
+
+static char *qjs_exception_to_payload(JSContext *ctx, JSValue exception);
+static char *qjs_value_to_string(JSContext *ctx, JSValue val);
 
 static void qjs_sb_init(QjsStringBuilder *builder) {
   builder->data = NULL;
@@ -333,6 +346,196 @@ static int qjs_interrupt_handler(JSRuntime *rt, void *opaque) {
   return 0;
 }
 
+static char *qjs_json_stringify(JSContext *ctx, JSValueConst value) {
+  JSValue global;
+  JSValue json;
+  JSValue stringify;
+  JSValue result;
+  const char *str;
+  char *copy;
+
+  global = JS_GetGlobalObject(ctx);
+  json = JS_GetPropertyStr(ctx, global, "JSON");
+  stringify = JS_GetPropertyStr(ctx, json, "stringify");
+  result = JS_Call(ctx, stringify, json, 1, &value);
+  copy = NULL;
+  if (!JS_IsException(result)) {
+    str = JS_ToCString(ctx, result);
+    if (str) {
+      copy = qjs_strdup(str);
+      JS_FreeCString(ctx, str);
+    }
+  }
+  JS_FreeValue(ctx, result);
+  JS_FreeValue(ctx, stringify);
+  JS_FreeValue(ctx, json);
+  JS_FreeValue(ctx, global);
+  return copy;
+}
+
+static JSValue qjs_json_parse(JSContext *ctx, const char *json) {
+  JSValue global;
+  JSValue json_obj;
+  JSValue parse;
+  JSValue text;
+  JSValue result;
+
+  global = JS_GetGlobalObject(ctx);
+  json_obj = JS_GetPropertyStr(ctx, global, "JSON");
+  parse = JS_GetPropertyStr(ctx, json_obj, "parse");
+  text = JS_NewString(ctx, json ? json : "null");
+  result = JS_Call(ctx, parse, json_obj, 1, &text);
+  JS_FreeValue(ctx, text);
+  JS_FreeValue(ctx, parse);
+  JS_FreeValue(ctx, json_obj);
+  JS_FreeValue(ctx, global);
+  return result;
+}
+
+static char *qjs_args_to_json(JSContext *ctx, int argc, JSValueConst *argv) {
+  JSValue array;
+  char *json;
+  int i;
+
+  array = JS_NewArray(ctx);
+  for (i = 0; i < argc; i++) {
+    JS_SetPropertyUint32(ctx, array, (uint32_t)i, JS_DupValue(ctx, argv[i]));
+  }
+  json = qjs_json_stringify(ctx, array);
+  JS_FreeValue(ctx, array);
+  return json;
+}
+
+static QuickjsPendingCallback *qjs_take_pending_callback(QuickjsRuntime *runtime,
+                                                        int64_t request_id) {
+  QuickjsPendingCallback **cursor;
+  QuickjsPendingCallback *entry;
+
+  cursor = &runtime->pending_callbacks;
+  while (*cursor) {
+    entry = *cursor;
+    if (entry->request_id == request_id) {
+      *cursor = entry->next;
+      entry->next = NULL;
+      return entry;
+    }
+    cursor = &entry->next;
+  }
+  return NULL;
+}
+
+static void qjs_free_pending_callbacks(QuickjsRuntime *runtime) {
+  QuickjsPendingCallback *entry;
+  QuickjsPendingCallback *next;
+
+  entry = runtime->pending_callbacks;
+  while (entry) {
+    next = entry->next;
+    JS_FreeValue(runtime->ctx, entry->resolve);
+    JS_FreeValue(runtime->ctx, entry->reject);
+    free(entry);
+    entry = next;
+  }
+  runtime->pending_callbacks = NULL;
+}
+
+static int qjs_execute_pending_jobs(QuickjsRuntime *runtime) {
+  JSContext *ctx;
+  int result;
+
+  if (!runtime || !runtime->rt) {
+    return -1;
+  }
+  do {
+    ctx = NULL;
+    result = JS_ExecutePendingJob(runtime->rt, &ctx);
+  } while (result > 0);
+  return result;
+}
+
+static JSValue qjs_host_callback(JSContext *ctx, JSValueConst this_val,
+                                 int argc, JSValueConst *argv, int magic,
+                                 JSValue *func_data) {
+  QuickjsRuntime *runtime;
+  QuickjsPendingCallback *pending;
+  JSValue resolving_funcs[2];
+  JSValue promise;
+  char *args_json;
+  int64_t callback_id;
+  int64_t request_id;
+
+  (void)this_val;
+  (void)magic;
+
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  if (!runtime || !runtime->host_callback) {
+    return JS_ThrowInternalError(ctx, "QuickJS host callback is not available");
+  }
+  if (JS_ToInt64(ctx, &callback_id, func_data[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  args_json = qjs_args_to_json(ctx, argc, argv);
+  if (!args_json) {
+    return JS_ThrowInternalError(ctx, "QuickJS host callback arguments cannot be encoded");
+  }
+  request_id = runtime->host_callback(callback_id, args_json);
+  free(args_json);
+  if (request_id <= 0) {
+    return JS_ThrowInternalError(ctx, "QuickJS host callback request failed");
+  }
+
+  promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return promise;
+  }
+
+  pending = (QuickjsPendingCallback *)calloc(1, sizeof(*pending));
+  if (!pending) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  pending->request_id = request_id;
+  pending->resolve = resolving_funcs[0];
+  pending->reject = resolving_funcs[1];
+  pending->next = runtime->pending_callbacks;
+  runtime->pending_callbacks = pending;
+  return promise;
+}
+
+static char *qjs_async_poll_result(QuickjsRuntime *runtime) {
+  JSPromiseStateEnum state;
+  JSValue result;
+  char *output;
+
+  if (!runtime || !runtime->ctx || JS_IsUndefined(runtime->async_promise)) {
+    return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS async eval is not running\"}");
+  }
+
+  if (qjs_execute_pending_jobs(runtime) < 0) {
+    return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS pending job failed\"}");
+  }
+
+  state = JS_PromiseState(runtime->ctx, runtime->async_promise);
+  if (state == JS_PROMISE_PENDING) {
+    return qjs_strdup("\x1eQuickJS_PENDING");
+  }
+
+  result = JS_PromiseResult(runtime->ctx, runtime->async_promise);
+  JS_FreeValue(runtime->ctx, runtime->async_promise);
+  runtime->async_promise = JS_UNDEFINED;
+
+  if (state == JS_PROMISE_FULFILLED) {
+    output = qjs_value_to_string(runtime->ctx, result);
+  } else {
+    output = qjs_exception_to_payload(runtime->ctx, result);
+  }
+  JS_FreeValue(runtime->ctx, result);
+  return output;
+}
+
 const char *quickjs_version(void) {
 #if defined(QJS_VERSION_SUFFIX)
   static char version[32];
@@ -353,6 +556,7 @@ QuickjsRuntime *quickjs_runtime_new(void) {
   if (!runtime) {
     return NULL;
   }
+  runtime->async_promise = JS_UNDEFINED;
 
   runtime->rt = JS_NewRuntime();
   if (!runtime->rt) {
@@ -381,6 +585,11 @@ void quickjs_runtime_free(QuickjsRuntime *runtime) {
     return;
   }
   if (runtime->ctx) {
+    qjs_free_pending_callbacks(runtime);
+    if (!JS_IsUndefined(runtime->async_promise)) {
+      JS_FreeValue(runtime->ctx, runtime->async_promise);
+      runtime->async_promise = JS_UNDEFINED;
+    }
     JS_FreeContext(runtime->ctx);
     runtime->ctx = NULL;
   }
@@ -452,6 +661,97 @@ char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
   char *output = qjs_value_to_string(runtime->ctx, result);
   JS_FreeValue(runtime->ctx, result);
   return output;
+}
+
+int quickjs_runtime_bind_callback(QuickjsRuntime *runtime, int64_t callback_id,
+                                  const char *name,
+                                  QuickjsHostCallback callback) {
+  JSValue global;
+  JSValue data;
+  JSValue function;
+  int result;
+
+  if (!runtime || !runtime->ctx || !name || !callback) {
+    return -1;
+  }
+
+  runtime->host_callback = callback;
+  data = JS_NewInt64(runtime->ctx, callback_id);
+  function = JS_NewCFunctionData(runtime->ctx, qjs_host_callback, 0, 0, 1, &data);
+  JS_FreeValue(runtime->ctx, data);
+  if (JS_IsException(function)) {
+    return -1;
+  }
+
+  global = JS_GetGlobalObject(runtime->ctx);
+  result = JS_SetPropertyStr(runtime->ctx, global, name, function);
+  JS_FreeValue(runtime->ctx, global);
+  return result;
+}
+
+char *quickjs_eval_async_start(QuickjsRuntime *runtime, const char *code) {
+  JSValue result;
+
+  if (!runtime || !runtime->ctx || !code) {
+    return qjs_strdup("invalid arguments");
+  }
+  if (!JS_IsUndefined(runtime->async_promise)) {
+    return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS async eval is already running\"}");
+  }
+
+  result = JS_Eval(runtime->ctx, code, strlen(code), "<evalAsync>",
+                   JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT);
+  if (JS_IsException(result)) {
+    return qjs_value_to_string(runtime->ctx, result);
+  }
+  if (!JS_IsPromise(result)) {
+    char *output = qjs_value_to_string(runtime->ctx, result);
+    JS_FreeValue(runtime->ctx, result);
+    return output;
+  }
+
+  runtime->async_promise = result;
+  return qjs_async_poll_result(runtime);
+}
+
+char *quickjs_eval_async_poll(QuickjsRuntime *runtime) {
+  return qjs_async_poll_result(runtime);
+}
+
+int quickjs_runtime_resolve_callback(QuickjsRuntime *runtime, int64_t request_id,
+                                     int success, const char *payload_json) {
+  QuickjsPendingCallback *pending;
+  JSValue value;
+  JSValue function;
+  JSValue call_result;
+
+  if (!runtime || !runtime->ctx) {
+    return -1;
+  }
+
+  pending = qjs_take_pending_callback(runtime, request_id);
+  if (!pending) {
+    return -1;
+  }
+
+  value = success ? qjs_json_parse(runtime->ctx, payload_json)
+                  : JS_NewError(runtime->ctx);
+  if (!success) {
+    JSValue message = JS_NewString(runtime->ctx, payload_json ? payload_json : "");
+    JS_SetPropertyStr(runtime->ctx, value, "message", message);
+  }
+  if (JS_IsException(value)) {
+    value = JS_NewString(runtime->ctx, payload_json ? payload_json : "");
+  }
+
+  function = success ? pending->resolve : pending->reject;
+  call_result = JS_Call(runtime->ctx, function, JS_UNDEFINED, 1, &value);
+  JS_FreeValue(runtime->ctx, call_result);
+  JS_FreeValue(runtime->ctx, value);
+  JS_FreeValue(runtime->ctx, pending->resolve);
+  JS_FreeValue(runtime->ctx, pending->reject);
+  free(pending);
+  return qjs_execute_pending_jobs(runtime);
 }
 
 void quickjs_free_string(char *str) {

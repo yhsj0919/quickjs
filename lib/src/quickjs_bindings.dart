@@ -38,6 +38,40 @@ typedef QuickjsEvalTimeout =
 typedef QuickjsFreeStringNative = Void Function(Pointer<Utf8>);
 typedef QuickjsFreeString = void Function(Pointer<Utf8>);
 
+typedef QuickjsHostCallbackNative =
+    Int64 Function(Int64 callbackId, Pointer<Utf8> argsJson);
+typedef QuickjsHostCallback =
+    int Function(int callbackId, Pointer<Utf8> argsJson);
+
+typedef QuickjsRuntimeBindCallbackNative =
+    Int32 Function(
+      Pointer<QuickjsRuntime>,
+      Int64,
+      Pointer<Utf8>,
+      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+    );
+typedef QuickjsRuntimeBindCallback =
+    int Function(
+      Pointer<QuickjsRuntime>,
+      int,
+      Pointer<Utf8>,
+      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+    );
+
+typedef QuickjsEvalAsyncStartNative =
+    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
+typedef QuickjsEvalAsyncStart =
+    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
+
+typedef QuickjsEvalAsyncPollNative =
+    Pointer<Utf8> Function(Pointer<QuickjsRuntime>);
+typedef QuickjsEvalAsyncPoll = Pointer<Utf8> Function(Pointer<QuickjsRuntime>);
+
+typedef QuickjsRuntimeResolveCallbackNative =
+    Int32 Function(Pointer<QuickjsRuntime>, Int64, Int32, Pointer<Utf8>);
+typedef QuickjsRuntimeResolveCallback =
+    int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
+
 /// QuickJS native 动态库的 Dart FFI 绑定。
 ///
 /// 这里只声明 ABI 函数，不持有 runtime 状态；runtime 生命周期由 worker 管理。
@@ -73,6 +107,24 @@ class QuickjsBindings {
           .lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
             'quickjs_eval_timeout',
           ),
+      runtimeBindCallback = lib
+          .lookupFunction<
+            QuickjsRuntimeBindCallbackNative,
+            QuickjsRuntimeBindCallback
+          >('quickjs_runtime_bind_callback'),
+      evalAsyncStart = lib
+          .lookupFunction<QuickjsEvalAsyncStartNative, QuickjsEvalAsyncStart>(
+            'quickjs_eval_async_start',
+          ),
+      evalAsyncPoll = lib
+          .lookupFunction<QuickjsEvalAsyncPollNative, QuickjsEvalAsyncPoll>(
+            'quickjs_eval_async_poll',
+          ),
+      runtimeResolveCallback = lib
+          .lookupFunction<
+            QuickjsRuntimeResolveCallbackNative,
+            QuickjsRuntimeResolveCallback
+          >('quickjs_runtime_resolve_callback'),
       freeString = lib
           .lookupFunction<QuickjsFreeStringNative, QuickjsFreeString>(
             'quickjs_free_string',
@@ -85,6 +137,10 @@ class QuickjsBindings {
   final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
   final QuickjsEvalTimeout evalTimeout;
+  final QuickjsRuntimeBindCallback runtimeBindCallback;
+  final QuickjsEvalAsyncStart evalAsyncStart;
+  final QuickjsEvalAsyncPoll evalAsyncPoll;
+  final QuickjsRuntimeResolveCallback runtimeResolveCallback;
   final QuickjsFreeString freeString;
 
   static DynamicLibrary open() {

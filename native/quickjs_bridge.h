@@ -22,6 +22,8 @@ QJS_BRIDGE_EXPORT const char *quickjs_version(void);
 
 /* Dart 侧只持有这个不透明指针，不直接访问内部 JSRuntime / JSContext。 */
 typedef struct QuickjsRuntime QuickjsRuntime;
+typedef int64_t (*QuickjsHostCallback)(int64_t callback_id,
+                                       const char *args_json);
 
 QJS_BRIDGE_EXPORT QuickjsRuntime *quickjs_runtime_new(void);
 QJS_BRIDGE_EXPORT void quickjs_runtime_free(QuickjsRuntime *runtime);
@@ -41,6 +43,15 @@ QJS_BRIDGE_EXPORT char *quickjs_eval(QuickjsRuntime *runtime, const char *code);
 QJS_BRIDGE_EXPORT char *quickjs_eval_timeout(QuickjsRuntime *runtime,
                                              const char *code,
                                              int64_t timeout_ms);
+QJS_BRIDGE_EXPORT int quickjs_runtime_bind_callback(
+    QuickjsRuntime *runtime, int64_t callback_id, const char *name,
+    QuickjsHostCallback callback);
+QJS_BRIDGE_EXPORT char *quickjs_eval_async_start(QuickjsRuntime *runtime,
+                                                 const char *code);
+QJS_BRIDGE_EXPORT char *quickjs_eval_async_poll(QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT int quickjs_runtime_resolve_callback(
+    QuickjsRuntime *runtime, int64_t request_id, int success,
+    const char *payload_json);
 
 QJS_BRIDGE_EXPORT void quickjs_free_string(char *str);
 
