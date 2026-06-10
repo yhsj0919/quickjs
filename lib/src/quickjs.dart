@@ -38,6 +38,16 @@ enum QuickjsRuntimeState {
 class Quickjs {
   Quickjs._(this._backend, this._runtime, this._options);
 
+  /// Creates a [Quickjs] wrapper around a supplied backend/runtime pair.
+  ///
+  /// This is intended for package tests that need deterministic control over
+  /// runtime lifecycle transitions without depending on a real QuickJS worker.
+  Quickjs.test(
+    QuickjsBackend backend,
+    QuickjsJsRuntimeBase runtime, {
+    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+  }) : this._(backend, runtime, options);
+
   final QuickjsBackend _backend;
   QuickjsJsRuntimeBase _runtime;
   final QuickjsRuntimeOptions _options;

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
-/// 异常模型演示：手动触发并展示公开异常类型。
+/// 异常模型演示：手动触发并展示公开异常类型与结构化 JS 异常字段。
 class ExceptionModelPage extends StatefulWidget {
   const ExceptionModelPage({super.key});
 
@@ -143,12 +143,26 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
   }
 
   String _describeError(Object error) {
+    if (error is JsException) {
+      return [
+        '${error.runtimeType}',
+        'name: ${_formatNullable(error.name)}',
+        'message: ${error.message}',
+        'stack: ${_formatNullable(error.stack)}',
+        'fileName: ${_formatNullable(error.fileName)}',
+        'line: ${_formatNullable(error.line)}',
+        'column: ${_formatNullable(error.column)}',
+      ].join('\n');
+    }
+
     // 公开 QuickjsException 都有 message，可以比普通 Object 输出更稳定。
     if (error is QuickjsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
   }
+
+  String _formatNullable(Object? value) => value?.toString() ?? '<null>';
 
   @override
   void dispose() {
@@ -206,7 +220,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: _log.isEmpty
-                    ? const Center(child: Text('点击按钮查看异常类型'))
+                    ? const Center(child: Text('点击按钮查看异常类型与结构化字段'))
                     : ListView.builder(
                         padding: const EdgeInsets.all(12),
                         itemCount: _log.length,
