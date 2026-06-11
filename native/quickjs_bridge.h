@@ -24,6 +24,10 @@ QJS_BRIDGE_EXPORT const char *quickjs_version(void);
 typedef struct QuickjsRuntime QuickjsRuntime;
 typedef int64_t (*QuickjsHostCallback)(int64_t callback_id,
                                        const char *args_json);
+typedef int64_t (*QuickjsHostStreamPull)(int64_t stream_id);
+typedef void (*QuickjsHostStreamCancel)(int64_t stream_id);
+typedef int64_t (*QuickjsHostSinkAction)(int64_t sink_id, const char *action,
+                                         const char *payload_json);
 
 QJS_BRIDGE_EXPORT QuickjsRuntime *quickjs_runtime_new(void);
 QJS_BRIDGE_EXPORT void quickjs_runtime_free(QuickjsRuntime *runtime);
@@ -52,6 +56,18 @@ QJS_BRIDGE_EXPORT char *quickjs_eval_async_poll(QuickjsRuntime *runtime);
 QJS_BRIDGE_EXPORT int quickjs_runtime_resolve_callback(
     QuickjsRuntime *runtime, int64_t request_id, int success,
     const char *payload_json);
+QJS_BRIDGE_EXPORT void quickjs_runtime_set_stream_handlers(
+    QuickjsRuntime *runtime, QuickjsHostStreamPull pull,
+    QuickjsHostStreamCancel cancel, QuickjsHostSinkAction sink_action);
+QJS_BRIDGE_EXPORT int quickjs_runtime_resolve_stream_pull(
+    QuickjsRuntime *runtime, int64_t request_id, int success,
+    const char *payload_json);
+QJS_BRIDGE_EXPORT int quickjs_runtime_resolve_sink_action(
+    QuickjsRuntime *runtime, int64_t request_id, int success,
+    const char *message);
+QJS_BRIDGE_EXPORT int quickjs_runtime_bind_sink(QuickjsRuntime *runtime,
+                                                int64_t sink_id,
+                                                const char *name);
 
 QJS_BRIDGE_EXPORT void quickjs_free_string(char *str);
 

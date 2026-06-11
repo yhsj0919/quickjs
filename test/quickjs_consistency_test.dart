@@ -328,6 +328,229 @@ void main() {
       expect(results, ['first', 'second']);
     });
 
+    test('maps Dart Stream callback to JS for-await consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostStream', (_) {
+        return Stream<Object?>.fromIterable([1, 2, 3]);
+      });
+
+      expect(
+        await engine.evalAsync('''
+const values = [];
+const stream = await hostStream();
+for await (const item of stream) {
+  values.push(item);
+}
+return values.join(',');
+'''),
+        '1,2,3',
+      );
+    });
+
+    test('maps JS sink to Dart Stream consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final values = <Object?>[];
+      final done = Completer<void>();
+
+      final stream = await engine.bindSink('progress');
+      final subscription = stream.listen(values.add, onDone: done.complete);
+      addTearDown(subscription.cancel);
+
+      expect(
+        await engine.evalAsync('''
+await progress.emit('chunk-1');
+await progress.emit('chunk-2');
+await progress.close();
+return 'done';
+'''),
+        'done',
+      );
+      await done.future.timeout(const Duration(seconds: 2));
+      expect(values, ['chunk-1', 'chunk-2']);
+    });
+
+    test(
+      'streams periodic JS sink values without starving async jobs',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
+        final values = <Object?>[];
+        final done = Completer<void>();
+
+        final stream = await engine.bindSink('progress');
+        final subscription = stream.listen(values.add, onDone: done.complete);
+        addTearDown(subscription.cancel);
+
+        expect(
+          await engine.evalAsync('''
+let n = 0;
+const sideJob = new Promise((resolve) => setTimeout(() => resolve('side'), 1));
+while (n < 3) {
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  await progress.emit(++n);
+}
+await progress.close();
+return await sideJob;
+'''),
+          'side',
+        );
+        await done.future.timeout(const Duration(seconds: 2));
+        expect(values, [1, 2, 3]);
+      },
+    );
+
+    test('maps Dart Stream errors to JS exceptions consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostStream', (_) async* {
+        yield 'before';
+        throw StateError('stream failed');
+      });
+
+      await expectLater(
+        engine.evalAsync('''
+const values = [];
+const stream = await hostStream();
+for await (const item of stream) {
+  values.push(item);
+}
+return values.join(',');
+'''),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('stream failed'),
+          ),
+        ),
+      );
+    });
+
+    test('maps JS sink error to Dart Stream error consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final errorSeen = Completer<Object>();
+
+      final stream = await engine.bindSink('progress');
+      final subscription = stream.listen(
+        (_) {},
+        onError: (Object error) {
+          if (!errorSeen.isCompleted) {
+            errorSeen.complete(error);
+          }
+        },
+      );
+      addTearDown(subscription.cancel);
+
+      expect(
+        await engine.evalAsync('''
+await progress.error('sink failed');
+return 'done';
+'''),
+        'done',
+      );
+      expect(
+        '${await errorSeen.future.timeout(const Duration(seconds: 2))}',
+        contains('sink failed'),
+      );
+    });
+
+    test('cancels Dart Stream when JS stops consuming', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final cancelled = Completer<void>();
+      StreamController<Object?>? controller;
+
+      await engine.bind('hostStream', (_) {
+        late final StreamController<Object?> current;
+        current = StreamController<Object?>(
+          onListen: () {
+            current.add(1);
+            current.add(2);
+          },
+          onCancel: () {
+            if (!cancelled.isCompleted) {
+              cancelled.complete();
+            }
+          },
+        );
+        controller = current;
+        return current.stream;
+      });
+
+      expect(
+        await engine.evalAsync('''
+let first;
+const stream = await hostStream();
+for await (const item of stream) {
+  first = item;
+  break;
+}
+return first;
+'''),
+        '1',
+      );
+      await cancelled.future.timeout(const Duration(seconds: 2));
+      await controller?.close();
+    });
+
+    test('keeps stream and sink bindings isolated per runtime', () async {
+      final first = await Quickjs.create();
+      final second = await Quickjs.create();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      final firstValues = <Object?>[];
+      final secondValues = <Object?>[];
+      final firstDone = Completer<void>();
+      final secondDone = Completer<void>();
+
+      await first.bind('hostStream', (_) => Stream<Object?>.value('first'));
+      await second.bind('hostStream', (_) => Stream<Object?>.value('second'));
+      final firstStream = await first.bindSink('progress');
+      final secondStream = await second.bindSink('progress');
+      final firstSub = firstStream.listen(
+        firstValues.add,
+        onDone: firstDone.complete,
+      );
+      final secondSub = secondStream.listen(
+        secondValues.add,
+        onDone: secondDone.complete,
+      );
+      addTearDown(firstSub.cancel);
+      addTearDown(secondSub.cancel);
+
+      final results = await Future.wait([
+        first.evalAsync('''
+await progress.emit('first-sink');
+await progress.close();
+const values = [];
+for await (const item of await hostStream()) {
+  values.push(item);
+}
+return values.join(',');
+'''),
+        second.evalAsync('''
+await progress.emit('second-sink');
+await progress.close();
+const values = [];
+for await (const item of await hostStream()) {
+  values.push(item);
+}
+return values.join(',');
+'''),
+      ]);
+
+      await firstDone.future.timeout(const Duration(seconds: 2));
+      await secondDone.future.timeout(const Duration(seconds: 2));
+      expect(results, ['first', 'second']);
+      expect(firstValues, ['first-sink']);
+      expect(secondValues, ['second-sink']);
+    });
+
     // JS throw 不能被当成普通字符串结果。
     test('maps JavaScript throw to JsException', () async {
       final engine = await Quickjs.create();

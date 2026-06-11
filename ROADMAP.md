@@ -248,17 +248,22 @@ nullable 暴露；`eval` 场景不强制保证所有位置字段都存在。
 该能力依赖 0.5.0 的 callback、Promise job pump、timer 和 dispose cancellation，
 因此放在 module 阶段之前实现。
 
-- [ ] Dart `Stream<T>` 返回值映射：JS 侧获得 async iterable，可通过
+- [x] Dart `Stream<T>` 返回值映射：JS 侧获得 async iterable，可通过
   `for await (...)` 消费增量结果。
-- [ ] JS sink callback 映射：Dart 侧提供 `emit(value)` / `close()` / `error(e)`
+- [x] JS sink callback 映射：Dart 侧提供 `emit(value)` / `close()` / `error(e)`
   语义，JS 可多次向 Dart 推送进度或分片。
-- [ ] stream payload 映射复用 callback codec：JSON-compatible 值与
+- [x] stream payload 映射复用 callback codec：JSON-compatible 值与
   `Uint8List` / `Uint8Array`。
-- [ ] backpressure 策略：先实现串行 await ack，避免 worker message 队列无界增长。
-- [ ] cancel / dispose 语义：JS 停止消费、runtime dispose、Dart stream cancel
+- [x] backpressure 策略：先实现串行 await ack，避免 worker message 队列无界增长。
+- [x] cancel / dispose 语义：JS 停止消费、runtime dispose、Dart stream cancel
   都必须释放 pending stream 与 timer / callback 资源。
-- [ ] native / web 一致性测试：多 chunk、错误、取消、runtime 隔离。
-- [ ] stream callback example 页面：展示 JS `for await` 消费 Dart stream，以及 JS
+- [x] native / web 一致性测试：多 chunk、错误、取消、runtime 隔离。
+- [x] 验收：JS 使用标准事件循环每秒向 Dart 推送一个递增数字：
+  `await new Promise(resolve => setTimeout(resolve, 1000)); await progress.emit(++n);`；
+  推送期间同 runtime 的其他异步 job / callback 不应被 pending timer 或 pending emit 饿死。
+- [x] 事件循环语义文档：timer 不抢占正在运行的同步 JS；长同步 JS 阻塞 timer、Promise
+  job 和同 runtime 后续 eval 符合 JS 单线程事件循环语义。
+- [x] stream callback example 页面：展示 JS `for await` 消费 Dart stream，以及 JS
   分片推送到 Dart 日志。
 
 ## 0.6.0：module 与 asset

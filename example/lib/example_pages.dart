@@ -7,6 +7,7 @@ import 'pages/memory_limit_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
+import 'pages/stream_callback_page.dart';
 import 'pages/structured_values_page.dart';
 import 'pages/timer_event_loop_page.dart';
 
@@ -66,5 +67,11 @@ final List<ExamplePageSpec> examplePages = [
     title: 'Timer 与事件循环',
     description: '使用 setTimeout / clearTimeout / setInterval 驱动 Promise 与事件循环。',
     builder: (_) => const TimerEventLoopPage(),
+  ),
+  ExamplePageSpec(
+    title: '流式 Callback',
+    description:
+        'Dart Stream 映射为 JS async iterable（for-await），JS sink 分片推送到 Dart Stream。',
+    builder: (_) => const StreamCallbackPage(),
   ),
 ];

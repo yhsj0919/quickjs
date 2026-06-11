@@ -10,6 +10,7 @@ import '../quickjs_callback_codec.dart';
 import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
 import '../quickjs_runtime_options.dart';
+import '../quickjs_stream_bridge.dart';
 
 const String _messageTypeKey = 'type';
 const String _messageIdKey = 'id';
@@ -23,6 +24,11 @@ const String _messageCallbackRequestIdKey = 'callbackRequestId';
 const String _messageArgsJsonKey = 'argsJson';
 const String _messageSuccessKey = 'success';
 const String _messagePayloadJsonKey = 'payloadJson';
+const String _messageStreamIdKey = 'streamId';
+const String _messagePullRequestIdKey = 'pullRequestId';
+const String _messageSinkIdKey = 'sinkId';
+const String _messageSinkActionKey = 'action';
+const String _messageActionRequestIdKey = 'actionRequestId';
 const String _timeoutErrorMessage = 'QuickJS evaluation timed out';
 const String _timeoutSentinel = '\u001eQuickJS_TIMEOUT';
 const String _cancelledErrorMessage = 'QuickJS evaluation was cancelled';
@@ -36,6 +42,12 @@ const String _evalAsyncMessage = 'evalAsync';
 const String _bindCallbackMessage = 'bindCallback';
 const String _callbackRequestMessage = 'callbackRequest';
 const String _callbackResponseMessage = 'callbackResponse';
+const String _streamPullRequestMessage = 'streamPullRequest';
+const String _streamPullResponseMessage = 'streamPullResponse';
+const String _streamCancelRequestMessage = 'streamCancelRequest';
+const String _bindSinkMessage = 'bindSink';
+const String _sinkActionRequestMessage = 'sinkActionRequest';
+const String _sinkActionResponseMessage = 'sinkActionResponse';
 const String _disposeMessage = 'dispose';
 const String _debugCrashMessage = 'debugCrash';
 const String _errorMessage = 'error';
@@ -62,11 +74,74 @@ int _nativeHostCallback(int callbackId, Pointer<Utf8> argsJson) {
   return requestId;
 }
 
+int _nativeHostStreamPull(int streamId) {
+  final sendPort = _nativeHostCallbackSendPort;
+  if (sendPort == null) {
+    return -1;
+  }
+  final requestId = _nativeNextHostCallbackRequestId++;
+  sendPort.send(<String, Object?>{
+    _messageTypeKey: _streamPullRequestMessage,
+    _messagePullRequestIdKey: requestId,
+    _messageStreamIdKey: streamId,
+  });
+  return requestId;
+}
+
+void _nativeHostStreamCancel(int streamId) {
+  final sendPort = _nativeHostCallbackSendPort;
+  sendPort?.send(<String, Object?>{
+    _messageTypeKey: _streamCancelRequestMessage,
+    _messageStreamIdKey: streamId,
+  });
+}
+
+int _nativeHostSinkAction(
+  int sinkId,
+  Pointer<Utf8> action,
+  Pointer<Utf8> payloadJson,
+) {
+  final sendPort = _nativeHostCallbackSendPort;
+  if (sendPort == null) {
+    return -1;
+  }
+  final requestId = _nativeNextHostCallbackRequestId++;
+  sendPort.send(<String, Object?>{
+    _messageTypeKey: _sinkActionRequestMessage,
+    _messageActionRequestIdKey: requestId,
+    _messageSinkIdKey: sinkId,
+    _messageSinkActionKey: action.toDartString(),
+    if (payloadJson != nullptr)
+      _messagePayloadJsonKey: payloadJson.toDartString(),
+  });
+  return requestId;
+}
+
 final Pointer<NativeFunction<QuickjsHostCallbackNative>>
 _nativeHostCallbackPointer = Pointer.fromFunction<QuickjsHostCallbackNative>(
   _nativeHostCallback,
   -1,
 );
+
+final Pointer<NativeFunction<QuickjsHostStreamPullNative>>
+_nativeHostStreamPullPointer =
+    Pointer.fromFunction<QuickjsHostStreamPullNative>(
+      _nativeHostStreamPull,
+      -1,
+    );
+
+final Pointer<NativeFunction<QuickjsHostStreamCancelNative>>
+_nativeHostStreamCancelPointer =
+    Pointer.fromFunction<QuickjsHostStreamCancelNative>(
+      _nativeHostStreamCancel,
+    );
+
+final Pointer<NativeFunction<QuickjsHostSinkActionNative>>
+_nativeHostSinkActionPointer =
+    Pointer.fromFunction<QuickjsHostSinkActionNative>(
+      _nativeHostSinkAction,
+      -1,
+    );
 
 /// native 平台的 QuickJS runtime。
 ///
@@ -96,6 +171,43 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   final String quickjsVersion;
   final Map<int, Completer<String?>> _pending = <int, Completer<String?>>{};
   final Map<int, _QuickjsCallback> _callbacks = <int, _QuickjsCallback>{};
+  late final QuickjsDartStreamRegistry _streamRegistry =
+      QuickjsDartStreamRegistry(
+        (pullRequestId, payloadJson) {
+          _sendPort.send(<String, Object?>{
+            _messageTypeKey: _streamPullResponseMessage,
+            _messagePullRequestIdKey: int.parse(pullRequestId),
+            _messageSuccessKey: true,
+            _messagePayloadJsonKey: payloadJson,
+          });
+        },
+        (pullRequestId, message) {
+          _sendPort.send(<String, Object?>{
+            _messageTypeKey: _streamPullResponseMessage,
+            _messagePullRequestIdKey: int.parse(pullRequestId),
+            _messageSuccessKey: false,
+            _messagePayloadJsonKey: message,
+          });
+        },
+      );
+  late final QuickjsJsSinkRegistry _sinkRegistry = QuickjsJsSinkRegistry(
+    (actionRequestId) {
+      _sendPort.send(<String, Object?>{
+        _messageTypeKey: _sinkActionResponseMessage,
+        _messageActionRequestIdKey: int.parse(actionRequestId),
+        _messageSuccessKey: true,
+        _messagePayloadJsonKey: '',
+      });
+    },
+    (actionRequestId, message) {
+      _sendPort.send(<String, Object?>{
+        _messageTypeKey: _sinkActionResponseMessage,
+        _messageActionRequestIdKey: int.parse(actionRequestId),
+        _messageSuccessKey: false,
+        _messagePayloadJsonKey: message,
+      });
+    },
+  );
   StreamSubscription<dynamic>? _responseSubscription;
   int _nextRequestId = 1;
   bool _closed = false;
@@ -268,6 +380,19 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<Stream<Object?>> bindJsSink(String name) async {
+    if (_closed) {
+      throw JsRuntimeClosedException();
+    }
+    final created = _sinkRegistry.createSink();
+    await _sendRequest<void>(_bindSinkMessage, <String, Object?>{
+      _messageSinkIdKey: created.sinkId,
+      _messageCallbackNameKey: name,
+    });
+    return created.stream;
+  }
+
+  @override
   Future<void> dispose() {
     if (_disposeFuture != null) {
       return _disposeFuture!;
@@ -279,11 +404,15 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     if (_asyncRunning) {
       _closed = true;
       _cancelFlag.value = 1;
+      _streamRegistry.dispose();
+      _sinkRegistry.dispose();
       _failAll(JsCancelledException());
       _disposeFuture = _closePorts();
       return _disposeFuture!;
     }
     _closed = true;
+    _streamRegistry.dispose();
+    _sinkRegistry.dispose();
     // dispose 作为普通 worker 命令发送，让 worker 自己释放 QuickJS runtime。
     _disposeFuture = _sendRequest<void>(
       _disposeMessage,
@@ -299,6 +428,8 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     if (_asyncRunning) {
       _closed = true;
       _cancelFlag.value = 1;
+      _streamRegistry.dispose();
+      _sinkRegistry.dispose();
       _failAll(JsCancelledException());
       await _closePorts();
       return;
@@ -310,6 +441,8 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       for (final future in pending) future.then<void>((_) {}, onError: (_) {}),
     ]);
     _closed = true;
+    _streamRegistry.dispose();
+    _sinkRegistry.dispose();
     await _closePorts();
   }
 
@@ -396,6 +529,35 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       unawaited(
         _handleCallbackRequest(callbackRequestId, callbackId, argsJson),
       );
+      return;
+    }
+    if (message case {
+      _messageTypeKey: _streamPullRequestMessage,
+      _messagePullRequestIdKey: final int pullRequestId,
+      _messageStreamIdKey: final int streamId,
+    }) {
+      _streamRegistry.handlePull('$pullRequestId', streamId);
+      return;
+    }
+    if (message case {
+      _messageTypeKey: _streamCancelRequestMessage,
+      _messageStreamIdKey: final int streamId,
+    }) {
+      _streamRegistry.handleCancel(streamId);
+      return;
+    }
+    if (message case {
+      _messageTypeKey: _sinkActionRequestMessage,
+      _messageActionRequestIdKey: final int actionRequestId,
+      _messageSinkIdKey: final int sinkId,
+      _messageSinkActionKey: final String action,
+    }) {
+      _sinkRegistry.handleAction(
+        '$actionRequestId',
+        sinkId,
+        action,
+        message[_messagePayloadJsonKey] as String?,
+      );
     }
   }
 
@@ -425,7 +587,9 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
         _messageTypeKey: _callbackResponseMessage,
         _messageCallbackRequestIdKey: callbackRequestId,
         _messageSuccessKey: true,
-        _messagePayloadJsonKey: jsonEncode(encodeCallbackWireValue(result)),
+        _messagePayloadJsonKey: jsonEncode(
+          _streamRegistry.encodeCallbackResult(result),
+        ),
       });
     } catch (error) {
       _sendPort.send(<String, Object?>{
@@ -438,6 +602,8 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 
   void _failAll(Object error) {
+    _streamRegistry.dispose();
+    _sinkRegistry.dispose();
     for (final completer in _pending.values) {
       if (!completer.isCompleted) {
         completer.completeError(error);
@@ -494,6 +660,12 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
       bindings.runtimeSetStackLimit(runtime, stackLimitBytes);
     }
     bindings.runtimeSetCancelFlag(runtime, cancelFlag);
+    bindings.runtimeSetStreamHandlers(
+      runtime,
+      _nativeHostStreamPullPointer,
+      _nativeHostStreamCancelPointer,
+      _nativeHostSinkActionPointer,
+    );
     _nativeHostCallbackSendPort = responseSendPort;
     readySendPort.send(<String, Object?>{
       _messageTypeKey: _readyMessage,
@@ -520,6 +692,36 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
         bindings,
         runtime,
         callbackRequestId,
+        success,
+        payloadJson,
+      );
+      return;
+    }
+    if (message case {
+      _messageTypeKey: _streamPullResponseMessage,
+      _messagePullRequestIdKey: final int pullRequestId,
+      _messageSuccessKey: final bool success,
+      _messagePayloadJsonKey: final String payloadJson,
+    }) {
+      _resolveStreamPull(
+        bindings,
+        runtime,
+        pullRequestId,
+        success,
+        payloadJson,
+      );
+      return;
+    }
+    if (message case {
+      _messageTypeKey: _sinkActionResponseMessage,
+      _messageActionRequestIdKey: final int actionRequestId,
+      _messageSuccessKey: final bool success,
+      _messagePayloadJsonKey: final String payloadJson,
+    }) {
+      _resolveSinkAction(
+        bindings,
+        runtime,
+        actionRequestId,
         success,
         payloadJson,
       );
@@ -559,6 +761,11 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             final name = message[_messageCallbackNameKey] as String;
             _bindCallback(bindings, runtime, callbackId, name);
             _sendOk(responseSendPort, requestId, null);
+          case _bindSinkMessage:
+            final sinkId = message[_messageSinkIdKey] as int;
+            final name = message[_messageCallbackNameKey] as String;
+            _bindSink(bindings, runtime, sinkId, name);
+            _sendOk(responseSendPort, requestId, null);
           case _disposeMessage:
             // runtime 必须在持有它的 worker isolate 中释放。
             closed = true;
@@ -575,6 +782,23 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
       }
     }
   });
+}
+
+void _bindSink(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  int sinkId,
+  String name,
+) {
+  final namePtr = name.toNativeUtf8();
+  try {
+    final result = bindings.runtimeBindSink(runtime, sinkId, namePtr);
+    if (result < 0) {
+      throw StateError('QuickJS sink binding failed');
+    }
+  } finally {
+    calloc.free(namePtr);
+  }
 }
 
 void _bindCallback(
@@ -619,6 +843,52 @@ void _resolveCallback(
     }
   } finally {
     calloc.free(payloadPtr);
+  }
+}
+
+void _resolveStreamPull(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  int pullRequestId,
+  bool success,
+  String payloadJson,
+) {
+  final payloadPtr = payloadJson.toNativeUtf8();
+  try {
+    final result = bindings.runtimeResolveStreamPull(
+      runtime,
+      pullRequestId,
+      success ? 1 : 0,
+      payloadPtr,
+    );
+    if (result < 0) {
+      throw StateError('QuickJS stream pull resolution failed');
+    }
+  } finally {
+    calloc.free(payloadPtr);
+  }
+}
+
+void _resolveSinkAction(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  int actionRequestId,
+  bool success,
+  String message,
+) {
+  final messagePtr = message.toNativeUtf8();
+  try {
+    final result = bindings.runtimeResolveSinkAction(
+      runtime,
+      actionRequestId,
+      success ? 1 : 0,
+      messagePtr,
+    );
+    if (result < 0) {
+      throw StateError('QuickJS sink action resolution failed');
+    }
+  } finally {
+    calloc.free(messagePtr);
   }
 }
 

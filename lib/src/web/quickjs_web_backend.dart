@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 
@@ -6,6 +7,7 @@ import '../quickjs_callback_codec.dart';
 import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
 import '../quickjs_runtime_options.dart';
+import '../quickjs_stream_bridge.dart';
 import 'quickjs_web_loader.dart';
 
 const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
@@ -69,13 +71,78 @@ class WebQuickjsBackend implements QuickjsBackend {
 }
 
 final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
-  WebQuickjsJsRuntime(this._host, this._id, this._options);
+  WebQuickjsJsRuntime(this._host, this._id, this._options) {
+    _registerStreamBridgeForCurrentId();
+  }
 
   final QuickjsWebHost _host;
   final QuickjsRuntimeOptions _options;
   int _id;
   bool _closed = false;
   Future<void>? _recovering;
+  int _nextSinkActionRequestId = 1;
+  final Map<String, Completer<String>> _pendingStreamPulls =
+      <String, Completer<String>>{};
+  final Map<String, Completer<void>> _pendingSinkActions =
+      <String, Completer<void>>{};
+  late final QuickjsDartStreamRegistry _streamRegistry =
+      QuickjsDartStreamRegistry(
+        (pullRequestId, payloadJson) {
+          _pendingStreamPulls.remove(pullRequestId)?.complete(payloadJson);
+        },
+        (pullRequestId, message) {
+          _pendingStreamPulls.remove(pullRequestId)?.completeError(message);
+        },
+      );
+  late final QuickjsJsSinkRegistry _sinkRegistry = QuickjsJsSinkRegistry(
+    (actionRequestId) {
+      _pendingSinkActions.remove(actionRequestId)?.complete();
+    },
+    (actionRequestId, message) {
+      _pendingSinkActions.remove(actionRequestId)?.completeError(message);
+    },
+  );
+
+  void _registerStreamBridgeForCurrentId() {
+    _host.runtimeRegisterStreamBridge(
+      _id.toJS,
+      _handleStreamPull.toJS,
+      _handleStreamCancel.toJS,
+      _handleSinkAction.toJS,
+    );
+  }
+
+  JSPromise<JSString> _handleStreamPull(
+    JSString pullRequestId,
+    JSNumber streamId,
+  ) {
+    final id = pullRequestId.toDart;
+    final completer = Completer<String>();
+    _pendingStreamPulls[id] = completer;
+    _streamRegistry.handlePull(id, streamId.toDartInt);
+    return completer.future.then((payloadJson) => payloadJson.toJS).toJS;
+  }
+
+  void _handleStreamCancel(JSNumber streamId) {
+    _streamRegistry.handleCancel(streamId.toDartInt);
+  }
+
+  JSPromise<JSAny?> _handleSinkAction(
+    JSNumber sinkId,
+    JSString action,
+    JSString? payloadJson,
+  ) {
+    final id = '$_id:${_nextSinkActionRequestId++}';
+    final completer = Completer<void>();
+    _pendingSinkActions[id] = completer;
+    _sinkRegistry.handleAction(
+      id,
+      sinkId.toDartInt,
+      action.toDart,
+      payloadJson?.toDart,
+    );
+    return completer.future.then((_) => null).toJS;
+  }
 
   @override
   Future<String> evaluate(String code, {Duration? timeout}) async {
@@ -132,7 +199,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
             ? [for (final item in decoded) decodeCallbackWireValue(item)]
             : <Object?>[];
         final result = await callback(args);
-        return jsonEncode(encodeCallbackWireValue(result)).toJS;
+        return jsonEncode(_streamRegistry.encodeCallbackResult(result)).toJS;
       })().toJS;
     }
 
@@ -147,10 +214,30 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<Stream<Object?>> bindJsSink(String name) async {
+    _ensureOpen();
+    final created = _sinkRegistry.createSink();
+    await _host
+        .runtimeBindSink(_id.toJS, created.sinkId.toJS, name.toJS)
+        .toDart;
+    return created.stream;
+  }
+
+  @override
   Future<void> dispose() async {
     if (_closed) {
       return;
     }
+    _streamRegistry.dispose();
+    _sinkRegistry.dispose();
+    for (final completer in _pendingStreamPulls.values) {
+      completer.completeError(JsRuntimeClosedException());
+    }
+    _pendingStreamPulls.clear();
+    for (final completer in _pendingSinkActions.values) {
+      completer.completeError(JsRuntimeClosedException());
+    }
+    _pendingSinkActions.clear();
     await _host.runtimeDispose(_id.toJS).toDart;
     _closed = true;
   }
@@ -179,6 +266,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
         .toDart
         .then((id) {
           _id = id.toDartInt;
+          _registerStreamBridgeForCurrentId();
         });
     _recovering = recovering.whenComplete(() {
       _recovering = null;

@@ -11,6 +11,8 @@
   const pending = new Map();
   /** @type {Map<string, (argsJson: string) => Promise<string>>} */
   const callbacks = new Map();
+  /** @type {Map<number, { pull: (pullRequestId: string, streamId: number) => Promise<string>, cancel: (streamId: number) => void, sinkAction: (sinkId: number, action: string, payloadJson?: string) => Promise<void> }>} */
+  const streamBridges = new Map();
   const timeoutMessage = 'QuickJS evaluation timed out';
   const cancelledMessage = 'QuickJS evaluation was cancelled';
 
@@ -49,6 +51,18 @@
       const message = event.data || {};
       if (message.type === 'callbackRequest') {
         void handleCallbackRequest(message);
+        return;
+      }
+      if (message.type === 'streamPullRequest') {
+        void handleStreamPullRequest(message);
+        return;
+      }
+      if (message.type === 'streamCancelRequest') {
+        handleStreamCancelRequest(message);
+        return;
+      }
+      if (message.type === 'sinkActionRequest') {
+        void handleSinkActionRequest(message);
         return;
       }
       const callbacks = pending.get(message.id);
@@ -101,6 +115,76 @@
       worker?.postMessage({
         type: 'callbackResponse',
         callbackRequestId,
+        success: false,
+        payloadJson: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function handleStreamPullRequest(message) {
+    const bridge = streamBridges.get(Number(message.runtimeId));
+    const pullRequestId = message.pullRequestId;
+    if (!bridge) {
+      worker?.postMessage({
+        type: 'streamPullResponse',
+        pullRequestId,
+        success: false,
+        payloadJson: `QuickJS stream bridge for runtime ${message.runtimeId} is not registered`,
+      });
+      return;
+    }
+    try {
+      const payloadJson = await bridge.pull(
+        String(pullRequestId),
+        Number(message.streamId)
+      );
+      worker?.postMessage({
+        type: 'streamPullResponse',
+        pullRequestId,
+        success: true,
+        payloadJson,
+      });
+    } catch (error) {
+      worker?.postMessage({
+        type: 'streamPullResponse',
+        pullRequestId,
+        success: false,
+        payloadJson: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  function handleStreamCancelRequest(message) {
+    streamBridges.get(Number(message.runtimeId))?.cancel(Number(message.streamId));
+  }
+
+  async function handleSinkActionRequest(message) {
+    const bridge = streamBridges.get(Number(message.runtimeId));
+    const actionRequestId = message.actionRequestId;
+    if (!bridge) {
+      worker?.postMessage({
+        type: 'sinkActionResponse',
+        actionRequestId,
+        success: false,
+        payloadJson: `QuickJS stream bridge for runtime ${message.runtimeId} is not registered`,
+      });
+      return;
+    }
+    try {
+      await bridge.sinkAction(
+        Number(message.sinkId),
+        String(message.action),
+        message.payloadJson === undefined ? undefined : String(message.payloadJson)
+      );
+      worker?.postMessage({
+        type: 'sinkActionResponse',
+        actionRequestId,
+        success: true,
+      });
+    } catch (error) {
+      worker?.postMessage({
+        type: 'sinkActionResponse',
+        actionRequestId,
         success: false,
         payloadJson: error instanceof Error ? error.message : String(error),
       });
@@ -192,6 +276,14 @@
       return post('runtimeBindCallback', { runtimeId, callbackId, name });
     },
 
+    runtimeRegisterStreamBridge(runtimeId, pull, cancel, sinkAction) {
+      streamBridges.set(runtimeId, { pull, cancel, sinkAction });
+    },
+
+    async runtimeBindSink(runtimeId, sinkId, name) {
+      return post('runtimeBindSink', { runtimeId, sinkId, name });
+    },
+
     async runtimeStop() {
       // stop 在 web 侧等价于终止 Worker；Dart backend 会随后重建 runtime。
       rejectAll(new Error(cancelledMessage));
@@ -208,6 +300,7 @@
           callbacks.delete(key);
         }
       }
+      streamBridges.delete(id);
       await post('runtimeDispose', { runtimeId: id });
     },
   };

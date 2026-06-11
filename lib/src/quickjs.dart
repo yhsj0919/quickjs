@@ -137,6 +137,17 @@ class Quickjs {
     });
   }
 
+  /// 在 JS `globalThis` 上绑定 `{ emit, close, error }`，并返回 Dart [Stream]。
+  ///
+  /// JS 侧每次 `await sink.emit(value)` 会等待 Dart 侧确认，用于串行 backpressure。
+  Future<Stream<Object?>> bindSink(String name) {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<Stream<Object?>>.error(terminalError);
+    }
+    return _runtime.bindJsSink(_validateGlobalName(name));
+  }
+
   /// 在当前 runtime 中执行 [code]，并把基础 JS 值转换成 Dart 值。
   ///
   /// 当前阶段覆盖 number、boolean、string、null、undefined、BigInt、

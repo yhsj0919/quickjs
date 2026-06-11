@@ -15,6 +15,12 @@ const exceptionSentinel = '\x1eQuickJS_EXCEPTION';
 
 /** @type {((request: { runtimeId: number, callbackId: number, argsJson: string }) => Promise<{ ok: boolean, payloadJson: string }>) | null} */
 let callbackDispatcher = null;
+/** @type {((request: { runtimeId: number, streamId: number }) => Promise<string>) | null} */
+let streamPullDispatcher = null;
+/** @type {((request: { runtimeId: number, streamId: number }) => void) | null} */
+let streamCancelDispatcher = null;
+/** @type {((request: { runtimeId: number, sinkId: number, action: string, payloadJson?: string }) => Promise<void>) | null} */
+let sinkActionDispatcher = null;
 
 /**
  * 初始化 WASM module。
@@ -87,21 +93,55 @@ function encodeWireValue(value) {
   return value;
 }
 
-function decodeWireValue(value) {
+function decodeWireValue(record, value) {
   if (Array.isArray(value)) {
-    return value.map(decodeWireValue);
+    return value.map((item) => decodeWireValue(record, item));
   }
   if (value && typeof value === 'object') {
     if (value.__quickjsType === 'bytes') {
       return new Uint8Array(value.value || []);
     }
+    if (value.__quickjsType === 'dartStream') {
+      return createDartStreamIterable(record, Number(value.streamId));
+    }
     const result = {};
     for (const [key, item] of Object.entries(value)) {
-      result[key] = decodeWireValue(item);
+      result[key] = decodeWireValue(record, item);
     }
     return result;
   }
   return value;
+}
+
+function createDartStreamIterable(record, streamId) {
+  return {
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+    async next() {
+      if (!streamPullDispatcher) {
+        throw new Error('quickjs: stream pull dispatcher is not registered');
+      }
+      const payloadJson = await streamPullDispatcher({
+        runtimeId: record.id,
+        streamId,
+      });
+      const payload = JSON.parse(payloadJson);
+      if (payload.done) {
+        return { done: true, value: undefined };
+      }
+      return {
+        done: false,
+        value: decodeWireValue(record, payload.value),
+      };
+    },
+    async return() {
+      if (streamCancelDispatcher) {
+        streamCancelDispatcher({ runtimeId: record.id, streamId });
+      }
+      return { done: true, value: undefined };
+    },
+  };
 }
 
 function readStringProperty(value, property) {
@@ -318,7 +358,7 @@ export async function runtimeNew(memoryLimitBytes) {
   const vm = await QuickJS.create(options);
   const id = nextRuntimeId++;
   // runtime id 是 Dart 侧唯一可见的 handle，真实 VM 只保存在 Worker 内。
-  const record = { vm, callbackIds: new Map(), timers: new Map(), nextTimerId: 1 };
+  const record = { id, vm, callbackIds: new Map(), timers: new Map(), nextTimerId: 1 };
   installTimers(record);
   runtimes.set(id, record);
   return id;
@@ -339,6 +379,17 @@ export function runtimeEval(id, code) {
  */
 export function setCallbackDispatcher(dispatcher) {
   callbackDispatcher = dispatcher;
+}
+
+/**
+ * @param {(request: { runtimeId: number, streamId: number }) => Promise<string>} pull
+ * @param {(request: { runtimeId: number, streamId: number }) => void} cancel
+ * @param {(request: { runtimeId: number, sinkId: number, action: string, payloadJson?: string }) => Promise<void>} sinkAction
+ */
+export function setStreamDispatchers(pull, cancel, sinkAction) {
+  streamPullDispatcher = pull;
+  streamCancelDispatcher = cancel;
+  sinkActionDispatcher = sinkAction;
 }
 
 /**
@@ -364,7 +415,7 @@ export function runtimeBindCallback(id, callbackId, name) {
       argsJson: JSON.stringify(values),
     }).then((response) => {
       if (response.ok) {
-        return decodeWireValue(JSON.parse(response.payloadJson));
+        return decodeWireValue(record, JSON.parse(response.payloadJson));
       }
       throw new Error(response.payloadJson);
     }));
@@ -380,6 +431,47 @@ export function runtimeBindCallback(id, callbackId, name) {
  */
 export async function runtimeEvalAsync(id, code) {
   return evalAsyncOnVm(runtimeRecord(id).vm, code);
+}
+
+/**
+ * @param {number} id
+ * @param {number} sinkId
+ * @param {string} name
+ */
+export function runtimeBindSink(id, sinkId, name) {
+  const record = runtimeRecord(id);
+  const vm = record.vm;
+  const sinkObject = vm.newObject();
+  const actionFunction = (action) => (...args) => {
+    if (!sinkActionDispatcher) {
+      throw new Error('quickjs: sink action dispatcher is not registered');
+    }
+    let payloadJson;
+    if (args.length > 0) {
+      payloadJson = JSON.stringify(encodeWireValue(vm.dump(args[0])));
+    }
+    for (const arg of args) {
+      arg.dispose();
+    }
+    return vm.hostToHandle(sinkActionDispatcher({
+      runtimeId: id,
+      sinkId,
+      action,
+      payloadJson,
+    }));
+  };
+  const emit = vm.newFunction(`__quickjsSinkEmit_${sinkId}`, actionFunction('emit'));
+  const close = vm.newFunction(`__quickjsSinkClose_${sinkId}`, actionFunction('close'));
+  const error = vm.newFunction(`__quickjsSinkError_${sinkId}`, actionFunction('error'));
+  sinkObject.setProp('emit', emit);
+  sinkObject.setProp('close', close);
+  sinkObject.setProp('error', error);
+  const global = vm.global;
+  global.setProp(name, sinkObject);
+  emit.dispose();
+  close.dispose();
+  error.dispose();
+  sinkObject.dispose();
 }
 
 /**

@@ -41,6 +41,9 @@ struct QuickjsRuntime {
   /* Dart worker 写入这个共享标记，interrupt handler 读取后中断 JS。 */
   volatile int32_t *cancel_flag;
   QuickjsHostCallback host_callback;
+  QuickjsHostStreamPull host_stream_pull;
+  QuickjsHostStreamCancel host_stream_cancel;
+  QuickjsHostSinkAction host_sink_action;
   QuickjsPendingCallback *pending_callbacks;
   QuickjsTimer *timers;
   int32_t next_timer_id;
@@ -452,6 +455,32 @@ static JSValue qjs_call_codec_method(JSContext *ctx, const char *method,
   return result;
 }
 
+static JSValue qjs_create_pending_promise(JSContext *ctx,
+                                          QuickjsRuntime *runtime,
+                                          int64_t request_id) {
+  QuickjsPendingCallback *pending;
+  JSValue resolving_funcs[2];
+  JSValue promise;
+
+  promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return promise;
+  }
+  pending = (QuickjsPendingCallback *)calloc(1, sizeof(*pending));
+  if (!pending) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  pending->request_id = request_id;
+  pending->resolve = resolving_funcs[0];
+  pending->reject = resolving_funcs[1];
+  pending->next = runtime->pending_callbacks;
+  runtime->pending_callbacks = pending;
+  return promise;
+}
+
 static JSValue qjs_json_parse(JSContext *ctx, const char *json) {
   JSValue global;
   JSValue json_obj;
@@ -732,9 +761,6 @@ static JSValue qjs_host_callback(JSContext *ctx, JSValueConst this_val,
                                  int argc, JSValueConst *argv, int magic,
                                  JSValue *func_data) {
   QuickjsRuntime *runtime;
-  QuickjsPendingCallback *pending;
-  JSValue resolving_funcs[2];
-  JSValue promise;
   char *args_json;
   int64_t callback_id;
   int64_t request_id;
@@ -759,25 +785,178 @@ static JSValue qjs_host_callback(JSContext *ctx, JSValueConst this_val,
   if (request_id <= 0) {
     return JS_ThrowInternalError(ctx, "QuickJS host callback request failed");
   }
+  return qjs_create_pending_promise(ctx, runtime, request_id);
+}
 
-  promise = JS_NewPromiseCapability(ctx, resolving_funcs);
-  if (JS_IsException(promise)) {
-    return promise;
-  }
+static JSValue qjs_stream_pull(JSContext *ctx, JSValueConst this_val, int argc,
+                               JSValueConst *argv) {
+  QuickjsRuntime *runtime;
+  int64_t stream_id;
+  int64_t request_id;
 
-  pending = (QuickjsPendingCallback *)calloc(1, sizeof(*pending));
-  if (!pending) {
-    JS_FreeValue(ctx, resolving_funcs[0]);
-    JS_FreeValue(ctx, resolving_funcs[1]);
-    JS_FreeValue(ctx, promise);
-    return JS_ThrowOutOfMemory(ctx);
+  (void)this_val;
+  if (argc < 1 || JS_ToInt64(ctx, &stream_id, argv[0]) < 0) {
+    return JS_EXCEPTION;
   }
-  pending->request_id = request_id;
-  pending->resolve = resolving_funcs[0];
-  pending->reject = resolving_funcs[1];
-  pending->next = runtime->pending_callbacks;
-  runtime->pending_callbacks = pending;
-  return promise;
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  if (!runtime || !runtime->host_stream_pull) {
+    return JS_ThrowInternalError(ctx, "QuickJS stream pull is not available");
+  }
+  request_id = runtime->host_stream_pull(stream_id);
+  if (request_id <= 0) {
+    return JS_ThrowInternalError(ctx, "QuickJS stream pull request failed");
+  }
+  return qjs_create_pending_promise(ctx, runtime, request_id);
+}
+
+static JSValue qjs_stream_cancel(JSContext *ctx, JSValueConst this_val,
+                                 int argc, JSValueConst *argv) {
+  QuickjsRuntime *runtime;
+  int64_t stream_id;
+
+  (void)this_val;
+  if (argc < 1 || JS_ToInt64(ctx, &stream_id, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  if (runtime && runtime->host_stream_cancel) {
+    runtime->host_stream_cancel(stream_id);
+  }
+  return JS_UNDEFINED;
+}
+
+static JSValue qjs_sink_action(JSContext *ctx, JSValueConst this_val, int argc,
+                               JSValueConst *argv, int magic,
+                               JSValue *func_data) {
+  QuickjsRuntime *runtime;
+  int64_t sink_id;
+  const char *action;
+  char *payload_json = NULL;
+  JSValue payload_value;
+  int64_t request_id;
+
+  (void)this_val;
+  (void)magic;
+  if (JS_ToInt64(ctx, &sink_id, func_data[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+  action = JS_ToCString(ctx, func_data[1]);
+  if (!action) {
+    return JS_EXCEPTION;
+  }
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  if (!runtime || !runtime->host_sink_action) {
+    JS_FreeCString(ctx, action);
+    return JS_ThrowInternalError(ctx, "QuickJS sink action is not available");
+  }
+  if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+    payload_value = qjs_call_codec_method(ctx, "encode", argv[0]);
+    if (JS_IsException(payload_value)) {
+      JS_FreeCString(ctx, action);
+      return payload_value;
+    }
+    payload_json = qjs_json_stringify(ctx, payload_value);
+    JS_FreeValue(ctx, payload_value);
+  }
+  request_id = runtime->host_sink_action(sink_id, action, payload_json);
+  free(payload_json);
+  JS_FreeCString(ctx, action);
+  if (request_id <= 0) {
+    return JS_ThrowInternalError(ctx, "QuickJS sink action request failed");
+  }
+  return qjs_create_pending_promise(ctx, runtime, request_id);
+}
+
+static void qjs_install_stream_helpers(QuickjsRuntime *runtime) {
+  static const char *source =
+      "globalThis.__quickjsDartStream = {"
+      "create(streamId) {"
+      "return {"
+      "[Symbol.asyncIterator]() { return this; },"
+      "async next() {"
+      "const payload = await __quickjsStreamPull(streamId);"
+      "if (payload.done) return { done: true, value: undefined };"
+      "return { done: false, value: payload.value };"
+      "},"
+      "async return() { __quickjsStreamCancel(streamId); return { done: true, value: undefined }; }"
+      "};"
+      "}"
+      "};";
+  JSValue global;
+  JSValue pull;
+  JSValue cancel;
+  JSValue result;
+
+  if (!runtime || !runtime->ctx) {
+    return;
+  }
+  global = JS_GetGlobalObject(runtime->ctx);
+  pull = JS_NewCFunction(runtime->ctx, qjs_stream_pull, "__quickjsStreamPull", 1);
+  cancel =
+      JS_NewCFunction(runtime->ctx, qjs_stream_cancel, "__quickjsStreamCancel", 1);
+  JS_SetPropertyStr(runtime->ctx, global, "__quickjsStreamPull", pull);
+  JS_SetPropertyStr(runtime->ctx, global, "__quickjsStreamCancel", cancel);
+  JS_FreeValue(runtime->ctx, global);
+  result = JS_Eval(runtime->ctx, source, strlen(source), "<stream-helpers>",
+                   JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT);
+  JS_FreeValue(runtime->ctx, result);
+}
+
+static JSValue qjs_create_dart_stream(JSContext *ctx, int64_t stream_id) {
+  JSValue global;
+  JSValue helper;
+  JSValue create_fn;
+  JSValue stream_id_value;
+  JSValue result;
+
+  global = JS_GetGlobalObject(ctx);
+  helper = JS_GetPropertyStr(ctx, global, "__quickjsDartStream");
+  create_fn = JS_GetPropertyStr(ctx, helper, "create");
+  JS_FreeValue(ctx, helper);
+  JS_FreeValue(ctx, global);
+  if (JS_IsUndefined(create_fn)) {
+    JS_FreeValue(ctx, create_fn);
+    return JS_ThrowInternalError(ctx, "QuickJS stream helper is not installed");
+  }
+  stream_id_value = JS_NewInt64(ctx, stream_id);
+  result = JS_Call(ctx, create_fn, JS_UNDEFINED, 1, &stream_id_value);
+  JS_FreeValue(ctx, stream_id_value);
+  JS_FreeValue(ctx, create_fn);
+  return result;
+}
+
+static int qjs_value_is_dart_stream(JSContext *ctx, JSValueConst value,
+                                    int64_t *stream_id) {
+  JSValue type_value;
+  const char *type_name;
+  JSValue id_value;
+  int result = 0;
+
+  if (!JS_IsObject(value)) {
+    return 0;
+  }
+  type_value = JS_GetPropertyStr(ctx, value, "__quickjsType");
+  type_name = JS_ToCString(ctx, type_value);
+  if (type_name && strcmp(type_name, "dartStream") == 0) {
+    id_value = JS_GetPropertyStr(ctx, value, "streamId");
+    result = JS_ToInt64(ctx, stream_id, id_value) == 0;
+    JS_FreeValue(ctx, id_value);
+  }
+  if (type_name) {
+    JS_FreeCString(ctx, type_name);
+  }
+  JS_FreeValue(ctx, type_value);
+  return result;
+}
+
+static JSValue qjs_materialize_wire_value(JSContext *ctx, JSValue value) {
+  int64_t stream_id;
+
+  if (qjs_value_is_dart_stream(ctx, value, &stream_id)) {
+    JS_FreeValue(ctx, value);
+    return qjs_create_dart_stream(ctx, stream_id);
+  }
+  return value;
 }
 
 static char *qjs_async_poll_result(QuickjsRuntime *runtime) {
@@ -857,6 +1036,7 @@ QuickjsRuntime *quickjs_runtime_new(void) {
   js_std_add_helpers(runtime->ctx, 0, NULL);
   runtime->next_timer_id = 1;
   qjs_install_timers(runtime);
+  qjs_install_stream_helpers(runtime);
   return runtime;
 }
 
@@ -1020,7 +1200,7 @@ int quickjs_runtime_resolve_callback(QuickjsRuntime *runtime, int64_t request_id
   if (success && !JS_IsException(value)) {
     JSValue decoded = qjs_call_codec_method(runtime->ctx, "decode", value);
     JS_FreeValue(runtime->ctx, value);
-    value = decoded;
+    value = qjs_materialize_wire_value(runtime->ctx, decoded);
   }
   if (!success) {
     JSValue message = JS_NewString(runtime->ctx, payload_json ? payload_json : "");
@@ -1038,6 +1218,126 @@ int quickjs_runtime_resolve_callback(QuickjsRuntime *runtime, int64_t request_id
   JS_FreeValue(runtime->ctx, pending->reject);
   free(pending);
   return qjs_execute_pending_jobs(runtime);
+}
+
+void quickjs_runtime_set_stream_handlers(QuickjsRuntime *runtime,
+                                         QuickjsHostStreamPull pull,
+                                         QuickjsHostStreamCancel cancel,
+                                         QuickjsHostSinkAction sink_action) {
+  if (!runtime) {
+    return;
+  }
+  runtime->host_stream_pull = pull;
+  runtime->host_stream_cancel = cancel;
+  runtime->host_sink_action = sink_action;
+}
+
+int quickjs_runtime_resolve_stream_pull(QuickjsRuntime *runtime,
+                                        int64_t request_id, int success,
+                                        const char *payload_json) {
+  QuickjsPendingCallback *pending;
+  JSValue value;
+  JSValue function;
+  JSValue call_result;
+
+  if (!runtime || !runtime->ctx) {
+    return -1;
+  }
+  pending = qjs_take_pending_callback(runtime, request_id);
+  if (!pending) {
+    return -1;
+  }
+  if (success) {
+    value = qjs_json_parse(runtime->ctx, payload_json);
+    if (!JS_IsException(value)) {
+      JSValue decoded = qjs_call_codec_method(runtime->ctx, "decode", value);
+      JS_FreeValue(runtime->ctx, value);
+      value = decoded;
+    }
+  } else {
+    value = JS_NewError(runtime->ctx);
+    JS_SetPropertyStr(runtime->ctx, value, "message",
+                      JS_NewString(runtime->ctx,
+                                   payload_json ? payload_json : ""));
+  }
+  function = success ? pending->resolve : pending->reject;
+  call_result = JS_Call(runtime->ctx, function, JS_UNDEFINED, 1, &value);
+  JS_FreeValue(runtime->ctx, call_result);
+  JS_FreeValue(runtime->ctx, value);
+  JS_FreeValue(runtime->ctx, pending->resolve);
+  JS_FreeValue(runtime->ctx, pending->reject);
+  free(pending);
+  return qjs_execute_pending_jobs(runtime);
+}
+
+int quickjs_runtime_resolve_sink_action(QuickjsRuntime *runtime,
+                                        int64_t request_id, int success,
+                                        const char *message) {
+  QuickjsPendingCallback *pending;
+  JSValue value;
+  JSValue function;
+  JSValue call_result;
+
+  if (!runtime || !runtime->ctx) {
+    return -1;
+  }
+  pending = qjs_take_pending_callback(runtime, request_id);
+  if (!pending) {
+    return -1;
+  }
+  if (success) {
+    value = JS_UNDEFINED;
+  } else {
+    value = JS_NewError(runtime->ctx);
+    JS_SetPropertyStr(runtime->ctx, value, "message",
+                      JS_NewString(runtime->ctx, message ? message : ""));
+  }
+  function = success ? pending->resolve : pending->reject;
+  call_result = JS_Call(runtime->ctx, function, JS_UNDEFINED, 1, &value);
+  JS_FreeValue(runtime->ctx, call_result);
+  JS_FreeValue(runtime->ctx, value);
+  JS_FreeValue(runtime->ctx, pending->resolve);
+  JS_FreeValue(runtime->ctx, pending->reject);
+  free(pending);
+  return qjs_execute_pending_jobs(runtime);
+}
+
+int quickjs_runtime_bind_sink(QuickjsRuntime *runtime, int64_t sink_id,
+                              const char *name) {
+  JSValue global;
+  JSValue sink;
+  JSValue data[2];
+  JSValue emit;
+  JSValue close;
+  JSValue error;
+  int result;
+
+  if (!runtime || !runtime->ctx || !name) {
+    return -1;
+  }
+  sink = JS_NewObject(runtime->ctx);
+  data[0] = JS_NewInt64(runtime->ctx, sink_id);
+
+  data[1] = JS_NewString(runtime->ctx, "emit");
+  emit = JS_NewCFunctionData(runtime->ctx, qjs_sink_action, 1, 0, 2, data);
+  JS_FreeValue(runtime->ctx, data[1]);
+  JS_SetPropertyStr(runtime->ctx, sink, "emit", emit);
+
+  data[1] = JS_NewString(runtime->ctx, "close");
+  close = JS_NewCFunctionData(runtime->ctx, qjs_sink_action, 0, 0, 2, data);
+  JS_FreeValue(runtime->ctx, data[1]);
+  JS_SetPropertyStr(runtime->ctx, sink, "close", close);
+
+  data[1] = JS_NewString(runtime->ctx, "error");
+  error = JS_NewCFunctionData(runtime->ctx, qjs_sink_action, 1, 0, 2, data);
+  JS_FreeValue(runtime->ctx, data[1]);
+  JS_SetPropertyStr(runtime->ctx, sink, "error", error);
+
+  JS_FreeValue(runtime->ctx, data[0]);
+  global = JS_GetGlobalObject(runtime->ctx);
+  result = JS_SetPropertyStr(runtime->ctx, global, name, sink);
+  JS_FreeValue(runtime->ctx, global);
+  return result;
 }
 
 void quickjs_free_string(char *str) {

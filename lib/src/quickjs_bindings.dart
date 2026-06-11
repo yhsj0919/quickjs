@@ -72,6 +72,51 @@ typedef QuickjsRuntimeResolveCallbackNative =
 typedef QuickjsRuntimeResolveCallback =
     int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
 
+typedef QuickjsHostStreamPullNative = Int64 Function(Int64 streamId);
+typedef QuickjsHostStreamPull = int Function(int streamId);
+
+typedef QuickjsHostStreamCancelNative = Void Function(Int64 streamId);
+typedef QuickjsHostStreamCancel = void Function(int streamId);
+
+typedef QuickjsHostSinkActionNative =
+    Int64 Function(
+      Int64 sinkId,
+      Pointer<Utf8> action,
+      Pointer<Utf8> payloadJson,
+    );
+typedef QuickjsHostSinkAction =
+    int Function(int sinkId, Pointer<Utf8> action, Pointer<Utf8> payloadJson);
+
+typedef QuickjsRuntimeSetStreamHandlersNative =
+    Void Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<NativeFunction<QuickjsHostStreamPullNative>>,
+      Pointer<NativeFunction<QuickjsHostStreamCancelNative>>,
+      Pointer<NativeFunction<QuickjsHostSinkActionNative>>,
+    );
+typedef QuickjsRuntimeSetStreamHandlers =
+    void Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<NativeFunction<QuickjsHostStreamPullNative>>,
+      Pointer<NativeFunction<QuickjsHostStreamCancelNative>>,
+      Pointer<NativeFunction<QuickjsHostSinkActionNative>>,
+    );
+
+typedef QuickjsRuntimeResolveStreamPullNative =
+    Int32 Function(Pointer<QuickjsRuntime>, Int64, Int32, Pointer<Utf8>);
+typedef QuickjsRuntimeResolveStreamPull =
+    int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
+
+typedef QuickjsRuntimeResolveSinkActionNative =
+    Int32 Function(Pointer<QuickjsRuntime>, Int64, Int32, Pointer<Utf8>);
+typedef QuickjsRuntimeResolveSinkAction =
+    int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
+
+typedef QuickjsRuntimeBindSinkNative =
+    Int32 Function(Pointer<QuickjsRuntime>, Int64, Pointer<Utf8>);
+typedef QuickjsRuntimeBindSink =
+    int Function(Pointer<QuickjsRuntime>, int, Pointer<Utf8>);
+
 /// QuickJS native 动态库的 Dart FFI 绑定。
 ///
 /// 这里只声明 ABI 函数，不持有 runtime 状态；runtime 生命周期由 worker 管理。
@@ -125,6 +170,25 @@ class QuickjsBindings {
             QuickjsRuntimeResolveCallbackNative,
             QuickjsRuntimeResolveCallback
           >('quickjs_runtime_resolve_callback'),
+      runtimeSetStreamHandlers = lib
+          .lookupFunction<
+            QuickjsRuntimeSetStreamHandlersNative,
+            QuickjsRuntimeSetStreamHandlers
+          >('quickjs_runtime_set_stream_handlers'),
+      runtimeResolveStreamPull = lib
+          .lookupFunction<
+            QuickjsRuntimeResolveStreamPullNative,
+            QuickjsRuntimeResolveStreamPull
+          >('quickjs_runtime_resolve_stream_pull'),
+      runtimeResolveSinkAction = lib
+          .lookupFunction<
+            QuickjsRuntimeResolveSinkActionNative,
+            QuickjsRuntimeResolveSinkAction
+          >('quickjs_runtime_resolve_sink_action'),
+      runtimeBindSink = lib
+          .lookupFunction<QuickjsRuntimeBindSinkNative, QuickjsRuntimeBindSink>(
+            'quickjs_runtime_bind_sink',
+          ),
       freeString = lib
           .lookupFunction<QuickjsFreeStringNative, QuickjsFreeString>(
             'quickjs_free_string',
@@ -141,6 +205,10 @@ class QuickjsBindings {
   final QuickjsEvalAsyncStart evalAsyncStart;
   final QuickjsEvalAsyncPoll evalAsyncPoll;
   final QuickjsRuntimeResolveCallback runtimeResolveCallback;
+  final QuickjsRuntimeSetStreamHandlers runtimeSetStreamHandlers;
+  final QuickjsRuntimeResolveStreamPull runtimeResolveStreamPull;
+  final QuickjsRuntimeResolveSinkAction runtimeResolveSinkAction;
+  final QuickjsRuntimeBindSink runtimeBindSink;
   final QuickjsFreeString freeString;
 
   static DynamicLibrary open() {

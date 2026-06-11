@@ -8,7 +8,11 @@
   let draining = false;
 
   self.onmessage = (event) => {
-    if ((event.data || {}).type === 'callbackResponse') {
+    if (
+      (event.data || {}).type === 'callbackResponse' ||
+      (event.data || {}).type === 'streamPullResponse' ||
+      (event.data || {}).type === 'sinkActionResponse'
+    ) {
       return;
     }
     // 所有消息进入 FIFO 队列，避免同一个 Worker 内的 QuickJS runtime 被并发重入。
@@ -63,6 +67,14 @@
           bridge.runtimeBindCallback(
             message.runtimeId,
             message.callbackId,
+            message.name
+          );
+          break;
+        case 'runtimeBindSink':
+          ensureBridge();
+          bridge.runtimeBindSink(
+            message.runtimeId,
+            message.sinkId,
             message.name
           );
           break;
@@ -121,5 +133,70 @@
         });
       });
     });
+    bridge.setStreamDispatchers(
+      async (request) => {
+        const pullRequestId = `${request.runtimeId}:${request.streamId}:${Date.now()}:${Math.random()}`;
+        return new Promise((resolve, reject) => {
+          const listener = (event) => {
+            const message = event.data || {};
+            if (
+              message.type !== 'streamPullResponse' ||
+              message.pullRequestId !== pullRequestId
+            ) {
+              return;
+            }
+            self.removeEventListener('message', listener);
+            if (message.success) {
+              resolve(String(message.payloadJson ?? '{"done":true}'));
+            } else {
+              reject(new Error(String(message.payloadJson ?? 'QuickJS stream pull failed')));
+            }
+          };
+          self.addEventListener('message', listener);
+          self.postMessage({
+            type: 'streamPullRequest',
+            pullRequestId,
+            runtimeId: request.runtimeId,
+            streamId: request.streamId,
+          });
+        });
+      },
+      (request) => {
+        self.postMessage({
+          type: 'streamCancelRequest',
+          runtimeId: request.runtimeId,
+          streamId: request.streamId,
+        });
+      },
+      async (request) => {
+        const actionRequestId = `${request.runtimeId}:${request.sinkId}:${Date.now()}:${Math.random()}`;
+        return new Promise((resolve, reject) => {
+          const listener = (event) => {
+            const message = event.data || {};
+            if (
+              message.type !== 'sinkActionResponse' ||
+              message.actionRequestId !== actionRequestId
+            ) {
+              return;
+            }
+            self.removeEventListener('message', listener);
+            if (message.success) {
+              resolve();
+            } else {
+              reject(new Error(String(message.payloadJson ?? 'QuickJS sink action failed')));
+            }
+          };
+          self.addEventListener('message', listener);
+          self.postMessage({
+            type: 'sinkActionRequest',
+            actionRequestId,
+            runtimeId: request.runtimeId,
+            sinkId: request.sinkId,
+            action: request.action,
+            payloadJson: request.payloadJson,
+          });
+        });
+      }
+    );
   }
 })();

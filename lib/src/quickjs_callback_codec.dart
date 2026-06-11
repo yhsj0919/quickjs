@@ -5,6 +5,9 @@ Object? decodeCallbackWireValue(Object? value) {
     return [for (final item in value) decodeCallbackWireValue(item)];
   }
   if (value is Map) {
+    if (value['__quickjsType'] == 'dartStream') {
+      return value;
+    }
     if (value['__quickjsType'] == 'bytes') {
       final bytes = value['value'];
       if (bytes is List) {
