@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
@@ -162,6 +164,168 @@ void main() {
       );
       expect(await engine.eval('answer'), '1');
       expect(await engine.eval('typeof extra'), 'undefined');
+    });
+
+    // Promise-based Dart callback 在 native 和 web 上都应 resolve 为 JS await 结果。
+    test('maps Promise-based Dart callback resolve consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostAdd', (args) {
+        return (args[0] as num).toInt() + (args[1] as num).toInt();
+      });
+
+      expect(await engine.evalAsync('return await hostAdd(20, 22);'), '42');
+    });
+
+    test('maps Promise-based Dart callback reject consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostFail', (_) {
+        throw StateError('host failed');
+      });
+
+      await expectLater(
+        engine.evalAsync('return await hostFail();'),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('host failed'),
+          ),
+        ),
+      );
+    });
+
+    test('keeps bound Dart callbacks isolated per runtime', () async {
+      final first = await Quickjs.create();
+      final second = await Quickjs.create();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      await first.bind('hostName', (_) => 'first');
+      await second.bind('hostName', (_) => 'second');
+
+      expect(await first.evalAsync('return await hostName();'), 'first');
+      expect(await second.evalAsync('return await hostName();'), 'second');
+    });
+
+    test('maps callback binary values consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostBytes', (args) {
+        final bytes = args.single as Uint8List;
+        return Uint8List.fromList([bytes[0], bytes[1], 255]);
+      });
+
+      expect(
+        await engine.evalAsync(
+          'const bytes = await hostBytes(new Uint8Array([1, 2]));'
+          'return Array.from(bytes).join(",");',
+        ),
+        '1,2,255',
+      );
+    });
+
+    test('dispose cancels pending Dart callback Promise', () async {
+      final engine = await Quickjs.create();
+      final callbackInvoked = Completer<void>();
+      final callbackResult = Completer<Object?>();
+
+      await engine.bind('hostWait', (_) {
+        if (!callbackInvoked.isCompleted) {
+          callbackInvoked.complete();
+        }
+        return callbackResult.future;
+      });
+
+      final running = engine.evalAsync('return await hostWait();');
+      await callbackInvoked.future.timeout(const Duration(seconds: 2));
+
+      final runningFailure = expectLater(
+        running,
+        throwsA(
+          anyOf(isA<JsCancelledException>(), isA<JsRuntimeClosedException>()),
+        ),
+      );
+      await engine.dispose().timeout(const Duration(seconds: 2));
+      await runningFailure;
+    });
+
+    test('resolves Promise through setTimeout consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync(
+          'const value = await new Promise((resolve) => '
+          'setTimeout(() => resolve(42), 1));'
+          'return value;',
+        ),
+        '42',
+      );
+    });
+
+    test('clearTimeout cancels scheduled callback consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync(
+          'let called = false;'
+          'const id = setTimeout(() => { called = true; }, 1);'
+          'clearTimeout(id);'
+          'await new Promise((resolve) => setTimeout(resolve, 2));'
+          'return called;',
+        ),
+        'false',
+      );
+    });
+
+    test('setInterval repeats until clearInterval consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync(
+          'let count = 0;'
+          'await new Promise((resolve) => {'
+          '  const id = setInterval(() => {'
+          '    count++;'
+          '    if (count === 3) {'
+          '      clearInterval(id);'
+          '      resolve();'
+          '    }'
+          '  }, 1);'
+          '});'
+          'return count;',
+        ),
+        '3',
+      );
+    });
+
+    test('keeps timers isolated per runtime', () async {
+      final first = await Quickjs.create();
+      final second = await Quickjs.create();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      final results = await Future.wait([
+        first.evalAsync(
+          'globalThis.timerName = "first";'
+          'return await new Promise((resolve) => '
+          'setTimeout(() => resolve(timerName), 1));',
+        ),
+        second.evalAsync(
+          'globalThis.timerName = "second";'
+          'return await new Promise((resolve) => '
+          'setTimeout(() => resolve(timerName), 1));',
+        ),
+      ]);
+
+      expect(results, ['first', 'second']);
     });
 
     // JS throw 不能被当成普通字符串结果。

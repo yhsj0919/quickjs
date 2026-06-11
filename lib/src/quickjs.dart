@@ -57,6 +57,7 @@ class Quickjs {
   QuickjsRuntimeState _state = QuickjsRuntimeState.ready;
   Object? _failure;
   Future<void>? _running;
+  _QueuedEval? _runningRequest;
   Future<void>? _disposeFuture;
   Future<void>? _stopFuture;
   int _nextCallbackId = 1;
@@ -252,9 +253,14 @@ class Quickjs {
       return currentDispose;
     }
 
+    final running = _running;
+    final shouldCancelRunning = _runningRequest?.async == true;
     _state = QuickjsRuntimeState.closed;
     _cancelQueued(JsRuntimeClosedException());
-    _disposeFuture = (_running ?? Future<void>.value()).then(
+    if (shouldCancelRunning) {
+      unawaited(_runtime.stop());
+    }
+    _disposeFuture = (running ?? Future<void>.value()).then(
       (_) => _runtime.dispose(),
       onError: (Object _, StackTrace _) => _runtime.dispose(),
     );
@@ -334,6 +340,7 @@ class Quickjs {
     }
 
     final request = _queue.removeFirst();
+    _runningRequest = request;
     request.cancelQueueTimer();
 
     final timeout = request.remainingTimeout;
@@ -370,6 +377,7 @@ class Quickjs {
       _running!.then<void>(
         (_) {
           _running = null;
+          _runningRequest = null;
           if (_state == QuickjsRuntimeState.running) {
             _state = QuickjsRuntimeState.ready;
           }
@@ -377,6 +385,7 @@ class Quickjs {
         },
         onError: (Object _, StackTrace _) {
           _running = null;
+          _runningRequest = null;
           if (_state == QuickjsRuntimeState.running) {
             _state = QuickjsRuntimeState.ready;
           }

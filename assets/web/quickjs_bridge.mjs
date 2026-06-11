@@ -13,6 +13,9 @@ const runtimes = new Map();
 let nextRuntimeId = 1;
 const exceptionSentinel = '\x1eQuickJS_EXCEPTION';
 
+/** @type {((request: { runtimeId: number, callbackId: number, argsJson: string }) => Promise<{ ok: boolean, payloadJson: string }>) | null} */
+let callbackDispatcher = null;
+
 /**
  * 初始化 WASM module。
  *
@@ -59,6 +62,46 @@ function valueToString(vm, handle) {
     handle.dispose();
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+function encodeWireValue(value) {
+  if (value instanceof ArrayBuffer) {
+    return { __quickjsType: 'bytes', value: Array.from(new Uint8Array(value)) };
+  }
+  if (ArrayBuffer.isView(value)) {
+    return {
+      __quickjsType: 'bytes',
+      value: Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)),
+    };
+  }
+  if (Array.isArray(value)) {
+    return value.map(encodeWireValue);
+  }
+  if (value && typeof value === 'object') {
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = encodeWireValue(item);
+    }
+    return result;
+  }
+  return value;
+}
+
+function decodeWireValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(decodeWireValue);
+  }
+  if (value && typeof value === 'object') {
+    if (value.__quickjsType === 'bytes') {
+      return new Uint8Array(value.value || []);
+    }
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = decodeWireValue(item);
+    }
+    return result;
+  }
+  return value;
 }
 
 function readStringProperty(value, property) {
@@ -112,6 +155,141 @@ function evalOnVm(vm, code) {
   }
 }
 
+function runtimeRecord(id) {
+  const record = runtimes.get(id);
+  if (!record) {
+    throw new Error(`quickjs: invalid runtime id ${id}`);
+  }
+  return record;
+}
+
+function disposeTimer(vm, timer) {
+  if (!timer || timer.disposed) {
+    return;
+  }
+  timer.disposed = true;
+  timer.callback.dispose();
+  for (const arg of timer.args) {
+    arg.dispose();
+  }
+}
+
+function clearRuntimeTimer(record, timerId) {
+  const timer = record.timers.get(timerId);
+  if (!timer) {
+    return;
+  }
+  timer.cancelled = true;
+  if (timer.repeat) {
+    clearInterval(timer.hostId);
+  } else {
+    clearTimeout(timer.hostId);
+  }
+  if (!timer.running) {
+    record.timers.delete(timerId);
+    disposeTimer(record.vm, timer);
+  }
+}
+
+function installTimers(record) {
+  const vm = record.vm;
+  const setTimer = (repeat, args) => {
+    if (!args.length) {
+      throw new TypeError('QuickJS timer callback must be a function');
+    }
+    const callback = args[0].dup();
+    const delay = Math.max(0, Number(args[1] ? vm.dump(args[1]) : 0) || 0);
+    const timerArgs = args.slice(2).map((arg) => arg.dup());
+    for (const arg of args) {
+      arg.dispose();
+    }
+
+    const timerId = record.nextTimerId++;
+    const timer = {
+      id: timerId,
+      hostId: 0,
+      repeat,
+      callback,
+      args: timerArgs,
+      running: false,
+      cancelled: false,
+      disposed: false,
+    };
+    const fire = () => {
+      if (timer.cancelled || timer.disposed) {
+        return;
+      }
+      timer.running = true;
+      try {
+        const result = vm.callFunction(callback, vm.undefined, ...timerArgs);
+        result.dispose();
+        vm.executePendingJobs();
+      } finally {
+        timer.running = false;
+        if (!repeat || timer.cancelled) {
+          clearRuntimeTimer(record, timerId);
+        }
+      }
+    };
+    timer.hostId = repeat
+      ? setInterval(fire, delay === 0 ? 1 : delay)
+      : setTimeout(fire, delay);
+    record.timers.set(timerId, timer);
+    return vm.hostToHandle(timerId);
+  };
+
+  const setTimeoutFn = vm.newFunction('setTimeout', (...args) => setTimer(false, args));
+  const setIntervalFn = vm.newFunction('setInterval', (...args) => setTimer(true, args));
+  const clearTimeoutFn = vm.newFunction('clearTimeout', (...args) => {
+    const timerId = args.length ? Number(vm.dump(args[0])) : 0;
+    for (const arg of args) {
+      arg.dispose();
+    }
+    clearRuntimeTimer(record, timerId);
+    return vm.undefined;
+  });
+  const clearIntervalFn = vm.newFunction('clearInterval', (...args) => {
+    const timerId = args.length ? Number(vm.dump(args[0])) : 0;
+    for (const arg of args) {
+      arg.dispose();
+    }
+    clearRuntimeTimer(record, timerId);
+    return vm.undefined;
+  });
+  const global = vm.global;
+  global.setProp('setTimeout', setTimeoutFn);
+  global.setProp('setInterval', setIntervalFn);
+  global.setProp('clearTimeout', clearTimeoutFn);
+  global.setProp('clearInterval', clearIntervalFn);
+  setTimeoutFn.dispose();
+  setIntervalFn.dispose();
+  clearTimeoutFn.dispose();
+  clearIntervalFn.dispose();
+}
+
+async function evalAsyncOnVm(vm, code) {
+  let handle;
+  try {
+    handle = vm.evalCode(code);
+    const settled = await vm.resolvePromise(handle);
+    vm.executePendingJobs();
+    if (settled.error) {
+      const payload = exceptionToPayload(vm.dump(settled.error));
+      settled.error.dispose();
+      return `${exceptionSentinel}${payload}`;
+    }
+    const output = valueToString(vm, settled.value);
+    settled.value.dispose();
+    return output;
+  } catch (err) {
+    return `${exceptionSentinel}${exceptionToPayload(err)}`;
+  } finally {
+    if (handle) {
+      handle.dispose();
+    }
+  }
+}
+
 /** @returns {Promise<string>} */
 export async function quickjsVersion() {
   if (!wasmModule) {
@@ -140,7 +318,9 @@ export async function runtimeNew(memoryLimitBytes) {
   const vm = await QuickJS.create(options);
   const id = nextRuntimeId++;
   // runtime id 是 Dart 侧唯一可见的 handle，真实 VM 只保存在 Worker 内。
-  runtimes.set(id, vm);
+  const record = { vm, callbackIds: new Map(), timers: new Map(), nextTimerId: 1 };
+  installTimers(record);
+  runtimes.set(id, record);
   return id;
 }
 
@@ -151,11 +331,55 @@ export async function runtimeNew(memoryLimitBytes) {
  * @param {string} code
  */
 export function runtimeEval(id, code) {
-  const vm = runtimes.get(id);
-  if (!vm) {
-    throw new Error(`quickjs: invalid runtime id ${id}`);
-  }
-  return evalOnVm(vm, code);
+  return evalOnVm(runtimeRecord(id).vm, code);
+}
+
+/**
+ * @param {(request: { runtimeId: number, callbackId: number, argsJson: string }) => Promise<{ ok: boolean, payloadJson: string }>} dispatcher
+ */
+export function setCallbackDispatcher(dispatcher) {
+  callbackDispatcher = dispatcher;
+}
+
+/**
+ * @param {number} id
+ * @param {number} callbackId
+ * @param {string} name
+ */
+export function runtimeBindCallback(id, callbackId, name) {
+  const record = runtimeRecord(id);
+  const vm = record.vm;
+  record.callbackIds.set(name, callbackId);
+  const hostFunction = vm.newFunction(name, (...args) => {
+    if (!callbackDispatcher) {
+      throw new Error('quickjs: callback dispatcher is not registered');
+    }
+    const values = args.map((arg) => encodeWireValue(vm.dump(arg)));
+    for (const arg of args) {
+      arg.dispose();
+    }
+    return vm.hostToHandle(callbackDispatcher({
+      runtimeId: id,
+      callbackId,
+      argsJson: JSON.stringify(values),
+    }).then((response) => {
+      if (response.ok) {
+        return decodeWireValue(JSON.parse(response.payloadJson));
+      }
+      throw new Error(response.payloadJson);
+    }));
+  });
+  const global = vm.global;
+  global.setProp(name, hostFunction);
+  hostFunction.dispose();
+}
+
+/**
+ * @param {number} id
+ * @param {string} code
+ */
+export async function runtimeEvalAsync(id, code) {
+  return evalAsyncOnVm(runtimeRecord(id).vm, code);
 }
 
 /**
@@ -164,10 +388,13 @@ export function runtimeEval(id, code) {
  * @param {number} id
  */
 export function runtimeDispose(id) {
-  const vm = runtimes.get(id);
-  if (vm) {
+  const record = runtimes.get(id);
+  if (record) {
+    for (const timerId of Array.from(record.timers.keys())) {
+      clearRuntimeTimer(record, timerId);
+    }
     // runtime 必须显式 dispose，避免 WASM 侧 handle 和内存泄漏。
-    vm[Symbol.dispose]();
+    record.vm[Symbol.dispose]();
     runtimes.delete(id);
   }
 }

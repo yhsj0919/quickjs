@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:js_interop';
 
 import '../quickjs_backend.dart';
+import '../quickjs_callback_codec.dart';
 import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
 import '../quickjs_runtime_options.dart';
@@ -98,10 +100,22 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
-  Future<String> evaluateAsync(String code, {Duration? timeout}) {
-    throw UnsupportedError(
-      'Promise-based callback bridge is not implemented for Web yet',
-    );
+  Future<String> evaluateAsync(String code, {Duration? timeout}) async {
+    _ensureOpen();
+    try {
+      return _mapWebEvalResult(
+        (await _host
+                .runtimeEvalAsync(
+                  _id.toJS,
+                  code.toJS,
+                  timeout?.inMilliseconds.toJS,
+                )
+                .toDart)
+            .toDart,
+      );
+    } catch (error) {
+      throw _mapWebError(error);
+    }
   }
 
   @override
@@ -109,10 +123,27 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
     int callbackId,
     String name,
     Future<Object?> Function(List<Object?> args) callback,
-  ) {
-    throw UnsupportedError(
-      'Promise-based callback bridge is not implemented for Web yet',
-    );
+  ) async {
+    _ensureOpen();
+    JSPromise<JSString> callbackAdapter(JSString argsJson) {
+      return (() async {
+        final decoded = jsonDecode(argsJson.toDart);
+        final args = decoded is List
+            ? [for (final item in decoded) decodeCallbackWireValue(item)]
+            : <Object?>[];
+        final result = await callback(args);
+        return jsonEncode(encodeCallbackWireValue(result)).toJS;
+      })().toJS;
+    }
+
+    await _host
+        .runtimeBindCallback(
+          _id.toJS,
+          callbackId.toJS,
+          name.toJS,
+          callbackAdapter.toJS,
+        )
+        .toDart;
   }
 
   @override

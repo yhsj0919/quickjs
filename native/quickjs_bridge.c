@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "quickjs-libc.h"
 #include "quickjs.h"
@@ -19,6 +22,19 @@ typedef struct QuickjsPendingCallback {
   struct QuickjsPendingCallback *next;
 } QuickjsPendingCallback;
 
+typedef struct QuickjsTimer {
+  int32_t id;
+  int is_interval;
+  int cancelled;
+  int running;
+  int64_t delay_ms;
+  int64_t due_ms;
+  JSValue callback;
+  JSValue *args;
+  int argc;
+  struct QuickjsTimer *next;
+} QuickjsTimer;
+
 struct QuickjsRuntime {
   JSRuntime *rt;
   JSContext *ctx;
@@ -26,6 +42,8 @@ struct QuickjsRuntime {
   volatile int32_t *cancel_flag;
   QuickjsHostCallback host_callback;
   QuickjsPendingCallback *pending_callbacks;
+  QuickjsTimer *timers;
+  int32_t next_timer_id;
   JSValue async_promise;
 };
 
@@ -61,6 +79,16 @@ typedef struct QjsStringBuilder {
 
 static char *qjs_exception_to_payload(JSContext *ctx, JSValue exception);
 static char *qjs_value_to_string(JSContext *ctx, JSValue val);
+
+static int64_t qjs_now_ms(void) {
+#ifdef _WIN32
+  return (int64_t)GetTickCount64();
+#else
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ((int64_t)ts.tv_sec * 1000) + (ts.tv_nsec / 1000000);
+#endif
+}
 
 static void qjs_sb_init(QjsStringBuilder *builder) {
   builder->data = NULL;
@@ -373,6 +401,57 @@ static char *qjs_json_stringify(JSContext *ctx, JSValueConst value) {
   return copy;
 }
 
+static JSValue qjs_callback_wire_codec(JSContext *ctx) {
+  static const char *source =
+      "(() => ({"
+      "encode(value, seen = new WeakSet()) {"
+      "if (value === undefined) return null;"
+      "if (value === null || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') return value;"
+      "if (value instanceof ArrayBuffer) return { __quickjsType: 'bytes', value: Array.from(new Uint8Array(value)) };"
+      "if (ArrayBuffer.isView(value)) return { __quickjsType: 'bytes', value: Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)) };"
+      "if (Array.isArray(value)) return value.map((item) => this.encode(item, seen));"
+      "if (typeof value === 'object') {"
+      "if (seen.has(value)) throw new TypeError('QuickJS callback value cannot contain circular references');"
+      "seen.add(value);"
+      "const out = {};"
+      "for (const key of Object.keys(value)) out[key] = this.encode(value[key], seen);"
+      "seen.delete(value);"
+      "return out;"
+      "}"
+      "throw new TypeError('QuickJS callback value cannot be encoded: ' + typeof value);"
+      "},"
+      "decode(value) {"
+      "if (Array.isArray(value)) return value.map((item) => this.decode(item));"
+      "if (value && typeof value === 'object') {"
+      "if (value.__quickjsType === 'bytes') return new Uint8Array(value.value || []);"
+      "const out = {};"
+      "for (const key of Object.keys(value)) out[key] = this.decode(value[key]);"
+      "return out;"
+      "}"
+      "return value;"
+      "}"
+      "}))()";
+  return JS_Eval(ctx, source, strlen(source), "<callback-codec>",
+                 JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT);
+}
+
+static JSValue qjs_call_codec_method(JSContext *ctx, const char *method,
+                                     JSValueConst value) {
+  JSValue codec;
+  JSValue function;
+  JSValue result;
+
+  codec = qjs_callback_wire_codec(ctx);
+  if (JS_IsException(codec)) {
+    return codec;
+  }
+  function = JS_GetPropertyStr(ctx, codec, method);
+  result = JS_Call(ctx, function, codec, 1, &value);
+  JS_FreeValue(ctx, function);
+  JS_FreeValue(ctx, codec);
+  return result;
+}
+
 static JSValue qjs_json_parse(JSContext *ctx, const char *json) {
   JSValue global;
   JSValue json_obj;
@@ -394,6 +473,7 @@ static JSValue qjs_json_parse(JSContext *ctx, const char *json) {
 
 static char *qjs_args_to_json(JSContext *ctx, int argc, JSValueConst *argv) {
   JSValue array;
+  JSValue encoded;
   char *json;
   int i;
 
@@ -401,7 +481,9 @@ static char *qjs_args_to_json(JSContext *ctx, int argc, JSValueConst *argv) {
   for (i = 0; i < argc; i++) {
     JS_SetPropertyUint32(ctx, array, (uint32_t)i, JS_DupValue(ctx, argv[i]));
   }
-  json = qjs_json_stringify(ctx, array);
+  encoded = qjs_call_codec_method(ctx, "encode", array);
+  json = JS_IsException(encoded) ? NULL : qjs_json_stringify(ctx, encoded);
+  JS_FreeValue(ctx, encoded);
   JS_FreeValue(ctx, array);
   return json;
 }
@@ -439,6 +521,66 @@ static void qjs_free_pending_callbacks(QuickjsRuntime *runtime) {
   runtime->pending_callbacks = NULL;
 }
 
+static void qjs_free_timer(QuickjsRuntime *runtime, QuickjsTimer *timer) {
+  int i;
+
+  if (!timer) {
+    return;
+  }
+  JS_FreeValue(runtime->ctx, timer->callback);
+  for (i = 0; i < timer->argc; i++) {
+    JS_FreeValue(runtime->ctx, timer->args[i]);
+  }
+  free(timer->args);
+  free(timer);
+}
+
+static void qjs_free_timers(QuickjsRuntime *runtime) {
+  QuickjsTimer *entry;
+  QuickjsTimer *next;
+
+  entry = runtime->timers;
+  while (entry) {
+    next = entry->next;
+    qjs_free_timer(runtime, entry);
+    entry = next;
+  }
+  runtime->timers = NULL;
+}
+
+static QuickjsTimer *qjs_find_timer(QuickjsRuntime *runtime, int32_t id) {
+  QuickjsTimer *entry;
+
+  entry = runtime->timers;
+  while (entry) {
+    if (entry->id == id) {
+      return entry;
+    }
+    entry = entry->next;
+  }
+  return NULL;
+}
+
+static void qjs_remove_timer(QuickjsRuntime *runtime, int32_t id) {
+  QuickjsTimer **cursor;
+  QuickjsTimer *entry;
+
+  cursor = &runtime->timers;
+  while (*cursor) {
+    entry = *cursor;
+    if (entry->id == id) {
+      entry->cancelled = 1;
+      if (entry->running) {
+        return;
+      }
+      *cursor = entry->next;
+      qjs_free_timer(runtime, entry);
+      return;
+    }
+    cursor = &entry->next;
+  }
+}
+
 static int qjs_execute_pending_jobs(QuickjsRuntime *runtime) {
   JSContext *ctx;
   int result;
@@ -451,6 +593,139 @@ static int qjs_execute_pending_jobs(QuickjsRuntime *runtime) {
     result = JS_ExecutePendingJob(runtime->rt, &ctx);
   } while (result > 0);
   return result;
+}
+
+static JSValue qjs_set_timer(JSContext *ctx, JSValueConst this_val, int argc,
+                             JSValueConst *argv, int magic) {
+  QuickjsRuntime *runtime;
+  QuickjsTimer *timer;
+  int64_t delay_ms = 0;
+  int i;
+
+  (void)this_val;
+
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  if (!runtime) {
+    return JS_ThrowInternalError(ctx, "QuickJS timer runtime is not available");
+  }
+  if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+    return JS_ThrowTypeError(ctx, "QuickJS timer callback must be a function");
+  }
+  if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+    if (JS_ToInt64(ctx, &delay_ms, argv[1]) < 0) {
+      return JS_EXCEPTION;
+    }
+  }
+  if (delay_ms < 0) {
+    delay_ms = 0;
+  }
+  if (magic && delay_ms == 0) {
+    delay_ms = 1;
+  }
+
+  timer = (QuickjsTimer *)calloc(1, sizeof(*timer));
+  if (!timer) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  timer->id = runtime->next_timer_id++;
+  if (timer->id <= 0) {
+    timer->id = runtime->next_timer_id++;
+  }
+  timer->is_interval = magic ? 1 : 0;
+  timer->delay_ms = delay_ms;
+  timer->due_ms = qjs_now_ms() + delay_ms;
+  timer->callback = JS_DupValue(ctx, argv[0]);
+  timer->argc = argc > 2 ? argc - 2 : 0;
+  if (timer->argc > 0) {
+    timer->args = (JSValue *)calloc((size_t)timer->argc, sizeof(JSValue));
+    if (!timer->args) {
+      JS_FreeValue(ctx, timer->callback);
+      free(timer);
+      return JS_ThrowOutOfMemory(ctx);
+    }
+    for (i = 0; i < timer->argc; i++) {
+      timer->args[i] = JS_DupValue(ctx, argv[i + 2]);
+    }
+  }
+  timer->next = runtime->timers;
+  runtime->timers = timer;
+  return JS_NewInt32(ctx, timer->id);
+}
+
+static JSValue qjs_clear_timer(JSContext *ctx, JSValueConst this_val, int argc,
+                               JSValueConst *argv) {
+  QuickjsRuntime *runtime;
+  int32_t id;
+
+  (void)this_val;
+
+  runtime = (QuickjsRuntime *)JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  if (!runtime || argc < 1 || JS_ToInt32(ctx, &id, argv[0]) < 0) {
+    return JS_UNDEFINED;
+  }
+  qjs_remove_timer(runtime, id);
+  return JS_UNDEFINED;
+}
+
+static int qjs_run_due_timers(QuickjsRuntime *runtime) {
+  QuickjsTimer *entry;
+  QuickjsTimer *next;
+  JSValue result;
+  int64_t now_ms;
+  int ran = 0;
+
+  if (!runtime || !runtime->ctx) {
+    return 0;
+  }
+  now_ms = qjs_now_ms();
+  entry = runtime->timers;
+  while (entry) {
+    next = entry->next;
+    if (!entry->cancelled && entry->due_ms <= now_ms) {
+      entry->running = 1;
+      result = JS_Call(runtime->ctx, entry->callback, JS_UNDEFINED,
+                       entry->argc, entry->args);
+      entry->running = 0;
+      ran++;
+      JS_FreeValue(runtime->ctx, result);
+      if (entry->is_interval && !entry->cancelled &&
+          qjs_find_timer(runtime, entry->id) == entry) {
+        entry->due_ms = qjs_now_ms() + entry->delay_ms;
+      } else {
+        qjs_remove_timer(runtime, entry->id);
+      }
+    }
+    entry = next;
+  }
+  return ran;
+}
+
+static void qjs_install_timers(QuickjsRuntime *runtime) {
+  JSValue global;
+  JSValue set_timeout;
+  JSValue set_interval;
+  JSValue clear_timeout;
+  JSValue clear_interval;
+
+  if (!runtime || !runtime->ctx) {
+    return;
+  }
+  global = JS_GetGlobalObject(runtime->ctx);
+  set_timeout =
+      JS_NewCFunctionMagic(runtime->ctx, qjs_set_timer, "setTimeout", 2,
+                           JS_CFUNC_generic_magic, 0);
+  set_interval =
+      JS_NewCFunctionMagic(runtime->ctx, qjs_set_timer, "setInterval", 2,
+                           JS_CFUNC_generic_magic, 1);
+  clear_timeout =
+      JS_NewCFunction(runtime->ctx, qjs_clear_timer, "clearTimeout", 1);
+  clear_interval =
+      JS_NewCFunction(runtime->ctx, qjs_clear_timer, "clearInterval", 1);
+  JS_SetPropertyStr(runtime->ctx, global, "setTimeout", set_timeout);
+  JS_SetPropertyStr(runtime->ctx, global, "setInterval", set_interval);
+  JS_SetPropertyStr(runtime->ctx, global, "clearTimeout", clear_timeout);
+  JS_SetPropertyStr(runtime->ctx, global, "clearInterval", clear_interval);
+  JS_FreeValue(runtime->ctx, global);
 }
 
 static JSValue qjs_host_callback(JSContext *ctx, JSValueConst this_val,
@@ -517,6 +792,9 @@ static char *qjs_async_poll_result(QuickjsRuntime *runtime) {
   if (qjs_execute_pending_jobs(runtime) < 0) {
     return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS pending job failed\"}");
   }
+  if (qjs_run_due_timers(runtime) > 0 && qjs_execute_pending_jobs(runtime) < 0) {
+    return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS pending job failed\"}");
+  }
 
   state = JS_PromiseState(runtime->ctx, runtime->async_promise);
   if (state == JS_PROMISE_PENDING) {
@@ -577,6 +855,8 @@ QuickjsRuntime *quickjs_runtime_new(void) {
   js_init_module_std(runtime->ctx, "std");
   js_init_module_os(runtime->ctx, "os");
   js_std_add_helpers(runtime->ctx, 0, NULL);
+  runtime->next_timer_id = 1;
+  qjs_install_timers(runtime);
   return runtime;
 }
 
@@ -586,6 +866,7 @@ void quickjs_runtime_free(QuickjsRuntime *runtime) {
   }
   if (runtime->ctx) {
     qjs_free_pending_callbacks(runtime);
+    qjs_free_timers(runtime);
     if (!JS_IsUndefined(runtime->async_promise)) {
       JS_FreeValue(runtime->ctx, runtime->async_promise);
       runtime->async_promise = JS_UNDEFINED;
@@ -736,6 +1017,11 @@ int quickjs_runtime_resolve_callback(QuickjsRuntime *runtime, int64_t request_id
 
   value = success ? qjs_json_parse(runtime->ctx, payload_json)
                   : JS_NewError(runtime->ctx);
+  if (success && !JS_IsException(value)) {
+    JSValue decoded = qjs_call_codec_method(runtime->ctx, "decode", value);
+    JS_FreeValue(runtime->ctx, value);
+    value = decoded;
+  }
   if (!success) {
     JSValue message = JS_NewString(runtime->ctx, payload_json ? payload_json : "");
     JS_SetPropertyStr(runtime->ctx, value, "message", message);

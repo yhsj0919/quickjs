@@ -8,6 +8,7 @@ import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
 import 'pages/structured_values_page.dart';
+import 'pages/timer_event_loop_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
@@ -60,5 +61,10 @@ final List<ExamplePageSpec> examplePages = [
     title: 'Callback Bridge',
     description: '绑定 Dart 函数，JS 通过 Promise await 调用并接收返回值或错误。',
     builder: (_) => const CallbackBridgePage(),
+  ),
+  ExamplePageSpec(
+    title: 'Timer 与事件循环',
+    description: '使用 setTimeout / clearTimeout / setInterval 驱动 Promise 与事件循环。',
+    builder: (_) => const TimerEventLoopPage(),
   ),
 ];

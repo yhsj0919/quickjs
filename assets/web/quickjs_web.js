@@ -9,6 +9,8 @@
   let nextRequestId = 1;
   /** @type {Map<number, { resolve: (value: unknown) => void, reject: (reason: unknown) => void, timer: number | null }>} */
   const pending = new Map();
+  /** @type {Map<string, (argsJson: string) => Promise<string>>} */
+  const callbacks = new Map();
   const timeoutMessage = 'QuickJS evaluation timed out';
   const cancelledMessage = 'QuickJS evaluation was cancelled';
 
@@ -45,6 +47,10 @@
     const instance = new Worker(workerScriptUrl);
     instance.onmessage = (event) => {
       const message = event.data || {};
+      if (message.type === 'callbackRequest') {
+        void handleCallbackRequest(message);
+        return;
+      }
       const callbacks = pending.get(message.id);
       if (!callbacks) {
         return;
@@ -67,6 +73,38 @@
       rejectAll(new Error('QuickJS worker message error'));
     };
     return instance;
+  }
+
+  async function handleCallbackRequest(message) {
+    const callbackKey = `${message.runtimeId}:${message.callbackId}`;
+    const callback = callbacks.get(callbackKey);
+    const callbackRequestId = message.callbackRequestId;
+    if (!callback) {
+      worker?.postMessage({
+        type: 'callbackResponse',
+        callbackRequestId,
+        success: false,
+        payloadJson: `QuickJS callback ${message.callbackId} is not bound`,
+      });
+      return;
+    }
+
+    try {
+      const payloadJson = await callback(String(message.argsJson || '[]'));
+      worker?.postMessage({
+        type: 'callbackResponse',
+        callbackRequestId,
+        success: true,
+        payloadJson,
+      });
+    } catch (error) {
+      worker?.postMessage({
+        type: 'callbackResponse',
+        callbackRequestId,
+        success: false,
+        payloadJson: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async function post(type, payload = {}, timeoutMs = 0) {
@@ -138,6 +176,22 @@
       return post('runtimeEval', { runtimeId: id, code }, timeoutMs);
     },
 
+    /** @param {number} id @param {string} code */
+    async runtimeEvalAsync(id, code, timeoutMs = 0) {
+      return post('runtimeEvalAsync', { runtimeId: id, code }, timeoutMs);
+    },
+
+    /**
+     * @param {number} runtimeId
+     * @param {number} callbackId
+     * @param {string} name
+     * @param {(argsJson: string) => Promise<string>} callback
+     */
+    async runtimeBindCallback(runtimeId, callbackId, name, callback) {
+      callbacks.set(`${runtimeId}:${callbackId}`, callback);
+      return post('runtimeBindCallback', { runtimeId, callbackId, name });
+    },
+
     async runtimeStop() {
       // stop 在 web 侧等价于终止 Worker；Dart backend 会随后重建 runtime。
       rejectAll(new Error(cancelledMessage));
@@ -147,6 +201,12 @@
     async runtimeDispose(id) {
       if (!worker) {
         return;
+      }
+      const prefix = `${id}:`;
+      for (const key of callbacks.keys()) {
+        if (key.startsWith(prefix)) {
+          callbacks.delete(key);
+        }
       }
       await post('runtimeDispose', { runtimeId: id });
     },

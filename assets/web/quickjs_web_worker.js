@@ -8,6 +8,9 @@
   let draining = false;
 
   self.onmessage = (event) => {
+    if ((event.data || {}).type === 'callbackResponse') {
+      return;
+    }
     // 所有消息进入 FIFO 队列，避免同一个 Worker 内的 QuickJS runtime 被并发重入。
     queue.push(event);
     void drainQueue();
@@ -51,6 +54,23 @@
           ensureBridge();
           result = bridge.runtimeEval(message.runtimeId, message.code);
           break;
+        case 'runtimeEvalAsync':
+          ensureBridge();
+          result = await bridge.runtimeEvalAsync(message.runtimeId, message.code);
+          break;
+        case 'runtimeBindCallback':
+          ensureBridge();
+          bridge.runtimeBindCallback(
+            message.runtimeId,
+            message.callbackId,
+            message.name
+          );
+          break;
+        case 'callbackResponse':
+          ensureBridge();
+          // callback responses are consumed by the dispatcher promise below.
+          // They do not correspond to a normal request/response id.
+          break;
         case 'runtimeDispose':
           ensureBridge();
           bridge.runtimeDispose(message.runtimeId);
@@ -74,5 +94,32 @@
     if (!bridge) {
       throw new Error('quickjs worker: call init first');
     }
+    bridge.setCallbackDispatcher(async (request) => {
+      const callbackRequestId = `${request.runtimeId}:${request.callbackId}:${Date.now()}:${Math.random()}`;
+      return new Promise((resolve) => {
+        const listener = (event) => {
+          const message = event.data || {};
+          if (
+            message.type !== 'callbackResponse' ||
+            message.callbackRequestId !== callbackRequestId
+          ) {
+            return;
+          }
+          self.removeEventListener('message', listener);
+          resolve({
+            ok: Boolean(message.success),
+            payloadJson: String(message.payloadJson ?? ''),
+          });
+        };
+        self.addEventListener('message', listener);
+        self.postMessage({
+          type: 'callbackRequest',
+          callbackRequestId,
+          runtimeId: request.runtimeId,
+          callbackId: request.callbackId,
+          argsJson: request.argsJson,
+        });
+      });
+    });
   }
 })();

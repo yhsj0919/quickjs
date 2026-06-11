@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 
 import '../quickjs_bindings.dart';
+import '../quickjs_callback_codec.dart';
 import '../quickjs_exception.dart';
 import '../quickjs_runtime_base.dart';
 import '../quickjs_runtime_options.dart';
@@ -98,6 +99,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   StreamSubscription<dynamic>? _responseSubscription;
   int _nextRequestId = 1;
   bool _closed = false;
+  bool _asyncRunning = false;
   bool _portsClosed = false;
   Future<void>? _disposeFuture;
 
@@ -236,12 +238,17 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       throw JsRuntimeClosedException();
     }
     _cancelFlag.value = 0;
-    final result =
-        await _sendRequest<String>(_evalAsyncMessage, <String, Object?>{
-          _messageCodeKey: code,
-          if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
-        });
-    return result;
+    _asyncRunning = true;
+    try {
+      final result =
+          await _sendRequest<String>(_evalAsyncMessage, <String, Object?>{
+            _messageCodeKey: code,
+            if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
+          });
+      return result;
+    } finally {
+      _asyncRunning = false;
+    }
   }
 
   @override
@@ -269,6 +276,13 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       _disposeFuture = _closePorts();
       return _disposeFuture!;
     }
+    if (_asyncRunning) {
+      _closed = true;
+      _cancelFlag.value = 1;
+      _failAll(JsCancelledException());
+      _disposeFuture = _closePorts();
+      return _disposeFuture!;
+    }
     _closed = true;
     // dispose 作为普通 worker 命令发送，让 worker 自己释放 QuickJS runtime。
     _disposeFuture = _sendRequest<void>(
@@ -280,6 +294,13 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   @override
   Future<void> stop() async {
     if (_closed) {
+      return;
+    }
+    if (_asyncRunning) {
+      _closed = true;
+      _cancelFlag.value = 1;
+      _failAll(JsCancelledException());
+      await _closePorts();
       return;
     }
     // C interrupt handler 会读取这个标记并中断正在执行的 JS。
@@ -396,13 +417,15 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
 
     try {
       final decoded = jsonDecode(argsJson);
-      final args = decoded is List ? decoded.cast<Object?>() : <Object?>[];
+      final args = decoded is List
+          ? [for (final item in decoded) decodeCallbackWireValue(item)]
+          : <Object?>[];
       final result = await callback(args);
       _sendPort.send(<String, Object?>{
         _messageTypeKey: _callbackResponseMessage,
         _messageCallbackRequestIdKey: callbackRequestId,
         _messageSuccessKey: true,
-        _messagePayloadJsonKey: jsonEncode(result),
+        _messagePayloadJsonKey: jsonEncode(encodeCallbackWireValue(result)),
       });
     } catch (error) {
       _sendPort.send(<String, Object?>{
@@ -523,7 +546,13 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
           case _evalAsyncMessage:
             final code = message[_messageCodeKey] as String;
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
-            final result = await _evalAsync(bindings, runtime, code, timeoutMs);
+            final result = await _evalAsync(
+              bindings,
+              runtime,
+              code,
+              timeoutMs,
+              cancelFlag,
+            );
             _sendOk(responseSendPort, requestId, result);
           case _bindCallbackMessage:
             final callbackId = message[_messageCallbackIdKey] as int;
@@ -630,6 +659,7 @@ Future<String> _evalAsync(
   Pointer<QuickjsRuntime> runtime,
   String code,
   int? timeoutMs,
+  Pointer<Int32> cancelFlag,
 ) async {
   final codePtr = code.toNativeUtf8();
   final stopwatch = Stopwatch()..start();
@@ -637,6 +667,9 @@ Future<String> _evalAsync(
   calloc.free(codePtr);
 
   while (true) {
+    if (cancelFlag.value != 0) {
+      throw JsCancelledException();
+    }
     final result = _takeResult(bindings, resultPtr);
     if (result != _pendingSentinel) {
       return result;
@@ -645,6 +678,9 @@ Future<String> _evalAsync(
       throw const JsTimeoutException();
     }
     await Future<void>.delayed(Duration.zero);
+    if (cancelFlag.value != 0) {
+      throw JsCancelledException();
+    }
     resultPtr = bindings.evalAsyncPoll(runtime);
   }
 }
