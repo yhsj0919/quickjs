@@ -260,6 +260,11 @@
       return post('runtimeEval', { runtimeId: id, code }, timeoutMs);
     },
 
+    /** @param {number} id @param {string} source @param {string} name */
+    async runtimeEvalModule(id, source, name, timeoutMs = 0) {
+      return post('runtimeEvalModule', { runtimeId: id, source, name }, timeoutMs);
+    },
+
     /** @param {number} id @param {string} code */
     async runtimeEvalAsync(id, code, timeoutMs = 0) {
       return post('runtimeEvalAsync', { runtimeId: id, code }, timeoutMs);

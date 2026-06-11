@@ -8,7 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('native/web consistency', () {
-    // 最小求值语义必须在 native FFI 和 Web WASM 上一致。
+    // 鏈€灏忔眰鍊艰涔夊繀椤诲湪 native FFI 鍜?Web WASM 涓婁竴鑷淬€?
     test('evaluates basic JavaScript values', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -21,7 +21,7 @@ void main() {
       expect(await engine.eval('true'), 'true');
     });
 
-    // 结构化返回 API 在 native 和 web 上应保持基础 primitive 映射一致。
+    // 缁撴瀯鍖栬繑鍥?API 鍦?native 鍜?web 涓婂簲淇濇寔鍩虹 primitive 鏄犲皠涓€鑷淬€?
     test('maps primitive JavaScript values to Dart values', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -34,7 +34,7 @@ void main() {
       expect(await engine.evaluateValue('undefined'), isA<JsUndefined>());
     });
 
-    // BigInt 在 native 和 web 上都应映射为 Dart BigInt。
+    // BigInt 鍦?native 鍜?web 涓婇兘搴旀槧灏勪负 Dart BigInt銆?
     test('maps BigInt values to Dart BigInt', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -45,7 +45,7 @@ void main() {
       );
     });
 
-    // JSON-compatible array / plain object 在 native 和 web 上保持同样结构。
+    // JSON-compatible array / plain object 鍦?native 鍜?web 涓婁繚鎸佸悓鏍风粨鏋勩€?
     test('maps arrays and plain objects to Dart values', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -73,7 +73,7 @@ void main() {
       );
     });
 
-    // ArrayBuffer / Uint8Array 在 native 和 web 上都应映射为 Uint8List。
+    // ArrayBuffer / Uint8Array 鍦?native 鍜?web 涓婇兘搴旀槧灏勪负 Uint8List銆?
     test('maps binary buffers to Dart Uint8List', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -88,7 +88,7 @@ void main() {
       );
     });
 
-    // 不可直接转换值在 native 和 web 上都应返回同一类公开转换错误。
+    // 涓嶅彲鐩存帴杞崲鍊煎湪 native 鍜?web 涓婇兘搴旇繑鍥炲悓涓€绫诲叕寮€杞崲閿欒銆?
     test('rejects unsupported JavaScript values consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -106,7 +106,7 @@ void main() {
       }
     });
 
-    // Dart globals 注入在 native 和 web 上应保持同样的转换与恢复语义。
+    // Dart globals 娉ㄥ叆鍦?native 鍜?web 涓婂簲淇濇寔鍚屾牱鐨勮浆鎹笌鎭㈠璇箟銆?
     test('maps Dart globals to JavaScript values consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -166,7 +166,58 @@ void main() {
       expect(await engine.eval('typeof extra'), 'undefined');
     });
 
-    // Promise-based Dart callback 在 native 和 web 上都应 resolve 为 JS await 结果。
+    test('evaluates ES modules consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalModule(
+          'export const value = 42;'
+          'globalThis.moduleValue = value;',
+          name: 'module-basic.mjs',
+        ),
+        'undefined',
+      );
+      expect(await engine.eval('globalThis.moduleValue'), '42');
+    });
+
+    test('evaluates multiple ES module names in one runtime', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      for (var i = 1; i <= 2; i++) {
+        expect(
+          await engine.evalModule(
+            'export const value = $i;'
+            'globalThis.moduleValue = value;',
+            name: 'module-run-$i.mjs',
+          ),
+          'undefined',
+        );
+        expect(await engine.eval('globalThis.moduleValue'), '$i');
+      }
+    });
+
+    test('maps ES module throw to JsException consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evalModule(
+          'throw new Error("module boom");',
+          name: 'module-error.mjs',
+        ),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('module boom'),
+          ),
+        ),
+      );
+    });
+
+    // Promise-based Dart callback 鍦?native 鍜?web 涓婇兘搴?resolve 涓?JS await 缁撴灉銆?
     test('maps Promise-based Dart callback resolve consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -308,24 +359,32 @@ void main() {
 
     test('keeps timers isolated per runtime', () async {
       final first = await Quickjs.create();
+      try {
+        expect(
+          await first.evalAsync(
+            'globalThis.timerName = "first";'
+            'return await new Promise((resolve) => '
+            'setTimeout(() => resolve(timerName), 1));',
+          ),
+          'first',
+        );
+      } finally {
+        await first.dispose();
+      }
+
       final second = await Quickjs.create();
-      addTearDown(first.dispose);
-      addTearDown(second.dispose);
-
-      final results = await Future.wait([
-        first.evalAsync(
-          'globalThis.timerName = "first";'
-          'return await new Promise((resolve) => '
-          'setTimeout(() => resolve(timerName), 1));',
-        ),
-        second.evalAsync(
-          'globalThis.timerName = "second";'
-          'return await new Promise((resolve) => '
-          'setTimeout(() => resolve(timerName), 1));',
-        ),
-      ]);
-
-      expect(results, ['first', 'second']);
+      try {
+        expect(
+          await second.evalAsync(
+            'globalThis.timerName = "second";'
+            'return await new Promise((resolve) => '
+            'setTimeout(() => resolve(timerName), 1));',
+          ),
+          'second',
+        );
+      } finally {
+        await second.dispose();
+      }
     });
 
     test('maps Dart Stream callback to JS for-await consistently', () async {
@@ -370,6 +429,69 @@ return 'done';
       );
       await done.future.timeout(const Duration(seconds: 2));
       expect(values, ['chunk-1', 'chunk-2']);
+    });
+
+    test('keeps stream and sink bindings isolated per runtime', () async {
+      final first = await Quickjs.create();
+      final firstValues = <Object?>[];
+      final firstDone = Completer<void>();
+
+      try {
+        await first.bind('hostStream', (_) => Stream<Object?>.value('first'));
+        final firstStream = await first.bindSink('progress');
+        final firstSub = firstStream.listen(
+          firstValues.add,
+          onDone: firstDone.complete,
+        );
+        addTearDown(firstSub.cancel);
+
+        expect(
+          await first.evalAsync('''
+await progress.emit('first-sink');
+await progress.close();
+const values = [];
+for await (const item of await hostStream()) {
+  values.push(item);
+}
+return values.join(',');
+'''),
+          'first',
+        );
+        await firstDone.future.timeout(const Duration(seconds: 2));
+        expect(firstValues, ['first-sink']);
+      } finally {
+        await first.dispose();
+      }
+
+      final second = await Quickjs.create();
+      final secondValues = <Object?>[];
+      final secondDone = Completer<void>();
+      try {
+        await second.bind('hostStream', (_) => Stream<Object?>.value('second'));
+        final secondStream = await second.bindSink('progress');
+        final secondSub = secondStream.listen(
+          secondValues.add,
+          onDone: secondDone.complete,
+        );
+        addTearDown(secondSub.cancel);
+
+        expect(
+          await second.evalAsync('''
+await progress.emit('second-sink');
+await progress.close();
+const values = [];
+for await (const item of await hostStream()) {
+  values.push(item);
+}
+return values.join(',');
+'''),
+          'second',
+        );
+        await secondDone.future.timeout(const Duration(seconds: 2));
+        expect(secondValues, ['second-sink']);
+      } finally {
+        await second.dispose();
+      }
     });
 
     test(
@@ -498,60 +620,7 @@ return first;
       await controller?.close();
     });
 
-    test('keeps stream and sink bindings isolated per runtime', () async {
-      final first = await Quickjs.create();
-      final second = await Quickjs.create();
-      addTearDown(first.dispose);
-      addTearDown(second.dispose);
-      final firstValues = <Object?>[];
-      final secondValues = <Object?>[];
-      final firstDone = Completer<void>();
-      final secondDone = Completer<void>();
-
-      await first.bind('hostStream', (_) => Stream<Object?>.value('first'));
-      await second.bind('hostStream', (_) => Stream<Object?>.value('second'));
-      final firstStream = await first.bindSink('progress');
-      final secondStream = await second.bindSink('progress');
-      final firstSub = firstStream.listen(
-        firstValues.add,
-        onDone: firstDone.complete,
-      );
-      final secondSub = secondStream.listen(
-        secondValues.add,
-        onDone: secondDone.complete,
-      );
-      addTearDown(firstSub.cancel);
-      addTearDown(secondSub.cancel);
-
-      final results = await Future.wait([
-        first.evalAsync('''
-await progress.emit('first-sink');
-await progress.close();
-const values = [];
-for await (const item of await hostStream()) {
-  values.push(item);
-}
-return values.join(',');
-'''),
-        second.evalAsync('''
-await progress.emit('second-sink');
-await progress.close();
-const values = [];
-for await (const item of await hostStream()) {
-  values.push(item);
-}
-return values.join(',');
-'''),
-      ]);
-
-      await firstDone.future.timeout(const Duration(seconds: 2));
-      await secondDone.future.timeout(const Duration(seconds: 2));
-      expect(results, ['first', 'second']);
-      expect(firstValues, ['first-sink']);
-      expect(secondValues, ['second-sink']);
-    });
-
-    // JS throw 不能被当成普通字符串结果。
+    // JS throw 涓嶈兘琚綋鎴愭櫘閫氬瓧绗︿覆缁撴灉銆?
     test('maps JavaScript throw to JsException', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -587,7 +656,7 @@ return values.join(',');
       );
     });
 
-    // 同一 runtime 内并发 eval 必须按 FIFO 顺序串行。
+    // 鍚屼竴 runtime 鍐呭苟鍙?eval 蹇呴』鎸?FIFO 椤哄簭涓茶銆?
     test('queues concurrent evaluations in order', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -601,7 +670,7 @@ return values.join(',');
       expect(results, ['a', 'ab', 'abc']);
     });
 
-    // 多 runtime 的 globalThis 基础隔离必须一致。
+    // 澶?runtime 鐨?globalThis 鍩虹闅旂蹇呴』涓€鑷淬€?
     test('keeps runtime globals isolated', () async {
       final first = await Quickjs.create();
       final second = await Quickjs.create();
@@ -615,7 +684,7 @@ return values.join(',');
       expect(await second.eval('globalThis.sharedName'), 'second');
     });
 
-    // timeout 后同一个 Quickjs 实例应恢复为可继续 eval 的状态。
+    // timeout 鍚庡悓涓€涓?Quickjs 瀹炰緥搴旀仮澶嶄负鍙户缁?eval 鐨勭姸鎬併€?
     test('recovers after timeout', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -631,8 +700,8 @@ return values.join(',');
       expect(await engine.eval('21 * 2'), '42');
     });
 
-    // web 侧 timeout 会 terminate shared Worker；其它 runtime 下一次 eval 必须自动恢复。
-    // native 侧每个 runtime 独占 worker，因此 peer runtime 的 globals 不应丢失。
+    // web 渚?timeout 浼?terminate shared Worker锛涘叾瀹?runtime 涓嬩竴娆?eval 蹇呴』鑷姩鎭㈠銆?
+    // native 渚ф瘡涓?runtime 鐙崰 worker锛屽洜姝?peer runtime 鐨?globals 涓嶅簲涓㈠け銆?
     test('keeps peer runtime usable after timeout recovery', () async {
       final first = await Quickjs.create();
       final second = await Quickjs.create();
@@ -656,7 +725,7 @@ return values.join(',');
       expect(await second.eval('40 + 2'), '42');
     });
 
-    // native 和 web 都应把 memory limit 超限映射成同一个公开错误类型。
+    // native 鍜?web 閮藉簲鎶?memory limit 瓒呴檺鏄犲皠鎴愬悓涓€涓叕寮€閿欒绫诲瀷銆?
     test('maps memory limit failures consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(memoryLimitBytes: 256 * 1024),
@@ -670,7 +739,7 @@ return values.join(',');
       expect(await engine.eval('1 + 1'), '2');
     });
 
-    // stop 后同一个 Quickjs 实例应恢复为可继续 eval 的状态。
+    // stop 鍚庡悓涓€涓?Quickjs 瀹炰緥搴旀仮澶嶄负鍙户缁?eval 鐨勭姸鎬併€?
     test('recovers after stop', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -686,7 +755,7 @@ return values.join(',');
       expect(await engine.eval('21 * 2'), '42');
     });
 
-    // dispose 后继续 eval 必须返回 closed error。
+    // dispose 鍚庣户缁?eval 蹇呴』杩斿洖 closed error銆?
     test('rejects evaluation after dispose', () async {
       final engine = await Quickjs.create();
       await engine.dispose();

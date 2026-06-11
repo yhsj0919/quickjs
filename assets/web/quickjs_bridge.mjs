@@ -3,7 +3,7 @@
  * 这里直接调用 quickjs-wasi，并维护 worker 内的 runtime registry。
  * @see https://www.npmjs.com/package/quickjs-wasi
  */
-import { QuickJS } from './quickjs_wasi.js';
+import { EvalFlags, JSValueHandle, QuickJS } from './quickjs_wasi.js';
 
 /** @type {WebAssembly.Module | undefined} */
 let wasmModule;
@@ -102,7 +102,7 @@ function decodeWireValue(record, value) {
       return new Uint8Array(value.value || []);
     }
     if (value.__quickjsType === 'dartStream') {
-      return createDartStreamIterable(record, Number(value.streamId));
+      return createDartStreamHandle(record, Number(value.streamId));
     }
     const result = {};
     for (const [key, item] of Object.entries(value)) {
@@ -113,12 +113,11 @@ function decodeWireValue(record, value) {
   return value;
 }
 
-function createDartStreamIterable(record, streamId) {
-  return {
-    [Symbol.asyncIterator]() {
-      return this;
-    },
-    async next() {
+function createDartStreamHandle(record, streamId) {
+  const vm = record.vm;
+  const iterable = vm.newObject();
+  const next = vm.newFunction(`__quickjsStreamNext_${streamId}`, () => {
+    return vm.hostToHandle((async () => {
       if (!streamPullDispatcher) {
         throw new Error('quickjs: stream pull dispatcher is not registered');
       }
@@ -134,14 +133,52 @@ function createDartStreamIterable(record, streamId) {
         done: false,
         value: decodeWireValue(record, payload.value),
       };
-    },
-    async return() {
+    })());
+  });
+  const cancel = vm.newFunction(`__quickjsStreamReturn_${streamId}`, () => {
+    return vm.hostToHandle((async () => {
       if (streamCancelDispatcher) {
         streamCancelDispatcher({ runtimeId: record.id, streamId });
       }
       return { done: true, value: undefined };
+    })());
+  });
+  const asyncIterator = vm.newFunction(
+    `__quickjsStreamAsyncIterator_${streamId}`,
+    function () {
+      return this.dup();
     },
-  };
+  );
+  const asyncIteratorSymbol = vm.evalCode('Symbol.asyncIterator');
+
+  iterable.setProp('next', next);
+  iterable.setProp('return', cancel);
+  vm.setProp(iterable, asyncIteratorSymbol, asyncIterator);
+  next.dispose();
+  cancel.dispose();
+  asyncIterator.dispose();
+  asyncIteratorSymbol.dispose();
+  return iterable;
+}
+
+function resolveDeferredWithHostValue(vm, deferred, value) {
+  const handle = value instanceof JSValueHandle ? value : vm.hostToHandle(value);
+  try {
+    deferred.resolve(handle);
+    vm.executePendingJobs();
+  } finally {
+    handle.dispose();
+  }
+}
+
+function rejectDeferredWithHostValue(vm, deferred, value) {
+  const handle = value instanceof JSValueHandle ? value : vm.hostToHandle(value);
+  try {
+    deferred.reject(handle);
+    vm.executePendingJobs();
+  } finally {
+    handle.dispose();
+  }
 }
 
 function readStringProperty(value, property) {
@@ -375,6 +412,38 @@ export function runtimeEval(id, code) {
 }
 
 /**
+ * @param {number} id
+ * @param {string} source
+ * @param {string} name
+ */
+export async function runtimeEvalModule(id, source, name) {
+  const vm = runtimeRecord(id).vm;
+  let handle;
+  try {
+    handle = vm.evalCode(
+      source,
+      name || '<module>',
+      EvalFlags.TYPE_MODULE | EvalFlags.STRICT
+    );
+    const settled = await vm.resolvePromise(handle);
+    vm.executePendingJobs();
+    if (settled.error) {
+      const payload = exceptionToPayload(vm.dump(settled.error));
+      settled.error.dispose();
+      return `${exceptionSentinel}${payload}`;
+    }
+    const output = valueToString(vm, settled.value);
+    settled.value.dispose();
+    return output;
+  } catch (err) {
+    if (handle) {
+      handle.dispose();
+    }
+    return `${exceptionSentinel}${exceptionToPayload(err)}`;
+  }
+}
+
+/**
  * @param {(request: { runtimeId: number, callbackId: number, argsJson: string }) => Promise<{ ok: boolean, payloadJson: string }>} dispatcher
  */
 export function setCallbackDispatcher(dispatcher) {
@@ -409,16 +478,25 @@ export function runtimeBindCallback(id, callbackId, name) {
     for (const arg of args) {
       arg.dispose();
     }
-    return vm.hostToHandle(callbackDispatcher({
+    const deferred = vm.newPromise();
+    callbackDispatcher({
       runtimeId: id,
       callbackId,
       argsJson: JSON.stringify(values),
     }).then((response) => {
       if (response.ok) {
-        return decodeWireValue(record, JSON.parse(response.payloadJson));
+        resolveDeferredWithHostValue(
+          vm,
+          deferred,
+          decodeWireValue(record, JSON.parse(response.payloadJson)),
+        );
+        return;
       }
       throw new Error(response.payloadJson);
-    }));
+    }).catch((error) => {
+      rejectDeferredWithHostValue(vm, deferred, error);
+    });
+    return deferred.handle;
   });
   const global = vm.global;
   global.setProp(name, hostFunction);

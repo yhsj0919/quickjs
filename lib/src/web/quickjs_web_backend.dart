@@ -186,6 +186,30 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<String> evaluateModule(
+    String source, {
+    required String name,
+    Duration? timeout,
+  }) async {
+    _ensureOpen();
+    try {
+      return _mapWebEvalResult(
+        (await _host
+                .runtimeEvalModule(
+                  _id.toJS,
+                  source.toJS,
+                  name.toJS,
+                  timeout?.inMilliseconds.toJS,
+                )
+                .toDart)
+            .toDart,
+      );
+    } catch (error) {
+      throw _mapWebError(error);
+    }
+  }
+
+  @override
   Future<void> bindCallback(
     int callbackId,
     String name,

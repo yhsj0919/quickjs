@@ -58,6 +58,14 @@
           ensureBridge();
           result = bridge.runtimeEval(message.runtimeId, message.code);
           break;
+        case 'runtimeEvalModule':
+          ensureBridge();
+          result = await bridge.runtimeEvalModule(
+            message.runtimeId,
+            message.source,
+            message.name
+          );
+          break;
         case 'runtimeEvalAsync':
           ensureBridge();
           result = await bridge.runtimeEvalAsync(message.runtimeId, message.code);

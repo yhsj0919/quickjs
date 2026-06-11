@@ -1124,6 +1124,43 @@ char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
   return output;
 }
 
+char *quickjs_eval_module(QuickjsRuntime *runtime, const char *source,
+                          const char *name) {
+  JSValue result;
+  JSPromiseStateEnum state;
+  JSValue promise_result;
+  char *output;
+
+  if (!runtime || !runtime->ctx || !source || !name) {
+    return qjs_strdup("invalid arguments");
+  }
+  result = JS_Eval(runtime->ctx, source, strlen(source), name,
+                   JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_STRICT);
+  if (qjs_execute_pending_jobs(runtime) < 0) {
+    JS_FreeValue(runtime->ctx, result);
+    return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS pending job failed\"}");
+  }
+  if (JS_IsPromise(result)) {
+    state = JS_PromiseState(runtime->ctx, result);
+    if (state == JS_PROMISE_PENDING) {
+      JS_FreeValue(runtime->ctx, result);
+      return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS module evaluation is still pending\"}");
+    }
+    promise_result = JS_PromiseResult(runtime->ctx, result);
+    if (state == JS_PROMISE_FULFILLED) {
+      output = qjs_value_to_string(runtime->ctx, promise_result);
+    } else {
+      output = qjs_exception_to_payload(runtime->ctx, promise_result);
+    }
+    JS_FreeValue(runtime->ctx, promise_result);
+    JS_FreeValue(runtime->ctx, result);
+    return output;
+  }
+  output = qjs_value_to_string(runtime->ctx, result);
+  JS_FreeValue(runtime->ctx, result);
+  return output;
+}
+
 int quickjs_runtime_bind_callback(QuickjsRuntime *runtime, int64_t callback_id,
                                   const char *name,
                                   QuickjsHostCallback callback) {

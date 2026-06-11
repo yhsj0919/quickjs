@@ -270,8 +270,10 @@ nullable 暴露；`eval` 场景不强制保证所有位置字段都存在。
 
 目标：支持真实项目脚本组织方式。
 
-- [ ] `evalModule(source, name: ...)`
-- [ ] ES module parse / evaluate。
+- [x] `evalModule(source, name: ...)`
+- [x] ES module parse / evaluate：native / web 已支持单个 module source 执行与异常映射。
+  - 当前验收使用唯一 module name；同名 module 的缓存、复用与重复执行语义并入
+    `module cache` 阶段处理。
 - [ ] module cache。
 - [ ] relative path resolution。
 - [ ] runtime 级 module loader。

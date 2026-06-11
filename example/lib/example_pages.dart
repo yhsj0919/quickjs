@@ -4,6 +4,7 @@ import 'pages/basic_eval_page.dart';
 import 'pages/callback_bridge_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/memory_limit_page.dart';
+import 'pages/module_eval_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
@@ -73,5 +74,10 @@ final List<ExamplePageSpec> examplePages = [
     description:
         'Dart Stream 映射为 JS async iterable（for-await），JS sink 分片推送到 Dart Stream。',
     builder: (_) => const StreamCallbackPage(),
+  ),
+  ExamplePageSpec(
+    title: 'ES Module',
+    description: '使用 evalModule 执行单个 ES module source，并展示 module 错误映射。',
+    builder: (_) => const ModuleEvalPage(),
   ),
 ];

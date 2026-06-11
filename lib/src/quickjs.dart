@@ -121,6 +121,26 @@ class Quickjs {
     return evalAsync(code, timeout: timeout, globals: globals);
   }
 
+  /// 在当前 runtime 中执行 ES module [source]。
+  ///
+  /// 当前阶段只支持单个 module source 的 parse / evaluate，不解析静态 import。
+  Future<String> evalModule(
+    String source, {
+    String name = '<module>',
+    Duration? timeout,
+  }) {
+    return _enqueueModule(source, name: name, timeout: timeout);
+  }
+
+  /// [evalModule] 的兼容别名。
+  Future<String> evaluateModule(
+    String source, {
+    String name = '<module>',
+    Duration? timeout,
+  }) {
+    return evalModule(source, name: name, timeout: timeout);
+  }
+
   /// 在 JS `globalThis` 上绑定一个 Promise-based Dart callback。
   ///
   /// JS 侧调用绑定函数时会得到 Promise；Dart callback 的返回值会 resolve 该 Promise，
@@ -342,6 +362,27 @@ class Quickjs {
     return request.future;
   }
 
+  Future<String> _enqueueModule(
+    String source, {
+    required String name,
+    Duration? timeout,
+  }) {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<String>.error(terminalError);
+    }
+    final validName = _validateModuleName(name);
+    final request = _QueuedModuleEval(source, validName, timeout);
+    _queue.add(request);
+    request.startQueueTimer(() {
+      if (_queue.remove(request)) {
+        request.completeError(const JsTimeoutException());
+      }
+    });
+    _drainQueue();
+    return request.future;
+  }
+
   void _drainQueue() {
     if (_state != QuickjsRuntimeState.ready ||
         _running != null ||
@@ -362,9 +403,17 @@ class Quickjs {
     }
 
     final running = Future<String>.sync(
-      () => request.async
-          ? _runtime.evaluateAsync(request.code, timeout: timeout)
-          : _runtime.evaluate(request.code, timeout: timeout),
+      () => switch (request) {
+        _QueuedModuleEval() => _runtime.evaluateModule(
+          request.code,
+          name: request.name,
+          timeout: timeout,
+        ),
+        _ =>
+          request.async
+              ? _runtime.evaluateAsync(request.code, timeout: timeout)
+              : _runtime.evaluate(request.code, timeout: timeout),
+      },
     );
     _state = QuickjsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime
@@ -521,6 +570,18 @@ String _validateGlobalName(String name) {
   return name;
 }
 
+String _validateModuleName(String name) {
+  if (name.isEmpty) {
+    throw JsValueConversionException('QuickJS module name must not be empty');
+  }
+  if (name.contains('\u0000')) {
+    throw JsValueConversionException(
+      'QuickJS module name must not contain NUL',
+    );
+  }
+  return name;
+}
+
 Object _encodeDartValue(Object? value, Set<Object> seen) {
   if (value == null) {
     return {'type': 'null'};
@@ -645,4 +706,11 @@ final class _QueuedEval {
     _completer.future.ignore();
     _completer.completeError(error, stackTrace);
   }
+}
+
+final class _QueuedModuleEval extends _QueuedEval {
+  _QueuedModuleEval(String code, this.name, Duration? timeout)
+    : super(code, timeout, false);
+
+  final String name;
 }

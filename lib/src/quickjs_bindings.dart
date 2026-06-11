@@ -35,6 +35,19 @@ typedef QuickjsEvalTimeoutNative =
 typedef QuickjsEvalTimeout =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, int);
 
+typedef QuickjsEvalModuleNative =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+typedef QuickjsEvalModule =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+
 typedef QuickjsFreeStringNative = Void Function(Pointer<Utf8>);
 typedef QuickjsFreeString = void Function(Pointer<Utf8>);
 
@@ -152,6 +165,10 @@ class QuickjsBindings {
           .lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
             'quickjs_eval_timeout',
           ),
+      evalModule = lib
+          .lookupFunction<QuickjsEvalModuleNative, QuickjsEvalModule>(
+            'quickjs_eval_module',
+          ),
       runtimeBindCallback = lib
           .lookupFunction<
             QuickjsRuntimeBindCallbackNative,
@@ -201,6 +218,7 @@ class QuickjsBindings {
   final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
   final QuickjsEvalTimeout evalTimeout;
+  final QuickjsEvalModule evalModule;
   final QuickjsRuntimeBindCallback runtimeBindCallback;
   final QuickjsEvalAsyncStart evalAsyncStart;
   final QuickjsEvalAsyncPoll evalAsyncPoll;

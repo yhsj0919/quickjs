@@ -10,6 +10,13 @@ abstract class QuickjsJsRuntimeBase {
   /// 在当前 runtime 中执行返回 Promise 的 JS。
   Future<String> evaluateAsync(String code, {Duration? timeout});
 
+  /// 在当前 runtime 中按 ES module 语义执行 [source]。
+  Future<String> evaluateModule(
+    String source, {
+    required String name,
+    Duration? timeout,
+  });
+
   /// 在当前 runtime 的 JS globalThis 上绑定一个 Promise-based host callback。
   Future<void> bindCallback(
     int callbackId,

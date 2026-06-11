@@ -15,6 +15,7 @@ import '../quickjs_stream_bridge.dart';
 const String _messageTypeKey = 'type';
 const String _messageIdKey = 'id';
 const String _messageCodeKey = 'code';
+const String _messageModuleNameKey = 'moduleName';
 const String _messageTimeoutMsKey = 'timeoutMs';
 const String _messageMemoryLimitBytesKey = 'memoryLimitBytes';
 const String _messageStackLimitBytesKey = 'stackLimitBytes';
@@ -38,6 +39,7 @@ const String _pendingSentinel = '\u001eQuickJS_PENDING';
 
 const String _readyMessage = 'ready';
 const String _evalMessage = 'eval';
+const String _evalModuleMessage = 'evalModule';
 const String _evalAsyncMessage = 'evalAsync';
 const String _bindCallbackMessage = 'bindCallback';
 const String _callbackRequestMessage = 'callbackRequest';
@@ -361,6 +363,25 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     } finally {
       _asyncRunning = false;
     }
+  }
+
+  @override
+  Future<String> evaluateModule(
+    String source, {
+    required String name,
+    Duration? timeout,
+  }) async {
+    if (_closed) {
+      throw JsRuntimeClosedException();
+    }
+    _cancelFlag.value = 0;
+    final result =
+        await _sendRequest<String>(_evalModuleMessage, <String, Object?>{
+          _messageCodeKey: source,
+          _messageModuleNameKey: name,
+          if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
+        });
+    return result;
   }
 
   @override
@@ -745,6 +766,11 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
             final result = _eval(bindings, runtime, code, timeoutMs);
             _sendOk(responseSendPort, requestId, result);
+          case _evalModuleMessage:
+            final source = message[_messageCodeKey] as String;
+            final name = message[_messageModuleNameKey] as String;
+            final result = _evalModule(bindings, runtime, source, name);
+            _sendOk(responseSendPort, requestId, result);
           case _evalAsyncMessage:
             final code = message[_messageCodeKey] as String;
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
@@ -890,6 +916,20 @@ void _resolveSinkAction(
   } finally {
     calloc.free(messagePtr);
   }
+}
+
+String _evalModule(
+  QuickjsBindings bindings,
+  Pointer<QuickjsRuntime> runtime,
+  String source,
+  String name,
+) {
+  final sourcePtr = source.toNativeUtf8();
+  final namePtr = name.toNativeUtf8();
+  final resultPtr = bindings.evalModule(runtime, sourcePtr, namePtr);
+  calloc.free(sourcePtr);
+  calloc.free(namePtr);
+  return _takeResult(bindings, resultPtr);
 }
 
 String _eval(

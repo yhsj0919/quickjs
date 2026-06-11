@@ -215,6 +215,15 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<String> evaluateModule(
+    String source, {
+    required String name,
+    Duration? timeout,
+  }) {
+    return evaluate(source, timeout: timeout);
+  }
+
+  @override
   Future<void> bindCallback(
     int callbackId,
     String name,
