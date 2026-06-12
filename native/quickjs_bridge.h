@@ -49,7 +49,8 @@ QJS_BRIDGE_EXPORT char *quickjs_eval_timeout(QuickjsRuntime *runtime,
                                              int64_t timeout_ms);
 QJS_BRIDGE_EXPORT char *quickjs_eval_module(QuickjsRuntime *runtime,
                                             const char *source,
-                                            const char *name);
+                                            const char *name,
+                                            const char *modules);
 QJS_BRIDGE_EXPORT int quickjs_runtime_bind_callback(
     QuickjsRuntime *runtime, int64_t callback_id, const char *name,
     QuickjsHostCallback callback);

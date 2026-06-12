@@ -212,6 +212,26 @@ function exceptionToPayload(err) {
   });
 }
 
+function resolveModuleName(baseName, specifier) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+    return specifier;
+  }
+  const slash = baseName.lastIndexOf('/');
+  const base = slash < 0 ? '' : baseName.slice(0, slash + 1);
+  const parts = [];
+  for (const part of `${base}${specifier}`.split('/')) {
+    if (!part || part === '.') {
+      continue;
+    }
+    if (part === '..') {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join('/');
+}
+
 /**
  * 在指定 VM 中执行 JS，并用 sentinel 区分 JS throw 和普通字符串结果。
  *
@@ -388,14 +408,35 @@ export async function runtimeNew(memoryLimitBytes) {
   if (!wasmModule) {
     throw new Error('quickjs: WASM not initialized');
   }
-  const options = { wasm: wasmModule };
+  const moduleSources = new Map();
+  const options = {
+    wasm: wasmModule,
+    moduleLoader: {
+      normalize(baseName, specifier) {
+        return resolveModuleName(baseName || '', specifier);
+      },
+      load(name) {
+        if (!moduleSources.has(name)) {
+          throw new Error(`quickjs: module not found: ${name}`);
+        }
+        return moduleSources.get(name);
+      },
+    },
+  };
   if (Number.isFinite(memoryLimitBytes) && memoryLimitBytes > 0) {
     options.memoryLimit = memoryLimitBytes;
   }
   const vm = await QuickJS.create(options);
   const id = nextRuntimeId++;
   // runtime id 是 Dart 侧唯一可见的 handle，真实 VM 只保存在 Worker 内。
-  const record = { id, vm, callbackIds: new Map(), timers: new Map(), nextTimerId: 1 };
+  const record = {
+    id,
+    vm,
+    callbackIds: new Map(),
+    timers: new Map(),
+    nextTimerId: 1,
+    moduleSources,
+  };
   installTimers(record);
   runtimes.set(id, record);
   return id;
@@ -416,10 +457,17 @@ export function runtimeEval(id, code) {
  * @param {string} source
  * @param {string} name
  */
-export async function runtimeEvalModule(id, source, name) {
-  const vm = runtimeRecord(id).vm;
+export async function runtimeEvalModule(id, source, name, modulesJson) {
+  const record = runtimeRecord(id);
+  const vm = record.vm;
   let handle;
   try {
+    const modules = JSON.parse(modulesJson || '{}');
+    record.moduleSources.clear();
+    for (const [moduleName, moduleSource] of Object.entries(modules)) {
+      record.moduleSources.set(moduleName, String(moduleSource));
+    }
+    record.moduleSources.set(name || '<module>', source);
     handle = vm.evalCode(
       source,
       name || '<module>',

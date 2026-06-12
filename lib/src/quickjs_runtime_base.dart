@@ -14,6 +14,7 @@ abstract class QuickjsJsRuntimeBase {
   Future<String> evaluateModule(
     String source, {
     required String name,
+    Map<String, String> modules = const {},
     Duration? timeout,
   });
 

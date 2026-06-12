@@ -272,15 +272,14 @@ nullable 暴露；`eval` 场景不强制保证所有位置字段都存在。
 
 - [x] `evalModule(source, name: ...)`
 - [x] ES module parse / evaluate：native / web 已支持单个 module source 执行与异常映射。
-  - 当前验收使用唯一 module name；同名 module 的缓存、复用与重复执行语义并入
-    `module cache` 阶段处理。
-- [ ] module cache。
-- [ ] relative path resolution。
-- [ ] runtime 级 module loader。
-- [ ] Flutter `AssetBundle` asset loader。
-- [ ] package asset 路径。
-- [ ] Web asset URL。
-- [ ] 最小 CommonJS 兼容层：
+  - 已覆盖静态 import 依赖加载、相对路径解析与 imported module cache 复用。
+- [x] module cache。
+- [x] relative path resolution。
+- [x] runtime 级 module loader。
+- [x] Flutter `AssetBundle` asset loader。
+- [x] package asset 路径。
+- [x] Web asset URL。
+- [x] 最小 CommonJS 兼容层：
   `require()`、`module.exports`、`exports`、module cache、relative path resolution。
 
 不在 runtime 内实现完整 npm resolver。npm 包优先推荐用户通过 esbuild / Rollup /
@@ -439,5 +438,5 @@ flutter build windows
 - [x] runtime 显式状态机全状态测试。
 - [~] memory limit / stack limit 测试。
 - [x] exception model example 补齐结构化 `JsException` 字段展示。
-- [~] callback / timer / module cache runtime 隔离测试：callback / timer 已覆盖，module cache 待补。
+- [x] callback / timer / module cache runtime 隔离测试。
 - [ ] example app smoke 自动化测试。

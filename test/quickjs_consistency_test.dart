@@ -198,6 +198,68 @@ void main() {
       }
     });
 
+    test('loads relative ES module imports consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'lib/dep.mjs' => 'export const value = 40;',
+            'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalModule('''
+import { value } from './dep.mjs';
+import { add } from '../shared/add.mjs';
+globalThis.moduleValue = add(value, 2);
+''', name: 'lib/main.mjs'),
+        'undefined',
+      );
+      expect(await engine.eval('globalThis.moduleValue'), '42');
+    });
+
+    test('caches imported ES modules in one runtime consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'counter.mjs' =>
+              'globalThis.moduleImportCount = (globalThis.moduleImportCount || 0) + 1;'
+                  'export const value = globalThis.moduleImportCount;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.evalModule(
+        'import { value } from "counter.mjs"; globalThis.firstImport = value;',
+        name: 'first.mjs',
+      );
+      await engine.evalModule(
+        'import { value } from "counter.mjs"; globalThis.secondImport = value;',
+        name: 'second.mjs',
+      );
+
+      expect(await engine.eval('globalThis.firstImport'), '1');
+      expect(await engine.eval('globalThis.secondImport'), '1');
+      expect(await engine.eval('globalThis.moduleImportCount'), '1');
+    });
+
+    test('reports missing ES module imports consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(moduleLoader: (_) => null),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evalModule('import "./missing.mjs";', name: 'main.mjs'),
+        throwsA(isA<JsValueConversionException>()),
+      );
+    });
+
     test('maps ES module throw to JsException consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -214,6 +276,91 @@ void main() {
             contains('module boom'),
           ),
         ),
+      );
+    });
+
+    test('loads relative CommonJS require consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'lib/dep.js' => 'exports.value = 40;',
+            'shared/add.js' =>
+              'module.exports = function add(a, b) { return a + b; };',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalCommonJs('''
+const dep = require('./dep.js');
+const add = require('../shared/add.js');
+globalThis.commonJsValue = add(dep.value, 2);
+exports.value = globalThis.commonJsValue;
+''', name: 'lib/main.js'),
+        '[object Object]',
+      );
+      expect(await engine.eval('globalThis.commonJsValue'), '42');
+    });
+
+    test('supports CommonJS module.exports consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'answer.js' => 'module.exports = 42;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalCommonJs(
+          'globalThis.commonJsAnswer = require("./answer.js");',
+          name: 'main.js',
+        ),
+        '[object Object]',
+      );
+      expect(await engine.eval('globalThis.commonJsAnswer'), '42');
+    });
+
+    test('caches CommonJS modules in one runtime consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'counter.js' =>
+              'globalThis.commonJsImportCount = (globalThis.commonJsImportCount || 0) + 1;'
+                  'exports.count = globalThis.commonJsImportCount;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.evalCommonJs(
+        'globalThis.firstCommonJsCount = require("./counter.js").count;',
+        name: 'first.js',
+      );
+      await engine.evalCommonJs(
+        'globalThis.secondCommonJsCount = require("./counter.js").count;',
+        name: 'second.js',
+      );
+
+      expect(await engine.eval('globalThis.firstCommonJsCount'), '1');
+      expect(await engine.eval('globalThis.secondCommonJsCount'), '1');
+      expect(await engine.eval('globalThis.commonJsImportCount'), '1');
+    });
+
+    test('reports missing CommonJS modules consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(moduleLoader: (_) => null),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evalCommonJs('require("./missing.js");', name: 'main.js'),
+        throwsA(isA<JsValueConversionException>()),
       );
     });
 

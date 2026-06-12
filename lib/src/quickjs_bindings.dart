@@ -40,10 +40,12 @@ typedef QuickjsEvalModuleNative =
       Pointer<QuickjsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
+      Pointer<Utf8>,
     );
 typedef QuickjsEvalModule =
     Pointer<Utf8> Function(
       Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );

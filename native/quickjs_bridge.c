@@ -10,6 +10,7 @@
 #include <time.h>
 #ifdef _WIN32
 #include <windows.h>
+#define strtok_r strtok_s
 #endif
 
 #include "quickjs-libc.h"
@@ -35,6 +36,12 @@ typedef struct QuickjsTimer {
   struct QuickjsTimer *next;
 } QuickjsTimer;
 
+typedef struct QuickjsModuleSource {
+  char *name;
+  char *source;
+  struct QuickjsModuleSource *next;
+} QuickjsModuleSource;
+
 struct QuickjsRuntime {
   JSRuntime *rt;
   JSContext *ctx;
@@ -46,6 +53,7 @@ struct QuickjsRuntime {
   QuickjsHostSinkAction host_sink_action;
   QuickjsPendingCallback *pending_callbacks;
   QuickjsTimer *timers;
+  QuickjsModuleSource *module_sources;
   int32_t next_timer_id;
   JSValue async_promise;
 };
@@ -71,6 +79,223 @@ static char *qjs_strdup(const char *src) {
   }
   memcpy(copy, src, len + 1);
   return copy;
+}
+
+static char qjs_hex_value(char ch) {
+  if (ch >= '0' && ch <= '9') {
+    return (char)(ch - '0');
+  }
+  if (ch >= 'a' && ch <= 'f') {
+    return (char)(10 + ch - 'a');
+  }
+  if (ch >= 'A' && ch <= 'F') {
+    return (char)(10 + ch - 'A');
+  }
+  return -1;
+}
+
+static char *qjs_percent_decode(const char *text, size_t len) {
+  char *out = (char *)malloc(len + 1);
+  size_t i;
+  size_t j = 0;
+  if (!out) {
+    return NULL;
+  }
+  for (i = 0; i < len; i++) {
+    if (text[i] == '%' && i + 2 < len) {
+      char hi = qjs_hex_value(text[i + 1]);
+      char lo = qjs_hex_value(text[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        out[j++] = (char)((hi << 4) | lo);
+        i += 2;
+        continue;
+      }
+    }
+    out[j++] = text[i];
+  }
+  out[j] = '\0';
+  return out;
+}
+
+static void qjs_free_module_sources(QuickjsRuntime *runtime) {
+  QuickjsModuleSource *item;
+  QuickjsModuleSource *next;
+  if (!runtime) {
+    return;
+  }
+  item = runtime->module_sources;
+  while (item) {
+    next = item->next;
+    free(item->name);
+    free(item->source);
+    free(item);
+    item = next;
+  }
+  runtime->module_sources = NULL;
+}
+
+static int qjs_add_module_source(QuickjsRuntime *runtime, char *name,
+                                 char *source) {
+  QuickjsModuleSource *item;
+  if (!runtime || !name || !source) {
+    free(name);
+    free(source);
+    return 0;
+  }
+  item = (QuickjsModuleSource *)calloc(1, sizeof(*item));
+  if (!item) {
+    free(name);
+    free(source);
+    return 0;
+  }
+  item->name = name;
+  item->source = source;
+  item->next = runtime->module_sources;
+  runtime->module_sources = item;
+  return 1;
+}
+
+static int qjs_set_module_sources(QuickjsRuntime *runtime, const char *modules) {
+  const char *line;
+  const char *line_end;
+  const char *equals;
+  char *name;
+  char *source;
+
+  qjs_free_module_sources(runtime);
+  if (!runtime || !modules || !modules[0]) {
+    return 1;
+  }
+  line = modules;
+  while (*line) {
+    line_end = strchr(line, '\n');
+    if (!line_end) {
+      line_end = line + strlen(line);
+    }
+    if (line_end > line) {
+      equals = memchr(line, '=', (size_t)(line_end - line));
+      if (equals) {
+        name = qjs_percent_decode(line, (size_t)(equals - line));
+        source = qjs_percent_decode(equals + 1, (size_t)(line_end - equals - 1));
+        if (!qjs_add_module_source(runtime, name, source)) {
+          return 0;
+        }
+      }
+    }
+    line = *line_end == '\n' ? line_end + 1 : line_end;
+  }
+  return 1;
+}
+
+static const char *qjs_find_module_source(QuickjsRuntime *runtime,
+                                          const char *name) {
+  QuickjsModuleSource *item;
+  if (!runtime || !name) {
+    return NULL;
+  }
+  for (item = runtime->module_sources; item; item = item->next) {
+    if (strcmp(item->name, name) == 0) {
+      return item->source;
+    }
+  }
+  return NULL;
+}
+
+static void *qjs_js_alloc(void *opaque, size_t size) {
+  return js_malloc((JSContext *)opaque, size);
+}
+
+static char *qjs_normalize_module_name_alloc(const char *base_name,
+                                             const char *module_name,
+                                             void *(*alloc_fn)(void *, size_t),
+                                             void *opaque) {
+  const char *base_end;
+  char *cursor;
+  char **parts = NULL;
+  size_t part_count = 0;
+  size_t part_capacity = 0;
+  size_t out_len = 0;
+  char *combined;
+  char *result;
+  char *token;
+  char *saveptr = NULL;
+  size_t i;
+
+  if (!module_name) {
+    return NULL;
+  }
+  if (strncmp(module_name, "./", 2) != 0 &&
+      strncmp(module_name, "../", 3) != 0) {
+    size_t module_name_len = strlen(module_name);
+    result = (char *)alloc_fn(opaque, module_name_len + 1);
+    if (result) {
+      memcpy(result, module_name, module_name_len + 1);
+    }
+    return result;
+  }
+
+  base_end = base_name ? strrchr(base_name, '/') : NULL;
+  if (base_end) {
+    size_t base_len = (size_t)(base_end - base_name + 1);
+    combined = (char *)malloc(base_len + strlen(module_name) + 1);
+    if (!combined) {
+      return NULL;
+    }
+    memcpy(combined, base_name, base_len);
+    memcpy(combined + base_len, module_name, strlen(module_name) + 1);
+  } else {
+    combined = qjs_strdup(module_name);
+    if (!combined) {
+      return NULL;
+    }
+  }
+
+  for (token = strtok_r(combined, "/", &saveptr); token;
+       token = strtok_r(NULL, "/", &saveptr)) {
+    if (strcmp(token, ".") == 0 || strcmp(token, "") == 0) {
+      continue;
+    }
+    if (strcmp(token, "..") == 0) {
+      if (part_count > 0) {
+        part_count--;
+      }
+      continue;
+    }
+    if (part_count == part_capacity) {
+      size_t new_capacity = part_capacity ? part_capacity * 2 : 8;
+      char **new_parts =
+          (char **)realloc(parts, new_capacity * sizeof(char *));
+      if (!new_parts) {
+        free(parts);
+        free(combined);
+        return NULL;
+      }
+      parts = new_parts;
+      part_capacity = new_capacity;
+    }
+    parts[part_count++] = token;
+  }
+
+  for (i = 0; i < part_count; i++) {
+    out_len += strlen(parts[i]) + (i > 0 ? 1 : 0);
+  }
+  result = (char *)alloc_fn(opaque, out_len + 1);
+  if (result) {
+    cursor = result;
+    for (i = 0; i < part_count; i++) {
+      size_t len = strlen(parts[i]);
+      if (i > 0) {
+        *((char *)cursor) = '/';
+        cursor++;
+      }
+      memcpy((char *)cursor, parts[i], len);
+      cursor += len;
+    }
+    *((char *)cursor) = '\0';
+  }
+  free(parts);
+  free(combined);
+  return result;
 }
 
 typedef struct QjsStringBuilder {
@@ -453,6 +678,35 @@ static JSValue qjs_call_codec_method(JSContext *ctx, const char *method,
   JS_FreeValue(ctx, function);
   JS_FreeValue(ctx, codec);
   return result;
+}
+
+static char *qjs_module_normalize(JSContext *ctx, const char *module_base_name,
+                                  const char *module_name, void *opaque) {
+  (void)opaque;
+  return qjs_normalize_module_name_alloc(module_base_name, module_name,
+                                         qjs_js_alloc, ctx);
+}
+
+static JSModuleDef *qjs_module_loader(JSContext *ctx, const char *module_name,
+                                      void *opaque) {
+  QuickjsRuntime *runtime = (QuickjsRuntime *)opaque;
+  const char *source = qjs_find_module_source(runtime, module_name);
+  JSValue compiled;
+  JSModuleDef *module;
+
+  if (!source) {
+    JS_ThrowReferenceError(ctx, "could not load module '%s'", module_name);
+    return NULL;
+  }
+
+  compiled = JS_Eval(ctx, source, strlen(source), module_name,
+                     JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+  if (JS_IsException(compiled)) {
+    return NULL;
+  }
+  module = (JSModuleDef *)JS_VALUE_GET_PTR(compiled);
+  JS_FreeValue(ctx, compiled);
+  return module;
 }
 
 static JSValue qjs_create_pending_promise(JSContext *ctx,
@@ -1034,6 +1288,8 @@ QuickjsRuntime *quickjs_runtime_new(void) {
   js_init_module_std(runtime->ctx, "std");
   js_init_module_os(runtime->ctx, "os");
   js_std_add_helpers(runtime->ctx, 0, NULL);
+  JS_SetModuleLoaderFunc(runtime->rt, qjs_module_normalize, qjs_module_loader,
+                         runtime);
   runtime->next_timer_id = 1;
   qjs_install_timers(runtime);
   qjs_install_stream_helpers(runtime);
@@ -1047,6 +1303,7 @@ void quickjs_runtime_free(QuickjsRuntime *runtime) {
   if (runtime->ctx) {
     qjs_free_pending_callbacks(runtime);
     qjs_free_timers(runtime);
+    qjs_free_module_sources(runtime);
     if (!JS_IsUndefined(runtime->async_promise)) {
       JS_FreeValue(runtime->ctx, runtime->async_promise);
       runtime->async_promise = JS_UNDEFINED;
@@ -1125,7 +1382,7 @@ char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
 }
 
 char *quickjs_eval_module(QuickjsRuntime *runtime, const char *source,
-                          const char *name) {
+                          const char *name, const char *modules) {
   JSValue result;
   JSPromiseStateEnum state;
   JSValue promise_result;
@@ -1133,6 +1390,9 @@ char *quickjs_eval_module(QuickjsRuntime *runtime, const char *source,
 
   if (!runtime || !runtime->ctx || !source || !name) {
     return qjs_strdup("invalid arguments");
+  }
+  if (!qjs_set_module_sources(runtime, modules)) {
+    return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS module table allocation failed\"}");
   }
   result = JS_Eval(runtime->ctx, source, strlen(source), name,
                    JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_STRICT);

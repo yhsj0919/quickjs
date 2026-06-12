@@ -128,8 +128,19 @@ class Quickjs {
     String source, {
     String name = '<module>',
     Duration? timeout,
-  }) {
-    return _enqueueModule(source, name: name, timeout: timeout);
+  }) async {
+    final validName = _validateModuleName(name);
+    final modules = await _buildModuleGraph(
+      source,
+      validName,
+      _esModuleSpecifiers,
+    );
+    return _enqueueModule(
+      source,
+      name: validName,
+      modules: modules,
+      timeout: timeout,
+    );
   }
 
   /// [evalModule] 的兼容别名。
@@ -139,6 +150,37 @@ class Quickjs {
     Duration? timeout,
   }) {
     return evalModule(source, name: name, timeout: timeout);
+  }
+
+  /// Executes a minimal CommonJS module in the current runtime.
+  ///
+  /// This compatibility layer supports `require()`, `module.exports`, `exports`,
+  /// relative path resolution, and a runtime-scoped CommonJS module cache. It is
+  /// intentionally not a full Node/npm resolver.
+  Future<String> evalCommonJs(
+    String source, {
+    String name = '<commonjs>',
+    Duration? timeout,
+  }) async {
+    final validName = _validateModuleName(name);
+    final modules = await _buildModuleGraph(
+      source,
+      validName,
+      _commonJsSpecifiers,
+    );
+    return _enqueue(
+      _wrapCommonJsModule(source, validName, modules),
+      timeout: timeout,
+    );
+  }
+
+  /// [evalCommonJs] 的兼容别名。
+  Future<String> evaluateCommonJs(
+    String source, {
+    String name = '<commonjs>',
+    Duration? timeout,
+  }) {
+    return evalCommonJs(source, name: name, timeout: timeout);
   }
 
   /// 在 JS `globalThis` 上绑定一个 Promise-based Dart callback。
@@ -365,14 +407,14 @@ class Quickjs {
   Future<String> _enqueueModule(
     String source, {
     required String name,
+    required Map<String, String> modules,
     Duration? timeout,
   }) {
     final terminalError = _terminalError;
     if (terminalError != null) {
       return Future<String>.error(terminalError);
     }
-    final validName = _validateModuleName(name);
-    final request = _QueuedModuleEval(source, validName, timeout);
+    final request = _QueuedModuleEval(source, name, modules, timeout);
     _queue.add(request);
     request.startQueueTimer(() {
       if (_queue.remove(request)) {
@@ -407,6 +449,7 @@ class Quickjs {
         _QueuedModuleEval() => _runtime.evaluateModule(
           request.code,
           name: request.name,
+          modules: request.modules,
           timeout: timeout,
         ),
         _ =>
@@ -473,6 +516,51 @@ class Quickjs {
       QuickjsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
       _ => null,
     };
+  }
+
+  Future<Map<String, String>> _buildModuleGraph(
+    String rootSource,
+    String rootName,
+    Iterable<String> Function(String source) specifiers,
+  ) async {
+    final loader = _options.moduleLoader;
+    if (loader == null) {
+      return const {};
+    }
+    final modules = <String, String>{rootName: rootSource};
+    final visiting = <String>{};
+
+    Future<void> visit(String moduleName) async {
+      if (!visiting.add(moduleName)) {
+        return;
+      }
+      final source = modules[moduleName];
+      if (source == null) {
+        visiting.remove(moduleName);
+        return;
+      }
+      try {
+        for (final specifier in specifiers(source)) {
+          final resolved = _resolveModuleName(moduleName, specifier);
+          if (modules.containsKey(resolved)) {
+            continue;
+          }
+          final loaded = await loader(resolved);
+          if (loaded == null) {
+            throw JsValueConversionException(
+              'QuickJS module loader could not resolve "$specifier" from "$moduleName"',
+            );
+          }
+          modules[resolved] = loaded;
+          await visit(resolved);
+        }
+      } finally {
+        visiting.remove(moduleName);
+      }
+    }
+
+    await visit(rootName);
+    return Map<String, String>.unmodifiable(modules);
   }
 }
 
@@ -580,6 +668,106 @@ String _validateModuleName(String name) {
     );
   }
   return name;
+}
+
+String _wrapCommonJsModule(
+  String rootSource,
+  String rootName,
+  Map<String, String> modules,
+) {
+  final allModules = <String, String>{...modules, rootName: rootSource};
+  final encodedRoot = jsonEncode(rootName);
+  final encodedModules = jsonEncode(allModules);
+  return '''
+(() => {
+  const sources = $encodedModules;
+  const cacheKey = '__quickjsCommonJsCache';
+  const cache = globalThis[cacheKey] || Object.defineProperty(
+    globalThis,
+    cacheKey,
+    {
+      value: Object.create(null),
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  )[cacheKey];
+  const resolve = (referrer, specifier) => {
+    if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+      return specifier;
+    }
+    const slash = referrer.lastIndexOf('/');
+    const base = slash < 0 ? '' : referrer.slice(0, slash + 1);
+    const parts = [];
+    for (const part of (base + specifier).split('/')) {
+      if (!part || part === '.') {
+        continue;
+      }
+      if (part === '..') {
+        parts.pop();
+        continue;
+      }
+      parts.push(part);
+    }
+    return parts.join('/');
+  };
+  const load = (name) => {
+    if (Object.prototype.hasOwnProperty.call(cache, name)) {
+      return cache[name].exports;
+    }
+    if (!Object.prototype.hasOwnProperty.call(sources, name)) {
+      throw new Error('Cannot find CommonJS module "' + name + '"');
+    }
+    const module = { id: name, filename: name, loaded: false, exports: {} };
+    cache[name] = module;
+    const localRequire = (specifier) => load(resolve(name, String(specifier)));
+    localRequire.resolve = (specifier) => resolve(name, String(specifier));
+    const body = sources[name] + '\\n//# sourceURL=' + name;
+    try {
+      Function('require', 'module', 'exports', body)(
+        localRequire,
+        module,
+        module.exports
+      );
+      module.loaded = true;
+      return module.exports;
+    } catch (error) {
+      delete cache[name];
+      throw error;
+    }
+  };
+  return load($encodedRoot);
+})()
+''';
+}
+
+Iterable<String> _esModuleSpecifiers(String source) sync* {
+  final pattern = RegExp(
+    r'''(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)''',
+    multiLine: true,
+  );
+  for (final match in pattern.allMatches(source)) {
+    yield match.group(1) ?? match.group(2)!;
+  }
+}
+
+Iterable<String> _commonJsSpecifiers(String source) sync* {
+  final pattern = RegExp(
+    r'''(?:^|[^\w$])require\s*\(\s*['"]([^'"]+)['"]\s*\)''',
+    multiLine: true,
+  );
+  for (final match in pattern.allMatches(source)) {
+    yield match.group(1)!;
+  }
+}
+
+String _resolveModuleName(String referrer, String specifier) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+    return specifier;
+  }
+  final slash = referrer.lastIndexOf('/');
+  final base = slash < 0 ? '' : referrer.substring(0, slash + 1);
+  return Uri.parse(base).resolve(specifier).path;
 }
 
 Object _encodeDartValue(Object? value, Set<Object> seen) {
@@ -709,8 +897,9 @@ final class _QueuedEval {
 }
 
 final class _QueuedModuleEval extends _QueuedEval {
-  _QueuedModuleEval(String code, this.name, Duration? timeout)
+  _QueuedModuleEval(String code, this.name, this.modules, Duration? timeout)
     : super(code, timeout, false);
 
   final String name;
+  final Map<String, String> modules;
 }

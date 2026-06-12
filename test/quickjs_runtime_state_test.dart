@@ -218,6 +218,7 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
   Future<String> evaluateModule(
     String source, {
     required String name,
+    Map<String, String> modules = const {},
     Duration? timeout,
   }) {
     return evaluate(source, timeout: timeout);

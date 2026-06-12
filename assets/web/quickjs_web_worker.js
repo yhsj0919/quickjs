@@ -63,7 +63,8 @@
           result = await bridge.runtimeEvalModule(
             message.runtimeId,
             message.source,
-            message.name
+            message.name,
+            message.modulesJson
           );
           break;
         case 'runtimeEvalAsync':

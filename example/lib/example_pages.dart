@@ -76,8 +76,8 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const StreamCallbackPage(),
   ),
   ExamplePageSpec(
-    title: 'ES Module',
-    description: '使用 evalModule 执行单个 ES module source，并展示 module 错误映射。',
+    title: 'Module',
+    description: '执行 ES module、CommonJS、相对路径解析与 runtime module cache。',
     builder: (_) => const ModuleEvalPage(),
   ),
 ];

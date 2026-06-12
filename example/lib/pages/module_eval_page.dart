@@ -38,7 +38,24 @@ class _ModuleEvalPageState extends State<ModuleEvalPage> {
       _moduleRunCount = 0;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
+      final quickjs = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'example/dep.mjs' => 'export const value = 40;',
+            'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
+            'shared/counter.mjs' =>
+              'globalThis.moduleImportCount = (globalThis.moduleImportCount || 0) + 1;'
+                  'export const count = globalThis.moduleImportCount;',
+            'common/dep.js' => 'exports.value = 40;',
+            'shared/add.js' =>
+              'module.exports = function add(a, b) { return a + b; };',
+            'shared/counter.js' =>
+              'globalThis.commonJsImportCount = (globalThis.commonJsImportCount || 0) + 1;'
+                  'exports.count = globalThis.commonJsImportCount;',
+            _ => null,
+          },
+        ),
+      );
       if (!mounted || _disposed) {
         await quickjs.dispose();
         return;
@@ -78,6 +95,51 @@ globalThis.moduleAnswer = answer;
         'throw new Error("module failed");',
         name: moduleName,
       );
+    });
+  }
+
+  Future<void> _runModuleImport() async {
+    await _capture('module import/cache', () async {
+      await _requireRuntime().evalModule('''
+import { value } from './dep.mjs';
+import { add } from '../shared/add.mjs';
+import { count } from '../shared/counter.mjs';
+globalThis.moduleImportResult = add(value, 2);
+globalThis.moduleImportFirstCount = count;
+''', name: 'example/main-${++_moduleRunCount}.mjs');
+      await _requireRuntime().evalModule('''
+import { count } from './counter.mjs';
+globalThis.moduleImportSecondCount = count;
+''', name: 'shared/second-${++_moduleRunCount}.mjs');
+      final value = await _requireRuntime().eval(
+        'globalThis.moduleImportResult + "/" + '
+        'globalThis.moduleImportFirstCount + "/" + '
+        'globalThis.moduleImportSecondCount',
+      );
+      _appendLog('relative import/cache => result/first/second = $value');
+    });
+  }
+
+  Future<void> _runCommonJs() async {
+    await _capture('CommonJS require/cache', () async {
+      await _requireRuntime().evalCommonJs('''
+const dep = require('./dep.js');
+const add = require('../shared/add.js');
+const counter = require('../shared/counter.js');
+globalThis.commonJsResult = add(dep.value, 2);
+globalThis.commonJsFirstCount = counter.count;
+exports.value = globalThis.commonJsResult;
+''', name: 'common/main-${++_moduleRunCount}.js');
+      await _requireRuntime().evalCommonJs('''
+const counter = require('./counter.js');
+globalThis.commonJsSecondCount = counter.count;
+''', name: 'shared/second-${++_moduleRunCount}.js');
+      final value = await _requireRuntime().eval(
+        'globalThis.commonJsResult + "/" + '
+        'globalThis.commonJsFirstCount + "/" + '
+        'globalThis.commonJsSecondCount',
+      );
+      _appendLog('CommonJS require/cache => result/first/second = $value');
     });
   }
 
@@ -151,7 +213,7 @@ globalThis.moduleAnswer = answer;
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('ES Module')),
+      appBar: AppBar(title: const Text('Module')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -159,9 +221,7 @@ globalThis.moduleAnswer = answer;
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text(
-              '执行单个 ES module source；import resolver 与 module cache 后续实现。',
-            ),
+            const Text('执行 ES module、CommonJS、相对路径解析与 runtime module cache。'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -174,6 +234,14 @@ globalThis.moduleAnswer = answer;
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _runModuleError,
                   child: const Text('触发 module error'),
+                ),
+                OutlinedButton(
+                  onPressed: _busy || !hasRuntime ? null : _runModuleImport,
+                  child: const Text('Import/cache'),
+                ),
+                OutlinedButton(
+                  onPressed: _busy || !hasRuntime ? null : _runCommonJs,
+                  child: const Text('CommonJS'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _createRuntime,

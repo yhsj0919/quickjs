@@ -30,7 +30,8 @@ extension type QuickjsWebHost(JSObject _) implements JSObject {
   external JSPromise<JSString> runtimeEvalModule(
     JSNumber id,
     JSString source,
-    JSString name, [
+    JSString name,
+    JSString modulesJson, [
     JSNumber? timeoutMs,
   ]);
   external JSPromise<JSString> runtimeEvalAsync(

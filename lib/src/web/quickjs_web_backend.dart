@@ -189,6 +189,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   Future<String> evaluateModule(
     String source, {
     required String name,
+    Map<String, String> modules = const {},
     Duration? timeout,
   }) async {
     _ensureOpen();
@@ -199,6 +200,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
                   _id.toJS,
                   source.toJS,
                   name.toJS,
+                  jsonEncode(modules).toJS,
                   timeout?.inMilliseconds.toJS,
                 )
                 .toDart)

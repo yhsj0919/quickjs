@@ -83,10 +83,10 @@ void main() {
     expect(find.textContaining('JS sink'), findsOneWidget);
   });
 
-  testWidgets('registers ES module example page', (WidgetTester tester) async {
+  testWidgets('registers module example page', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
 
-    final title = find.text('ES Module');
+    final title = find.text('Module');
     if (title.evaluate().isEmpty) {
       await tester.scrollUntilVisible(
         title,
@@ -95,6 +95,7 @@ void main() {
       );
     }
     expect(title, findsOneWidget);
-    expect(find.textContaining('evalModule'), findsOneWidget);
+    expect(find.textContaining('runtime module cache'), findsOneWidget);
+    expect(find.textContaining('CommonJS'), findsOneWidget);
   });
 }

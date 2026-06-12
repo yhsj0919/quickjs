@@ -261,8 +261,12 @@
     },
 
     /** @param {number} id @param {string} source @param {string} name */
-    async runtimeEvalModule(id, source, name, timeoutMs = 0) {
-      return post('runtimeEvalModule', { runtimeId: id, source, name }, timeoutMs);
+    async runtimeEvalModule(id, source, name, modulesJson = '{}', timeoutMs = 0) {
+      return post(
+        'runtimeEvalModule',
+        { runtimeId: id, source, name, modulesJson },
+        timeoutMs,
+      );
     },
 
     /** @param {number} id @param {string} code */
