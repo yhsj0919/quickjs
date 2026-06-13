@@ -45,6 +45,10 @@ extension type QuickjsWebHost(JSObject _) implements JSObject {
     JSString name,
     JSFunction callback,
   );
+  external JSPromise<JSAny?> runtimeUnbindCallback(
+    JSNumber runtimeId,
+    JSNumber callbackId,
+  );
   external void runtimeRegisterStreamBridge(
     JSNumber runtimeId,
     JSFunction pull,

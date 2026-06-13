@@ -1,16 +1,17 @@
 import 'dart:async';
 
-/// native 与 web runtime 的最小公共接口。
+/// Shared runtime contract for native and web backends.
 ///
-/// `Quickjs` 只通过这个接口调度执行、停止和释放，不直接接触平台细节。
+/// `Quickjs` schedules work through this interface and does not expose backend
+/// implementation details to the public API.
 abstract class QuickjsJsRuntimeBase {
-  /// 在当前 runtime 中执行 JS。
+  /// Evaluates JavaScript in the current runtime.
   Future<String> evaluate(String code, {Duration? timeout});
 
-  /// 在当前 runtime 中执行返回 Promise 的 JS。
+  /// Evaluates JavaScript that returns a Promise in the current runtime.
   Future<String> evaluateAsync(String code, {Duration? timeout});
 
-  /// 在当前 runtime 中按 ES module 语义执行 [source]。
+  /// Evaluates [source] as an ES module in the current runtime.
   Future<String> evaluateModule(
     String source, {
     required String name,
@@ -18,19 +19,22 @@ abstract class QuickjsJsRuntimeBase {
     Duration? timeout,
   });
 
-  /// 在当前 runtime 的 JS globalThis 上绑定一个 Promise-based host callback。
+  /// Binds a Promise-based host callback on JS `globalThis`.
   Future<void> bindCallback(
     int callbackId,
     String name,
     Future<Object?> Function(List<Object?> args) callback,
   );
 
-  /// 在当前 runtime 的 JS globalThis 上绑定 `{ emit, close, error }` sink。
+  /// Removes a Promise-based host callback from the runtime registry.
+  Future<void> unbindCallback(int callbackId);
+
+  /// Binds a `{ emit, close, error }` sink on JS `globalThis`.
   Future<Stream<Object?>> bindJsSink(String name);
 
-  /// 尝试停止当前 runtime 中正在执行的任务。
+  /// Attempts to stop the currently running runtime task.
   Future<void> stop();
 
-  /// 释放当前 runtime 持有的底层资源。
+  /// Releases resources owned by the current runtime.
   Future<void> dispose();
 }

@@ -232,6 +232,9 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
   ) async {}
 
   @override
+  Future<void> unbindCallback(int callbackId) async {}
+
+  @override
   Future<Stream<Object?>> bindJsSink(String name) async {
     return const Stream<Object?>.empty();
   }

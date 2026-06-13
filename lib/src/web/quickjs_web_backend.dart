@@ -240,6 +240,14 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<void> unbindCallback(int callbackId) async {
+    if (_closed) {
+      return;
+    }
+    await _host.runtimeUnbindCallback(_id.toJS, callbackId.toJS).toDart;
+  }
+
+  @override
   Future<Stream<Object?>> bindJsSink(String name) async {
     _ensureOpen();
     final created = _sinkRegistry.createSink();

@@ -404,6 +404,11 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
+  Future<void> unbindCallback(int callbackId) async {
+    _callbacks.remove(callbackId);
+  }
+
+  @override
   Future<Stream<Object?>> bindJsSink(String name) async {
     if (_closed) {
       throw JsRuntimeClosedException();

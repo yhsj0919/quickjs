@@ -312,10 +312,13 @@ await add.cancel(); // 取消当前 call，语义对齐 eval stop / cancel
 
 计划范围：
 
-- [ ] `evaluateHandle()` / 等价 API：从 JS 表达式取得 function handle。
-- [ ] `handle.call(args, {timeout})`：通过 runtime worker 执行，支持 timeout / cancel。
-- [ ] handle 绑定所属 runtime；跨 runtime 调用返回明确错误。
-- [ ] runtime dispose 后 handle 调用返回 closed error。
+- [x] `evaluateHandle()` / 等价 API：从 JS 表达式取得 function handle。
+- [x] `handle.call(args, {timeout})` / `handle.callAsync(args, {timeout})`：通过 runtime worker 执行，支持 timeout / cancel。
+  `call` 保留同步 interrupt 语义；`callAsync` await Promise-returning function。
+- [x] `callAsync` timeout 语义已文档化：覆盖 Promise pending 阶段；返回 Promise 前的同步长任务应使用 `call`。
+- [x] handle 绑定所属 runtime；跨 runtime 调用返回明确错误。
+- [x] `handle.dispose()` 显式释放 runtime 内 function registry entry；重复释放不报错。
+- [x] runtime dispose 后 handle 调用返回 closed error。
 
 ### Dart object proxy
 
@@ -333,12 +336,14 @@ await user.save()
 
 计划范围：
 
-- [ ] `engine.bindObject(name, instance)`：注册 Dart 实例 proxy。
-- [ ] property getter / setter。
-- [ ] method call（同步与 async method 分开定义语义）。
-- [ ] readonly property。
-- [ ] async getter / method：JS 侧表现为 Promise。
-- [ ] proxy 归属 runtime；dispose 后 JS 访问返回 closed error 或明确异常。
+- [x] `engine.bindObject(name, proxy)`：通过显式 `QuickjsObjectProxy` descriptor 注册 Dart proxy。
+- [~] property getter / setter：当前 slice 支持 readonly data property；动态 getter / setter 待补。
+- [x] method call（同步与 async method 分开定义语义）：method 走 Promise callback bridge。
+- [x] readonly property。
+- [~] async getter / method：method 已表现为 Promise；async getter 待补。
+- [~] proxy 归属 runtime；dispose 后新绑定返回 closed error，已绑定 JS proxy 随 runtime 释放。
+- [x] `QuickjsObjectHandle.dispose()`：显式删除 JS global proxy 和隐藏 method callback globals；重复释放不报错。
+- [x] runtime-level callback unregister：proxy dispose 后即使 JS 持有泄漏的 method 引用，也不能再触发 Dart callback。
 
 ### Dart class / instance binding
 

@@ -364,7 +364,397 @@ exports.value = globalThis.commonJsValue;
       );
     });
 
+    test('calls JavaScript function handles consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final add = await engine.evaluateHandle('''
+function add(a, b) {
+  return a + b;
+}
+add
+''');
+
+      expect(await add.call([20, 22]), '42');
+      expect(await add.call([1, 2]), '3');
+    });
+
+    test(
+      'passes structured arguments to function handles consistently',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
+
+        final summarize = await engine.evaluateHandle(
+          '(input) => input.name + ":" + input.values.join(",")',
+        );
+
+        expect(
+          await summarize.call([
+            {
+              'name': 'items',
+              'values': [1, 2, 3],
+            },
+          ]),
+          'items:1,2,3',
+        );
+      },
+    );
+
+    test('awaits Promise-returning function handles consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final add = await engine.evaluateHandle('''
+async (a, b) => {
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  return a + b;
+}
+''');
+
+      expect(await add.callAsync([20, 22]), '42');
+    });
+
+    test('maps Promise rejection from function handles consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final fail = await engine.evaluateHandle('''
+async () => {
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  throw new Error('handle async boom');
+}
+''');
+
+      await expectLater(
+        fail.callAsync(const []),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.toString(),
+            'message',
+            contains('handle async boom'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects non-function handles consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evaluateHandle('42'),
+        throwsA(isA<JsValueConversionException>()),
+      );
+    });
+
+    test('keeps function handles isolated per runtime', () async {
+      final first = await Quickjs.create();
+      final second = await Quickjs.create();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      final firstHandle = await first.evaluateHandle('() => "first"');
+      final secondHandle = await second.evaluateHandle('() => "second"');
+
+      expect(await firstHandle.call(const []), 'first');
+      expect(await secondHandle.call(const []), 'second');
+    });
+
+    test('function handle calls can time out consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final loop = await engine.evaluateHandle('() => { while (true) {} }');
+
+      await expectLater(
+        loop.call(const [], timeout: const Duration(milliseconds: 50)),
+        throwsA(isA<JsTimeoutException>()),
+      );
+      expect(await engine.eval('21 * 2'), '42');
+    });
+
+    test('async function handle calls can time out consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final pending = await engine.evaluateHandle(
+        '() => new Promise(() => {})',
+      );
+
+      await expectLater(
+        pending.callAsync(const [], timeout: const Duration(milliseconds: 50)),
+        throwsA(isA<JsTimeoutException>()),
+      );
+      expect(await engine.eval('21 * 2'), '42');
+    });
+
+    test('function handle calls can be cancelled consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final loop = await engine.evaluateHandle('() => { while (true) {} }');
+      final running = loop.call(const []);
+      final cancelFuture = Future<void>.delayed(
+        const Duration(milliseconds: 50),
+        loop.cancel,
+      );
+
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+      await cancelFuture.timeout(const Duration(seconds: 2));
+      expect(await engine.eval('21 * 2'), '42');
+    });
+
+    test('function handles reject calls after dispose consistently', () async {
+      final engine = await Quickjs.create();
+      final add = await engine.evaluateHandle('(a, b) => a + b');
+
+      await engine.dispose();
+
+      await expectLater(
+        add.call([1, 2]),
+        throwsA(isA<JsRuntimeClosedException>()),
+      );
+      await expectLater(
+        add.callAsync([1, 2]),
+        throwsA(isA<JsRuntimeClosedException>()),
+      );
+    });
+
+    test('function handles can be disposed consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final add = await engine.evaluateHandle('(a, b) => a + b');
+
+      expect(await add.call([20, 22]), '42');
+      await add.dispose();
+      await add.dispose();
+
+      await expectLater(
+        add.call([1, 2]),
+        throwsA(
+          isA<JsRuntimeClosedException>().having(
+            (error) => error.message,
+            'message',
+            contains('function handle is disposed'),
+          ),
+        ),
+      );
+      await expectLater(
+        add.callAsync([1, 2]),
+        throwsA(
+          isA<JsRuntimeClosedException>().having(
+            (error) => error.message,
+            'message',
+            contains('function handle is disposed'),
+          ),
+        ),
+      );
+
+      final multiply = await engine.evaluateHandle('(a, b) => a * b');
+      expect(await multiply.call([6, 7]), '42');
+    });
+
+    test(
+      'disposing function handles after runtime dispose is a no-op',
+      () async {
+        final engine = await Quickjs.create();
+        final add = await engine.evaluateHandle('(a, b) => a + b');
+
+        await engine.dispose();
+        await add.dispose();
+        await add.dispose();
+      },
+    );
+
     // Promise-based Dart callback 鍦?native 鍜?web 涓婇兘搴?resolve 涓?JS await 缁撴灉銆?
+    test('binds readonly Dart object proxy properties consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bindObject(
+        'user',
+        const QuickjsObjectProxy(properties: {'name': 'Tom', 'age': 42}),
+      );
+
+      expect(await engine.eval('user.name + ":" + user.age'), 'Tom:42');
+      expect(
+        await engine.eval(
+          'Reflect.set(user, "name", "Jerry") + ":" + user.name',
+        ),
+        'false:Tom',
+      );
+    });
+
+    test('binds Dart object proxy methods consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final handle = await engine.bindObject(
+        'calculator',
+        QuickjsObjectProxy(
+          properties: const {'name': 'calc'},
+          methods: {
+            'add': (args) {
+              return (args[0] as num).toInt() + (args[1] as num).toInt();
+            },
+            'label': (args) async {
+              return '${args.single}:${DateTime.utc(2024).year}';
+            },
+          },
+        ),
+      );
+
+      expect(
+        await engine.evalAsync('return await calculator.add(20, 22);'),
+        '42',
+      );
+      expect(
+        await engine.evalAsync(
+          'return await calculator.label(calculator.name);',
+        ),
+        'calc:2024',
+      );
+      expect(handle.name, 'calculator');
+      expect(handle.disposed, isFalse);
+    });
+
+    test('Dart object proxy handles can be disposed consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final handle = await engine.bindObject(
+        'service',
+        QuickjsObjectProxy(methods: {'ping': (_) => 'pong'}),
+      );
+
+      expect(await engine.evalAsync('return await service.ping();'), 'pong');
+      expect(
+        await engine.eval(
+          'const quickjsObjectProxyKeys = Object.keys(globalThis).filter((key) => '
+          'key.startsWith("__quickjsObjectProxy_"));'
+          'globalThis.leakedPing = globalThis[quickjsObjectProxyKeys[0]];'
+          '"saved"',
+        ),
+        'saved',
+      );
+      expect(
+        await engine.eval(
+          'Object.keys(globalThis).filter((key) => '
+          'key.startsWith("__quickjsObjectProxy_")).length',
+        ),
+        '1',
+      );
+
+      await handle.dispose();
+      await handle.dispose();
+
+      expect(handle.disposed, isTrue);
+      expect(await engine.eval('typeof service'), 'undefined');
+      expect(
+        await engine.eval(
+          'Object.keys(globalThis).filter((key) => '
+          'key.startsWith("__quickjsObjectProxy_")).length',
+        ),
+        '0',
+      );
+      await expectLater(
+        engine.evalAsync('return await leakedPing();'),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('not bound'),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'disposing Dart object proxy handles after runtime dispose is a no-op',
+      () async {
+        final engine = await Quickjs.create();
+        final handle = await engine.bindObject(
+          'service',
+          QuickjsObjectProxy(methods: {'ping': (_) => 'pong'}),
+        );
+
+        await engine.dispose();
+        await handle.dispose();
+        await handle.dispose();
+
+        expect(handle.disposed, isTrue);
+      },
+    );
+
+    test('maps Dart object proxy method errors consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bindObject(
+        'service',
+        QuickjsObjectProxy(
+          methods: {
+            'fail': (_) {
+              throw StateError('proxy failed');
+            },
+          },
+        ),
+      );
+
+      await expectLater(
+        engine.evalAsync('return await service.fail();'),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('proxy failed'),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'rejects invalid Dart object proxy descriptors consistently',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
+
+        await expectLater(
+          engine.bindObject(
+            'invalidProxy',
+            const QuickjsObjectProxy(properties: {'not-valid': 1}),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+        await expectLater(
+          engine.bindObject(
+            'invalidProxy',
+            QuickjsObjectProxy(
+              properties: const {'value': 1},
+              methods: {'value': (_) => null},
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+      },
+    );
+
+    test(
+      'rejects Dart object proxy binding after dispose consistently',
+      () async {
+        final engine = await Quickjs.create();
+
+        await engine.dispose();
+
+        await expectLater(
+          engine.bindObject('user', const QuickjsObjectProxy()),
+          throwsA(isA<JsRuntimeClosedException>()),
+        );
+      },
+    );
+
     test('maps Promise-based Dart callback resolve consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);

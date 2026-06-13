@@ -3,9 +3,11 @@ import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
 import 'pages/callback_bridge_page.dart';
 import 'pages/exception_model_page.dart';
+import 'pages/function_handle_page.dart';
 import 'pages/memory_limit_page.dart';
 import 'pages/module_eval_page.dart';
 import 'pages/native_worker_page.dart';
+import 'pages/object_proxy_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
 import 'pages/stream_callback_page.dart';
@@ -79,5 +81,16 @@ final List<ExamplePageSpec> examplePages = [
     title: 'Module',
     description: '执行 ES module、CommonJS、相对路径解析与 runtime module cache。',
     builder: (_) => const ModuleEvalPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Function Handle',
+    description:
+        '使用 evaluateHandle 获取 JS function，并通过 handle.call / callAsync / dispose 管理。',
+    builder: (_) => const FunctionHandlePage(),
+  ),
+  ExamplePageSpec(
+    title: '对象代理',
+    description: '使用 bindObject 注册 Dart proxy，暴露只读属性、Promise 方法和显式释放。',
+    builder: (_) => const ObjectProxyPage(),
   ),
 ];

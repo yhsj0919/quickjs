@@ -12,6 +12,120 @@ import 'quickjs_value.dart';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
 
+/// Explicit descriptor for a Dart object exposed to JavaScript.
+///
+/// This first proxy slice intentionally avoids Dart reflection. Properties are
+/// exposed as readonly JS data properties, and methods are exposed as JS
+/// functions that return Promises through the existing callback bridge.
+final class QuickjsObjectProxy {
+  const QuickjsObjectProxy({
+    this.properties = const <String, Object?>{},
+    this.methods = const <String, QuickjsCallback>{},
+  });
+
+  final Map<String, Object?> properties;
+  final Map<String, QuickjsCallback> methods;
+}
+
+/// Runtime-owned handle to a JavaScript object proxy.
+final class QuickjsObjectHandle {
+  QuickjsObjectHandle._(
+    this._owner,
+    this.name,
+    this._callbackNames,
+    this._callbackIds,
+  );
+
+  final Quickjs _owner;
+  final List<String> _callbackNames;
+  final List<int> _callbackIds;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
+
+  /// Global name used by the object proxy in the owning runtime.
+  final String name;
+
+  /// Releases the JS global proxy, hidden method callback globals, and runtime
+  /// callback registry entries.
+  Future<void> dispose() {
+    final currentDispose = _disposeFuture;
+    if (currentDispose != null) {
+      return currentDispose;
+    }
+    _disposed = true;
+    return _disposeFuture = _owner._releaseObjectProxy(
+      name,
+      _callbackNames,
+      _callbackIds,
+    );
+  }
+
+  /// Whether this Dart handle has been explicitly disposed.
+  bool get disposed => _disposed;
+}
+
+/// Runtime-owned handle to a JavaScript function.
+///
+/// The Dart side only stores an opaque id. The actual function remains inside
+/// the owning [Quickjs] runtime and is released when that runtime is disposed.
+final class QuickjsFunctionHandle {
+  QuickjsFunctionHandle._(this._owner, this.id);
+
+  final Quickjs _owner;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
+
+  /// Opaque handle id, unique within the owning runtime.
+  final int id;
+
+  /// Calls the referenced JavaScript function with [args].
+  ///
+  /// This path preserves synchronous interrupt semantics for long-running
+  /// JavaScript. Use [callAsync] when the function returns a Promise.
+  Future<String> call(List<Object?> args, {Duration? timeout}) {
+    if (_disposed) {
+      return Future<String>.error(
+        JsRuntimeClosedException('QuickJS function handle is disposed'),
+      );
+    }
+    return _owner._callFunctionHandle(id, args, timeout: timeout);
+  }
+
+  /// Calls the referenced JavaScript function and awaits its result.
+  ///
+  /// This accepts both synchronous and Promise-returning JavaScript functions.
+  /// The [timeout] covers the awaited Promise lifecycle. If the function may do
+  /// long synchronous work before returning a Promise or reaching its first
+  /// `await`, prefer [call] so the synchronous interrupt path can stop it.
+  Future<String> callAsync(List<Object?> args, {Duration? timeout}) {
+    if (_disposed) {
+      return Future<String>.error(
+        JsRuntimeClosedException('QuickJS function handle is disposed'),
+      );
+    }
+    return _owner._callFunctionHandleAsync(id, args, timeout: timeout);
+  }
+
+  /// Releases the JavaScript function from the owning runtime registry.
+  ///
+  /// Disposing a handle is idempotent. Disposing the owning runtime still
+  /// releases all handles in bulk, so this is only needed for long-lived
+  /// runtimes that create many short-lived handles.
+  Future<void> dispose() {
+    final currentDispose = _disposeFuture;
+    if (currentDispose != null) {
+      return currentDispose;
+    }
+    _disposed = true;
+    return _disposeFuture = _owner._releaseFunctionHandle(id);
+  }
+
+  /// Cancels the current runtime operation, matching [Quickjs.stop] semantics.
+  Future<void> cancel() {
+    return _owner.stop();
+  }
+}
+
 /// `Quickjs` 实例当前可观察的生命周期状态。
 enum QuickjsRuntimeState {
   /// Runtime 正在创建中。
@@ -61,6 +175,7 @@ class Quickjs {
   Future<void>? _disposeFuture;
   Future<void>? _stopFuture;
   int _nextCallbackId = 1;
+  int _nextObjectProxyId = 1;
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
   static Future<Quickjs> create({
@@ -183,6 +298,27 @@ class Quickjs {
     return evalCommonJs(source, name: name, timeout: timeout);
   }
 
+  /// Evaluates [code] and stores the resulting JavaScript function as a handle.
+  Future<QuickjsFunctionHandle> evaluateHandle(
+    String code, {
+    Duration? timeout,
+  }) async {
+    final payloadJson = await _enqueue(
+      _wrapEvaluateFunctionHandle(code),
+      timeout: timeout,
+    );
+    final payload = jsonDecode(payloadJson) as Map<String, Object?>;
+    if (payload['ok'] != true) {
+      throw JsValueConversionException(payload['message']! as String);
+    }
+    return QuickjsFunctionHandle._(this, payload['id']! as int);
+  }
+
+  /// [evaluateHandle] 的兼容别名。
+  Future<QuickjsFunctionHandle> evalHandle(String code, {Duration? timeout}) {
+    return evaluateHandle(code, timeout: timeout);
+  }
+
   /// 在 JS `globalThis` 上绑定一个 Promise-based Dart callback。
   ///
   /// JS 侧调用绑定函数时会得到 Promise；Dart callback 的返回值会 resolve 该 Promise，
@@ -202,6 +338,63 @@ class Quickjs {
   /// 在 JS `globalThis` 上绑定 `{ emit, close, error }`，并返回 Dart [Stream]。
   ///
   /// JS 侧每次 `await sink.emit(value)` 会等待 Dart 侧确认，用于串行 backpressure。
+  /// Binds an explicit Dart object proxy on JS `globalThis`.
+  ///
+  /// [proxy.properties] become readonly enumerable properties. [proxy.methods]
+  /// become JS functions that return Promises and route calls through the same
+  /// callback bridge used by [bind].
+  Future<QuickjsObjectHandle> bindObject(
+    String name,
+    QuickjsObjectProxy proxy,
+  ) async {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<QuickjsObjectHandle>.error(terminalError);
+    }
+    final validName = _validateGlobalName(name);
+    final propertyPayload = <String, Object>{};
+    final propertyNames = <String>{};
+    for (final entry in proxy.properties.entries) {
+      final propertyName = _validateObjectProxyMemberName(entry.key);
+      propertyNames.add(propertyName);
+      propertyPayload[propertyName] = _encodeDartValue(
+        entry.value,
+        Set<Object>.identity(),
+      );
+    }
+
+    final proxyId = _nextObjectProxyId++;
+    final methods = <Map<String, String>>[];
+    final methodNames = <String>{};
+    final callbackNames = <String>[];
+    final callbackIds = <int>[];
+    var methodIndex = 1;
+    for (final entry in proxy.methods.entries) {
+      final methodName = _validateObjectProxyMemberName(entry.key);
+      if (propertyNames.contains(methodName)) {
+        throw JsValueConversionException(
+          'QuickJS object proxy member is defined more than once: $methodName',
+        );
+      }
+      if (!methodNames.add(methodName)) {
+        throw JsValueConversionException(
+          'QuickJS object proxy member is defined more than once: $methodName',
+        );
+      }
+      final callbackId = _nextCallbackId++;
+      callbackIds.add(callbackId);
+      final callbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
+      callbackNames.add(callbackName);
+      await _runtime.bindCallback(callbackId, callbackName, (args) async {
+        return entry.value(args);
+      });
+      methods.add({'name': methodName, 'callback': callbackName});
+    }
+
+    await _enqueue(_wrapBindObjectProxy(validName, propertyPayload, methods));
+    return QuickjsObjectHandle._(this, validName, callbackNames, callbackIds);
+  }
+
   Future<Stream<Object?>> bindSink(String name) {
     final terminalError = _terminalError;
     if (terminalError != null) {
@@ -518,6 +711,55 @@ class Quickjs {
     };
   }
 
+  Future<String> _callFunctionHandle(
+    int handleId,
+    List<Object?> args, {
+    Duration? timeout,
+  }) {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<String>.error(terminalError);
+    }
+    return _enqueue(_wrapFunctionHandleCall(handleId, args), timeout: timeout);
+  }
+
+  Future<String> _callFunctionHandleAsync(
+    int handleId,
+    List<Object?> args, {
+    Duration? timeout,
+  }) {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<String>.error(terminalError);
+    }
+    return _enqueue(
+      _wrapAsyncFunctionBody(_wrapFunctionHandleCallAwait(handleId, args)),
+      timeout: timeout,
+      async: true,
+    );
+  }
+
+  Future<void> _releaseFunctionHandle(int handleId) {
+    if (_isTerminal) {
+      return Future<void>.value();
+    }
+    return _enqueue(_wrapReleaseFunctionHandle(handleId)).then((_) {});
+  }
+
+  Future<void> _releaseObjectProxy(
+    String name,
+    List<String> callbackNames,
+    List<int> callbackIds,
+  ) async {
+    if (_isTerminal) {
+      return;
+    }
+    await _enqueue(_wrapReleaseObjectProxy(name, callbackNames));
+    for (final callbackId in callbackIds) {
+      await _runtime.unbindCallback(callbackId);
+    }
+  }
+
   Future<Map<String, String>> _buildModuleGraph(
     String rootSource,
     String rootName,
@@ -638,6 +880,168 @@ $code
 ''';
 }
 
+String _wrapBindObjectProxy(
+  String name,
+  Map<String, Object> properties,
+  List<Map<String, String>> methods,
+) {
+  final encodedName = jsonEncode(name);
+  final encodedProperties = jsonEncode(properties);
+  final encodedMethods = jsonEncode(methods);
+  return '''
+(() => {
+const inflate = ${_dartValueInflateFunctionSource()};
+const target = Object.create(null);
+const properties = $encodedProperties;
+for (const key of Object.keys(properties)) {
+  Object.defineProperty(target, key, {
+    value: inflate(properties[key]),
+    configurable: false,
+    enumerable: true,
+    writable: false,
+  });
+}
+const methods = $encodedMethods;
+for (const method of methods) {
+  Object.defineProperty(target, method.name, {
+    value: (...args) => globalThis[method.callback](...args),
+    configurable: false,
+    enumerable: true,
+    writable: false,
+  });
+}
+Object.defineProperty(globalThis, $encodedName, {
+  value: target,
+  configurable: true,
+  enumerable: true,
+  writable: true,
+});
+})()
+''';
+}
+
+String _wrapEvaluateFunctionHandle(String code) {
+  final encodedSource = jsonEncode(code);
+  return '''
+(() => {
+  const value = (0, eval)($encodedSource);
+  if (typeof value !== 'function') {
+    return JSON.stringify({
+      ok: false,
+      message: 'QuickJS handle expression must evaluate to a function',
+    });
+  }
+  const registryKey = '__quickjsFunctionHandles';
+  const nextIdKey = '__quickjsNextFunctionHandleId';
+  if (!Object.prototype.hasOwnProperty.call(globalThis, registryKey)) {
+    Object.defineProperty(globalThis, registryKey, {
+      value: Object.create(null),
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    });
+  }
+  if (!Object.prototype.hasOwnProperty.call(globalThis, nextIdKey)) {
+    Object.defineProperty(globalThis, nextIdKey, {
+      value: 1,
+      configurable: false,
+      enumerable: false,
+      writable: true,
+    });
+  }
+  const id = globalThis[nextIdKey]++;
+  globalThis[registryKey][id] = value;
+  return JSON.stringify({ ok: true, id });
+})()
+''';
+}
+
+String _wrapFunctionHandleCall(int handleId, List<Object?> args) {
+  final encodedArgs = jsonEncode([
+    for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
+  ]);
+  return '''
+(() => {
+const inflate = ${_dartValueInflateFunctionSource()};
+const registry = globalThis.__quickjsFunctionHandles;
+if (!registry || typeof registry[$handleId] !== 'function') {
+  throw new Error('QuickJS function handle is not valid');
+}
+const args = $encodedArgs.map(inflate);
+return registry[$handleId](...args);
+})()
+''';
+}
+
+String _wrapFunctionHandleCallAwait(int handleId, List<Object?> args) {
+  final encodedArgs = jsonEncode([
+    for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
+  ]);
+  return '''
+const inflate = ${_dartValueInflateFunctionSource()};
+const registry = globalThis.__quickjsFunctionHandles;
+if (!registry || typeof registry[$handleId] !== 'function') {
+  throw new Error('QuickJS function handle is not valid');
+}
+const args = $encodedArgs.map(inflate);
+return await registry[$handleId](...args);
+''';
+}
+
+String _wrapReleaseFunctionHandle(int handleId) {
+  return '''
+(() => {
+const registry = globalThis.__quickjsFunctionHandles;
+if (registry) {
+  delete registry[$handleId];
+}
+})()
+''';
+}
+
+String _wrapReleaseObjectProxy(String name, List<String> callbackNames) {
+  final encodedName = jsonEncode(name);
+  final encodedCallbackNames = jsonEncode(callbackNames);
+  return '''
+(() => {
+delete globalThis[$encodedName];
+for (const callbackName of $encodedCallbackNames) {
+  delete globalThis[callbackName];
+}
+})()
+''';
+}
+
+String _dartValueInflateFunctionSource() {
+  return '''
+(payload) => {
+  switch (payload.type) {
+    case 'null':
+      return null;
+    case 'number':
+    case 'boolean':
+    case 'string':
+      return payload.value;
+    case 'bytes':
+      return new Uint8Array(payload.value);
+    case 'array':
+      return payload.value.map((item) => inflate(item));
+    case 'object': {
+      const value = {};
+      for (const key of Object.keys(payload.value)) {
+        value[key] = inflate(payload.value[key]);
+      }
+      return value;
+    }
+    case 'date':
+      return new Date(payload.value);
+    default:
+      throw new TypeError('Unknown Dart value payload: ' + payload.type);
+  }
+}
+''';
+}
+
 Map<String, Object?> _encodeGlobals(Map<String, Object?> globals) {
   return {
     for (final entry in globals.entries)
@@ -653,6 +1057,16 @@ String _validateGlobalName(String name) {
   if (!isIdentifier) {
     throw JsValueConversionException(
       'QuickJS global name must be a JavaScript identifier: $name',
+    );
+  }
+  return name;
+}
+
+String _validateObjectProxyMemberName(String name) {
+  final isIdentifier = RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(name);
+  if (!isIdentifier) {
+    throw JsValueConversionException(
+      'QuickJS object proxy member name must be a JavaScript identifier: $name',
     );
   }
   return name;

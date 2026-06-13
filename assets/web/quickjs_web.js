@@ -285,6 +285,10 @@
       return post('runtimeBindCallback', { runtimeId, callbackId, name });
     },
 
+    async runtimeUnbindCallback(runtimeId, callbackId) {
+      callbacks.delete(`${runtimeId}:${callbackId}`);
+    },
+
     runtimeRegisterStreamBridge(runtimeId, pull, cancel, sinkAction) {
       streamBridges.set(runtimeId, { pull, cancel, sinkAction });
     },

@@ -18,7 +18,25 @@
   - `exports`
   - relative path resolution
   - runtime-scoped CommonJS module cache
-- The working tree may contain the uncommitted 0.6.0 changes. Do not assume a clean tree.
+- 0.7.0 function handle slice is implemented:
+  - `Quickjs.evaluateHandle()` / `evalHandle()`
+  - `QuickjsFunctionHandle.call(args, timeout: ...)`
+  - `QuickjsFunctionHandle.callAsync(args, timeout: ...)`
+  - `QuickjsFunctionHandle.dispose()`
+  - `QuickjsFunctionHandle.cancel()`
+  - runtime-owned hidden JS function registry
+  - `callAsync` timeout docs: timeout covers Promise pending; synchronous work before returning a Promise should use `call`
+  - native/web consistency tests cover call, callAsync Promise resolve/reject, structured args, non-function rejection, isolation, timeout, cancel, handle dispose, and runtime dispose errors
+- 0.7.0 object proxy minimal slice is implemented:
+  - `QuickjsObjectProxy`
+  - `Quickjs.bindObject(name, proxy)`
+  - `QuickjsObjectHandle.dispose()`
+  - readonly data properties
+  - methods routed through the existing Promise callback bridge
+  - object handle dispose deletes the JS global proxy, hidden method callback globals, and runtime-level callback registry entries
+  - native/web consistency tests cover readonly properties, method calls, method errors, invalid descriptors, object handle dispose, leaked method references after dispose, dispose-after-runtime-dispose, and bind-after-dispose errors
+  - example page registered as `对象代理`
+- The working tree may contain uncommitted 0.6.0 and 0.7.0 changes. Do not assume a clean tree.
 
 ## Important Files
 
@@ -36,6 +54,7 @@
 - `native/quickjs_bridge.c`
 - `native/quickjs_bridge.h`
 - `test/quickjs_consistency_test.dart`
+- `example/lib/pages/function_handle_page.dart`
 - `example/lib/pages/module_eval_page.dart`
 - `example/lib/example_pages.dart`
 - `example/test/widget_test.dart`
@@ -61,17 +80,14 @@ Notes:
 
 ## Next Recommended Step
 
-Start 0.7.0 with the smallest JS function handle slice:
+Continue 0.7.0 with the next Dart object proxy slice:
 
-1. Add public `evaluateHandle()` or equivalent on `Quickjs`.
-2. Return a `QuickjsHandle` / function-handle object bound to its owning `Quickjs` runtime.
-3. Implement `handle.call(args, {timeout})`.
-4. Reuse the existing worker request / response queue model.
-5. Support timeout and closed-runtime errors.
-6. Add ownership rules: handle calls after runtime dispose return `JsRuntimeClosedException`; cross-runtime use should be impossible or explicitly rejected.
-7. Add native/web consistency tests before expanding to object proxy or class binding.
+1. Add dynamic getter / setter descriptors if the public API shape is clear.
+2. Consider proxy access after handle dispose error semantics if a stronger error than missing global is desired.
+3. Keep using explicit descriptors rather than arbitrary Dart reflection.
+4. Add native/web consistency tests before expanding to constructors or class binding.
 
-Do not start with Dart object proxy or class binding. Those expand the API surface and should wait until function handles are stable.
+Do not start with Dart class binding. That expands the API surface and should wait until object proxy semantics are stable.
 
 ## Constraints To Preserve
 
