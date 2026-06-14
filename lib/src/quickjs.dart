@@ -11,20 +11,117 @@ import 'quickjs_runtime_options.dart';
 import 'quickjs_value.dart';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
+typedef QuickjsObjectGetter = FutureOr<Object?> Function();
+typedef QuickjsObjectSetter = FutureOr<void> Function(Object? value);
+typedef QuickjsClassConstructor<T extends Object> =
+    FutureOr<T> Function(List<Object?> args);
+typedef QuickjsInstanceGetter<T extends Object> =
+    FutureOr<Object?> Function(T instance);
+typedef QuickjsInstanceSetter<T extends Object> =
+    FutureOr<void> Function(T instance, Object? value);
+typedef QuickjsInstanceMethod<T extends Object> =
+    FutureOr<Object?> Function(T instance, List<Object?> args);
+
+/// Explicit getter / setter descriptor for a Dart object proxy property.
+final class QuickjsObjectAccessor {
+  const QuickjsObjectAccessor({this.get, this.set});
+
+  /// Called when JS reads the property. JS receives a Promise.
+  final QuickjsObjectGetter? get;
+
+  /// Called when JS writes the property.
+  ///
+  /// JavaScript setter syntax cannot return a Promise to the assignment
+  /// expression, so async setter errors are not awaitable through `obj.prop = x`.
+  final QuickjsObjectSetter? set;
+}
 
 /// Explicit descriptor for a Dart object exposed to JavaScript.
 ///
 /// This first proxy slice intentionally avoids Dart reflection. Properties are
-/// exposed as readonly JS data properties, and methods are exposed as JS
-/// functions that return Promises through the existing callback bridge.
+/// exposed as readonly enumerable JS properties, accessors as dynamic JS properties,
+/// and methods as JS functions that return Promises through the existing
+/// callback bridge.
 final class QuickjsObjectProxy {
   const QuickjsObjectProxy({
     this.properties = const <String, Object?>{},
+    this.accessors = const <String, QuickjsObjectAccessor>{},
     this.methods = const <String, QuickjsCallback>{},
   });
 
   final Map<String, Object?> properties;
+  final Map<String, QuickjsObjectAccessor> accessors;
   final Map<String, QuickjsCallback> methods;
+}
+
+/// Explicit getter / setter descriptor for a Dart class instance property.
+final class QuickjsInstanceAccessor<T extends Object> {
+  const QuickjsInstanceAccessor({this.get, this.set});
+
+  /// Called when JS reads the property. JS receives a Promise.
+  final QuickjsInstanceGetter<T>? get;
+
+  /// Called when JS writes the property.
+  ///
+  /// JavaScript setter syntax cannot return a Promise to the assignment
+  /// expression, so async setter errors are not awaitable through `obj.prop = x`.
+  final QuickjsInstanceSetter<T>? set;
+}
+
+/// Explicit descriptor for a Dart class exposed as a JavaScript constructor.
+///
+/// The constructor returns a JS instance synchronously, while the Dart instance
+/// is created through the Promise callback bridge. Instance getters and methods
+/// wait for that constructor Promise before touching the Dart instance.
+final class QuickjsClass<T extends Object> {
+  const QuickjsClass({
+    required this.constructor,
+    this.accessors = const {},
+    this.methods = const {},
+  });
+
+  final QuickjsClassConstructor<T> constructor;
+  final Map<String, QuickjsInstanceAccessor<T>> accessors;
+  final Map<String, QuickjsInstanceMethod<T>> methods;
+}
+
+/// Runtime-owned handle to a JavaScript constructor binding.
+final class QuickjsClassHandle {
+  QuickjsClassHandle._(
+    this._owner,
+    this.name,
+    this._classId,
+    this._callbackNames,
+    this._callbackIds,
+  );
+
+  final Quickjs _owner;
+  final int _classId;
+  final List<String> _callbackNames;
+  final List<int> _callbackIds;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
+
+  /// Global constructor name used in the owning runtime.
+  final String name;
+
+  /// Releases the JS constructor, hidden callbacks, and Dart instance table.
+  Future<void> dispose() {
+    final currentDispose = _disposeFuture;
+    if (currentDispose != null) {
+      return currentDispose;
+    }
+    _disposed = true;
+    return _disposeFuture = _owner._releaseClassBinding(
+      name,
+      _classId,
+      _callbackNames,
+      _callbackIds,
+    );
+  }
+
+  /// Whether this Dart handle has been explicitly disposed.
+  bool get disposed => _disposed;
 }
 
 /// Runtime-owned handle to a JavaScript object proxy.
@@ -32,11 +129,13 @@ final class QuickjsObjectHandle {
   QuickjsObjectHandle._(
     this._owner,
     this.name,
+    this._stateName,
     this._callbackNames,
     this._callbackIds,
   );
 
   final Quickjs _owner;
+  final String _stateName;
   final List<String> _callbackNames;
   final List<int> _callbackIds;
   bool _disposed = false;
@@ -55,6 +154,7 @@ final class QuickjsObjectHandle {
     _disposed = true;
     return _disposeFuture = _owner._releaseObjectProxy(
       name,
+      _stateName,
       _callbackNames,
       _callbackIds,
     );
@@ -176,6 +276,8 @@ class Quickjs {
   Future<void>? _stopFuture;
   int _nextCallbackId = 1;
   int _nextObjectProxyId = 1;
+  int _nextClassBindingId = 1;
+  final Map<int, Map<int, Object>> _classInstances = <int, Map<int, Object>>{};
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
   static Future<Quickjs> create({
@@ -340,9 +442,10 @@ class Quickjs {
   /// JS 侧每次 `await sink.emit(value)` 会等待 Dart 侧确认，用于串行 backpressure。
   /// Binds an explicit Dart object proxy on JS `globalThis`.
   ///
-  /// [proxy.properties] become readonly enumerable properties. [proxy.methods]
-  /// become JS functions that return Promises and route calls through the same
-  /// callback bridge used by [bind].
+  /// [proxy.properties] become readonly enumerable properties.
+  /// [proxy.accessors] become dynamic getter / setter descriptors.
+  /// [proxy.methods] become JS functions that return Promises and route calls
+  /// through the same callback bridge used by [bind].
   Future<QuickjsObjectHandle> bindObject(
     String name,
     QuickjsObjectProxy proxy,
@@ -364,14 +467,65 @@ class Quickjs {
     }
 
     final proxyId = _nextObjectProxyId++;
+    final stateName = '__quickjsObjectProxy_${proxyId}_state';
+    final accessors = <Map<String, String?>>[];
+    final accessorNames = <String>{};
     final methods = <Map<String, String>>[];
     final methodNames = <String>{};
     final callbackNames = <String>[];
     final callbackIds = <int>[];
     var methodIndex = 1;
+    for (final entry in proxy.accessors.entries) {
+      final accessorName = _validateObjectProxyMemberName(entry.key);
+      if (propertyNames.contains(accessorName)) {
+        throw JsValueConversionException(
+          'QuickJS object proxy member is defined more than once: $accessorName',
+        );
+      }
+      if (!accessorNames.add(accessorName)) {
+        throw JsValueConversionException(
+          'QuickJS object proxy member is defined more than once: $accessorName',
+        );
+      }
+      final descriptor = entry.value;
+      if (descriptor.get == null && descriptor.set == null) {
+        throw JsValueConversionException(
+          'QuickJS object proxy accessor must define get or set: $accessorName',
+        );
+      }
+      String? getCallbackName;
+      final getter = descriptor.get;
+      if (getter != null) {
+        final callbackId = _nextCallbackId++;
+        callbackIds.add(callbackId);
+        getCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
+        callbackNames.add(getCallbackName);
+        await _runtime.bindCallback(callbackId, getCallbackName, (_) async {
+          return getter();
+        });
+      }
+      String? setCallbackName;
+      final setter = descriptor.set;
+      if (setter != null) {
+        final callbackId = _nextCallbackId++;
+        callbackIds.add(callbackId);
+        setCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
+        callbackNames.add(setCallbackName);
+        await _runtime.bindCallback(callbackId, setCallbackName, (args) async {
+          await setter(args.isEmpty ? null : args.first);
+          return null;
+        });
+      }
+      accessors.add({
+        'name': accessorName,
+        'getCallback': getCallbackName,
+        'setCallback': setCallbackName,
+      });
+    }
     for (final entry in proxy.methods.entries) {
       final methodName = _validateObjectProxyMemberName(entry.key);
-      if (propertyNames.contains(methodName)) {
+      if (propertyNames.contains(methodName) ||
+          accessorNames.contains(methodName)) {
         throw JsValueConversionException(
           'QuickJS object proxy member is defined more than once: $methodName',
         );
@@ -391,8 +545,150 @@ class Quickjs {
       methods.add({'name': methodName, 'callback': callbackName});
     }
 
-    await _enqueue(_wrapBindObjectProxy(validName, propertyPayload, methods));
-    return QuickjsObjectHandle._(this, validName, callbackNames, callbackIds);
+    await _enqueue(
+      _wrapBindObjectProxy(
+        validName,
+        stateName,
+        propertyPayload,
+        accessors,
+        methods,
+      ),
+    );
+    return QuickjsObjectHandle._(
+      this,
+      validName,
+      stateName,
+      callbackNames,
+      callbackIds,
+    );
+  }
+
+  /// Binds an explicit Dart class as a JavaScript constructor.
+  ///
+  /// `new $name(...)` returns a JavaScript instance immediately. The Dart
+  /// constructor runs through the Promise callback bridge, so instance getters
+  /// and methods wait for construction before accessing the Dart instance.
+  Future<QuickjsClassHandle> bindClass<T extends Object>(
+    String name,
+    QuickjsClass<T> definition,
+  ) async {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<QuickjsClassHandle>.error(terminalError);
+    }
+    final validName = _validateGlobalName(name);
+    final classId = _nextClassBindingId++;
+    final instances = <int, Object>{};
+    _classInstances[classId] = instances;
+
+    final callbackNames = <String>[];
+    final callbackIds = <int>[];
+    final constructorCallbackName = '__quickjsClass_${classId}_constructor';
+    final constructorCallbackId = _nextCallbackId++;
+    callbackNames.add(constructorCallbackName);
+    callbackIds.add(constructorCallbackId);
+    await _runtime.bindCallback(
+      constructorCallbackId,
+      constructorCallbackName,
+      (args) async {
+        if (args.isEmpty || args.first is! num) {
+          throw StateError('QuickJS class constructor missing instance id');
+        }
+        final instanceId = (args.first! as num).toInt();
+        final instance = await definition.constructor(args.skip(1).toList());
+        instances[instanceId] = instance;
+        return null;
+      },
+    );
+
+    final accessors = <Map<String, String?>>[];
+    final accessorNames = <String>{};
+    final methods = <Map<String, String>>[];
+    final methodNames = <String>{};
+    var callbackIndex = 1;
+    for (final entry in definition.accessors.entries) {
+      final accessorName = _validateObjectProxyMemberName(entry.key);
+      if (!accessorNames.add(accessorName)) {
+        throw JsValueConversionException(
+          'QuickJS class member is defined more than once: $accessorName',
+        );
+      }
+      final descriptor = entry.value;
+      if (descriptor.get == null && descriptor.set == null) {
+        throw JsValueConversionException(
+          'QuickJS class accessor must define get or set: $accessorName',
+        );
+      }
+      String? getCallbackName;
+      final getter = descriptor.get;
+      if (getter != null) {
+        final callbackId = _nextCallbackId++;
+        callbackIds.add(callbackId);
+        getCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
+        callbackNames.add(getCallbackName);
+        await _runtime.bindCallback(callbackId, getCallbackName, (args) async {
+          final instance = _requireClassInstance<T>(classId, args);
+          return getter(instance);
+        });
+      }
+      String? setCallbackName;
+      final setter = descriptor.set;
+      if (setter != null) {
+        final callbackId = _nextCallbackId++;
+        callbackIds.add(callbackId);
+        setCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
+        callbackNames.add(setCallbackName);
+        await _runtime.bindCallback(callbackId, setCallbackName, (args) async {
+          final instance = _requireClassInstance<T>(classId, args);
+          await setter(instance, args.length < 2 ? null : args[1]);
+          return null;
+        });
+      }
+      accessors.add({
+        'name': accessorName,
+        'getCallback': getCallbackName,
+        'setCallback': setCallbackName,
+      });
+    }
+    for (final entry in definition.methods.entries) {
+      final methodName = _validateObjectProxyMemberName(entry.key);
+      if (accessorNames.contains(methodName)) {
+        throw JsValueConversionException(
+          'QuickJS class member is defined more than once: $methodName',
+        );
+      }
+      if (!methodNames.add(methodName)) {
+        throw JsValueConversionException(
+          'QuickJS class member is defined more than once: $methodName',
+        );
+      }
+      final callbackId = _nextCallbackId++;
+      callbackIds.add(callbackId);
+      final callbackName = '__quickjsClass_${classId}_${callbackIndex++}';
+      callbackNames.add(callbackName);
+      await _runtime.bindCallback(callbackId, callbackName, (args) async {
+        final instance = _requireClassInstance<T>(classId, args);
+        return entry.value(instance, args.skip(1).toList());
+      });
+      methods.add({'name': methodName, 'callback': callbackName});
+    }
+
+    await _enqueue(
+      _wrapBindClass(
+        validName,
+        classId,
+        constructorCallbackName,
+        accessors,
+        methods,
+      ),
+    );
+    return QuickjsClassHandle._(
+      this,
+      validName,
+      classId,
+      callbackNames,
+      callbackIds,
+    );
   }
 
   Future<Stream<Object?>> bindSink(String name) {
@@ -522,6 +818,7 @@ class Quickjs {
     final running = _running;
     final shouldCancelRunning = _runningRequest?.async == true;
     _state = QuickjsRuntimeState.closed;
+    _classInstances.clear();
     _cancelQueued(JsRuntimeClosedException());
     if (shouldCancelRunning) {
       unawaited(_runtime.stop());
@@ -563,6 +860,7 @@ class Quickjs {
         .catchError((Object _) {})
         .then<void>((_) async {
           if (!_isTerminal) {
+            _classInstances.clear();
             _runtime = await _backend.createRuntime(_options);
             _state = QuickjsRuntimeState.ready;
           }
@@ -748,13 +1046,45 @@ class Quickjs {
 
   Future<void> _releaseObjectProxy(
     String name,
+    String stateName,
     List<String> callbackNames,
     List<int> callbackIds,
   ) async {
     if (_isTerminal) {
       return;
     }
-    await _enqueue(_wrapReleaseObjectProxy(name, callbackNames));
+    await _enqueue(_wrapReleaseObjectProxy(name, stateName, callbackNames));
+    for (final callbackId in callbackIds) {
+      await _runtime.unbindCallback(callbackId);
+    }
+  }
+
+  T _requireClassInstance<T extends Object>(int classId, List<Object?> args) {
+    if (args.isEmpty || args.first is! num) {
+      throw StateError('QuickJS class instance id is missing');
+    }
+    final instanceId = (args.first! as num).toInt();
+    final instance = _classInstances[classId]?[instanceId];
+    if (instance == null) {
+      throw StateError('QuickJS class instance is disposed');
+    }
+    if (instance is! T) {
+      throw StateError('QuickJS class instance type mismatch');
+    }
+    return instance;
+  }
+
+  Future<void> _releaseClassBinding(
+    String name,
+    int classId,
+    List<String> callbackNames,
+    List<int> callbackIds,
+  ) async {
+    _classInstances.remove(classId);
+    if (_isTerminal) {
+      return;
+    }
+    await _enqueue(_wrapReleaseClassBinding(name, classId, callbackNames));
     for (final callbackId in callbackIds) {
       await _runtime.unbindCallback(callbackId);
     }
@@ -882,29 +1212,71 @@ $code
 
 String _wrapBindObjectProxy(
   String name,
+  String stateName,
   Map<String, Object> properties,
+  List<Map<String, String?>> accessors,
   List<Map<String, String>> methods,
 ) {
   final encodedName = jsonEncode(name);
+  final encodedStateName = jsonEncode(stateName);
   final encodedProperties = jsonEncode(properties);
+  final encodedAccessors = jsonEncode(accessors);
   final encodedMethods = jsonEncode(methods);
   return '''
 (() => {
 const inflate = ${_dartValueInflateFunctionSource()};
 const target = Object.create(null);
+const state = { disposed: false };
+const assertLive = () => {
+  if (state.disposed) {
+    throw new Error('QuickJS object proxy is disposed');
+  }
+};
+Object.defineProperty(target, $encodedStateName, {
+  value: state,
+  configurable: false,
+  enumerable: false,
+  writable: false,
+});
 const properties = $encodedProperties;
 for (const key of Object.keys(properties)) {
+  const value = inflate(properties[key]);
   Object.defineProperty(target, key, {
-    value: inflate(properties[key]),
+    get: () => {
+      assertLive();
+      return value;
+    },
     configurable: false,
     enumerable: true,
-    writable: false,
   });
+}
+const accessors = $encodedAccessors;
+for (const accessor of accessors) {
+  const descriptor = {
+    configurable: false,
+    enumerable: true,
+  };
+  if (accessor.getCallback) {
+    descriptor.get = () => {
+      assertLive();
+      return globalThis[accessor.getCallback]();
+    };
+  }
+  if (accessor.setCallback) {
+    descriptor.set = (value) => {
+      assertLive();
+      globalThis[accessor.setCallback](value);
+    };
+  }
+  Object.defineProperty(target, accessor.name, descriptor);
 }
 const methods = $encodedMethods;
 for (const method of methods) {
   Object.defineProperty(target, method.name, {
-    value: (...args) => globalThis[method.callback](...args),
+    value: (...args) => {
+      assertLive();
+      return globalThis[method.callback](...args);
+    },
     configurable: false,
     enumerable: true,
     writable: false,
@@ -999,11 +1371,162 @@ if (registry) {
 ''';
 }
 
-String _wrapReleaseObjectProxy(String name, List<String> callbackNames) {
+String _wrapReleaseObjectProxy(
+  String name,
+  String stateName,
+  List<String> callbackNames,
+) {
   final encodedName = jsonEncode(name);
+  final encodedStateName = jsonEncode(stateName);
   final encodedCallbackNames = jsonEncode(callbackNames);
   return '''
 (() => {
+const proxy = globalThis[$encodedName];
+if (proxy && proxy[$encodedStateName]) {
+  proxy[$encodedStateName].disposed = true;
+}
+delete globalThis[$encodedName];
+for (const callbackName of $encodedCallbackNames) {
+  delete globalThis[callbackName];
+}
+})()
+''';
+}
+
+String _wrapBindClass(
+  String name,
+  int classId,
+  String constructorCallbackName,
+  List<Map<String, String?>> accessors,
+  List<Map<String, String>> methods,
+) {
+  final encodedName = jsonEncode(name);
+  final encodedStateName = jsonEncode('__quickjsClass_${classId}_state');
+  final encodedConstructorCallbackName = jsonEncode(constructorCallbackName);
+  final encodedAccessors = jsonEncode(accessors);
+  final encodedMethods = jsonEncode(methods);
+  return '''
+(() => {
+let nextInstanceId = 1;
+const assertReceiver = (value) => {
+  if (!value || !Object.prototype.hasOwnProperty.call(value, $encodedStateName)) {
+    throw new TypeError('QuickJS class method called with invalid receiver');
+  }
+  return value[$encodedStateName];
+};
+const waitLive = (value) => {
+  const state = assertReceiver(value);
+  return state.ready.then(() => state.pending).then(() => {
+    if (state.disposed) {
+      throw new Error('QuickJS class instance is disposed');
+    }
+    return state.id;
+  });
+};
+const instanceStates = [];
+function QuickjsBoundClass(...args) {
+  if (!new.target) {
+    throw new TypeError('QuickJS class constructor must be called with new');
+  }
+  const instanceId = nextInstanceId++;
+  const target = Object.create(QuickjsBoundClass.prototype);
+  const state = {
+    id: instanceId,
+    disposed: false,
+    ready: null,
+    pending: Promise.resolve(),
+  };
+  state.ready = globalThis[$encodedConstructorCallbackName](instanceId, ...args)
+    .catch((error) => {
+      state.disposed = true;
+      throw error;
+    });
+  instanceStates.push(state);
+  Object.defineProperty(target, $encodedStateName, {
+    value: state,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+  return target;
+}
+Object.defineProperty(QuickjsBoundClass, 'name', {
+  value: $encodedName,
+  configurable: true,
+});
+Object.defineProperty(QuickjsBoundClass, $encodedStateName, {
+  value: instanceStates,
+  configurable: false,
+  enumerable: false,
+  writable: false,
+});
+const accessors = $encodedAccessors;
+for (const accessor of accessors) {
+  const descriptor = {
+    configurable: false,
+    enumerable: true,
+  };
+  if (accessor.getCallback) {
+    descriptor.get = function() {
+      return waitLive(this).then((instanceId) =>
+        globalThis[accessor.getCallback](instanceId)
+      );
+    };
+  }
+  if (accessor.setCallback) {
+    descriptor.set = function(value) {
+      const state = assertReceiver(this);
+      state.pending = state.pending
+        .then(() => state.ready)
+        .then(() => {
+          if (state.disposed) {
+            throw new Error('QuickJS class instance is disposed');
+          }
+          return globalThis[accessor.setCallback](state.id, value);
+        });
+    };
+  }
+  Object.defineProperty(QuickjsBoundClass.prototype, accessor.name, descriptor);
+}
+const methods = $encodedMethods;
+for (const method of methods) {
+  Object.defineProperty(QuickjsBoundClass.prototype, method.name, {
+    value: function(...args) {
+      return waitLive(this).then((instanceId) =>
+        globalThis[method.callback](instanceId, ...args)
+      );
+    },
+    configurable: false,
+    enumerable: true,
+    writable: false,
+  });
+}
+Object.defineProperty(globalThis, $encodedName, {
+  value: QuickjsBoundClass,
+  configurable: true,
+  enumerable: true,
+  writable: true,
+});
+})()
+''';
+}
+
+String _wrapReleaseClassBinding(
+  String name,
+  int classId,
+  List<String> callbackNames,
+) {
+  final encodedName = jsonEncode(name);
+  final encodedStateName = jsonEncode('__quickjsClass_${classId}_state');
+  final encodedCallbackNames = jsonEncode(callbackNames);
+  return '''
+(() => {
+const constructor = globalThis[$encodedName];
+if (typeof constructor === 'function' && Array.isArray(constructor[$encodedStateName])) {
+  for (const state of constructor[$encodedStateName]) {
+    state.disposed = true;
+  }
+}
 delete globalThis[$encodedName];
 for (const callbackName of $encodedCallbackNames) {
   delete globalThis[callbackName];

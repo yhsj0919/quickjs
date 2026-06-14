@@ -3,16 +3,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
-class ObjectProxyPage extends StatefulWidget {
-  const ObjectProxyPage({super.key});
+class ClassBindingPage extends StatefulWidget {
+  const ClassBindingPage({super.key});
 
   @override
-  State<ObjectProxyPage> createState() => _ObjectProxyPageState();
+  State<ClassBindingPage> createState() => _ClassBindingPageState();
 }
 
-class _ObjectProxyPageState extends State<ObjectProxyPage> {
+final class _ExampleUser {
+  _ExampleUser(this.name);
+
+  String name;
+}
+
+class _ClassBindingPageState extends State<ClassBindingPage> {
   Quickjs? _quickjs;
-  QuickjsObjectHandle? _userHandle;
+  QuickjsClassHandle? _userClass;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -29,7 +35,7 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
       _busy = true;
       _status = '正在创建 runtime...';
       _log.clear();
-      _userHandle = null;
+      _userClass = null;
     });
 
     try {
@@ -37,23 +43,21 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
       _quickjs = null;
       await previous?.dispose();
 
-      var userName = 'Tom';
       final quickjs = await Quickjs.create();
-      final userHandle = await quickjs.bindObject(
-        'user',
-        QuickjsObjectProxy(
-          properties: const {'role': 'admin'},
+      final userClass = await quickjs.bindClass<_ExampleUser>(
+        'User',
+        QuickjsClass<_ExampleUser>(
+          constructor: (args) => _ExampleUser(args.single as String),
           accessors: {
-            'name': QuickjsObjectAccessor(
-              get: () => userName,
-              set: (value) {
-                userName = value as String;
+            'name': QuickjsInstanceAccessor<_ExampleUser>(
+              get: (user) => user.name,
+              set: (user, value) {
+                user.name = value as String;
               },
             ),
           },
           methods: {
-            'greet': (args) => '你好 ${args.single}，我是 $userName',
-            'save': (_) async => '已保存 $userName',
+            'greet': (user, args) => '你好 ${args.single}，我是 ${user.name}',
           },
         ),
       );
@@ -63,7 +67,7 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
       }
       setState(() {
         _quickjs = quickjs;
-        _userHandle = userHandle;
+        _userClass = userClass;
         _busy = false;
         _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
       });
@@ -78,62 +82,63 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
     }
   }
 
-  Future<void> _readProperties() async {
-    await _capture('读取属性', () async {
-      final result = await _requireRuntime().evalAsync(
-        'return await user.name + ":" + user.role;',
-      );
-      _appendLog('await user.name:user.role => $result');
+  Future<void> _constructAndRead() async {
+    await _capture('构造并读取实例', () async {
+      final result = await _requireRuntime().evalAsync('''
+globalThis.currentUser = new User('Tom');
+return await currentUser.name;
+''');
+      _appendLog("new User('Tom'); await user.name => $result");
     });
   }
 
-  Future<void> _changeDynamicProperty() async {
-    await _capture('动态属性 getter/setter', () async {
+  Future<void> _changeName() async {
+    await _capture('修改动态属性', () async {
       final result = await _requireRuntime().evalAsync('''
-const before = await user.name;
-user.name = 'Jerry';
-await new Promise((resolve) => setTimeout(resolve, 1));
-const after = await user.name;
+globalThis.currentUser ??= new User('Tom');
+const before = await currentUser.name;
+currentUser.name = 'Jerry';
+const after = await currentUser.name;
 return before + ' -> ' + after;
 ''');
-      _appendLog('await user.name; user.name = "Jerry" => $result');
+      _appendLog('user.name = "Jerry" => $result');
     });
   }
 
-  Future<void> _callMethods() async {
-    await _capture('调用方法', () async {
+  Future<void> _callMethod() async {
+    await _capture('调用实例方法', () async {
       final result = await _requireRuntime().evalAsync('''
-const greeting = await user.greet('Jerry');
-const saved = await user.save();
-return greeting + ':' + saved;
+globalThis.currentUser ??= new User('Tom');
+return await currentUser.greet('Alice');
 ''');
-      _appendLog('user.greet/save => $result');
+      _appendLog("await user.greet('Alice') => $result");
     });
   }
 
-  Future<void> _checkReadonly() async {
-    await _capture('检查只读属性', () async {
-      final result = await _requireRuntime().eval(
-        'Reflect.set(user, "role", "guest") + ":" + user.role',
-      );
-      _appendLog('Reflect.set(user.role) => $result');
-    });
-  }
-
-  Future<void> _disposeProxy() async {
-    await _capture('释放对象代理', () async {
-      final handle = _userHandle;
+  Future<void> _disposeClass() async {
+    await _capture('释放 class binding', () async {
+      final handle = _userClass;
       if (handle == null) {
-        throw JsRuntimeClosedException('QuickJS object proxy is not ready');
+        throw JsRuntimeClosedException('QuickJS class binding is not ready');
       }
+      await _requireRuntime().evalAsync('''
+globalThis.leakedUser = globalThis.currentUser ?? new User('Tom');
+return await leakedUser.name;
+''');
       await handle.dispose();
-      _appendLog('对象代理已释放');
+      _appendLog('QuickjsClassHandle.dispose() 已释放 constructor 和实例表');
       if (!mounted || _disposed) {
         return;
       }
       setState(() {
-        _userHandle = null;
+        _userClass = null;
       });
+    });
+  }
+
+  Future<void> _checkDisposedInstance() async {
+    await _capture('检查释放后的实例', () async {
+      await _requireRuntime().evalAsync('return await leakedUser.name;');
     });
   }
 
@@ -186,16 +191,17 @@ return greeting + ':' + saved;
     _disposed = true;
     unawaited(_quickjs?.dispose() ?? Future<void>.value());
     _quickjs = null;
-    _userHandle = null;
+    _userClass = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null && _userHandle != null;
+    final hasRuntime = _quickjs != null && _userClass != null;
+    final canCheckDisposed = _quickjs != null && _userClass == null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('对象代理')),
+      appBar: AppBar(title: const Text('Class Binding')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -204,7 +210,7 @@ return greeting + ':' + saved;
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              '使用 bindObject 绑定 Dart 对象代理，暴露只读属性、动态 getter/setter 和 Promise 方法。',
+              '使用 bindClass 注册 Dart class；JS 可以 new User(...)，getter 和 method 通过 Promise await 访问。',
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -212,26 +218,26 @@ return greeting + ':' + saved;
               runSpacing: 8,
               children: [
                 FilledButton(
-                  onPressed: _busy || !hasRuntime ? null : _readProperties,
-                  child: const Text('读取属性'),
+                  onPressed: _busy || !hasRuntime ? null : _constructAndRead,
+                  child: const Text('构造并读取'),
                 ),
                 FilledButton.tonal(
-                  onPressed: _busy || !hasRuntime
-                      ? null
-                      : _changeDynamicProperty,
-                  child: const Text('动态属性'),
+                  onPressed: _busy || !hasRuntime ? null : _changeName,
+                  child: const Text('修改属性'),
                 ),
                 FilledButton.tonal(
-                  onPressed: _busy || !hasRuntime ? null : _callMethods,
+                  onPressed: _busy || !hasRuntime ? null : _callMethod,
                   child: const Text('调用方法'),
                 ),
                 OutlinedButton(
-                  onPressed: _busy || !hasRuntime ? null : _checkReadonly,
-                  child: const Text('检查只读'),
+                  onPressed: _busy || !hasRuntime ? null : _disposeClass,
+                  child: const Text('释放 class binding'),
                 ),
                 OutlinedButton(
-                  onPressed: _busy || !hasRuntime ? null : _disposeProxy,
-                  child: const Text('释放对象代理'),
+                  onPressed: _busy || !canCheckDisposed
+                      ? null
+                      : _checkDisposedInstance,
+                  child: const Text('检查泄漏实例'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _createRuntime,
@@ -247,7 +253,7 @@ return greeting + ':' + saved;
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: _log.isEmpty
-                    ? const Center(child: Text('点击按钮查看对象代理结果'))
+                    ? const Center(child: Text('点击按钮查看 class binding 结果'))
                     : ListView.builder(
                         padding: const EdgeInsets.all(12),
                         itemCount: _log.length,

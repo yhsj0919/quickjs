@@ -29,13 +29,30 @@
   - native/web consistency tests cover call, callAsync Promise resolve/reject, structured args, non-function rejection, isolation, timeout, cancel, handle dispose, and runtime dispose errors
 - 0.7.0 object proxy minimal slice is implemented:
   - `QuickjsObjectProxy`
+  - `QuickjsObjectAccessor`
   - `Quickjs.bindObject(name, proxy)`
   - `QuickjsObjectHandle.dispose()`
-  - readonly data properties
+  - readonly enumerable properties
+  - dynamic getter / setter descriptors
+  - getter descriptors return Promises on the JS side; setter descriptors dispatch through callback, but assignment expressions cannot await setter Promises because of JS accessor semantics
   - methods routed through the existing Promise callback bridge
-  - object handle dispose deletes the JS global proxy, hidden method callback globals, and runtime-level callback registry entries
-  - native/web consistency tests cover readonly properties, method calls, method errors, invalid descriptors, object handle dispose, leaked method references after dispose, dispose-after-runtime-dispose, and bind-after-dispose errors
+  - object handle dispose deletes the JS global proxy, hidden method/accessor callback globals, and runtime-level callback registry entries
+  - leaked proxy/method/accessor references reject with a clear disposed error after object handle dispose
+  - native/web consistency tests cover readonly properties, dynamic accessors, getter errors, method calls, method errors, invalid descriptors, object handle dispose, leaked proxy/method/accessor references after dispose, dispose-after-runtime-dispose, and bind-after-dispose errors
   - example page registered as `对象代理`
+- 0.7.0 Dart class / instance binding first slice is implemented:
+  - `QuickjsClass<T>`
+  - `QuickjsInstanceAccessor<T>`
+  - `Quickjs.bindClass<T>(jsName, definition)`
+  - `QuickjsClassHandle.dispose()`
+  - JS `new User(...)` returns an instance proxy synchronously while Dart construction runs through the Promise callback bridge
+  - instance getters and methods wait for Dart construction before touching the Dart instance
+  - setter assignment cannot await async setter errors because of JS accessor semantics
+  - Dart instances are stored in a runtime-owned class/instance table and cleared on class handle dispose, runtime dispose, or runtime stop/rebuild
+  - native/web consistency tests cover constructor binding, accessors, methods, constructor errors, class handle dispose, dispose-after-runtime-dispose, invalid descriptors, and bind-after-dispose errors
+  - lifecycle docs are in `docs/class_binding_lifecycle.md`
+  - example page registered as `Class Binding`
+  - instance finalizer is explicitly deferred; supported cleanup is explicit class handle dispose, runtime dispose, or runtime rebuild
 - The working tree may contain uncommitted 0.6.0 and 0.7.0 changes. Do not assume a clean tree.
 
 ## Important Files
@@ -55,6 +72,7 @@
 - `native/quickjs_bridge.h`
 - `test/quickjs_consistency_test.dart`
 - `example/lib/pages/function_handle_page.dart`
+- `example/lib/pages/class_binding_page.dart`
 - `example/lib/pages/module_eval_page.dart`
 - `example/lib/example_pages.dart`
 - `example/test/widget_test.dart`
@@ -80,14 +98,14 @@ Notes:
 
 ## Next Recommended Step
 
-Continue 0.7.0 with the next Dart object proxy slice:
+Continue with 0.8.0 debug/dev experience:
 
-1. Add dynamic getter / setter descriptors if the public API shape is clear.
-2. Consider proxy access after handle dispose error semantics if a stronger error than missing global is desired.
-3. Keep using explicit descriptors rather than arbitrary Dart reflection.
-4. Add native/web consistency tests before expanding to constructors or class binding.
+1. Start with `console.log` / `console.warn` / `console.error` binding.
+2. Reuse the existing Promise callback bridge where possible, and keep behavior native/web consistent.
+3. Keep class binding explicit; do not add arbitrary Dart reflection.
+4. Avoid inheritance, static members, and automatic reflection until the first public API shape settles.
 
-Do not start with Dart class binding. That expands the API surface and should wait until object proxy semantics are stable.
+The first class-binding slice is intentionally narrow and now has docs plus example UI. Instance finalizer is deferred by design.
 
 ## Constraints To Preserve
 

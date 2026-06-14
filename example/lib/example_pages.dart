@@ -2,6 +2,7 @@ import 'example_page_spec.dart';
 import 'pages/async_api_page.dart';
 import 'pages/basic_eval_page.dart';
 import 'pages/callback_bridge_page.dart';
+import 'pages/class_binding_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/function_handle_page.dart';
 import 'pages/memory_limit_page.dart';
@@ -92,5 +93,11 @@ final List<ExamplePageSpec> examplePages = [
     title: '对象代理',
     description: '使用 bindObject 注册 Dart proxy，暴露只读属性、Promise 方法和显式释放。',
     builder: (_) => const ObjectProxyPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Class Binding',
+    description:
+        '使用 bindClass 注册 Dart class，展示 new User、await getter/method 和显式释放。',
+    builder: (_) => const ClassBindingPage(),
   ),
 ];

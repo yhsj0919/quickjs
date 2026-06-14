@@ -4,6 +4,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 
+Object? _objectProxyTestGetter() => 'value';
+
+final class _TestUser {
+  _TestUser(this.name);
+
+  String name;
+}
+
+_TestUser _classTestUserConstructor(List<Object?> args) {
+  return _TestUser(args.single as String);
+}
+
+Object? _classTestUserNameGetter(_TestUser user) => user.name;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -587,6 +601,74 @@ async () => {
       );
     });
 
+    test('binds dynamic Dart object proxy accessors consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      var name = 'Tom';
+
+      await engine.bindObject(
+        'profile',
+        QuickjsObjectProxy(
+          accessors: {
+            'name': QuickjsObjectAccessor(
+              get: () => name,
+              set: (value) {
+                name = value as String;
+              },
+            ),
+            'readonly': QuickjsObjectAccessor(get: () => 'fixed'),
+          },
+        ),
+      );
+
+      expect(await engine.evalAsync('return await profile.name;'), 'Tom');
+      expect(
+        await engine.evalAsync('''
+profile.name = 'Jerry';
+await new Promise((resolve) => setTimeout(resolve, 1));
+return await profile.name;
+'''),
+        'Jerry',
+      );
+      expect(name, 'Jerry');
+      expect(
+        await engine.evalAsync(
+          'return Reflect.set(profile, "readonly", "changed") + ":" + '
+          'await profile.readonly;',
+        ),
+        'false:fixed',
+      );
+    });
+
+    test('maps Dart object proxy getter errors consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bindObject(
+        'profile',
+        QuickjsObjectProxy(
+          accessors: {
+            'name': QuickjsObjectAccessor(
+              get: () {
+                throw StateError('getter failed');
+              },
+            ),
+          },
+        ),
+      );
+
+      await expectLater(
+        engine.evalAsync('return await profile.name;'),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('getter failed'),
+          ),
+        ),
+      );
+    });
+
     test('binds Dart object proxy methods consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -672,6 +754,63 @@ async () => {
     });
 
     test(
+      'leaked Dart object proxies reject access after dispose consistently',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
+        var name = 'Tom';
+
+        final handle = await engine.bindObject(
+          'service',
+          QuickjsObjectProxy(
+            properties: const {'role': 'admin'},
+            accessors: {
+              'name': QuickjsObjectAccessor(
+                get: () => name,
+                set: (value) {
+                  name = value as String;
+                },
+              ),
+            },
+            methods: {'ping': (_) => 'pong'},
+          ),
+        );
+
+        expect(
+          await engine.evalAsync(
+            'globalThis.leakedService = service;'
+            'globalThis.leakedPing = service.ping;'
+            'return await service.name + ":" + service.role + ":" + '
+            'await service.ping();',
+          ),
+          'Tom:admin:pong',
+        );
+
+        await handle.dispose();
+
+        for (final code in <String>[
+          'return leakedService.role;',
+          'return await leakedService.name;',
+          'leakedService.name = "Jerry"; return "updated";',
+          'return await leakedService.ping();',
+          'return await leakedPing();',
+        ]) {
+          await expectLater(
+            engine.evalAsync(code),
+            throwsA(
+              isA<JsException>().having(
+                (error) => error.message,
+                'message',
+                contains('object proxy is disposed'),
+              ),
+            ),
+          );
+        }
+        expect(name, 'Tom');
+      },
+    );
+
+    test(
       'disposing Dart object proxy handles after runtime dispose is a no-op',
       () async {
         final engine = await Quickjs.create();
@@ -738,6 +877,27 @@ async () => {
           ),
           throwsA(isA<JsValueConversionException>()),
         );
+        await expectLater(
+          engine.bindObject(
+            'invalidProxy',
+            const QuickjsObjectProxy(
+              accessors: {'value': QuickjsObjectAccessor()},
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+        await expectLater(
+          engine.bindObject(
+            'invalidProxy',
+            QuickjsObjectProxy(
+              accessors: const {
+                'value': QuickjsObjectAccessor(get: _objectProxyTestGetter),
+              },
+              methods: {'value': (_) => null},
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
       },
     );
 
@@ -754,6 +914,192 @@ async () => {
         );
       },
     );
+
+    test(
+      'binds Dart classes as JavaScript constructors consistently',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
+
+        final handle = await engine.bindClass<_TestUser>(
+          'User',
+          QuickjsClass<_TestUser>(
+            constructor: (args) => _TestUser(args.single as String),
+            accessors: {
+              'name': QuickjsInstanceAccessor<_TestUser>(
+                get: (user) => user.name,
+                set: (user, value) {
+                  user.name = value as String;
+                },
+              ),
+            },
+            methods: {
+              'greet': (user, args) =>
+                  'Hello ${args.single}, I am ${user.name}',
+            },
+          ),
+        );
+
+        expect(
+          await engine.evalAsync('''
+const user = new User('Tom');
+const before = await user.name;
+user.name = 'Jerry';
+const after = await user.name;
+const greeting = await user.greet('Alice');
+return before + ':' + after + ':' + greeting + ':' + (user instanceof User);
+'''),
+          'Tom:Jerry:Hello Alice, I am Jerry:true',
+        );
+        expect(handle.name, 'User');
+        expect(handle.disposed, isFalse);
+      },
+    );
+
+    test('maps Dart class constructor errors consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bindClass<_TestUser>(
+        'User',
+        QuickjsClass<_TestUser>(
+          constructor: (_) {
+            throw StateError('constructor failed');
+          },
+          methods: {'name': (user, _) => user.name},
+        ),
+      );
+
+      await expectLater(
+        engine.evalAsync('''
+const user = new User('Tom');
+return await user.name();
+'''),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('constructor failed'),
+          ),
+        ),
+      );
+    });
+
+    test('Dart class handles can be disposed consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final handle = await engine.bindClass<_TestUser>(
+        'User',
+        QuickjsClass<_TestUser>(
+          constructor: (args) => _TestUser(args.single as String),
+          accessors: {
+            'name': QuickjsInstanceAccessor<_TestUser>(
+              get: (user) => user.name,
+              set: (user, value) {
+                user.name = value as String;
+              },
+            ),
+          },
+          methods: {'greet': (user, _) => 'Hello ${user.name}'},
+        ),
+      );
+
+      expect(
+        await engine.evalAsync(
+          'globalThis.leakedUser = new User("Tom");'
+          'return await leakedUser.greet();',
+        ),
+        'Hello Tom',
+      );
+
+      await handle.dispose();
+      await handle.dispose();
+
+      expect(handle.disposed, isTrue);
+      expect(await engine.eval('typeof User'), 'undefined');
+      for (final code in <String>[
+        'return await leakedUser.name;',
+        'return await leakedUser.greet();',
+      ]) {
+        await expectLater(
+          engine.evalAsync(code),
+          throwsA(
+            isA<JsException>().having(
+              (error) => error.message,
+              'message',
+              contains('class instance is disposed'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test(
+      'disposing Dart class handles after runtime dispose is a no-op',
+      () async {
+        final engine = await Quickjs.create();
+        final handle = await engine.bindClass<_TestUser>(
+          'User',
+          QuickjsClass<_TestUser>(
+            constructor: (args) => _TestUser(args.single as String),
+          ),
+        );
+
+        await engine.dispose();
+        await handle.dispose();
+        await handle.dispose();
+
+        expect(handle.disposed, isTrue);
+      },
+    );
+
+    test('rejects invalid Dart class descriptors consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.bindClass<_TestUser>(
+          'Invalid',
+          QuickjsClass<_TestUser>(
+            constructor: _classTestUserConstructor,
+            accessors: const {
+              'not-valid': QuickjsInstanceAccessor<_TestUser>(),
+            },
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      await expectLater(
+        engine.bindClass<_TestUser>(
+          'Invalid',
+          QuickjsClass<_TestUser>(
+            constructor: _classTestUserConstructor,
+            accessors: const {
+              'value': QuickjsInstanceAccessor<_TestUser>(
+                get: _classTestUserNameGetter,
+              ),
+            },
+            methods: {'value': (user, _) => user.name},
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+    });
+
+    test('rejects Dart class binding after dispose consistently', () async {
+      final engine = await Quickjs.create();
+
+      await engine.dispose();
+
+      await expectLater(
+        engine.bindClass<_TestUser>(
+          'User',
+          QuickjsClass<_TestUser>(constructor: _classTestUserConstructor),
+        ),
+        throwsA(isA<JsRuntimeClosedException>()),
+      );
+    });
 
     test('maps Promise-based Dart callback resolve consistently', () async {
       final engine = await Quickjs.create();
