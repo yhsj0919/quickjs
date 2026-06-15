@@ -18,6 +18,16 @@ _TestUser _classTestUserConstructor(List<Object?> args) {
 
 Object? _classTestUserNameGetter(_TestUser user) => user.name;
 
+Future<void> _waitFor(bool Function() condition) async {
+  final stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed > const Duration(seconds: 2)) {
+      throw StateError('Timed out waiting for condition');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -33,6 +43,113 @@ void main() {
       expect(await engine.eval('undefined'), 'undefined');
       expect(await engine.eval('null'), 'null');
       expect(await engine.eval('true'), 'true');
+    });
+
+    test('provides no-op console methods by default', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('typeof console.log + "/" + console.log("ignored")'),
+        'function/undefined',
+      );
+      expect(await engine.eval('typeof console.warn'), 'function');
+      expect(await engine.eval('typeof console.error'), 'function');
+    });
+
+    test('emits console events to the configured sink', () async {
+      final events = <QuickjsConsoleEvent>[];
+      final engine = await Quickjs.create(onConsole: events.add);
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('''
+console.log("hello", 42, { ok: true });
+console.warn("careful");
+console.error(new Error("boom"));
+"done";
+'''),
+        'done',
+      );
+
+      await _waitFor(() => events.length == 3);
+      expect(events[0].level, QuickjsConsoleLevel.log);
+      expect(events[0].text, 'hello 42 {"ok":true}');
+      expect(events[0].args, <Object?>[
+        'hello',
+        42,
+        {'ok': true},
+      ]);
+      expect(events[1].level, QuickjsConsoleLevel.warn);
+      expect(events[1].text, 'careful');
+      expect(events[2].level, QuickjsConsoleLevel.error);
+      expect(events[2].text, contains('boom'));
+      expect(events[2].timestamp, isA<DateTime>());
+    });
+
+    test('can emit console events repeatedly in one runtime', () async {
+      final events = <QuickjsConsoleEvent>[];
+      final engine = await Quickjs.create(onConsole: events.add);
+      addTearDown(engine.dispose);
+
+      for (var i = 0; i < 2; i++) {
+        expect(
+          await engine.eval('''
+console.log("run", $i);
+console.warn("warn", $i);
+console.error("error", $i);
+"done";
+'''),
+          'done',
+        );
+      }
+
+      await _waitFor(() => events.length == 6);
+      expect(events.map((event) => event.text), <String>[
+        'run 0',
+        'warn 0',
+        'error 0',
+        'run 1',
+        'warn 1',
+        'error 1',
+      ]);
+    });
+
+    test('keeps console events isolated per runtime', () async {
+      final firstEvents = <QuickjsConsoleEvent>[];
+      final secondEvents = <QuickjsConsoleEvent>[];
+      final first = await Quickjs.create(onConsole: firstEvents.add);
+      final second = await Quickjs.create(onConsole: secondEvents.add);
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      await first.eval('console.log("first")');
+      await second.eval('console.error("second")');
+
+      await _waitFor(() => firstEvents.length == 1 && secondEvents.length == 1);
+      expect(firstEvents.single.text, 'first');
+      expect(firstEvents.single.level, QuickjsConsoleLevel.log);
+      expect(secondEvents.single.text, 'second');
+      expect(secondEvents.single.level, QuickjsConsoleLevel.error);
+    });
+
+    test('reinstalls console after stop rebuilds the runtime', () async {
+      final events = <QuickjsConsoleEvent>[];
+      final engine = await Quickjs.create(onConsole: events.add);
+      addTearDown(engine.dispose);
+
+      final running = engine
+          .eval('while (true) {}')
+          .then<Object?>((_) => null, onError: (Object error) => error);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await engine.stop();
+      final error = await running;
+      expect(error, isA<JsCancelledException>());
+
+      await engine.eval('console.warn("after stop")');
+      await _waitFor(() => events.length == 1);
+      expect(events.single.level, QuickjsConsoleLevel.warn);
+      expect(events.single.text, 'after stop');
     });
 
     // 缁撴瀯鍖栬繑鍥?API 鍦?native 鍜?web 涓婂簲淇濇寔鍩虹 primitive 鏄犲皠涓€鑷淬€?
@@ -956,6 +1073,44 @@ return before + ':' + after + ':' + greeting + ':' + (user instanceof User);
       },
     );
 
+    test('Dart class instances survive separate async evaluations', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bindClass<_TestUser>(
+        'User',
+        QuickjsClass<_TestUser>(
+          constructor: (args) => _TestUser(args.single as String),
+          accessors: {
+            'name': QuickjsInstanceAccessor<_TestUser>(
+              get: (user) => user.name,
+              set: (user, value) {
+                user.name = value as String;
+              },
+            ),
+          },
+        ),
+      );
+
+      expect(
+        await engine.evalAsync('''
+globalThis.currentUser = new User('Tom');
+return await currentUser.name;
+'''),
+        'Tom',
+      );
+      expect(
+        await engine.evalAsync('''
+globalThis.currentUser ??= new User('Tom');
+const before = await currentUser.name;
+currentUser.name = 'Jerry';
+const after = await currentUser.name;
+return before + ' -> ' + after;
+'''),
+        'Tom -> Jerry',
+      );
+    });
+
     test('maps Dart class constructor errors consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -1288,6 +1443,55 @@ for await (const item of stream) {
 return values.join(',');
 '''),
         '1,2,3',
+      );
+    });
+
+    test('can consume Dart Stream callback repeatedly', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostStream', (_) {
+        return Stream<Object?>.fromIterable([1, 2, 3]);
+      });
+
+      expect(
+        await engine.evalAsync('''
+const collect = async () => {
+  const values = [];
+  const stream = await hostStream();
+  for await (const item of stream) {
+    values.push(item);
+  }
+  return values.join(',');
+};
+return [await collect(), await collect()].join('|');
+'''),
+        '1,2,3|1,2,3',
+      );
+    });
+
+    test('maps periodic Dart Stream callback to JS for-await consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.bind('hostCount', (args) {
+        final max = (args.single as num).toInt();
+        return Stream<Object?>.periodic(
+          const Duration(milliseconds: 10),
+          (index) => index + 1,
+        ).take(max);
+      });
+
+      expect(
+        await engine.evalAsync('''
+const values = [];
+const stream = await hostCount(5);
+for await (const value of stream) {
+  values.push(value);
+}
+return values.join(',');
+'''),
+        '1,2,3,4,5',
       );
     });
 

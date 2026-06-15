@@ -11,6 +11,7 @@ import 'quickjs_runtime_options.dart';
 import 'quickjs_value.dart';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
+typedef QuickjsConsoleSink = FutureOr<void> Function(QuickjsConsoleEvent event);
 typedef QuickjsObjectGetter = FutureOr<Object?> Function();
 typedef QuickjsObjectSetter = FutureOr<void> Function(Object? value);
 typedef QuickjsClassConstructor<T extends Object> =
@@ -21,6 +22,28 @@ typedef QuickjsInstanceSetter<T extends Object> =
     FutureOr<void> Function(T instance, Object? value);
 typedef QuickjsInstanceMethod<T extends Object> =
     FutureOr<Object?> Function(T instance, List<Object?> args);
+
+/// JavaScript console method severity.
+enum QuickjsConsoleLevel {
+  log,
+  warn,
+  error,
+}
+
+/// A single JavaScript `console.*` event emitted by one [Quickjs] runtime.
+final class QuickjsConsoleEvent {
+  const QuickjsConsoleEvent({
+    required this.level,
+    required this.text,
+    required this.args,
+    required this.timestamp,
+  });
+
+  final QuickjsConsoleLevel level;
+  final String text;
+  final List<Object?> args;
+  final DateTime timestamp;
+}
 
 /// Explicit getter / setter descriptor for a Dart object proxy property.
 final class QuickjsObjectAccessor {
@@ -252,7 +275,7 @@ enum QuickjsRuntimeState {
 /// 这个类只负责管理请求队列和 runtime 生命周期；真正的执行发生在平台 backend
 /// 里，native 侧是 Dart isolate + FFI，web 侧是 Web Worker + WASM。
 class Quickjs {
-  Quickjs._(this._backend, this._runtime, this._options);
+  Quickjs._(this._backend, this._runtime, this._options, this._onConsole);
 
   /// Creates a [Quickjs] wrapper around a supplied backend/runtime pair.
   ///
@@ -262,11 +285,13 @@ class Quickjs {
     QuickjsBackend backend,
     QuickjsJsRuntimeBase runtime, {
     QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
-  }) : this._(backend, runtime, options);
+    QuickjsConsoleSink? onConsole,
+  }) : this._(backend, runtime, options, onConsole);
 
   final QuickjsBackend _backend;
   QuickjsJsRuntimeBase _runtime;
   final QuickjsRuntimeOptions _options;
+  final QuickjsConsoleSink? _onConsole;
   final Queue<_QueuedEval> _queue = Queue<_QueuedEval>();
   QuickjsRuntimeState _state = QuickjsRuntimeState.ready;
   Object? _failure;
@@ -282,9 +307,23 @@ class Quickjs {
   /// 为当前平台创建一个独立的 QuickJS runtime。
   static Future<Quickjs> create({
     QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+    QuickjsConsoleSink? onConsole,
   }) async {
     final backend = await createQuickjsBackend();
-    return Quickjs._(backend, await backend.createRuntime(options), options);
+    final runtime = await backend.createRuntime(options);
+    final engine = Quickjs._(
+      backend,
+      runtime,
+      options,
+      onConsole,
+    );
+    try {
+      await engine._installConsoleOnCurrentRuntime();
+    } catch (_) {
+      await runtime.dispose();
+      rethrow;
+    }
+    return engine;
   }
 
   /// 当前打包进插件的 QuickJS 版本号。
@@ -699,6 +738,33 @@ class Quickjs {
     return _runtime.bindJsSink(_validateGlobalName(name));
   }
 
+  Future<void> _installConsoleOnCurrentRuntime() async {
+    const callbackName = '__quickjsConsoleCallback';
+    final onConsole = _onConsole;
+    if (onConsole != null) {
+      final callbackId = _nextCallbackId++;
+      await _runtime.bindCallback(callbackId, callbackName, (args) async {
+        final levelName = args.isNotEmpty ? args[0] : 'log';
+        final text = args.length > 1 ? args[1] : '';
+        final rawValue = args.length > 2 ? args[2] : null;
+        final rawArgs = rawValue is List
+            ? List<Object?>.from(rawValue)
+            : const <Object?>[];
+        final event = QuickjsConsoleEvent(
+          level: _consoleLevelFromName('$levelName'),
+          text: '$text',
+          args: rawArgs,
+          timestamp: DateTime.now(),
+        );
+        await onConsole(event);
+        return null;
+      });
+    }
+    await _runtime.evaluate(
+      _wrapInstallConsole(onConsole == null ? null : callbackName),
+    );
+  }
+
   /// 在当前 runtime 中执行 [code]，并把基础 JS 值转换成 Dart 值。
   ///
   /// 当前阶段覆盖 number、boolean、string、null、undefined、BigInt、
@@ -862,6 +928,7 @@ class Quickjs {
           if (!_isTerminal) {
             _classInstances.clear();
             _runtime = await _backend.createRuntime(_options);
+            await _installConsoleOnCurrentRuntime();
             _state = QuickjsRuntimeState.ready;
           }
         })
@@ -1141,6 +1208,14 @@ Uint8List _normalizeBytes(Object? value) {
   return Uint8List.fromList([for (final byte in bytes) (byte as num).toInt()]);
 }
 
+QuickjsConsoleLevel _consoleLevelFromName(String name) {
+  return switch (name) {
+    'warn' => QuickjsConsoleLevel.warn,
+    'error' => QuickjsConsoleLevel.error,
+    _ => QuickjsConsoleLevel.log,
+  };
+}
+
 String _wrapWithGlobals(String code, Map<String, Object?> globals) {
   if (globals.isEmpty) {
     return code;
@@ -1198,6 +1273,116 @@ String _wrapWithGlobals(String code, Map<String, Object?> globals) {
       }
     }
   }
+})()
+''';
+}
+
+String _wrapInstallConsole(String? callbackName) {
+  final encodedCallbackName = jsonEncode(callbackName);
+  return '''
+(() => {
+  const callbackName = $encodedCallbackName;
+  const normalize = (value, seen = new WeakSet()) => {
+    if (value === undefined) return 'undefined';
+    if (value === null || typeof value === 'number' ||
+        typeof value === 'boolean' || typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'bigint') return value.toString() + 'n';
+    if (typeof value === 'symbol') return String(value);
+    if (typeof value === 'function') {
+      return value.name ? '[Function ' + value.name + ']' : '[Function]';
+    }
+    if (value instanceof Error) {
+      return {
+        name: value.name || 'Error',
+        message: value.message || '',
+        stack: value.stack || null,
+      };
+    }
+    if (value instanceof ArrayBuffer) {
+      return { __quickjsType: 'bytes', value: Array.from(new Uint8Array(value)) };
+    }
+    if (ArrayBuffer.isView(value)) {
+      return {
+        __quickjsType: 'bytes',
+        value: Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)),
+      };
+    }
+    if (Array.isArray(value)) {
+      if (seen.has(value)) return '[Circular]';
+      seen.add(value);
+      const out = value.map((item) => normalize(item, seen));
+      seen.delete(value);
+      return out;
+    }
+    if (typeof value === 'object') {
+      if (seen.has(value)) return '[Circular]';
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype === Object.prototype || prototype === null) {
+        seen.add(value);
+        const out = {};
+        for (const key of Object.keys(value)) {
+          out[key] = normalize(value[key], seen);
+        }
+        seen.delete(value);
+        return out;
+      }
+      try {
+        return String(value);
+      } catch (_) {
+        return Object.prototype.toString.call(value);
+      }
+    }
+    return String(value);
+  };
+  const format = (value) => {
+    if (typeof value === 'string') return value;
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'bigint') return value.toString() + 'n';
+    if (typeof value === 'symbol' || typeof value === 'function') return String(value);
+    if (value instanceof Error) return value.stack || (value.name + ': ' + value.message);
+    const normalized = normalize(value);
+    if (typeof normalized === 'string') return normalized;
+    try {
+      return JSON.stringify(normalized);
+    } catch (_) {
+      return String(value);
+    }
+  };
+  const emit = (level, args) => {
+    if (!callbackName) return;
+    const callback = globalThis[callbackName];
+    if (typeof callback !== 'function') return;
+    const normalizedArgs = args.map((arg) => normalize(arg));
+    const text = args.map((arg) => format(arg)).join(' ');
+    try {
+      const pending = callback(level, text, normalizedArgs);
+      if (pending && typeof pending.catch === 'function') {
+        pending.catch(() => {});
+      }
+    } catch (_) {}
+  };
+  const target = (globalThis.console && typeof globalThis.console === 'object')
+    ? globalThis.console
+    : {};
+  for (const level of ['log', 'warn', 'error']) {
+    Object.defineProperty(target, level, {
+      value: (...args) => {
+        emit(level, args);
+        return undefined;
+      },
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+  }
+  Object.defineProperty(globalThis, 'console', {
+    value: target,
+    configurable: true,
+    enumerable: true,
+    writable: true,
+  });
 })()
 ''';
 }

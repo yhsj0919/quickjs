@@ -117,7 +117,9 @@ function createDartStreamHandle(record, streamId) {
   const vm = record.vm;
   const iterable = vm.newObject();
   const next = vm.newFunction(`__quickjsStreamNext_${streamId}`, () => {
-    return vm.hostToHandle((async () => {
+    const deferred = vm.newPromise();
+    let deferredSettled = false;
+    (async () => {
       if (!streamPullDispatcher) {
         throw new Error('quickjs: stream pull dispatcher is not registered');
       }
@@ -127,21 +129,46 @@ function createDartStreamHandle(record, streamId) {
       });
       const payload = JSON.parse(payloadJson);
       if (payload.done) {
-        return { done: true, value: undefined };
+        return createIteratorResult(record, true, undefined);
       }
-      return {
-        done: false,
-        value: decodeWireValue(record, payload.value),
-      };
-    })());
+      return createIteratorResult(record, false, decodeWireValue(record, payload.value));
+    })().then((value) => {
+      settleDeferred(deferred, () => deferredSettled, () => {
+        deferredSettled = true;
+      }, () => {
+        resolveDeferredWithHostValue(vm, deferred, value);
+      });
+    }).catch((error) => {
+      settleDeferred(deferred, () => deferredSettled, () => {
+        deferredSettled = true;
+      }, () => {
+        rejectDeferredWithHostValue(vm, deferred, error);
+      });
+    });
+    return deferred.handle;
   });
   const cancel = vm.newFunction(`__quickjsStreamReturn_${streamId}`, () => {
-    return vm.hostToHandle((async () => {
+    const deferred = vm.newPromise();
+    let deferredSettled = false;
+    (async () => {
       if (streamCancelDispatcher) {
         streamCancelDispatcher({ runtimeId: record.id, streamId });
       }
-      return { done: true, value: undefined };
-    })());
+      return createIteratorResult(record, true, undefined);
+    })().then((value) => {
+      settleDeferred(deferred, () => deferredSettled, () => {
+        deferredSettled = true;
+      }, () => {
+        resolveDeferredWithHostValue(vm, deferred, value);
+      });
+    }).catch((error) => {
+      settleDeferred(deferred, () => deferredSettled, () => {
+        deferredSettled = true;
+      }, () => {
+        rejectDeferredWithHostValue(vm, deferred, error);
+      });
+    });
+    return deferred.handle;
   });
   const asyncIterator = vm.newFunction(
     `__quickjsStreamAsyncIterator_${streamId}`,
@@ -161,6 +188,18 @@ function createDartStreamHandle(record, streamId) {
   return iterable;
 }
 
+function createIteratorResult(record, done, value) {
+  const vm = record.vm;
+  const result = vm.newObject();
+  const doneHandle = vm.hostToHandle(done);
+  result.setProp('done', doneHandle);
+  if (!done) {
+    const valueHandle = value instanceof JSValueHandle ? value : vm.hostToHandle(value);
+    result.setProp('value', valueHandle);
+  }
+  return result;
+}
+
 function resolveDeferredWithHostValue(vm, deferred, value) {
   const handle = value instanceof JSValueHandle ? value : vm.hostToHandle(value);
   try {
@@ -178,6 +217,18 @@ function rejectDeferredWithHostValue(vm, deferred, value) {
     vm.executePendingJobs();
   } finally {
     handle.dispose();
+  }
+}
+
+function settleDeferred(deferred, isSettled, markSettled, settle) {
+  if (isSettled()) {
+    return;
+  }
+  markSettled();
+  try {
+    settle();
+  } finally {
+    deferred.handle.dispose();
   }
 }
 
@@ -297,9 +348,6 @@ function installTimers(record) {
     const callback = args[0].dup();
     const delay = Math.max(0, Number(args[1] ? vm.dump(args[1]) : 0) || 0);
     const timerArgs = args.slice(2).map((arg) => arg.dup());
-    for (const arg of args) {
-      arg.dispose();
-    }
 
     const timerId = record.nextTimerId++;
     const timer = {
@@ -339,17 +387,11 @@ function installTimers(record) {
   const setIntervalFn = vm.newFunction('setInterval', (...args) => setTimer(true, args));
   const clearTimeoutFn = vm.newFunction('clearTimeout', (...args) => {
     const timerId = args.length ? Number(vm.dump(args[0])) : 0;
-    for (const arg of args) {
-      arg.dispose();
-    }
     clearRuntimeTimer(record, timerId);
     return vm.undefined;
   });
   const clearIntervalFn = vm.newFunction('clearInterval', (...args) => {
     const timerId = args.length ? Number(vm.dump(args[0])) : 0;
-    for (const arg of args) {
-      arg.dispose();
-    }
     clearRuntimeTimer(record, timerId);
     return vm.undefined;
   });
@@ -368,6 +410,7 @@ async function evalAsyncOnVm(vm, code) {
   let handle;
   try {
     handle = vm.evalCode(code);
+    vm.executePendingJobs();
     const settled = await vm.resolvePromise(handle);
     vm.executePendingJobs();
     if (settled.error) {
@@ -375,9 +418,7 @@ async function evalAsyncOnVm(vm, code) {
       settled.error.dispose();
       return `${exceptionSentinel}${payload}`;
     }
-    const output = valueToString(vm, settled.value);
-    settled.value.dispose();
-    return output;
+    return valueToString(vm, settled.value);
   } catch (err) {
     return `${exceptionSentinel}${exceptionToPayload(err)}`;
   } finally {
@@ -473,6 +514,7 @@ export async function runtimeEvalModule(id, source, name, modulesJson) {
       name || '<module>',
       EvalFlags.TYPE_MODULE | EvalFlags.STRICT
     );
+    vm.executePendingJobs();
     const settled = await vm.resolvePromise(handle);
     vm.executePendingJobs();
     if (settled.error) {
@@ -480,9 +522,7 @@ export async function runtimeEvalModule(id, source, name, modulesJson) {
       settled.error.dispose();
       return `${exceptionSentinel}${payload}`;
     }
-    const output = valueToString(vm, settled.value);
-    settled.value.dispose();
-    return output;
+    return valueToString(vm, settled.value);
   } catch (err) {
     if (handle) {
       handle.dispose();
@@ -523,26 +563,32 @@ export function runtimeBindCallback(id, callbackId, name) {
       throw new Error('quickjs: callback dispatcher is not registered');
     }
     const values = args.map((arg) => encodeWireValue(vm.dump(arg)));
-    for (const arg of args) {
-      arg.dispose();
-    }
     const deferred = vm.newPromise();
+    let deferredSettled = false;
     callbackDispatcher({
       runtimeId: id,
       callbackId,
       argsJson: JSON.stringify(values),
     }).then((response) => {
-      if (response.ok) {
-        resolveDeferredWithHostValue(
-          vm,
-          deferred,
-          decodeWireValue(record, JSON.parse(response.payloadJson)),
-        );
-        return;
-      }
-      throw new Error(response.payloadJson);
+      settleDeferred(deferred, () => deferredSettled, () => {
+        deferredSettled = true;
+      }, () => {
+        if (response.ok) {
+          resolveDeferredWithHostValue(
+            vm,
+            deferred,
+            decodeWireValue(record, JSON.parse(response.payloadJson)),
+          );
+          return;
+        }
+        rejectDeferredWithHostValue(vm, deferred, new Error(response.payloadJson));
+      });
     }).catch((error) => {
-      rejectDeferredWithHostValue(vm, deferred, error);
+      settleDeferred(deferred, () => deferredSettled, () => {
+        deferredSettled = true;
+      }, () => {
+        rejectDeferredWithHostValue(vm, deferred, error);
+      });
     });
     return deferred.handle;
   });
@@ -575,9 +621,6 @@ export function runtimeBindSink(id, sinkId, name) {
     let payloadJson;
     if (args.length > 0) {
       payloadJson = JSON.stringify(encodeWireValue(vm.dump(args[0])));
-    }
-    for (const arg of args) {
-      arg.dispose();
     }
     return vm.hostToHandle(sinkActionDispatcher({
       runtimeId: id,
