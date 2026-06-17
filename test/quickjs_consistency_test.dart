@@ -1908,7 +1908,112 @@ fail();
       expect(snapshot.globals, containsAll(['debugAnswer', 'debugAdd']));
     });
 
-    // 鍚屼竴 runtime 鍐呭苟鍙?eval 蹇呴』鎸?FIFO 椤哄簭涓茶銆?
+    test('does not expose browser globals unless configured', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('typeof window + "/" + typeof self'),
+        'undefined/undefined',
+      );
+    });
+
+    test('does not expose crypto randomUUID unless configured', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval(
+          'typeof crypto === "undefined" || '
+          'typeof crypto.randomUUID === "undefined"',
+        ),
+        'true',
+      );
+    });
+
+    test('installs configured browser global aliases consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostCapabilities: QuickjsHostCapabilities(
+            browserGlobals: QuickjsBrowserGlobals(window: true, self: true),
+          ),
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('window === globalThis && self === globalThis'),
+        'true',
+      );
+      expect(
+        await engine.eval('Object.keys(globalThis).includes("window")'),
+        'false',
+      );
+    });
+
+    test('installs configured crypto randomUUID consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostCapabilities: QuickjsHostCapabilities(
+            crypto: QuickjsCryptoCapabilities(randomUUID: true),
+          ),
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('''
+(() => {
+  const first = crypto.randomUUID();
+  const second = crypto.randomUUID();
+  const pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\$/;
+  return typeof first + '/' + pattern.test(first) + '/' +
+    pattern.test(second) + '/' + (first !== second);
+})()
+'''),
+        'string/true/true/true',
+      );
+    });
+
+    test('keeps host capability configuration isolated by runtime', () async {
+      final enabled = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostCapabilities: QuickjsHostCapabilities(
+            browserGlobals: QuickjsBrowserGlobals(window: true),
+          ),
+        ),
+      );
+      final disabled = await Quickjs.create();
+      addTearDown(enabled.dispose);
+      addTearDown(disabled.dispose);
+
+      expect(await enabled.eval('window === globalThis'), 'true');
+      expect(await disabled.eval('typeof window'), 'undefined');
+    });
+
+    test('reinstalls host capabilities after stop rebuilds runtime', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostCapabilities: QuickjsHostCapabilities(
+            browserGlobals: QuickjsBrowserGlobals(window: true),
+            crypto: QuickjsCryptoCapabilities(randomUUID: true),
+          ),
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      final running = engine.eval('while (true) {}');
+      await Future<void>.delayed(const Duration(milliseconds: 50), engine.stop);
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+
+      expect(await engine.eval('window === globalThis'), 'true');
+      expect(
+        await engine.eval('typeof crypto.randomUUID() === "string"'),
+        'true',
+      );
+    });
+
+    // 同一 runtime 内并发 eval 必须按 FIFO 顺序串行。
     test('queues concurrent evaluations in order', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);

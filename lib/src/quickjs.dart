@@ -342,6 +342,7 @@ class Quickjs {
     final engine = Quickjs._(backend, runtime, options, onConsole);
     try {
       await engine._installConsoleOnCurrentRuntime();
+      await engine._installHostCapabilitiesOnCurrentRuntime();
     } catch (_) {
       await runtime.dispose();
       rethrow;
@@ -880,6 +881,14 @@ class Quickjs {
     );
   }
 
+  Future<void> _installHostCapabilitiesOnCurrentRuntime() async {
+    final capabilities = _options.hostCapabilities;
+    if (capabilities.isEmpty) {
+      return;
+    }
+    await _runtime.evaluate(_wrapInstallHostCapabilities(capabilities));
+  }
+
   /// 在当前 runtime 中执行 [code]，并把基础 JS 值转换成 Dart 值。
   ///
   /// 当前阶段覆盖 number、boolean、string、null、undefined、BigInt、
@@ -1052,6 +1061,7 @@ class Quickjs {
             _classInstances.clear();
             _runtime = await _backend.createRuntime(_options);
             await _installConsoleOnCurrentRuntime();
+            await _installHostCapabilitiesOnCurrentRuntime();
             _state = QuickjsRuntimeState.ready;
           }
         })
@@ -1634,6 +1644,63 @@ String _wrapInstallConsole(String? callbackName) {
     enumerable: true,
     writable: true,
   });
+})()
+''';
+}
+
+String _wrapInstallHostCapabilities(QuickjsHostCapabilities capabilities) {
+  final aliases = <String>[
+    if (capabilities.browserGlobals.window) 'window',
+    if (capabilities.browserGlobals.self) 'self',
+  ];
+  final encodedAliases = jsonEncode(aliases);
+  final installRandomUuid = capabilities.crypto.randomUUID;
+  return '''
+(() => {
+  const aliases = $encodedAliases;
+  for (const name of aliases) {
+    Object.defineProperty(globalThis, name, {
+      value: globalThis,
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+  }
+  if ($installRandomUuid) {
+    const crypto = (globalThis.crypto && typeof globalThis.crypto === 'object')
+      ? globalThis.crypto
+      : {};
+    const hex = [];
+    for (let i = 0; i < 256; i++) {
+      hex[i] = (i + 0x100).toString(16).slice(1);
+    }
+    const randomByte = () => Math.floor(Math.random() * 256) & 0xff;
+    Object.defineProperty(crypto, 'randomUUID', {
+      value: () => {
+        const bytes = new Uint8Array(16);
+        for (let i = 0; i < bytes.length; i++) {
+          bytes[i] = randomByte();
+        }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        return hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + '-' +
+          hex[bytes[4]] + hex[bytes[5]] + '-' +
+          hex[bytes[6]] + hex[bytes[7]] + '-' +
+          hex[bytes[8]] + hex[bytes[9]] + '-' +
+          hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] +
+          hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]];
+      },
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'crypto', {
+      value: crypto,
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+  }
 })()
 ''';
 }

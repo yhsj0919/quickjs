@@ -392,7 +392,8 @@ const user = new User('Tom')
 
 ### 宿主能力注入
 
-- [ ] `Quickjs.create(...)` 支持显式配置宿主模块，例如 crypto 加速、浏览器兼容层。
+- [x] `Quickjs.create(...)` 支持显式配置宿主能力：`QuickjsRuntimeOptions.hostCapabilities`
+  可按 runtime 开启浏览器兼容别名。
 - [ ] 高开销能力替换：JS 侧仍调用 `crypto.subtle.digest()`、`crypto.randomUUID()` 或
   项目约定的 `hash()` 等 API；native 侧可绑定到 Dart、平台原生库或 FFI；Web 侧优先
   绑定浏览器 Web Crypto 等原生能力。
@@ -400,8 +401,9 @@ const user = new User('Tom')
   `sessionStorage` 等；只实现明确声明的最小子集，不伪装成完整浏览器环境。
 - [ ] Node 兼容对象（可选注入）：`process.env`、`Buffer`、`setImmediate` 等最小子集。
 - [ ] 同步宿主 API 只能绑定确定不会长时间阻塞的实现；耗时实现必须返回 Promise。
-- [ ] 权限与可用能力显式配置，不默认暴露平台敏感能力。
-- [ ] `window` / `globalThis` / `self` 的别名关系可配置并有文档说明。
+- [x] 权限与可用能力显式配置，不默认暴露平台敏感能力。
+- [x] `window` / `globalThis` / `self` 的别名关系可配置：默认不注入；
+  `QuickjsBrowserGlobals(window: true, self: true)` 时别名指向 `globalThis`。
 - [ ] dispose runtime 后，宿主能力回调不再触发，未完成 Promise 被 reject 或取消。
 
 ### 内置与文档
@@ -409,7 +411,8 @@ const user = new User('Tom')
 - [ ] npm bundle 支持文档。
 - [ ] native / Web Crypto 加速（可通过宿主注入替换默认实现）。
 - [ ] `fetch` 最小兼容层：native 使用 Dart `HttpClient`，Web 使用浏览器 fetch。
-- [ ] `crypto.randomUUID()`。
+- [x] `crypto.randomUUID()`：通过 `QuickjsHostCapabilities.crypto` 显式开启，
+  当前为同步 UUID v4 兼容实现，后续可替换为 native / Web Crypto 随机源。
 - [ ] random bytes。
 - [ ] SHA-256。
 - [ ] Node `Buffer` 最小兼容层：`Buffer.from`、`Buffer.alloc`、`toString`、

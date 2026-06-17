@@ -173,4 +173,25 @@ void main() {
     expect(find.textContaining('onConsole'), findsOneWidget);
     expect(find.textContaining('console.log'), findsOneWidget);
   });
+
+  testWidgets('registers crypto randomUUID example page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    final title = find.text('Crypto randomUUID');
+    if (title.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        title,
+        120,
+        scrollable: find.byType(Scrollable),
+      );
+    }
+    expect(title, findsOneWidget);
+    expect(
+      find.textContaining('QuickjsHostCapabilities.crypto'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('crypto.randomUUID()'), findsOneWidget);
+  });
 }

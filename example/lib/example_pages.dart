@@ -4,6 +4,7 @@ import 'pages/basic_eval_page.dart';
 import 'pages/callback_bridge_page.dart';
 import 'pages/class_binding_page.dart';
 import 'pages/console_page.dart';
+import 'pages/crypto_random_uuid_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/function_handle_page.dart';
 import 'pages/memory_limit_page.dart';
@@ -103,7 +104,13 @@ final List<ExamplePageSpec> examplePages = [
   ),
   ExamplePageSpec(
     title: 'Console',
-    description: '使用 Quickjs.create(onConsole:) 接收 console.log / warn / error 事件。',
+    description:
+        '使用 Quickjs.create(onConsole:) 接收 console.log / warn / error 事件。',
     builder: (_) => const ConsolePage(),
+  ),
+  ExamplePageSpec(
+    title: 'Crypto randomUUID',
+    description: '通过 QuickjsHostCapabilities.crypto 显式启用 crypto.randomUUID()。',
+    builder: (_) => const CryptoRandomUuidPage(),
   ),
 ];
