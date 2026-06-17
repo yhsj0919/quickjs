@@ -47,6 +47,10 @@ QJS_BRIDGE_EXPORT char *quickjs_eval(QuickjsRuntime *runtime, const char *code);
 QJS_BRIDGE_EXPORT char *quickjs_eval_timeout(QuickjsRuntime *runtime,
                                              const char *code,
                                              int64_t timeout_ms);
+QJS_BRIDGE_EXPORT char *quickjs_eval_timeout_named(QuickjsRuntime *runtime,
+                                                   const char *code,
+                                                   const char *name,
+                                                   int64_t timeout_ms);
 QJS_BRIDGE_EXPORT char *quickjs_eval_module(QuickjsRuntime *runtime,
                                             const char *source,
                                             const char *name,
@@ -56,6 +60,9 @@ QJS_BRIDGE_EXPORT int quickjs_runtime_bind_callback(
     QuickjsHostCallback callback);
 QJS_BRIDGE_EXPORT char *quickjs_eval_async_start(QuickjsRuntime *runtime,
                                                  const char *code);
+QJS_BRIDGE_EXPORT char *quickjs_eval_async_start_named(QuickjsRuntime *runtime,
+                                                       const char *code,
+                                                       const char *name);
 QJS_BRIDGE_EXPORT char *quickjs_eval_async_poll(QuickjsRuntime *runtime);
 QJS_BRIDGE_EXPORT int quickjs_runtime_resolve_callback(
     QuickjsRuntime *runtime, int64_t request_id, int success,

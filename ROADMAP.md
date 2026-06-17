@@ -374,11 +374,15 @@ const user = new User('Tom')
 - [x] `console.log`
 - [x] `console.warn`
 - [x] `console.error`
-- [ ] source file name。
-- [ ] sourcemap registry。
-- [ ] stack remap。
-- [ ] debug mode / inspector 原型：
-  globals、modules、memory、pending jobs、registered callbacks、手动执行表达式。
+- [x] source file name：`eval` / `evaluate` / `evalAsync` / `evaluateAsync` /
+  `evaluateValue` / `evaluateHandle` 支持 `name:`，native 与 web 异常栈可指向该 source name。
+- [x] sourcemap registry：`QuickjsSourceMap` 与 runtime 级注册表已支持按 source name
+  注册、查询、清理，并在匹配的 `JsException.sourceMap` 上附加元数据；stack 重写留给下一步。
+- [x] stack remap：注册 sourcemap 后，匹配 source name 的 `JsException.stack` 会重写为原始
+  source 位置，并同步更新 `fileName` / `line` / `column`。
+- [x] debug mode / inspector 原型：`debugInspect()` 可快照 globals、module names、
+  resource limits、pending evals、registered callbacks、source maps；`debugEvaluateValue()`
+  支持手动执行表达式。当前为 API 原型，非交互式 inspector UI。
 
 ## 0.9.0+：生态兼容能力
 

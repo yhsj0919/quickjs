@@ -255,9 +255,9 @@
       return post('runtimeNew', { memoryLimitBytes });
     },
 
-    /** @param {number} id @param {string} code */
-    async runtimeEval(id, code, timeoutMs = 0) {
-      return post('runtimeEval', { runtimeId: id, code }, timeoutMs);
+    /** @param {number} id @param {string} code @param {string} name */
+    async runtimeEval(id, code, name = '<eval>', timeoutMs = 0) {
+      return post('runtimeEval', { runtimeId: id, code, name }, timeoutMs);
     },
 
     /** @param {number} id @param {string} source @param {string} name */
@@ -269,9 +269,9 @@
       );
     },
 
-    /** @param {number} id @param {string} code */
-    async runtimeEvalAsync(id, code, timeoutMs = 0) {
-      return post('runtimeEvalAsync', { runtimeId: id, code }, timeoutMs);
+    /** @param {number} id @param {string} code @param {string} name */
+    async runtimeEvalAsync(id, code, name = '<evalAsync>', timeoutMs = 0) {
+      return post('runtimeEvalAsync', { runtimeId: id, code, name }, timeoutMs);
     },
 
     /**

@@ -24,7 +24,8 @@ extension type QuickjsWebHost(JSObject _) implements JSObject {
   external JSPromise<JSNumber> runtimeNew([JSNumber? memoryLimitBytes]);
   external JSPromise<JSString> runtimeEval(
     JSNumber id,
-    JSString code, [
+    JSString code,
+    JSString name, [
     JSNumber? timeoutMs,
   ]);
   external JSPromise<JSString> runtimeEvalModule(
@@ -36,7 +37,8 @@ extension type QuickjsWebHost(JSObject _) implements JSObject {
   ]);
   external JSPromise<JSString> runtimeEvalAsync(
     JSNumber id,
-    JSString code, [
+    JSString code,
+    JSString name, [
     JSNumber? timeoutMs,
   ]);
   external JSPromise<JSAny?> runtimeBindCallback(

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'quickjs_source_map.dart';
+
 /// QuickJS 插件对外暴露的异常基类。
 sealed class QuickjsException implements Exception {
   String get message;
@@ -14,6 +16,7 @@ final class JsException implements QuickjsException {
     this.fileName,
     this.line,
     this.column,
+    this.sourceMap,
   });
 
   @override
@@ -23,6 +26,32 @@ final class JsException implements QuickjsException {
   final String? fileName;
   final int? line;
   final int? column;
+  final QuickjsSourceMap? sourceMap;
+
+  JsException withSourceMap(
+    QuickjsSourceMap? sourceMap, {
+    String? stack,
+    String? fileName,
+    int? line,
+    int? column,
+  }) {
+    if (sourceMap == null &&
+        stack == null &&
+        fileName == null &&
+        line == null &&
+        column == null) {
+      return this;
+    }
+    return JsException(
+      message,
+      name: name,
+      stack: stack ?? this.stack,
+      fileName: fileName ?? this.fileName,
+      line: line ?? this.line,
+      column: column ?? this.column,
+      sourceMap: sourceMap ?? this.sourceMap,
+    );
+  }
 
   @override
   String toString() => message;

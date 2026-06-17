@@ -15,6 +15,7 @@ import '../quickjs_stream_bridge.dart';
 const String _messageTypeKey = 'type';
 const String _messageIdKey = 'id';
 const String _messageCodeKey = 'code';
+const String _messageSourceNameKey = 'sourceName';
 const String _messageModuleNameKey = 'moduleName';
 const String _messageModulesKey = 'modules';
 const String _messageTimeoutMsKey = 'timeoutMs';
@@ -334,7 +335,11 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
-  Future<String> evaluate(String code, {Duration? timeout}) async {
+  Future<String> evaluate(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) async {
     if (_closed) {
       throw JsRuntimeClosedException();
     }
@@ -342,13 +347,18 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     _cancelFlag.value = 0;
     final result = await _sendRequest<String>(_evalMessage, <String, Object?>{
       _messageCodeKey: code,
+      _messageSourceNameKey: name,
       if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
     });
     return result;
   }
 
   @override
-  Future<String> evaluateAsync(String code, {Duration? timeout}) async {
+  Future<String> evaluateAsync(
+    String code, {
+    Duration? timeout,
+    String name = '<evalAsync>',
+  }) async {
     if (_closed) {
       throw JsRuntimeClosedException();
     }
@@ -358,6 +368,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       final result =
           await _sendRequest<String>(_evalAsyncMessage, <String, Object?>{
             _messageCodeKey: code,
+            _messageSourceNameKey: name,
             if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
           });
       return result;
@@ -530,9 +541,12 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
           completer.completeError(JsCancelledException());
         } else if (error.contains('QuickJS runtime is closed')) {
           completer.completeError(JsRuntimeClosedException());
-        } else if (error.startsWith(_exceptionSentinel)) {
+        } else if (_isStackOverflowMessage(error)) {
+          completer.completeError(JsStackOverflowException(error));
+        } else if (error.contains(_exceptionSentinel)) {
+          final sentinelIndex = error.indexOf(_exceptionSentinel);
           final exception = parseJsExceptionPayload(
-            error.substring(_exceptionSentinel.length),
+            error.substring(sentinelIndex + _exceptionSentinel.length),
           );
           if (exception.message.toLowerCase().contains('out of memory')) {
             completer.completeError(JsOutOfMemoryException(exception.message));
@@ -771,8 +785,9 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
         switch (type) {
           case _evalMessage:
             final code = message[_messageCodeKey] as String;
+            final name = message[_messageSourceNameKey] as String? ?? '<eval>';
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
-            final result = _eval(bindings, runtime, code, timeoutMs);
+            final result = _eval(bindings, runtime, code, name, timeoutMs);
             _sendOk(responseSendPort, requestId, result);
           case _evalModuleMessage:
             final source = message[_messageCodeKey] as String;
@@ -788,11 +803,14 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             _sendOk(responseSendPort, requestId, result);
           case _evalAsyncMessage:
             final code = message[_messageCodeKey] as String;
+            final name =
+                message[_messageSourceNameKey] as String? ?? '<evalAsync>';
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
             final result = await _evalAsync(
               bindings,
               runtime,
               code,
+              name,
               timeoutMs,
               cancelFlag,
             );
@@ -973,11 +991,19 @@ String _eval(
   QuickjsBindings bindings,
   Pointer<QuickjsRuntime> runtime,
   String code,
+  String name,
   int? timeoutMs,
 ) {
   final codePtr = code.toNativeUtf8();
-  final resultPtr = bindings.evalTimeout(runtime, codePtr, timeoutMs ?? 0);
+  final namePtr = name.toNativeUtf8();
+  final resultPtr = bindings.evalTimeoutNamed(
+    runtime,
+    codePtr,
+    namePtr,
+    timeoutMs ?? 0,
+  );
   calloc.free(codePtr);
+  calloc.free(namePtr);
   if (resultPtr == nullptr) {
     throw StateError('QuickJS eval returned null');
   }
@@ -1005,13 +1031,20 @@ Future<String> _evalAsync(
   QuickjsBindings bindings,
   Pointer<QuickjsRuntime> runtime,
   String code,
+  String name,
   int? timeoutMs,
   Pointer<Int32> cancelFlag,
 ) async {
   final codePtr = code.toNativeUtf8();
+  final namePtr = name.toNativeUtf8();
   final stopwatch = Stopwatch()..start();
-  Pointer<Utf8> resultPtr = bindings.evalAsyncStart(runtime, codePtr);
+  Pointer<Utf8> resultPtr = bindings.evalAsyncStartNamed(
+    runtime,
+    codePtr,
+    namePtr,
+  );
   calloc.free(codePtr);
+  calloc.free(namePtr);
 
   while (true) {
     if (cancelFlag.value != 0) {

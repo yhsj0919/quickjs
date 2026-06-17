@@ -288,11 +288,12 @@ function resolveModuleName(baseName, specifier) {
  *
  * @param {import('./quickjs_wasi.js').QuickJS} vm
  * @param {string} code
+ * @param {string} name
  */
-function evalOnVm(vm, code) {
+function evalOnVm(vm, code, name = '<eval>') {
   let handle;
   try {
-    handle = vm.evalCode(code);
+    handle = vm.evalCode(code, name || '<eval>');
     return valueToString(vm, handle);
   } catch (err) {
     if (handle) {
@@ -406,10 +407,10 @@ function installTimers(record) {
   clearIntervalFn.dispose();
 }
 
-async function evalAsyncOnVm(vm, code) {
+async function evalAsyncOnVm(vm, code, name = '<evalAsync>') {
   let handle;
   try {
-    handle = vm.evalCode(code);
+    handle = vm.evalCode(code, name || '<evalAsync>');
     vm.executePendingJobs();
     const settled = await vm.resolvePromise(handle);
     vm.executePendingJobs();
@@ -488,9 +489,10 @@ export async function runtimeNew(memoryLimitBytes) {
  *
  * @param {number} id
  * @param {string} code
+ * @param {string} name
  */
-export function runtimeEval(id, code) {
-  return evalOnVm(runtimeRecord(id).vm, code);
+export function runtimeEval(id, code, name = '<eval>') {
+  return evalOnVm(runtimeRecord(id).vm, code, name);
 }
 
 /**
@@ -600,9 +602,10 @@ export function runtimeBindCallback(id, callbackId, name) {
 /**
  * @param {number} id
  * @param {string} code
+ * @param {string} name
  */
-export async function runtimeEvalAsync(id, code) {
-  return evalAsyncOnVm(runtimeRecord(id).vm, code);
+export async function runtimeEvalAsync(id, code, name = '<evalAsync>') {
+  return evalAsyncOnVm(runtimeRecord(id).vm, code, name);
 }
 
 /**

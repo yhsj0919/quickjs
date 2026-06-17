@@ -28,6 +28,22 @@ Future<void> _waitFor(bool Function() condition) async {
   }
 }
 
+bool _jsExceptionMentionsSource(JsException error, String sourceName) {
+  return error.fileName == sourceName ||
+      (error.stack?.contains(sourceName) ?? false);
+}
+
+QuickjsSourceMap _testSourceMap({String file = 'bundle.js'}) {
+  return QuickjsSourceMap.fromMap({
+    'version': 3,
+    'file': file,
+    'sources': ['src/main.ts'],
+    'sourcesContent': ['throw new Error("boom");'],
+    'names': ['fail'],
+    'mappings': 'AAAA',
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -1470,20 +1486,22 @@ return [await collect(), await collect()].join('|');
       );
     });
 
-    test('maps periodic Dart Stream callback to JS for-await consistently', () async {
-      final engine = await Quickjs.create();
-      addTearDown(engine.dispose);
+    test(
+      'maps periodic Dart Stream callback to JS for-await consistently',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
 
-      await engine.bind('hostCount', (args) {
-        final max = (args.single as num).toInt();
-        return Stream<Object?>.periodic(
-          const Duration(milliseconds: 10),
-          (index) => index + 1,
-        ).take(max);
-      });
+        await engine.bind('hostCount', (args) {
+          final max = (args.single as num).toInt();
+          return Stream<Object?>.periodic(
+            const Duration(milliseconds: 10),
+            (index) => index + 1,
+          ).take(max);
+        });
 
-      expect(
-        await engine.evalAsync('''
+        expect(
+          await engine.evalAsync('''
 const values = [];
 const stream = await hostCount(5);
 for await (const value of stream) {
@@ -1491,9 +1509,10 @@ for await (const value of stream) {
 }
 return values.join(',');
 '''),
-        '1,2,3,4,5',
-      );
-    });
+          '1,2,3,4,5',
+        );
+      },
+    );
 
     test('maps JS sink to Dart Stream consistently', () async {
       final engine = await Quickjs.create();
@@ -1741,6 +1760,152 @@ return first;
               .having((error) => error.stack, 'stack', isNot(isEmpty)),
         ),
       );
+    });
+
+    test('uses source names for eval exceptions consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      const sourceName = 'scripts/named_eval.js';
+
+      await expectLater(
+        engine.eval('''
+function fail() {
+  throw new Error("named eval boom");
+}
+fail();
+''', name: sourceName),
+        throwsA(
+          isA<JsException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('named eval boom'),
+              )
+              .having(
+                (error) => _jsExceptionMentionsSource(error, sourceName),
+                'source name',
+                isTrue,
+              ),
+        ),
+      );
+    });
+
+    test(
+      'uses source names for wrapped eval exceptions consistently',
+      () async {
+        final engine = await Quickjs.create();
+        addTearDown(engine.dispose);
+        const sourceName = 'scripts/named_value.js';
+
+        await expectLater(
+          engine.evaluateValue(
+            '''
+function fail() {
+  throw new Error("named value boom");
+}
+fail();
+''',
+            name: sourceName,
+            globals: {'prefix': 'named'},
+          ),
+          throwsA(
+            isA<JsException>()
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains('named value boom'),
+                )
+                .having(
+                  (error) => _jsExceptionMentionsSource(error, sourceName),
+                  'source name',
+                  isTrue,
+                ),
+          ),
+        );
+      },
+    );
+
+    test('attaches registered source maps to eval exceptions', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      const sourceName = 'bundle.js';
+      final sourceMap = _testSourceMap(file: sourceName);
+      engine.registerSourceMap(sourceName, sourceMap);
+
+      expect(engine.sourceMapFor(sourceName), same(sourceMap));
+      await expectLater(
+        engine.eval('throw new Error("mapped boom")', name: sourceName),
+        throwsA(
+          isA<JsException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('mapped boom'),
+              )
+              .having((error) => error.sourceMap, 'sourceMap', same(sourceMap))
+              .having(
+                (error) => error.stack,
+                'stack',
+                contains('src/main.ts:1:1'),
+              )
+              .having((error) => error.fileName, 'fileName', 'src/main.ts')
+              .having((error) => error.line, 'line', 1)
+              .having((error) => error.column, 'column', 0)
+              .having((error) => error.sourceMap?.sources, 'sources', [
+                'src/main.ts',
+              ]),
+        ),
+      );
+
+      engine.unregisterSourceMap(sourceName);
+      expect(engine.sourceMapFor(sourceName), isNull);
+      await expectLater(
+        engine.eval('throw new Error("unmapped boom")', name: sourceName),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.sourceMap,
+            'sourceMap',
+            isNull,
+          ),
+        ),
+      );
+    });
+
+    test('captures debug inspector snapshots consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          memoryLimitBytes: 512 * 1024,
+          stackLimitBytes: 128 * 1024,
+          moduleLoader: (name) => switch (name) {
+            'dep.mjs' => 'export const value = 41;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+      const sourceName = 'debug-bundle.js';
+      final sourceMap = _testSourceMap(file: sourceName);
+
+      engine.registerSourceMap(sourceName, sourceMap);
+      await engine.bind('debugAdd', (args) {
+        return (args[0] as num).toInt() + (args[1] as num).toInt();
+      });
+      await engine.evalModule(
+        'import { value } from "./dep.mjs"; globalThis.debugAnswer = value + 1;',
+        name: 'main.mjs',
+      );
+
+      expect(await engine.debugEvaluateValue('debugAnswer + 1'), 43);
+      final snapshot = await engine.debugInspect(includeGlobals: true);
+      expect(snapshot.state, QuickjsRuntimeState.ready);
+      expect(snapshot.running, isFalse);
+      expect(snapshot.pendingEvaluations, 0);
+      expect(snapshot.memoryLimitBytes, 512 * 1024);
+      expect(snapshot.stackLimitBytes, 128 * 1024);
+      expect(snapshot.registeredCallbacks, contains('debugAdd'));
+      expect(snapshot.moduleNames, containsAll(['main.mjs', 'dep.mjs']));
+      expect(snapshot.sourceMapNames, contains(sourceName));
+      expect(snapshot.globals, containsAll(['debugAnswer', 'debugAdd']));
     });
 
     // 鍚屼竴 runtime 鍐呭苟鍙?eval 蹇呴』鎸?FIFO 椤哄簭涓茶銆?

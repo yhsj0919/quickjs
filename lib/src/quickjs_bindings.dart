@@ -35,6 +35,21 @@ typedef QuickjsEvalTimeoutNative =
 typedef QuickjsEvalTimeout =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, int);
 
+typedef QuickjsEvalTimeoutNamedNative =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Int64,
+    );
+typedef QuickjsEvalTimeoutNamed =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      int,
+    );
+
 typedef QuickjsEvalModuleNative =
     Pointer<Utf8> Function(
       Pointer<QuickjsRuntime>,
@@ -77,6 +92,19 @@ typedef QuickjsEvalAsyncStartNative =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
 typedef QuickjsEvalAsyncStart =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
+
+typedef QuickjsEvalAsyncStartNamedNative =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+typedef QuickjsEvalAsyncStartNamed =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsRuntime>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
 
 typedef QuickjsEvalAsyncPollNative =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>);
@@ -167,6 +195,11 @@ class QuickjsBindings {
           .lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
             'quickjs_eval_timeout',
           ),
+      evalTimeoutNamed = lib
+          .lookupFunction<
+            QuickjsEvalTimeoutNamedNative,
+            QuickjsEvalTimeoutNamed
+          >('quickjs_eval_timeout_named'),
       evalModule = lib
           .lookupFunction<QuickjsEvalModuleNative, QuickjsEvalModule>(
             'quickjs_eval_module',
@@ -180,6 +213,11 @@ class QuickjsBindings {
           .lookupFunction<QuickjsEvalAsyncStartNative, QuickjsEvalAsyncStart>(
             'quickjs_eval_async_start',
           ),
+      evalAsyncStartNamed = lib
+          .lookupFunction<
+            QuickjsEvalAsyncStartNamedNative,
+            QuickjsEvalAsyncStartNamed
+          >('quickjs_eval_async_start_named'),
       evalAsyncPoll = lib
           .lookupFunction<QuickjsEvalAsyncPollNative, QuickjsEvalAsyncPoll>(
             'quickjs_eval_async_poll',
@@ -220,9 +258,11 @@ class QuickjsBindings {
   final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
   final QuickjsEvalTimeout evalTimeout;
+  final QuickjsEvalTimeoutNamed evalTimeoutNamed;
   final QuickjsEvalModule evalModule;
   final QuickjsRuntimeBindCallback runtimeBindCallback;
   final QuickjsEvalAsyncStart evalAsyncStart;
+  final QuickjsEvalAsyncStartNamed evalAsyncStartNamed;
   final QuickjsEvalAsyncPoll evalAsyncPoll;
   final QuickjsRuntimeResolveCallback runtimeResolveCallback;
   final QuickjsRuntimeSetStreamHandlers runtimeSetStreamHandlers;

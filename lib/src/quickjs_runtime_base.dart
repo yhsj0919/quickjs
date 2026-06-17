@@ -6,10 +6,18 @@ import 'dart:async';
 /// implementation details to the public API.
 abstract class QuickjsJsRuntimeBase {
   /// Evaluates JavaScript in the current runtime.
-  Future<String> evaluate(String code, {Duration? timeout});
+  Future<String> evaluate(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  });
 
   /// Evaluates JavaScript that returns a Promise in the current runtime.
-  Future<String> evaluateAsync(String code, {Duration? timeout});
+  Future<String> evaluateAsync(
+    String code, {
+    Duration? timeout,
+    String name = '<evalAsync>',
+  });
 
   /// Evaluates [source] as an ES module in the current runtime.
   Future<String> evaluateModule(

@@ -145,10 +145,14 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   @override
-  Future<String> evaluate(String code, {Duration? timeout}) async {
+  Future<String> evaluate(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) async {
     _ensureOpen();
     try {
-      return await _evaluateCurrentRuntime(code, timeout: timeout);
+      return await _evaluateCurrentRuntime(code, timeout: timeout, name: name);
     } catch (error) {
       if (error is QuickjsException) {
         rethrow;
@@ -160,14 +164,18 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
       } else if (mapped is JsRuntimeClosedException) {
         // worker 重启后旧 runtime id 会失效，重建 id 后重试一次当前 eval。
         await _recoverRuntime();
-        return _evaluateCurrentRuntime(code, timeout: timeout);
+        return _evaluateCurrentRuntime(code, timeout: timeout, name: name);
       }
       throw mapped;
     }
   }
 
   @override
-  Future<String> evaluateAsync(String code, {Duration? timeout}) async {
+  Future<String> evaluateAsync(
+    String code, {
+    Duration? timeout,
+    String name = '<evalAsync>',
+  }) async {
     _ensureOpen();
     try {
       return _mapWebEvalResult(
@@ -175,6 +183,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
                 .runtimeEvalAsync(
                   _id.toJS,
                   code.toJS,
+                  name.toJS,
                   timeout?.inMilliseconds.toJS,
                 )
                 .toDart)
@@ -311,10 +320,16 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   Future<String> _evaluateCurrentRuntime(
     String code, {
     Duration? timeout,
+    String name = '<eval>',
   }) async {
     return _mapWebEvalResult(
       (await _host
-              .runtimeEval(_id.toJS, code.toJS, timeout?.inMilliseconds.toJS)
+              .runtimeEval(
+                _id.toJS,
+                code.toJS,
+                name.toJS,
+                timeout?.inMilliseconds.toJS,
+              )
               .toDart)
           .toDart,
     );

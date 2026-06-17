@@ -1348,8 +1348,14 @@ void quickjs_runtime_set_cancel_flag(QuickjsRuntime *runtime,
 
 char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
                            int64_t timeout_ms) {
+  return quickjs_eval_timeout_named(runtime, code, "<eval>", timeout_ms);
+}
+
+char *quickjs_eval_timeout_named(QuickjsRuntime *runtime, const char *code,
+                                 const char *name, int64_t timeout_ms) {
   JSValue result;
   QuickjsEvalInterrupt interrupt = {0, 0, 0, 0};
+  const char *eval_name = name && *name ? name : "<eval>";
 
   if (!runtime || !runtime->ctx || !code) {
     return qjs_strdup("invalid arguments");
@@ -1363,7 +1369,7 @@ char *quickjs_eval_timeout(QuickjsRuntime *runtime, const char *code,
     JS_SetInterruptHandler(runtime->rt, qjs_interrupt_handler, &interrupt);
   }
 
-  result = JS_Eval(runtime->ctx, code, strlen(code), "<eval>",
+  result = JS_Eval(runtime->ctx, code, strlen(code), eval_name,
                    JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT);
   if (timeout_ms > 0 || runtime->cancel_flag) {
     JS_SetInterruptHandler(runtime->rt, NULL, NULL);
@@ -1448,7 +1454,13 @@ int quickjs_runtime_bind_callback(QuickjsRuntime *runtime, int64_t callback_id,
 }
 
 char *quickjs_eval_async_start(QuickjsRuntime *runtime, const char *code) {
+  return quickjs_eval_async_start_named(runtime, code, "<evalAsync>");
+}
+
+char *quickjs_eval_async_start_named(QuickjsRuntime *runtime, const char *code,
+                                     const char *name) {
   JSValue result;
+  const char *eval_name = name && *name ? name : "<evalAsync>";
 
   if (!runtime || !runtime->ctx || !code) {
     return qjs_strdup("invalid arguments");
@@ -1457,7 +1469,7 @@ char *quickjs_eval_async_start(QuickjsRuntime *runtime, const char *code) {
     return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS async eval is already running\"}");
   }
 
-  result = JS_Eval(runtime->ctx, code, strlen(code), "<evalAsync>",
+  result = JS_Eval(runtime->ctx, code, strlen(code), eval_name,
                    JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT);
   if (JS_IsException(result)) {
     return qjs_value_to_string(runtime->ctx, result);

@@ -8,6 +8,7 @@ import 'quickjs_backend_factory.dart';
 import 'quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
+import 'quickjs_source_map.dart';
 import 'quickjs_value.dart';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
@@ -24,11 +25,7 @@ typedef QuickjsInstanceMethod<T extends Object> =
     FutureOr<Object?> Function(T instance, List<Object?> args);
 
 /// JavaScript console method severity.
-enum QuickjsConsoleLevel {
-  log,
-  warn,
-  error,
-}
+enum QuickjsConsoleLevel { log, warn, error }
 
 /// A single JavaScript `console.*` event emitted by one [Quickjs] runtime.
 final class QuickjsConsoleEvent {
@@ -270,6 +267,33 @@ enum QuickjsRuntimeState {
   failed,
 }
 
+/// Runtime debug snapshot exposed by the inspector prototype.
+final class QuickjsInspectorSnapshot {
+  const QuickjsInspectorSnapshot({
+    required this.state,
+    required this.quickjsVersion,
+    required this.running,
+    required this.pendingEvaluations,
+    required this.registeredCallbacks,
+    required this.moduleNames,
+    required this.sourceMapNames,
+    required this.memoryLimitBytes,
+    required this.stackLimitBytes,
+    this.globals,
+  });
+
+  final QuickjsRuntimeState state;
+  final String quickjsVersion;
+  final bool running;
+  final int pendingEvaluations;
+  final List<String> registeredCallbacks;
+  final List<String> moduleNames;
+  final List<String> sourceMapNames;
+  final int? memoryLimitBytes;
+  final int? stackLimitBytes;
+  final List<String>? globals;
+}
+
 /// QuickJS 的公开 Dart 入口。
 ///
 /// 这个类只负责管理请求队列和 runtime 生命周期；真正的执行发生在平台 backend
@@ -302,6 +326,10 @@ class Quickjs {
   int _nextCallbackId = 1;
   int _nextObjectProxyId = 1;
   int _nextClassBindingId = 1;
+  final Map<String, QuickjsSourceMap> _sourceMaps =
+      <String, QuickjsSourceMap>{};
+  final Map<int, String> _callbackDebugNames = <int, String>{};
+  final Set<String> _moduleDebugNames = <String>{};
   final Map<int, Map<int, Object>> _classInstances = <int, Map<int, Object>>{};
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
@@ -311,12 +339,7 @@ class Quickjs {
   }) async {
     final backend = await createQuickjsBackend();
     final runtime = await backend.createRuntime(options);
-    final engine = Quickjs._(
-      backend,
-      runtime,
-      options,
-      onConsole,
-    );
+    final engine = Quickjs._(backend, runtime, options, onConsole);
     try {
       await engine._installConsoleOnCurrentRuntime();
     } catch (_) {
@@ -332,6 +355,79 @@ class Quickjs {
   /// 当前 runtime 生命周期状态。
   QuickjsRuntimeState get state => _state;
 
+  /// Registers a source map for generated JavaScript [sourceName].
+  ///
+  /// The [sourceName] should match the `name:` passed to eval/evaluate APIs or
+  /// the module name used for module evaluation. The current registry phase
+  /// attaches matching source maps to [JsException.sourceMap]; actual stack
+  /// rewriting is handled by the later stack remap phase.
+  void registerSourceMap(String sourceName, QuickjsSourceMap sourceMap) {
+    _sourceMaps[_validateSourceName(sourceName)] = sourceMap;
+  }
+
+  /// Removes the source map registered for [sourceName].
+  void unregisterSourceMap(String sourceName) {
+    _sourceMaps.remove(_validateSourceName(sourceName));
+  }
+
+  /// Returns the source map registered for [sourceName], if any.
+  QuickjsSourceMap? sourceMapFor(String sourceName) {
+    return _sourceMaps[_validateSourceName(sourceName)];
+  }
+
+  /// Removes all source maps registered on this runtime wrapper.
+  void clearSourceMaps() {
+    _sourceMaps.clear();
+  }
+
+  /// Captures a lightweight inspector snapshot.
+  ///
+  /// When [includeGlobals] is true this queues a short JavaScript expression to
+  /// read `globalThis` property names. Otherwise the snapshot is produced from
+  /// Dart-side runtime metadata only.
+  Future<QuickjsInspectorSnapshot> debugInspect({
+    bool includeGlobals = false,
+  }) async {
+    final globals = includeGlobals
+        ? await debugEvaluateValue(
+            'Object.getOwnPropertyNames(globalThis).sort()',
+            name: '<inspector:globals>',
+          )
+        : null;
+    return QuickjsInspectorSnapshot(
+      state: state,
+      quickjsVersion: quickjsVersion,
+      running: _running != null,
+      pendingEvaluations: _queue.length,
+      registeredCallbacks: List<String>.unmodifiable(
+        _callbackDebugNames.values.toList()..sort(),
+      ),
+      moduleNames: List<String>.unmodifiable(
+        _moduleDebugNames.toList()..sort(),
+      ),
+      sourceMapNames: List<String>.unmodifiable(
+        _sourceMaps.keys.toList()..sort(),
+      ),
+      memoryLimitBytes: _options.memoryLimitBytes,
+      stackLimitBytes: _options.stackLimitBytes,
+      globals: globals is List
+          ? List<String>.unmodifiable(globals.map((value) => '$value'))
+          : null,
+    );
+  }
+
+  /// Evaluates a debug expression and converts its result to Dart values.
+  ///
+  /// This is the inspector's manual expression entry point. It uses the same
+  /// queue, timeout, and conversion semantics as [evaluateValue].
+  Future<Object?> debugEvaluateValue(
+    String expression, {
+    Duration? timeout,
+    String name = '<inspector>',
+  }) {
+    return evaluateValue(expression, timeout: timeout, name: name);
+  }
+
   /// 在当前 runtime 中执行 [code]。
   ///
   /// 调用只会入队，不会在 Flutter UI isolate 中同步执行 JS。
@@ -339,18 +435,25 @@ class Quickjs {
   Future<String> eval(
     String code, {
     Duration? timeout,
+    String name = '<eval>',
     Map<String, Object?> globals = const {},
   }) {
-    return _enqueue(_wrapWithGlobals(code, globals), timeout: timeout);
+    final validName = _validateSourceName(name);
+    return _enqueue(
+      _wrapWithGlobals(code, globals, name: validName),
+      timeout: timeout,
+      name: validName,
+    );
   }
 
   /// [eval] 的兼容别名，保留给更自然的调用命名。
   Future<String> evaluate(
     String code, {
     Duration? timeout,
+    String name = '<eval>',
     Map<String, Object?> globals = const {},
   }) {
-    return eval(code, timeout: timeout, globals: globals);
+    return eval(code, timeout: timeout, name: name, globals: globals);
   }
 
   /// 在当前 runtime 中执行异步 JavaScript 函数体，并等待返回的 Promise。
@@ -359,11 +462,14 @@ class Quickjs {
   Future<String> evalAsync(
     String code, {
     Duration? timeout,
+    String name = '<evalAsync>',
     Map<String, Object?> globals = const {},
   }) {
+    final validName = _validateSourceName(name);
     return _enqueue(
-      _wrapWithGlobals(_wrapAsyncFunctionBody(code), globals),
+      _wrapWithGlobals(_wrapAsyncFunctionBody(code), globals, name: validName),
       timeout: timeout,
+      name: validName,
       async: true,
     );
   }
@@ -372,9 +478,10 @@ class Quickjs {
   Future<String> evaluateAsync(
     String code, {
     Duration? timeout,
+    String name = '<evalAsync>',
     Map<String, Object?> globals = const {},
   }) {
-    return evalAsync(code, timeout: timeout, globals: globals);
+    return evalAsync(code, timeout: timeout, name: name, globals: globals);
   }
 
   /// 在当前 runtime 中执行 ES module [source]。
@@ -391,6 +498,7 @@ class Quickjs {
       validName,
       _esModuleSpecifiers,
     );
+    _moduleDebugNames.addAll(modules.keys);
     return _enqueueModule(
       source,
       name: validName,
@@ -424,9 +532,11 @@ class Quickjs {
       validName,
       _commonJsSpecifiers,
     );
+    _moduleDebugNames.addAll(modules.keys);
     return _enqueue(
       _wrapCommonJsModule(source, validName, modules),
       timeout: timeout,
+      name: validName,
     );
   }
 
@@ -443,10 +553,13 @@ class Quickjs {
   Future<QuickjsFunctionHandle> evaluateHandle(
     String code, {
     Duration? timeout,
+    String name = '<handle>',
   }) async {
+    final validName = _validateSourceName(name);
     final payloadJson = await _enqueue(
-      _wrapEvaluateFunctionHandle(code),
+      _wrapEvaluateFunctionHandle(code, name: validName),
       timeout: timeout,
+      name: validName,
     );
     final payload = jsonDecode(payloadJson) as Map<String, Object?>;
     if (payload['ok'] != true) {
@@ -456,8 +569,12 @@ class Quickjs {
   }
 
   /// [evaluateHandle] 的兼容别名。
-  Future<QuickjsFunctionHandle> evalHandle(String code, {Duration? timeout}) {
-    return evaluateHandle(code, timeout: timeout);
+  Future<QuickjsFunctionHandle> evalHandle(
+    String code, {
+    Duration? timeout,
+    String name = '<handle>',
+  }) {
+    return evaluateHandle(code, timeout: timeout, name: name);
   }
 
   /// 在 JS `globalThis` 上绑定一个 Promise-based Dart callback。
@@ -471,7 +588,7 @@ class Quickjs {
     }
     final callbackId = _nextCallbackId++;
     final validName = _validateGlobalName(name);
-    return _runtime.bindCallback(callbackId, validName, (args) async {
+    return _bindRuntimeCallback(callbackId, validName, (args) async {
       return callback(args);
     });
   }
@@ -539,7 +656,7 @@ class Quickjs {
         callbackIds.add(callbackId);
         getCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
         callbackNames.add(getCallbackName);
-        await _runtime.bindCallback(callbackId, getCallbackName, (_) async {
+        await _bindRuntimeCallback(callbackId, getCallbackName, (_) async {
           return getter();
         });
       }
@@ -550,7 +667,7 @@ class Quickjs {
         callbackIds.add(callbackId);
         setCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
         callbackNames.add(setCallbackName);
-        await _runtime.bindCallback(callbackId, setCallbackName, (args) async {
+        await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
           await setter(args.isEmpty ? null : args.first);
           return null;
         });
@@ -578,7 +695,7 @@ class Quickjs {
       callbackIds.add(callbackId);
       final callbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
       callbackNames.add(callbackName);
-      await _runtime.bindCallback(callbackId, callbackName, (args) async {
+      await _bindRuntimeCallback(callbackId, callbackName, (args) async {
         return entry.value(args);
       });
       methods.add({'name': methodName, 'callback': callbackName});
@@ -626,19 +743,17 @@ class Quickjs {
     final constructorCallbackId = _nextCallbackId++;
     callbackNames.add(constructorCallbackName);
     callbackIds.add(constructorCallbackId);
-    await _runtime.bindCallback(
-      constructorCallbackId,
-      constructorCallbackName,
-      (args) async {
-        if (args.isEmpty || args.first is! num) {
-          throw StateError('QuickJS class constructor missing instance id');
-        }
-        final instanceId = (args.first! as num).toInt();
-        final instance = await definition.constructor(args.skip(1).toList());
-        instances[instanceId] = instance;
-        return null;
-      },
-    );
+    await _bindRuntimeCallback(constructorCallbackId, constructorCallbackName, (
+      args,
+    ) async {
+      if (args.isEmpty || args.first is! num) {
+        throw StateError('QuickJS class constructor missing instance id');
+      }
+      final instanceId = (args.first! as num).toInt();
+      final instance = await definition.constructor(args.skip(1).toList());
+      instances[instanceId] = instance;
+      return null;
+    });
 
     final accessors = <Map<String, String?>>[];
     final accessorNames = <String>{};
@@ -665,7 +780,7 @@ class Quickjs {
         callbackIds.add(callbackId);
         getCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
         callbackNames.add(getCallbackName);
-        await _runtime.bindCallback(callbackId, getCallbackName, (args) async {
+        await _bindRuntimeCallback(callbackId, getCallbackName, (args) async {
           final instance = _requireClassInstance<T>(classId, args);
           return getter(instance);
         });
@@ -677,7 +792,7 @@ class Quickjs {
         callbackIds.add(callbackId);
         setCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
         callbackNames.add(setCallbackName);
-        await _runtime.bindCallback(callbackId, setCallbackName, (args) async {
+        await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
           final instance = _requireClassInstance<T>(classId, args);
           await setter(instance, args.length < 2 ? null : args[1]);
           return null;
@@ -705,7 +820,7 @@ class Quickjs {
       callbackIds.add(callbackId);
       final callbackName = '__quickjsClass_${classId}_${callbackIndex++}';
       callbackNames.add(callbackName);
-      await _runtime.bindCallback(callbackId, callbackName, (args) async {
+      await _bindRuntimeCallback(callbackId, callbackName, (args) async {
         final instance = _requireClassInstance<T>(classId, args);
         return entry.value(instance, args.skip(1).toList());
       });
@@ -743,7 +858,7 @@ class Quickjs {
     final onConsole = _onConsole;
     if (onConsole != null) {
       final callbackId = _nextCallbackId++;
-      await _runtime.bindCallback(callbackId, callbackName, (args) async {
+      await _bindRuntimeCallback(callbackId, callbackName, (args) async {
         final levelName = args.isNotEmpty ? args[0] : 'log';
         final text = args.length > 1 ? args[1] : '';
         final rawValue = args.length > 2 ? args[2] : null;
@@ -773,10 +888,15 @@ class Quickjs {
   Future<Object?> evaluateValue(
     String code, {
     Duration? timeout,
+    String name = '<eval>',
     Map<String, Object?> globals = const {},
   }) async {
-    final encodedSource = jsonEncode(_wrapWithGlobals(code, globals));
-    final encodedValue = await eval('''
+    final validName = _validateSourceName(name);
+    final encodedSource = jsonEncode(
+      _wrapWithGlobals(code, globals, name: validName),
+    );
+    final encodedValue = await eval(
+      '''
 (() => {
   const unsupported = (reason) => ({
     type: 'conversionError',
@@ -844,7 +964,10 @@ class Quickjs {
   const value = (0, eval)($encodedSource);
   return JSON.stringify(convert(value, new WeakSet()));
 })()
-''', timeout: timeout);
+''',
+      timeout: timeout,
+      name: validName,
+    );
     final payload = jsonDecode(encodedValue) as Map<String, Object?>;
     if (payload['type'] == 'conversionError') {
       throw JsValueConversionException(payload['message']! as String);
@@ -943,6 +1066,7 @@ class Quickjs {
   Future<String> _enqueue(
     String code, {
     Duration? timeout,
+    String name = '<eval>',
     bool async = false,
   }) {
     final terminalError = _terminalError;
@@ -950,7 +1074,7 @@ class Quickjs {
       return Future<String>.error(terminalError);
     }
 
-    final request = _QueuedEval(code, timeout, async);
+    final request = _QueuedEval(code, timeout, name, async);
     _queue.add(request);
     // timeout 从入队开始计算，避免排队过久的任务进入 runtime 后才超时。
     request.startQueueTimer(() {
@@ -1012,8 +1136,16 @@ class Quickjs {
         ),
         _ =>
           request.async
-              ? _runtime.evaluateAsync(request.code, timeout: timeout)
-              : _runtime.evaluate(request.code, timeout: timeout),
+              ? _runtime.evaluateAsync(
+                  request.code,
+                  timeout: timeout,
+                  name: request.name,
+                )
+              : _runtime.evaluate(
+                  request.code,
+                  timeout: timeout,
+                  name: request.name,
+                ),
       },
     );
     _state = QuickjsRuntimeState.running;
@@ -1022,6 +1154,7 @@ class Quickjs {
     _running = running.then<void>(
       request.complete,
       onError: (Object error, StackTrace stackTrace) {
+        final effectiveError = _attachSourceMap(error, request.name);
         if (error is JsRuntimeClosedException ||
             error is JsRuntimeCrashException) {
           _state = error is JsRuntimeCrashException
@@ -1030,7 +1163,7 @@ class Quickjs {
           _failure = error;
           _cancelQueued(error);
         }
-        request.completeError(error, stackTrace);
+        request.completeError(effectiveError, stackTrace);
       },
     );
     unawaited(
@@ -1062,6 +1195,91 @@ class Quickjs {
       request.cancelQueueTimer();
       request.completeError(error);
     }
+  }
+
+  Object _attachSourceMap(Object error, String fallbackName) {
+    if (error is! JsException) {
+      return error;
+    }
+    final sourceName =
+        error.fileName ??
+        _firstRegisteredSourceNameIn(error.stack) ??
+        fallbackName;
+    final map = _sourceMaps[sourceName];
+    if (map == null) {
+      return error;
+    }
+    final remappedStack = _remapStack(error.stack);
+    final location =
+        _remapExceptionLocation(error, sourceName, map) ??
+        remappedStack.location;
+    return error.withSourceMap(
+      map,
+      stack: remappedStack.stack,
+      fileName: location?.source,
+      line: location?.line,
+      column: location?.column,
+    );
+  }
+
+  String? _firstRegisteredSourceNameIn(String? stack) {
+    if (stack == null || _sourceMaps.isEmpty) {
+      return null;
+    }
+    for (final sourceName in _sourceMaps.keys) {
+      if (stack.contains(sourceName)) {
+        return sourceName;
+      }
+    }
+    return null;
+  }
+
+  _StackRemapResult _remapStack(String? stack) {
+    if (stack == null || _sourceMaps.isEmpty) {
+      return _StackRemapResult(stack: stack);
+    }
+    QuickjsSourceMapLocation? firstLocation;
+    final remappedLines = <String>[];
+    for (final line in stack.split('\n')) {
+      var remappedLine = line;
+      for (final entry in _sourceMaps.entries) {
+        final pattern = RegExp('${RegExp.escape(entry.key)}:(\\d+):(\\d+)');
+        remappedLine = remappedLine.replaceAllMapped(pattern, (match) {
+          final generatedLine = int.parse(match.group(1)!);
+          final generatedColumn = int.parse(match.group(2)!);
+          final location = entry.value.lookup(
+            line: generatedLine,
+            column: _stackColumnToSourceMapColumn(generatedColumn),
+          );
+          if (location == null) {
+            return match.group(0)!;
+          }
+          firstLocation ??= location;
+          return '${location.source}:${location.line}:${location.column + 1}';
+        });
+      }
+      remappedLines.add(remappedLine);
+    }
+    return _StackRemapResult(
+      stack: remappedLines.join('\n'),
+      location: firstLocation,
+    );
+  }
+
+  QuickjsSourceMapLocation? _remapExceptionLocation(
+    JsException error,
+    String sourceName,
+    QuickjsSourceMap sourceMap,
+  ) {
+    final line = error.line;
+    final column = error.column;
+    if (line == null || column == null) {
+      return null;
+    }
+    return sourceMap.lookup(
+      line: line,
+      column: _stackColumnToSourceMapColumn(column),
+    );
   }
 
   bool get _isTerminal =>
@@ -1122,7 +1340,7 @@ class Quickjs {
     }
     await _enqueue(_wrapReleaseObjectProxy(name, stateName, callbackNames));
     for (final callbackId in callbackIds) {
-      await _runtime.unbindCallback(callbackId);
+      await _unbindRuntimeCallback(callbackId);
     }
   }
 
@@ -1153,8 +1371,22 @@ class Quickjs {
     }
     await _enqueue(_wrapReleaseClassBinding(name, classId, callbackNames));
     for (final callbackId in callbackIds) {
-      await _runtime.unbindCallback(callbackId);
+      await _unbindRuntimeCallback(callbackId);
     }
+  }
+
+  Future<void> _bindRuntimeCallback(
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  ) async {
+    await _runtime.bindCallback(callbackId, name, callback);
+    _callbackDebugNames[callbackId] = name;
+  }
+
+  Future<void> _unbindRuntimeCallback(int callbackId) async {
+    _callbackDebugNames.remove(callbackId);
+    await _runtime.unbindCallback(callbackId);
   }
 
   Future<Map<String, String>> _buildModuleGraph(
@@ -1216,12 +1448,17 @@ QuickjsConsoleLevel _consoleLevelFromName(String name) {
   };
 }
 
-String _wrapWithGlobals(String code, Map<String, Object?> globals) {
+String _wrapWithGlobals(
+  String code,
+  Map<String, Object?> globals, {
+  required String name,
+}) {
+  final source = _appendSourceUrl(code, name);
   if (globals.isEmpty) {
-    return code;
+    return source;
   }
 
-  final encodedSource = jsonEncode(code);
+  final encodedSource = jsonEncode(source);
   final encodedGlobals = jsonEncode(_encodeGlobals(globals));
   return '''
 (() => {
@@ -1278,6 +1515,16 @@ String _wrapWithGlobals(String code, Map<String, Object?> globals) {
 }
 
 String _wrapInstallConsole(String? callbackName) {
+  if (callbackName == null) {
+    return '''
+(() => {
+  const noop = () => undefined;
+  globalThis.console = globalThis.console || {};
+  console.log = console.warn = console.error = noop;
+})()
+''';
+  }
+
   final encodedCallbackName = jsonEncode(callbackName);
   return '''
 (() => {
@@ -1341,7 +1588,11 @@ String _wrapInstallConsole(String? callbackName) {
     if (value === undefined) return 'undefined';
     if (typeof value === 'bigint') return value.toString() + 'n';
     if (typeof value === 'symbol' || typeof value === 'function') return String(value);
-    if (value instanceof Error) return value.stack || (value.name + ': ' + value.message);
+    if (value instanceof Error) {
+      const header = (value.name || 'Error') + ': ' + (value.message || '');
+      if (!value.stack) return header;
+      return value.stack.includes(value.message || '') ? value.stack : header + '\\n' + value.stack;
+    }
     const normalized = normalize(value);
     if (typeof normalized === 'string') return normalized;
     try {
@@ -1477,8 +1728,8 @@ Object.defineProperty(globalThis, $encodedName, {
 ''';
 }
 
-String _wrapEvaluateFunctionHandle(String code) {
-  final encodedSource = jsonEncode(code);
+String _wrapEvaluateFunctionHandle(String code, {required String name}) {
+  final encodedSource = jsonEncode(_appendSourceUrl(code, name));
   return '''
 (() => {
   const value = (0, eval)($encodedSource);
@@ -1792,6 +2043,41 @@ String _validateModuleName(String name) {
   return name;
 }
 
+String _validateSourceName(String name) {
+  if (name.isEmpty) {
+    throw JsValueConversionException('QuickJS source name must not be empty');
+  }
+  if (name.contains('\u0000')) {
+    throw JsValueConversionException(
+      'QuickJS source name must not contain NUL',
+    );
+  }
+  if (name.contains('\n') || name.contains('\r')) {
+    throw JsValueConversionException(
+      'QuickJS source name must not contain line breaks',
+    );
+  }
+  return name;
+}
+
+String _appendSourceUrl(String source, String name) {
+  if (source.contains(RegExp(r'^\s*//# sourceURL=', multiLine: true))) {
+    return source;
+  }
+  return '$source\n//# sourceURL=$name';
+}
+
+int _stackColumnToSourceMapColumn(int column) {
+  return column <= 0 ? 0 : column - 1;
+}
+
+final class _StackRemapResult {
+  const _StackRemapResult({required this.stack, this.location});
+
+  final String? stack;
+  final QuickjsSourceMapLocation? location;
+}
+
 String _wrapCommonJsModule(
   String rootSource,
   String rootName,
@@ -1970,10 +2256,11 @@ Object _encodeWithCycleCheck(
 }
 
 final class _QueuedEval {
-  _QueuedEval(this.code, this.timeout, this.async);
+  _QueuedEval(this.code, this.timeout, this.name, this.async);
 
   final String code;
   final Duration? timeout;
+  final String name;
   final bool async;
   final Completer<String> _completer = Completer<String>();
   final Stopwatch _stopwatch = Stopwatch()..start();
@@ -2019,9 +2306,8 @@ final class _QueuedEval {
 }
 
 final class _QueuedModuleEval extends _QueuedEval {
-  _QueuedModuleEval(String code, this.name, this.modules, Duration? timeout)
-    : super(code, timeout, false);
+  _QueuedModuleEval(String code, String name, this.modules, Duration? timeout)
+    : super(code, timeout, name, false);
 
-  final String name;
   final Map<String, String> modules;
 }

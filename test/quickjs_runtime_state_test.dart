@@ -199,19 +199,31 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
   bool disposed = false;
 
   @override
-  Future<String> evaluate(String code, {Duration? timeout}) {
-    evaluations.add(code);
-    return switch (code) {
+  Future<String> evaluate(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) {
+    final effectiveCode = _stripSourceUrl(code);
+    if (_isInternalConsoleInstall(effectiveCode)) {
+      return Future<String>.value('undefined');
+    }
+    evaluations.add(effectiveCode);
+    return switch (effectiveCode) {
       'hold' => _hold(),
       'closed' => Future<String>.error(JsRuntimeClosedException()),
       'crash' => Future<String>.error(JsRuntimeCrashException('worker crash')),
-      _ => Future<String>.value(code),
+      _ => Future<String>.value(effectiveCode),
     };
   }
 
   @override
-  Future<String> evaluateAsync(String code, {Duration? timeout}) {
-    return evaluate(code, timeout: timeout);
+  Future<String> evaluateAsync(
+    String code, {
+    Duration? timeout,
+    String name = '<evalAsync>',
+  }) {
+    return evaluate(code, timeout: timeout, name: name);
   }
 
   @override
@@ -268,4 +280,13 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
     _current = completer;
     return completer.future;
   }
+}
+
+String _stripSourceUrl(String code) {
+  return code.replaceFirst(RegExp(r'\n//# sourceURL=[^\r\n]+$'), '');
+}
+
+bool _isInternalConsoleInstall(String code) {
+  return code.contains('globalThis.console = globalThis.console || {}') ||
+      code.contains("Object.defineProperty(globalThis, 'console'");
 }
