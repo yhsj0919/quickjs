@@ -226,10 +226,15 @@ static char *qjs_normalize_module_name_alloc(const char *base_name,
   }
   if (strncmp(module_name, "./", 2) != 0 &&
       strncmp(module_name, "../", 3) != 0) {
-    size_t module_name_len = strlen(module_name);
+    const char *normalized_name = module_name;
+    size_t module_name_len;
+    if (strncmp(module_name, "node:", 5) == 0) {
+      normalized_name = module_name + 5;
+    }
+    module_name_len = strlen(normalized_name);
     result = (char *)alloc_fn(opaque, module_name_len + 1);
     if (result) {
-      memcpy(result, module_name, module_name_len + 1);
+      memcpy(result, normalized_name, module_name_len + 1);
     }
     return result;
   }

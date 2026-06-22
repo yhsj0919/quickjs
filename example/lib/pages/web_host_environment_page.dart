@@ -3,19 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
-/// Web Crypto preset 示例：显式安装 `crypto.randomUUID()` / `getRandomValues()` global。
-class CryptoRandomUuidPage extends StatefulWidget {
-  const CryptoRandomUuidPage({super.key});
+/// Web 风格宿主环境示例：最小 browser-like globals。
+class WebHostEnvironmentPage extends StatefulWidget {
+  const WebHostEnvironmentPage({super.key});
 
   @override
-  State<CryptoRandomUuidPage> createState() => _CryptoRandomUuidPageState();
+  State<WebHostEnvironmentPage> createState() => _WebHostEnvironmentPageState();
 }
 
-class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
+class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
   Quickjs? _quickjs;
   bool _disposed = false;
   bool _busy = false;
-  String _status = '正在创建启用 Web Crypto 的 runtime...';
+  String _status = '正在创建启用 Web 宿主环境的 runtime...';
   final List<String> _log = <String>[];
 
   @override
@@ -27,7 +27,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
   Future<void> _createRuntime() async {
     setState(() {
       _busy = true;
-      _status = '正在创建启用 Web Crypto 的 runtime...';
+      _status = '正在创建启用 Web 宿主环境的 runtime...';
       _log.clear();
     });
 
@@ -39,7 +39,10 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
       final quickjs = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.webCrypto(),
+            QuickjsHostEnvironment.web(
+              locationHref: 'https://example.com:8443/app?q=1#top',
+              userAgent: 'quickjs-example',
+            ),
           ],
         ),
       );
@@ -51,7 +54,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
       setState(() {
         _quickjs = quickjs;
         _busy = false;
-        _status = 'runtime 已就绪：Web Crypto 已启用';
+        _status = 'runtime 已就绪：Web 宿主环境已显式启用';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -68,49 +71,79 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
     await _capture('默认未启用检查', () async {
       final quickjs = await Quickjs.create();
       try {
-        final result = await quickjs.eval(
-          'typeof crypto === "undefined" || '
-          'typeof crypto.randomUUID === "undefined" || '
-          'typeof crypto.getRandomValues === "undefined"',
-        );
-        _log.insert(0, '默认 runtime 暴露 Web Crypto => ${result == 'false'}');
-        _status = result == 'true'
-            ? '默认 runtime 未暴露 Web Crypto'
-            : '默认 runtime 检查失败';
+        final result = await quickjs.eval('''
+[
+  typeof window,
+  typeof self,
+  typeof location,
+  typeof navigator,
+  typeof localStorage,
+  typeof sessionStorage
+].join('/')
+''');
+        _log.insert(0, '默认 runtime => $result');
+        _status = '默认 runtime 不暴露 Web 宿主环境';
       } finally {
         await quickjs.dispose();
       }
     });
   }
 
-  Future<void> _runRandomUuid() async {
-    await _capture('生成 UUID', () async {
+  Future<void> _runGlobalCheck() async {
+    await _capture('全局对象检查', () async {
       final result = await _requireRuntime().eval('''
-(() => {
-  const first = crypto.randomUUID();
-  const second = crypto.randomUUID();
-  const pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\$/;
-  return first + "\\n" + second + "\\nvalid=" +
-    pattern.test(first) + "/" + pattern.test(second) +
-    "\\ndifferent=" + (first !== second);
-})()
+[
+  window === globalThis,
+  self === globalThis,
+  location.origin,
+  location.pathname,
+  location.search,
+  location.hash,
+  navigator.userAgent
+].join('\\n')
 ''');
       _log.insert(0, result);
-      _status = '已生成 crypto.randomUUID()';
+      _status = 'window / self / location / navigator 可用';
     });
   }
 
-  Future<void> _runGetRandomValues() async {
-    await _capture('生成随机字节', () async {
+  Future<void> _runStorageCheck() async {
+    await _capture('Storage 检查', () async {
+      final result = await _requireRuntime().eval('''
+localStorage.clear();
+sessionStorage.clear();
+localStorage.setItem('answer', 42);
+sessionStorage.setItem('answer', 7);
+[
+  localStorage.getItem('answer'),
+  sessionStorage.getItem('answer'),
+  localStorage.length,
+  sessionStorage.length,
+  localStorage.key(0)
+].join('/')
+''');
+      _log.insert(0, 'storage => $result');
+      _status = '内存版 localStorage / sessionStorage 可用';
+    });
+  }
+
+  Future<void> _runUrlCheck() async {
+    await _capture('URL 检查', () async {
       final result = await _requireRuntime().eval('''
 (() => {
-  const bytes = new Uint8Array(8);
-  const returned = crypto.getRandomValues(bytes);
-  return "same=" + (returned === bytes) + "\\nbytes=" + Array.from(bytes).join(",");
+  const url = new URL('https://dart.dev/docs?tab=api#top');
+  return [
+    url.href,
+    url.protocol,
+    url.hostname,
+    url.pathname,
+    url.search,
+    url.hash
+  ].join('\\n');
 })()
 ''');
       _log.insert(0, result);
-      _status = '已生成 crypto.getRandomValues()';
+      _status = '轻量 URL 构造器可用';
     });
   }
 
@@ -124,11 +157,10 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
       await quickjs.stop();
       await running;
       final result = await quickjs.eval(
-        'typeof crypto.randomUUID() === "string" && '
-        'crypto.getRandomValues(new Uint8Array(1)) instanceof Uint8Array',
+        'window === globalThis && location.hostname === "example.com"',
       );
-      _log.insert(0, 'stop 后 Web Crypto 可用 => $result');
-      _status = 'stop 后 runtime 已恢复，Web Crypto 可用';
+      _log.insert(0, 'stop 后 Web 宿主环境可用 => $result');
+      _status = 'stop / rebuild 后 Web 宿主环境已重新安装';
     });
   }
 
@@ -186,7 +218,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Web Crypto')),
+      appBar: AppBar(title: const Text('Web 宿主环境')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -195,7 +227,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsHostEnvironment.webCrypto()：显式安装 crypto.randomUUID() 和 crypto.getRandomValues()。',
+              'QuickjsHostEnvironment.web(locationHref: ..., userAgent: ...)',
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -203,12 +235,16 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
               runSpacing: 8,
               children: [
                 FilledButton(
-                  onPressed: _busy || !hasRuntime ? null : _runRandomUuid,
-                  child: const Text('生成 crypto.randomUUID()'),
+                  onPressed: _busy || !hasRuntime ? null : _runGlobalCheck,
+                  child: const Text('检查全局对象'),
                 ),
-                FilledButton.tonal(
-                  onPressed: _busy || !hasRuntime ? null : _runGetRandomValues,
-                  child: const Text('生成 getRandomValues()'),
+                OutlinedButton(
+                  onPressed: _busy || !hasRuntime ? null : _runStorageCheck,
+                  child: const Text('检查 Storage'),
+                ),
+                OutlinedButton(
+                  onPressed: _busy || !hasRuntime ? null : _runUrlCheck,
+                  child: const Text('检查 URL'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _runDefaultDisabledCheck,
@@ -216,7 +252,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _runStopRecovery,
-                  child: const Text('验证 stop 后恢复'),
+                  child: const Text('stop 后恢复'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _createRuntime,
@@ -232,7 +268,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: _log.isEmpty
-                    ? const Center(child: Text('点击按钮验证 Web Crypto 行为'))
+                    ? const Center(child: Text('点击按钮验证 Web 宿主环境行为'))
                     : ListView.builder(
                         padding: const EdgeInsets.all(12),
                         itemCount: _log.length,

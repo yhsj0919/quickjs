@@ -342,7 +342,7 @@ class Quickjs {
     final engine = Quickjs._(backend, runtime, options, onConsole);
     try {
       await engine._installConsoleOnCurrentRuntime();
-      await engine._installHostCapabilitiesOnCurrentRuntime();
+      await engine._installHostEnvironmentOnCurrentRuntime();
     } catch (_) {
       await runtime.dispose();
       rethrow;
@@ -403,9 +403,7 @@ class Quickjs {
       registeredCallbacks: List<String>.unmodifiable(
         _callbackDebugNames.values.toList()..sort(),
       ),
-      moduleNames: List<String>.unmodifiable(
-        _moduleDebugNames.toList()..sort(),
-      ),
+      moduleNames: List<String>.unmodifiable(_debugModuleNames()),
       sourceMapNames: List<String>.unmodifiable(
         _sourceMaps.keys.toList()..sort(),
       ),
@@ -498,6 +496,7 @@ class Quickjs {
       source,
       validName,
       _esModuleSpecifiers,
+      QuickjsHostModuleFormat.esModule,
     );
     _moduleDebugNames.addAll(modules.keys);
     return _enqueueModule(
@@ -532,6 +531,7 @@ class Quickjs {
       source,
       validName,
       _commonJsSpecifiers,
+      QuickjsHostModuleFormat.commonJs,
     );
     _moduleDebugNames.addAll(modules.keys);
     return _enqueue(
@@ -881,12 +881,20 @@ class Quickjs {
     );
   }
 
-  Future<void> _installHostCapabilitiesOnCurrentRuntime() async {
-    final capabilities = _options.hostCapabilities;
-    if (capabilities.isEmpty) {
-      return;
+  Future<void> _installHostEnvironmentOnCurrentRuntime() async {
+    final capabilities = _effectiveHostCapabilities();
+    if (!capabilities.isEmpty) {
+      await _runtime.evaluate(
+        _wrapInstallHostCapabilities(capabilities),
+        name: '<quickjs:host-capabilities>',
+      );
     }
-    await _runtime.evaluate(_wrapInstallHostCapabilities(capabilities));
+    for (final script in _effectiveHostScripts()) {
+      await _runtime.evaluate(
+        script.source,
+        name: _validateSourceName(script.name),
+      );
+    }
   }
 
   /// 在当前 runtime 中执行 [code]，并把基础 JS 值转换成 Dart 值。
@@ -1061,7 +1069,7 @@ class Quickjs {
             _classInstances.clear();
             _runtime = await _backend.createRuntime(_options);
             await _installConsoleOnCurrentRuntime();
-            await _installHostCapabilitiesOnCurrentRuntime();
+            await _installHostEnvironmentOnCurrentRuntime();
             _state = QuickjsRuntimeState.ready;
           }
         })
@@ -1403,11 +1411,10 @@ class Quickjs {
     String rootSource,
     String rootName,
     Iterable<String> Function(String source) specifiers,
+    QuickjsHostModuleFormat format,
   ) async {
+    final hostModules = _hostModuleSourceMap(format);
     final loader = _options.moduleLoader;
-    if (loader == null) {
-      return const {};
-    }
     final modules = <String, String>{rootName: rootSource};
     final visiting = <String>{};
 
@@ -1426,7 +1433,7 @@ class Quickjs {
           if (modules.containsKey(resolved)) {
             continue;
           }
-          final loaded = await loader(resolved);
+          final loaded = hostModules[resolved] ?? await loader?.call(resolved);
           if (loaded == null) {
             throw JsValueConversionException(
               'QuickJS module loader could not resolve "$specifier" from "$moduleName"',
@@ -1442,6 +1449,70 @@ class Quickjs {
 
     await visit(rootName);
     return Map<String, String>.unmodifiable(modules);
+  }
+
+  Map<String, String> _hostModuleSourceMap(QuickjsHostModuleFormat format) {
+    final hostModules = _effectiveHostModules();
+    if (hostModules.isEmpty) {
+      return const <String, String>{};
+    }
+    final modules = <String, String>{};
+    for (final module in hostModules) {
+      if (module.format != format) {
+        continue;
+      }
+      final name = _canonicalModuleName(_validateModuleName(module.specifier));
+      if (modules.containsKey(name)) {
+        throw JsValueConversionException(
+          'QuickJS host module is registered more than once: $name',
+        );
+      }
+      modules[name] = module.source;
+    }
+    return Map<String, String>.unmodifiable(modules);
+  }
+
+  List<String> _debugModuleNames() {
+    final names = <String>{..._moduleDebugNames};
+    for (final module in _effectiveHostModules()) {
+      names.add(_canonicalModuleName(_validateModuleName(module.specifier)));
+    }
+    return names.toList()..sort();
+  }
+
+  QuickjsHostCapabilities _effectiveHostCapabilities() {
+    var window = _options.hostCapabilities.browserGlobals.window;
+    var self = _options.hostCapabilities.browserGlobals.self;
+    for (final environment in _options.hostEnvironments) {
+      final browserGlobals = environment.hostCapabilities.browserGlobals;
+      window = window || browserGlobals.window;
+      self = self || browserGlobals.self;
+    }
+    return QuickjsHostCapabilities(
+      browserGlobals: QuickjsBrowserGlobals(window: window, self: self),
+    );
+  }
+
+  List<QuickjsHostScript> _effectiveHostScripts() {
+    if (_options.hostEnvironments.isEmpty) {
+      return _options.hostScripts;
+    }
+    return <QuickjsHostScript>[
+      for (final environment in _options.hostEnvironments)
+        ...environment.hostScripts,
+      ..._options.hostScripts,
+    ];
+  }
+
+  List<QuickjsHostModule> _effectiveHostModules() {
+    if (_options.hostEnvironments.isEmpty) {
+      return _options.hostModules;
+    }
+    return <QuickjsHostModule>[
+      for (final environment in _options.hostEnvironments)
+        ...environment.hostModules,
+      ..._options.hostModules,
+    ];
   }
 }
 
@@ -1654,48 +1725,12 @@ String _wrapInstallHostCapabilities(QuickjsHostCapabilities capabilities) {
     if (capabilities.browserGlobals.self) 'self',
   ];
   final encodedAliases = jsonEncode(aliases);
-  final installRandomUuid = capabilities.crypto.randomUUID;
   return '''
 (() => {
   const aliases = $encodedAliases;
   for (const name of aliases) {
     Object.defineProperty(globalThis, name, {
       value: globalThis,
-      configurable: true,
-      enumerable: false,
-      writable: true,
-    });
-  }
-  if ($installRandomUuid) {
-    const crypto = (globalThis.crypto && typeof globalThis.crypto === 'object')
-      ? globalThis.crypto
-      : {};
-    const hex = [];
-    for (let i = 0; i < 256; i++) {
-      hex[i] = (i + 0x100).toString(16).slice(1);
-    }
-    const randomByte = () => Math.floor(Math.random() * 256) & 0xff;
-    Object.defineProperty(crypto, 'randomUUID', {
-      value: () => {
-        const bytes = new Uint8Array(16);
-        for (let i = 0; i < bytes.length; i++) {
-          bytes[i] = randomByte();
-        }
-        bytes[6] = (bytes[6] & 0x0f) | 0x40;
-        bytes[8] = (bytes[8] & 0x3f) | 0x80;
-        return hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + '-' +
-          hex[bytes[4]] + hex[bytes[5]] + '-' +
-          hex[bytes[6]] + hex[bytes[7]] + '-' +
-          hex[bytes[8]] + hex[bytes[9]] + '-' +
-          hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] +
-          hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]];
-      },
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
-    Object.defineProperty(globalThis, 'crypto', {
-      value: crypto,
       configurable: true,
       enumerable: false,
       writable: true,
@@ -2169,7 +2204,7 @@ String _wrapCommonJsModule(
   )[cacheKey];
   const resolve = (referrer, specifier) => {
     if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
-      return specifier;
+      return specifier.startsWith('node:') ? specifier.slice(5) : specifier;
     }
     const slash = referrer.lastIndexOf('/');
     const base = slash < 0 ? '' : referrer.slice(0, slash + 1);
@@ -2238,11 +2273,15 @@ Iterable<String> _commonJsSpecifiers(String source) sync* {
 
 String _resolveModuleName(String referrer, String specifier) {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
-    return specifier;
+    return _canonicalModuleName(specifier);
   }
   final slash = referrer.lastIndexOf('/');
   final base = slash < 0 ? '' : referrer.substring(0, slash + 1);
   return Uri.parse(base).resolve(specifier).path;
+}
+
+String _canonicalModuleName(String name) {
+  return name.startsWith('node:') ? name.substring(5) : name;
 }
 
 Object _encodeDartValue(Object? value, Set<Object> seen) {

@@ -7,6 +7,7 @@ import 'pages/console_page.dart';
 import 'pages/crypto_random_uuid_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/function_handle_page.dart';
+import 'pages/host_modules_page.dart';
 import 'pages/memory_limit_page.dart';
 import 'pages/module_eval_page.dart';
 import 'pages/native_worker_page.dart';
@@ -16,6 +17,7 @@ import 'pages/runtime_isolation_page.dart';
 import 'pages/stream_callback_page.dart';
 import 'pages/structured_values_page.dart';
 import 'pages/timer_event_loop_page.dart';
+import 'pages/web_host_environment_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
@@ -86,6 +88,18 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const ModuleEvalPage(),
   ),
   ExamplePageSpec(
+    title: '宿主模块',
+    description:
+        '使用 QuickjsRuntimeOptions.hostModules 注入 ES module 和 CommonJS 宿主模块，验证 cache、debugInspect、essential Buffer 与 node preset。',
+    builder: (_) => const HostModulesPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Web 宿主环境',
+    description:
+        '使用 QuickjsHostEnvironment.web() 注入 window、location、navigator、URL 和内存版 storage。',
+    builder: (_) => const WebHostEnvironmentPage(),
+  ),
+  ExamplePageSpec(
     title: 'Function Handle',
     description:
         '使用 evaluateHandle 获取 JS function，并通过 handle.call / callAsync / dispose 管理。',
@@ -109,8 +123,9 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const ConsolePage(),
   ),
   ExamplePageSpec(
-    title: 'Crypto randomUUID',
-    description: '通过 QuickjsHostCapabilities.crypto 显式启用 crypto.randomUUID()。',
+    title: 'Web Crypto',
+    description:
+        '通过 QuickjsHostEnvironment.webCrypto() 安装 crypto.randomUUID() 和 crypto.getRandomValues()。',
     builder: (_) => const CryptoRandomUuidPage(),
   ),
 ];

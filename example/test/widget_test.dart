@@ -99,6 +99,49 @@ void main() {
     expect(find.textContaining('CommonJS'), findsOneWidget);
   });
 
+  testWidgets('registers host modules example page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    final title = find.text('宿主模块');
+    if (title.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        title,
+        120,
+        scrollable: find.byType(Scrollable),
+      );
+    }
+    expect(title, findsOneWidget);
+    expect(
+      find.textContaining('QuickjsRuntimeOptions.hostModules'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('CommonJS 宿主模块'), findsOneWidget);
+    expect(find.textContaining('验证 cache'), findsOneWidget);
+    expect(find.textContaining('debugInspect'), findsOneWidget);
+    expect(find.textContaining('essential Buffer'), findsOneWidget);
+    expect(find.textContaining('node preset'), findsOneWidget);
+  });
+
+  testWidgets('registers web host environment example page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    final title = find.text('Web 宿主环境');
+    if (title.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        title,
+        120,
+        scrollable: find.byType(Scrollable),
+      );
+    }
+    expect(title, findsOneWidget);
+    expect(find.textContaining('QuickjsHostEnvironment.web()'), findsOneWidget);
+    expect(find.textContaining('navigator'), findsOneWidget);
+  });
+
   testWidgets('registers function handle example page', (
     WidgetTester tester,
   ) async {
@@ -136,7 +179,7 @@ void main() {
     expect(find.textContaining('bindObject'), findsOneWidget);
     expect(find.textContaining('只读属性'), findsOneWidget);
     expect(find.textContaining('Promise 方法'), findsOneWidget);
-    expect(find.textContaining('显式释放'), findsOneWidget);
+    expect(find.textContaining('显式释放'), findsWidgets);
   });
 
   testWidgets('registers class binding example page', (
@@ -174,12 +217,10 @@ void main() {
     expect(find.textContaining('console.log'), findsOneWidget);
   });
 
-  testWidgets('registers crypto randomUUID example page', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('registers web crypto example page', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
 
-    final title = find.text('Crypto randomUUID');
+    final title = find.text('Web Crypto');
     if (title.evaluate().isEmpty) {
       await tester.scrollUntilVisible(
         title,
@@ -189,9 +230,10 @@ void main() {
     }
     expect(title, findsOneWidget);
     expect(
-      find.textContaining('QuickjsHostCapabilities.crypto'),
+      find.textContaining('QuickjsHostEnvironment.webCrypto()'),
       findsOneWidget,
     );
     expect(find.textContaining('crypto.randomUUID()'), findsOneWidget);
+    expect(find.textContaining('crypto.getRandomValues()'), findsOneWidget);
   });
 }

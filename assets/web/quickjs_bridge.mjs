@@ -265,7 +265,7 @@ function exceptionToPayload(err) {
 
 function resolveModuleName(baseName, specifier) {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
-    return specifier;
+    return specifier.startsWith('node:') ? specifier.slice(5) : specifier;
   }
   const slash = baseName.lastIndexOf('/');
   const base = slash < 0 ? '' : baseName.slice(0, slash + 1);

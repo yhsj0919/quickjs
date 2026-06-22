@@ -44,6 +44,140 @@ QuickjsSourceMap _testSourceMap({String file = 'bundle.js'}) {
   });
 }
 
+const _randomUuidHostScript = QuickjsHostScript(
+  name: 'host:crypto-random-uuid.js',
+  source: r'''
+(() => {
+  const crypto = (globalThis.crypto && typeof globalThis.crypto === 'object')
+    ? globalThis.crypto
+    : {};
+  const hex = [];
+  for (let i = 0; i < 256; i++) {
+    hex[i] = (i + 0x100).toString(16).slice(1);
+  }
+  const randomByte = () => Math.floor(Math.random() * 256) & 0xff;
+  Object.defineProperty(crypto, 'randomUUID', {
+    value: () => {
+      const bytes = new Uint8Array(16);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = randomByte();
+      }
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      return hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + '-' +
+        hex[bytes[4]] + hex[bytes[5]] + '-' +
+        hex[bytes[6]] + hex[bytes[7]] + '-' +
+        hex[bytes[8]] + hex[bytes[9]] + '-' +
+        hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] +
+        hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]];
+    },
+    configurable: true,
+    enumerable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, 'crypto', {
+    value: crypto,
+    configurable: true,
+    enumerable: false,
+    writable: true,
+  });
+})()
+''',
+);
+
+const _hostMathModule = QuickjsHostModule.esModule(
+  specifier: 'app/math',
+  source: '''
+export const value = 41;
+export function add(a, b) {
+  return a + b;
+}
+''',
+);
+
+const _hostBufferModule = QuickjsHostModule.esModule(
+  specifier: 'buffer',
+  source: '''
+export const label = 'host-buffer';
+export const byteLength = (value) => String(value).length;
+''',
+);
+
+const _hostCryptoModule = QuickjsHostModule.esModule(
+  specifier: 'crypto',
+  source: '''
+export const label = 'node-crypto-module';
+export function randomBytes(length) {
+  return 'bytes:' + length;
+}
+''',
+);
+
+const _hostPackageMainModule = QuickjsHostModule.esModule(
+  specifier: 'pkg/main',
+  source: '''
+import { value } from './dep';
+export const result = value + 1;
+''',
+);
+
+const _hostPackageDepModule = QuickjsHostModule.esModule(
+  specifier: 'pkg/dep',
+  source: 'export const value = 9;',
+);
+
+const _hostModuleLoaderMainModule = QuickjsHostModule.esModule(
+  specifier: 'loader/main',
+  source: '''
+import { value } from './dep';
+export const result = value + 1;
+''',
+);
+
+const _hostCommonJsModule = QuickjsHostModule.commonJs(
+  specifier: 'app/cjs',
+  source: '''
+const local = require('./local');
+module.exports = {
+  value: local.value + 1,
+};
+''',
+);
+
+const _hostCommonJsLocalModule = QuickjsHostModule.commonJs(
+  specifier: 'app/local',
+  source: 'exports.value = 6;',
+);
+
+const _hostCommonJsLoaderMainModule = QuickjsHostModule.commonJs(
+  specifier: 'loader/cjs-main',
+  source: '''
+const dep = require('./cjs-dep');
+exports.result = dep.value + 1;
+''',
+);
+
+const _hostCommonJsBufferModule = QuickjsHostModule.commonJs(
+  specifier: 'buffer',
+  source: "exports.label = 'commonjs-buffer';",
+);
+
+const _hostCounterModule = QuickjsHostModule.esModule(
+  specifier: 'app/counter',
+  source: '''
+globalThis.hostModuleImportCount = (globalThis.hostModuleImportCount || 0) + 1;
+export const count = globalThis.hostModuleImportCount;
+''',
+);
+
+const _hostCommonJsCounterModule = QuickjsHostModule.commonJs(
+  specifier: 'app/cjs-counter',
+  source: '''
+globalThis.hostCommonJsImportCount = (globalThis.hostCommonJsImportCount || 0) + 1;
+exports.count = globalThis.hostCommonJsImportCount;
+''',
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -1908,6 +2042,26 @@ fail();
       expect(snapshot.globals, containsAll(['debugAnswer', 'debugAdd']));
     });
 
+    test('captures registered host modules in debug snapshots', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[
+            _hostMathModule,
+            _hostBufferModule,
+            _hostCommonJsModule,
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      final snapshot = await engine.debugInspect();
+
+      expect(
+        snapshot.moduleNames,
+        containsAll(['app/math', 'buffer', 'app/cjs']),
+      );
+    });
+
     test('does not expose browser globals unless configured', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -1918,7 +2072,7 @@ fail();
       );
     });
 
-    test('does not expose crypto randomUUID unless configured', () async {
+    test('does not expose crypto randomUUID unless injected', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
@@ -1929,6 +2083,8 @@ fail();
         ),
         'true',
       );
+      expect(await engine.eval('typeof fetch'), 'undefined');
+      expect(await engine.eval('typeof Buffer'), 'undefined');
     });
 
     test('installs configured browser global aliases consistently', () async {
@@ -1951,12 +2107,10 @@ fail();
       );
     });
 
-    test('installs configured crypto randomUUID consistently', () async {
+    test('installs host script crypto randomUUID consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostCapabilities: QuickjsHostCapabilities(
-            crypto: QuickjsCryptoCapabilities(randomUUID: true),
-          ),
+          hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
         ),
       );
       addTearDown(engine.dispose);
@@ -1972,6 +2126,599 @@ fail();
 })()
 '''),
         'string/true/true/true',
+      );
+    });
+
+    test('installs minimal web crypto environment consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.webCrypto(),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('''
+(() => {
+  const first = crypto.randomUUID();
+  const second = crypto.randomUUID();
+  const pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\$/;
+  const bytes = new Uint8Array(8);
+  const returned = crypto.getRandomValues(bytes);
+  return [
+    pattern.test(first),
+    pattern.test(second),
+    first !== second,
+    returned === bytes,
+    bytes.length,
+    bytes.some((byte) => byte !== 0),
+    typeof crypto.subtle
+  ].join('/');
+})()
+'''),
+        'true/true/true/true/8/true/undefined',
+      );
+    });
+
+    test('can install selected web crypto helpers consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.webCrypto(getRandomValues: false),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval(
+          'typeof crypto.randomUUID + "/" + typeof crypto.getRandomValues',
+        ),
+        'function/undefined',
+      );
+    });
+
+    test('rejects invalid web crypto getRandomValues targets', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.webCrypto(),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.eval('crypto.getRandomValues(new Float32Array(1))'),
+        throwsA(isA<JsException>()),
+      );
+      await expectLater(
+        engine.eval('crypto.getRandomValues(new Uint8Array(65537))'),
+        throwsA(isA<JsException>()),
+      );
+    });
+
+    test('installs configured host environment bundles consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment(
+              hostCapabilities: QuickjsHostCapabilities(
+                browserGlobals: QuickjsBrowserGlobals(window: true),
+              ),
+              hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
+              hostModules: <QuickjsHostModule>[_hostMathModule],
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(await engine.eval('window === globalThis'), 'true');
+      expect(
+        await engine.eval('typeof crypto.randomUUID() === "string"'),
+        'true',
+      );
+      await engine.evalModule('''
+import { add, value } from 'app/math';
+globalThis.hostEnvironmentModuleValue = add(value, 1);
+''', name: 'main.mjs');
+      expect(await engine.eval('globalThis.hostEnvironmentModuleValue'), '42');
+      expect((await engine.debugInspect()).moduleNames, contains('app/math'));
+    });
+
+    test('installs minimal web host environment consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.web(
+              locationHref: 'https://example.com:8443/app?q=1#top',
+              userAgent: 'quickjs-test',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('''
+(() => {
+  localStorage.setItem('answer', 42);
+  sessionStorage.setItem('answer', 7);
+  const url = new URL('https://dart.dev/docs?tab=api#top');
+  return [
+    window === globalThis,
+    self === globalThis,
+    location.origin,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigator.userAgent,
+    localStorage.getItem('answer'),
+    sessionStorage.getItem('answer'),
+    localStorage.length,
+    url.hostname,
+    url.pathname
+  ].join('|');
+})()
+'''),
+        'true|true|https://example.com:8443|/app|?q=1|#top|quickjs-test|42|7|1|dart.dev|/docs',
+      );
+    });
+
+    test('installs essential buffer modules consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.essential(),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(await engine.eval('typeof Buffer'), 'undefined');
+      await engine.evalModule('''
+import { Buffer } from 'node:buffer';
+const first = Buffer.from('hello');
+const second = Buffer.from([65, 66, 67]);
+globalThis.essentialBufferValue = [
+  Buffer.isBuffer(first),
+  first.toString(),
+  second.toString(),
+  Buffer.byteLength('hello')
+].join('/');
+''', name: 'main.mjs');
+      expect(
+        await engine.eval('globalThis.essentialBufferValue'),
+        'true/hello/ABC/5',
+      );
+      expect(
+        await engine.evalCommonJs('''
+const { Buffer } = require('node:buffer');
+const value = Buffer.from('cjs');
+module.exports = Buffer.isBuffer(value) + '/' + value.toString() + '/' + value.length;
+''', name: 'main.cjs'),
+        'true/cjs/3',
+      );
+    });
+
+    test('installs essential global Buffer when requested', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.essential(globalBuffer: true),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval(
+          "Buffer.isBuffer(Buffer.from('global')) + '/' + Buffer.from('global').toString()",
+        ),
+        'true/global',
+      );
+    });
+
+    test('installs node preset modules without globals by default', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.node(
+              env: <String, String>{'APP_ENV': 'test'},
+              platform: 'test-platform',
+              cwd: '/workspace/app',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('typeof Buffer + "/" + typeof process'),
+        'undefined/undefined',
+      );
+      await engine.evalModule('''
+import { Buffer } from 'node:buffer';
+import path from 'node:path';
+import process, { env, platform, cwd } from 'node:process';
+import { setTimeout } from 'node:timers';
+globalThis.nodePresetValue = [
+  Buffer.from('node').toString(),
+  path.join('/app', 'src', '..', 'main.js'),
+  path.basename('/app/main.js', '.js'),
+  process.env.APP_ENV,
+  env.APP_ENV,
+  process.platform,
+  platform,
+  process.cwd(),
+  cwd(),
+  typeof setTimeout
+].join('|');
+''', name: 'main.mjs');
+
+      expect(
+        await engine.eval('globalThis.nodePresetValue'),
+        'node|/app/main.js|main|test|test|test-platform|test-platform|/workspace/app|/workspace/app|function',
+      );
+      final modules = (await engine.debugInspect()).moduleNames;
+      expect(
+        modules,
+        containsAll(<String>['buffer', 'path', 'process', 'timers']),
+      );
+    });
+
+    test('installs node preset CommonJS modules consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.node(
+              env: <String, String>{'MODE': 'cjs'},
+              cwd: '/cjs',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalCommonJs('''
+const { Buffer } = require('node:buffer');
+const path = require('node:path');
+const process = require('node:process');
+const timers = require('node:timers');
+module.exports = [
+  Buffer.from('cjs').toString(),
+  path.dirname('/app/main.js'),
+  path.extname('/app/main.js'),
+  process.env.MODE,
+  process.cwd(),
+  typeof timers.clearTimeout
+].join('|');
+''', name: 'main.cjs'),
+        'cjs|/app|.js|cjs|/cjs|function',
+      );
+    });
+
+    test('installs node preset globals when requested', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostEnvironments: <QuickjsHostEnvironment>[
+            QuickjsHostEnvironment.node(
+              globalBuffer: true,
+              globalProcess: true,
+              env: <String, String>{'GLOBAL_MODE': 'enabled'},
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('''
+[
+  Buffer.from('global-node').toString(),
+  process.env.GLOBAL_MODE,
+  process.versions.quickjs
+].join('|')
+'''),
+        'global-node|enabled|0.15.1',
+      );
+    });
+
+    test('loads configured ES host modules consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[_hostMathModule],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalModule('''
+import { add, value } from 'app/math';
+globalThis.hostModuleValue = add(value, 1);
+''', name: 'main.mjs'),
+        'undefined',
+      );
+      expect(await engine.eval('globalThis.hostModuleValue'), '42');
+    });
+
+    test('does not expose host modules as globals consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[_hostBufferModule],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.eval('typeof Buffer + "/" + typeof label'),
+        'undefined/undefined',
+      );
+      await engine.evalModule('''
+import { label } from 'buffer';
+globalThis.hostBufferImportLabel = label;
+''', name: 'main.mjs');
+      expect(
+        await engine.eval('globalThis.hostBufferImportLabel'),
+        'host-buffer',
+      );
+    });
+
+    test('keeps global crypto and node crypto module separate', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
+          hostModules: <QuickjsHostModule>[_hostCryptoModule],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.evalModule('''
+import { label, randomBytes } from 'node:crypto';
+globalThis.hostNodeCryptoValue =
+  typeof crypto.randomUUID + '/' + label + '/' + randomBytes(4);
+''', name: 'main.mjs');
+
+      expect(
+        await engine.eval('globalThis.hostNodeCryptoValue'),
+        'function/node-crypto-module/bytes:4',
+      );
+    });
+
+    test(
+      'normalizes node-prefixed host module specifiers consistently',
+      () async {
+        final engine = await Quickjs.create(
+          options: const QuickjsRuntimeOptions(
+            hostModules: <QuickjsHostModule>[_hostBufferModule],
+          ),
+        );
+        addTearDown(engine.dispose);
+
+        expect(
+          await engine.evalModule('''
+import { byteLength, label } from 'node:buffer';
+globalThis.hostNodeBufferValue = label + '/' + byteLength('abcd');
+''', name: 'main.mjs'),
+          'undefined',
+        );
+        expect(
+          await engine.eval('globalThis.hostNodeBufferValue'),
+          'host-buffer/4',
+        );
+      },
+    );
+
+    test('loads relative dependencies between ES host modules', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[
+            _hostPackageMainModule,
+            _hostPackageDepModule,
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalModule(
+          "import { result } from 'pkg/main'; globalThis.hostPackageValue = result;",
+          name: 'main.mjs',
+        ),
+        'undefined',
+      );
+      expect(await engine.eval('globalThis.hostPackageValue'), '10');
+    });
+
+    test('loads ES host module dependencies from moduleLoader', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostModules: const <QuickjsHostModule>[_hostModuleLoaderMainModule],
+          moduleLoader: (name) => switch (name) {
+            'loader/dep' => 'export const value = 40;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.evalModule('''
+import { result } from 'loader/main';
+globalThis.hostLoaderDependencyValue = result;
+''', name: 'main.mjs');
+
+      expect(await engine.eval('globalThis.hostLoaderDependencyValue'), '41');
+    });
+
+    test('prefers ES host modules over moduleLoader consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostModules: const <QuickjsHostModule>[_hostMathModule],
+          moduleLoader: (name) => switch (name) {
+            'app/math' =>
+              'export const value = -1; export const add = () => -1;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.evalModule('''
+import { add, value } from 'app/math';
+globalThis.hostPreferredValue = add(value, 1);
+''', name: 'main.mjs');
+
+      expect(await engine.eval('globalThis.hostPreferredValue'), '42');
+    });
+
+    test('caches ES host modules in one runtime consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[_hostCounterModule],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.evalModule('''
+import { count as first } from 'app/counter';
+import { count as second } from 'app/counter';
+globalThis.hostCounterResult = first + '/' + second + '/' + globalThis.hostModuleImportCount;
+''', name: 'main.mjs');
+
+      expect(await engine.eval('globalThis.hostCounterResult'), '1/1/1');
+    });
+
+    test('loads configured CommonJS host modules consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[
+            _hostCommonJsModule,
+            _hostCommonJsLocalModule,
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalCommonJs(
+          "const cjs = require('app/cjs'); module.exports = cjs.value;",
+          name: 'main.cjs',
+        ),
+        '7',
+      );
+    });
+
+    test('caches CommonJS host modules in one runtime consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[_hostCommonJsCounterModule],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalCommonJs('''
+const first = require('app/cjs-counter');
+const second = require('app/cjs-counter');
+module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJsImportCount;
+''', name: 'main.cjs'),
+        '1/1/1',
+      );
+    });
+
+    test('loads CommonJS host module dependencies from moduleLoader', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          hostModules: const <QuickjsHostModule>[_hostCommonJsLoaderMainModule],
+          moduleLoader: (name) => switch (name) {
+            'loader/cjs-dep' => 'exports.value = 40;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalCommonJs(
+          "module.exports = require('loader/cjs-main').result;",
+          name: 'main.cjs',
+        ),
+        '41',
+      );
+    });
+
+    test(
+      'prefers CommonJS host modules over moduleLoader consistently',
+      () async {
+        final engine = await Quickjs.create(
+          options: QuickjsRuntimeOptions(
+            hostModules: const <QuickjsHostModule>[_hostCommonJsModule],
+            moduleLoader: (name) => switch (name) {
+              'app/cjs' => 'module.exports = { value: -1 };',
+              'app/local' => 'exports.value = 6;',
+              _ => null,
+            },
+          ),
+        );
+        addTearDown(engine.dispose);
+
+        expect(
+          await engine.evalCommonJs(
+            "module.exports = require('app/cjs').value;",
+            name: 'main.cjs',
+          ),
+          '7',
+        );
+      },
+    );
+
+    test(
+      'normalizes node-prefixed CommonJS host modules consistently',
+      () async {
+        final engine = await Quickjs.create(
+          options: const QuickjsRuntimeOptions(
+            hostModules: <QuickjsHostModule>[_hostCommonJsBufferModule],
+          ),
+        );
+        addTearDown(engine.dispose);
+
+        expect(
+          await engine.evalCommonJs(
+            "module.exports = require('node:buffer').label;",
+            name: 'main.cjs',
+          ),
+          'commonjs-buffer',
+        );
+      },
+    );
+
+    test('rejects duplicate host module specifiers consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          hostModules: <QuickjsHostModule>[
+            QuickjsHostModule.esModule(
+              specifier: 'dup',
+              source: 'export const value = 1;',
+            ),
+            QuickjsHostModule.esModule(
+              specifier: 'node:dup',
+              source: 'export const value = 2;',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evalModule(
+          "import { value } from 'dup'; export default value;",
+          name: 'main.mjs',
+        ),
+        throwsA(isA<JsValueConversionException>()),
       );
     });
 
@@ -1991,13 +2738,14 @@ fail();
       expect(await disabled.eval('typeof window'), 'undefined');
     });
 
-    test('reinstalls host capabilities after stop rebuilds runtime', () async {
+    test('reinstalls host environment after stop rebuilds runtime', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
           hostCapabilities: QuickjsHostCapabilities(
             browserGlobals: QuickjsBrowserGlobals(window: true),
-            crypto: QuickjsCryptoCapabilities(randomUUID: true),
           ),
+          hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
+          hostModules: <QuickjsHostModule>[_hostMathModule],
         ),
       );
       addTearDown(engine.dispose);
@@ -2011,6 +2759,14 @@ fail();
         await engine.eval('typeof crypto.randomUUID() === "string"'),
         'true',
       );
+      expect(
+        await engine.evalModule(
+          "import { value } from 'app/math'; globalThis.rebuiltHostModuleValue = value + 1;",
+          name: 'main.mjs',
+        ),
+        'undefined',
+      );
+      expect(await engine.eval('globalThis.rebuiltHostModuleValue'), '42');
     });
 
     // 同一 runtime 内并发 eval 必须按 FIFO 顺序串行。
