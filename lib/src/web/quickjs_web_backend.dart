@@ -12,6 +12,19 @@ import 'quickjs_web_loader.dart';
 
 const String _exceptionSentinel = '\u001eQuickJS_EXCEPTION';
 
+JSPromise<JSString> _callbackFutureToJsPromise(Future<JSString> future) {
+  return JSPromise<JSString>(
+    ((JSFunction resolve, JSFunction reject) {
+      future.then(
+        (value) => resolve.callAsFunction(resolve, value),
+        onError: (Object error, StackTrace _) {
+          reject.callAsFunction(reject, error.toString().toJS);
+        },
+      );
+    }).toJS,
+  );
+}
+
 /// Flutter Web 使用的 QuickJS WASM backend。
 ///
 /// Dart 侧只通过 `quickjsNgWeb` 全局对象发消息，实际 QuickJS 执行在 Web Worker 中。
@@ -228,14 +241,15 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   ) async {
     _ensureOpen();
     JSPromise<JSString> callbackAdapter(JSString argsJson) {
-      return (() async {
+      final future = () async {
         final decoded = jsonDecode(argsJson.toDart);
         final args = decoded is List
             ? [for (final item in decoded) decodeCallbackWireValue(item)]
             : <Object?>[];
         final result = await callback(args);
         return jsonEncode(_streamRegistry.encodeCallbackResult(result)).toJS;
-      })().toJS;
+      }();
+      return _callbackFutureToJsPromise(future);
     }
 
     await _host

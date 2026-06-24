@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../diagnostics/quickjs_exception.dart';
@@ -13,13 +14,16 @@ const _fetchProviderName = 'fetch.request';
 ///
 /// Native platforms use `dart:io`'s `HttpClient` through `package:http`.
 /// Web uses the browser's native `fetch`. Requests are restricted to the
-/// explicit [allowedOrigins] set and redirects are rejected.
+/// explicit [allowedOrigins] set. Redirect targets are checked against the
+/// same allow-list before they are followed.
 final class QuickjsFetchMount extends QuickjsHostMount {
   factory QuickjsFetchMount({
     required Set<String> allowedOrigins,
     Duration timeout = const Duration(seconds: 30),
     int maxRequestBytes = 1024 * 1024,
     int maxResponseBytes = 10 * 1024 * 1024,
+    int maxRedirects = 5,
+    Map<String, String> defaultHeaders = const <String, String>{},
   }) {
     if (allowedOrigins.isEmpty) {
       throw ArgumentError.value(
@@ -45,9 +49,19 @@ final class QuickjsFetchMount extends QuickjsHostMount {
         'must not be negative',
       );
     }
+    if (maxRedirects < 0) {
+      throw ArgumentError.value(
+        maxRedirects,
+        'maxRedirects',
+        'must not be negative',
+      );
+    }
 
     final origins = Set<String>.unmodifiable(
       allowedOrigins.map(_normalizeAllowedOrigin),
+    );
+    final normalizedDefaultHeaders = Map<String, String>.unmodifiable(
+      _normalizeRequestHeaders(defaultHeaders),
     );
     final provider = QuickjsHostProvider.async(
       name: _fetchProviderName,
@@ -60,6 +74,8 @@ final class QuickjsFetchMount extends QuickjsHostMount {
         timeout: timeout,
         maxRequestBytes: maxRequestBytes,
         maxResponseBytes: maxResponseBytes,
+        maxRedirects: maxRedirects,
+        defaultHeaders: normalizedDefaultHeaders,
       ),
     );
     return QuickjsFetchMount._(
@@ -67,6 +83,8 @@ final class QuickjsFetchMount extends QuickjsHostMount {
       timeout: timeout,
       maxRequestBytes: maxRequestBytes,
       maxResponseBytes: maxResponseBytes,
+      maxRedirects: maxRedirects,
+      defaultHeaders: normalizedDefaultHeaders,
       provider: provider,
     );
   }
@@ -76,13 +94,23 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     required this.timeout,
     required this.maxRequestBytes,
     required this.maxResponseBytes,
+    required this.maxRedirects,
+    required this.defaultHeaders,
     required QuickjsHostProvider provider,
   }) : super(
          name: 'fetch',
          environmentPatches: <QuickjsHostScript>[
            QuickjsHostScript(
              name: 'host:fetch.js',
-             globals: const <String>['fetch', 'Headers', 'Response'],
+             globals: const <String>[
+               'fetch',
+               'Headers',
+               'Request',
+               'Response',
+               'AbortController',
+               'AbortSignal',
+               'XMLHttpRequest',
+             ],
              source: _fetchHostScript(_fetchProviderName),
            ),
          ],
@@ -100,6 +128,12 @@ final class QuickjsFetchMount extends QuickjsHostMount {
 
   /// Maximum streamed response body size.
   final int maxResponseBytes;
+
+  /// Maximum number of redirects followed by one request.
+  final int maxRedirects;
+
+  /// Headers merged into every request unless overridden by JavaScript.
+  final Map<String, String> defaultHeaders;
 }
 
 Future<Object?> _sendFetchRequest(
@@ -109,6 +143,8 @@ Future<Object?> _sendFetchRequest(
   required Duration timeout,
   required int maxRequestBytes,
   required int maxResponseBytes,
+  required int maxRedirects,
+  required Map<String, String> defaultHeaders,
 }) async {
   if (args.length != 1 || args.single is! Map) {
     throw const JsValueConversionException(
@@ -135,8 +171,17 @@ Future<Object?> _sendFetchRequest(
   if (!RegExp(r"^[!#$%&'*+.^_`|~0-9A-Z-]+$").hasMatch(method)) {
     throw JsValueConversionException('QuickJS fetch method is invalid');
   }
-  final headers = _normalizeRequestHeaders(payload['headers']);
+  final headers = <String, String>{
+    ...defaultHeaders,
+    ..._normalizeRequestHeaders(payload['headers']),
+  };
   final body = _normalizeRequestBody(payload['body']);
+  final redirectMode = '${payload['redirect'] ?? 'follow'}';
+  if (redirectMode != 'follow' &&
+      redirectMode != 'error' &&
+      redirectMode != 'manual') {
+    throw JsValueConversionException('QuickJS fetch redirect mode is invalid');
+  }
   if (body.length > maxRequestBytes) {
     throw JsValueConversionException(
       'QuickJS fetch request body exceeds $maxRequestBytes bytes',
@@ -152,16 +197,81 @@ Future<Object?> _sendFetchRequest(
   unawaited(context.cancelled.then((_) => client.close()));
   try {
     context.throwIfCancelled();
-    final request = http.Request(method, uri)
-      ..followRedirects = false
-      ..persistentConnection = false
-      ..headers.addAll(headers);
-    if (body.isNotEmpty) {
-      request.bodyBytes = body;
+    var currentUri = uri;
+    var currentMethod = method;
+    var currentBody = body;
+    var redirectCount = 0;
+    http.StreamedResponse response;
+    while (true) {
+      final request = http.Request(currentMethod, currentUri)
+        ..followRedirects = kIsWeb ? redirectMode == 'follow' : false
+        ..persistentConnection = false
+        ..headers.addAll(headers);
+      if (currentBody.isNotEmpty) request.bodyBytes = currentBody;
+      try {
+        response = await client.send(request).timeout(timeout);
+      } on http.ClientException {
+        if (kIsWeb && redirectMode == 'manual') {
+          return <String, Object?>{
+            'status': 0,
+            'statusText': '',
+            'url': currentUri.toString(),
+            'redirected': false,
+            'type': 'opaqueredirect',
+            'headers': const <String, String>{},
+            'body': Uint8List(0),
+          };
+        }
+        rethrow;
+      }
+      if (kIsWeb) break;
+      final location = response.headers['location'];
+      final isRedirect =
+          response.statusCode >= 300 &&
+          response.statusCode < 400 &&
+          location != null;
+      if (!isRedirect || redirectMode == 'manual') break;
+      if (redirectMode == 'error') {
+        throw StateError(
+          'QuickJS fetch redirect is not allowed by redirect:error',
+        );
+      }
+      if (redirectCount >= maxRedirects) {
+        throw StateError('QuickJS fetch exceeded $maxRedirects redirects');
+      }
+      final nextUri = currentUri.resolve(location);
+      if ((nextUri.scheme != 'http' && nextUri.scheme != 'https') ||
+          nextUri.host.isEmpty ||
+          nextUri.userInfo.isNotEmpty ||
+          !allowedOrigins.contains(nextUri.origin)) {
+        throw StateError(
+          'QuickJS fetch redirect origin is not allowed: ${nextUri.origin}',
+        );
+      }
+      await response.stream.drain<void>();
+      redirectCount++;
+      if (nextUri.origin != currentUri.origin) {
+        headers.remove('authorization');
+        headers.remove('cookie');
+        headers.remove('proxy-authorization');
+      }
+      if (response.statusCode == 303 ||
+          ((response.statusCode == 301 || response.statusCode == 302) &&
+              currentMethod == 'POST')) {
+        currentMethod = 'GET';
+        currentBody = Uint8List(0);
+        headers.remove('content-type');
+      }
+      currentUri = nextUri;
     }
-    final response = await client.send(request).timeout(timeout);
-    if (response.statusCode >= 300 && response.statusCode < 400) {
-      throw StateError('QuickJS fetch redirects are disabled');
+    final responseUri = switch (response) {
+      http.BaseResponseWithUrl(:final url) => url,
+      _ => response.request?.url ?? uri,
+    };
+    if (!allowedOrigins.contains(responseUri.origin)) {
+      throw StateError(
+        'QuickJS fetch redirect origin is not allowed: ${responseUri.origin}',
+      );
     }
     final contentLength = response.contentLength;
     if (contentLength != null && contentLength > maxResponseBytes) {
@@ -185,13 +295,17 @@ Future<Object?> _sendFetchRequest(
     return <String, Object?>{
       'status': response.statusCode,
       'statusText': response.reasonPhrase ?? '',
-      'url': response.request?.url.toString() ?? uri.toString(),
+      'url': responseUri.toString(),
+      'redirected': redirectCount > 0 || responseUri != uri,
+      'type': 'basic',
       'headers': response.headers,
       'body': builder.takeBytes(),
     };
   } on TimeoutException {
     client.close();
     throw StateError('QuickJS fetch timed out after $timeout');
+  } on http.ClientException catch (error) {
+    throw StateError('QuickJS fetch network error: ${error.message}');
   } finally {
     client.close();
   }
@@ -327,8 +441,8 @@ String _fetchHostScript(String providerName) {
       this.url = payload.url;
       this.headers = new QuickjsHeaders(payload.headers);
       this.ok = this.status >= 200 && this.status < 300;
-      this.redirected = false;
-      this.type = 'basic';
+      this.redirected = Boolean(payload.redirected);
+      this.type = payload.type || 'basic';
       this.bodyUsed = false;
       this._bytes = new Uint8Array(payload.body);
     }
@@ -351,6 +465,8 @@ String _fetchHostScript(String providerName) {
         url: this.url,
         headers: this.headers._toObject(),
         body: new Uint8Array(this._bytes),
+        redirected: this.redirected,
+        type: this.type,
       });
     }
   }
@@ -364,22 +480,206 @@ String _fetchHostScript(String providerName) {
     throw new TypeError('fetch body must be a string, ArrayBuffer, or Uint8Array');
   };
 
+  class QuickjsRequest {
+    constructor(input, init = {}) {
+      const source = input instanceof QuickjsRequest ? input : null;
+      this.url = source ? source.url : String(input && (input.href || input.url || input));
+      this.method = String(init.method || (source && source.method) || 'GET').toUpperCase();
+      this.headers = new QuickjsHeaders(init.headers || (source && source.headers) || {});
+      this.body = normalizeBody(init.body !== undefined ? init.body : source && source.body);
+      this.redirect = String(init.redirect || (source && source.redirect) || 'follow');
+      this.credentials = String(init.credentials || (source && source.credentials) || 'same-origin');
+    }
+    clone() { return new QuickjsRequest(this); }
+  }
+
   const fetch = async (input, init = {}) => {
-    const url = typeof input === 'string' ? input : String(input && (input.href || input.url || input));
-    const headers = new QuickjsHeaders(init.headers || {});
+    const request = new QuickjsRequest(input, init);
     const payload = await provider({
-      url,
-      method: String(init.method || 'GET').toUpperCase(),
-      headers: headers._toObject(),
-      body: normalizeBody(init.body),
+      url: request.url,
+      method: request.method,
+      headers: request.headers._toObject(),
+      body: request.body,
+      redirect: request.redirect,
     });
     return new QuickjsResponse(payload);
   };
 
+  class QuickjsAbortSignal {
+    constructor() {
+      this.aborted = false;
+      this.reason = undefined;
+      this.onabort = null;
+      this._listeners = [];
+    }
+    addEventListener(type, callback, options) {
+      if (type !== 'abort' || typeof callback !== 'function') return;
+      this._listeners.push({ callback, once: Boolean(options && options.once) });
+    }
+    removeEventListener(type, callback) {
+      if (type === 'abort') {
+        this._listeners = this._listeners.filter((entry) => entry.callback !== callback);
+      }
+    }
+    throwIfAborted() {
+      if (this.aborted) throw this.reason || new Error('This operation was aborted');
+    }
+    _abort(reason) {
+      if (this.aborted) return;
+      this.aborted = true;
+      this.reason = reason === undefined ? new Error('This operation was aborted') : reason;
+      const event = { type: 'abort', target: this, currentTarget: this };
+      if (typeof this.onabort === 'function') this.onabort.call(this, event);
+      const listeners = this._listeners.slice();
+      this._listeners = this._listeners.filter((entry) => !entry.once);
+      for (const entry of listeners) entry.callback.call(this, event);
+    }
+    static abort(reason) {
+      const controller = new QuickjsAbortController();
+      controller.abort(reason);
+      return controller.signal;
+    }
+  }
+
+  class QuickjsAbortController {
+    constructor() { this.signal = new QuickjsAbortSignal(); }
+    abort(reason) { this.signal._abort(reason); }
+  }
+
+  class QuickjsXMLHttpRequest {
+    constructor() {
+      this.readyState = 0;
+      this.status = 0;
+      this.statusText = '';
+      this.responseType = '';
+      this.response = null;
+      this.responseText = '';
+      this.responseURL = '';
+      this.timeout = 0;
+      this.withCredentials = false;
+      this.onreadystatechange = null;
+      this.onloadstart = null;
+      this.onload = null;
+      this.onloadend = null;
+      this.onerror = null;
+      this.ontimeout = null;
+      this.onabort = null;
+      this.onprogress = null;
+      this.upload = { addEventListener() {}, removeEventListener() {} };
+      this._listeners = Object.create(null);
+      this._headers = new QuickjsHeaders();
+      this._responseHeaders = new QuickjsHeaders();
+      this._aborted = false;
+      this._sent = false;
+    }
+    open(method, url, async = true, username, password) {
+      if (async === false) throw new Error('Synchronous XMLHttpRequest is not supported');
+      this._method = String(method).toUpperCase();
+      this._url = String(url);
+      this._headers = new QuickjsHeaders();
+      this._aborted = false;
+      this._sent = false;
+      this._setReadyState(1);
+    }
+    setRequestHeader(name, value) {
+      if (this.readyState !== 1 || this._sent) throw new Error('InvalidStateError');
+      this._headers.append(name, value);
+    }
+    getResponseHeader(name) {
+      return this.readyState < 2 ? null : this._responseHeaders.get(name);
+    }
+    getAllResponseHeaders() {
+      if (this.readyState < 2) return '';
+      return Array.from(this._responseHeaders.entries()).map(([k, v]) => k + ': ' + v).join('\\r\\n');
+    }
+    overrideMimeType() {}
+    addEventListener(type, callback) {
+      if (typeof callback !== 'function') return;
+      (this._listeners[type] || (this._listeners[type] = [])).push(callback);
+    }
+    removeEventListener(type, callback) {
+      const list = this._listeners[type];
+      if (list) this._listeners[type] = list.filter((item) => item !== callback);
+    }
+    _dispatch(type) {
+      const event = { type, target: this, currentTarget: this, lengthComputable: false, loaded: 0, total: 0 };
+      const handler = this['on' + type];
+      if (typeof handler === 'function') handler.call(this, event);
+      for (const listener of this._listeners[type] || []) listener.call(this, event);
+    }
+    _setReadyState(value) {
+      this.readyState = value;
+      this._dispatch('readystatechange');
+    }
+    abort() {
+      if (this.readyState === 0 || this.readyState === 4) return;
+      this._aborted = true;
+      this.status = 0;
+      this._setReadyState(4);
+      this._dispatch('abort');
+      this._dispatch('loadend');
+    }
+    async send(body = null) {
+      if (this.readyState !== 1 || this._sent) throw new Error('InvalidStateError');
+      this._sent = true;
+      this._dispatch('loadstart');
+      let timer = null;
+      try {
+        const request = provider({
+          url: this._url,
+          method: this._method,
+          headers: this._headers._toObject(),
+          body: normalizeBody(body),
+          redirect: 'follow',
+        });
+        const payload = this.timeout > 0
+          ? await Promise.race([
+              request,
+              new Promise((_, reject) => { timer = setTimeout(() => reject({ __xhrTimeout: true }), this.timeout); }),
+            ])
+          : await request;
+        if (timer !== null) clearTimeout(timer);
+        if (this._aborted) return;
+        this.status = payload.status;
+        this.statusText = payload.statusText;
+        this.responseURL = payload.url;
+        this._responseHeaders = new QuickjsHeaders(payload.headers);
+        this._setReadyState(2);
+        this._setReadyState(3);
+        const bytes = new Uint8Array(payload.body);
+        const text = decodeUtf8(bytes);
+        if (this.responseType === 'arraybuffer') {
+          this.response = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        } else if (this.responseType === 'json') {
+          this.response = text === '' ? null : JSON.parse(text);
+        } else {
+          this.responseText = text;
+          this.response = text;
+        }
+        this._setReadyState(4);
+        this._dispatch('load');
+        this._dispatch('loadend');
+      } catch (error) {
+        if (timer !== null) clearTimeout(timer);
+        if (this._aborted) return;
+        this.status = 0;
+        this._setReadyState(4);
+        this._dispatch(error && error.__xhrTimeout ? 'timeout' : 'error');
+        this._dispatch('loadend');
+      }
+    }
+  }
+  Object.assign(QuickjsXMLHttpRequest, { UNSENT: 0, OPENED: 1, HEADERS_RECEIVED: 2, LOADING: 3, DONE: 4 });
+  Object.assign(QuickjsXMLHttpRequest.prototype, { UNSENT: 0, OPENED: 1, HEADERS_RECEIVED: 2, LOADING: 3, DONE: 4 });
+
   Object.defineProperties(globalThis, {
     fetch: { value: fetch, configurable: true, enumerable: false, writable: true },
     Headers: { value: QuickjsHeaders, configurable: true, enumerable: false, writable: true },
+    Request: { value: QuickjsRequest, configurable: true, enumerable: false, writable: true },
     Response: { value: QuickjsResponse, configurable: true, enumerable: false, writable: true },
+    AbortController: { value: QuickjsAbortController, configurable: true, enumerable: false, writable: true },
+    AbortSignal: { value: QuickjsAbortSignal, configurable: true, enumerable: false, writable: true },
+    XMLHttpRequest: { value: QuickjsXMLHttpRequest, configurable: true, enumerable: false, writable: true },
   });
 })();
 ''';

@@ -147,7 +147,7 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: 'Fetch',
     description:
-        '通过 QuickjsFetchMount 显式允许目标 origin，Native 使用 HttpClient，Web 使用浏览器 fetch。',
+        '验证 QuickjsFetchMount 的 Fetch、Request、Response、重定向、自定义配置与 Axios/XHR 兼容协议。',
     builder: (_) => const FetchPage(),
   ),
 ];

@@ -144,8 +144,21 @@ void main() {
     }
     expect(title, findsOneWidget);
     expect(find.textContaining('QuickjsFetchMount'), findsOneWidget);
-    expect(find.textContaining('HttpClient'), findsOneWidget);
-    expect(find.textContaining('浏览器 fetch'), findsOneWidget);
+    expect(find.textContaining('重定向'), findsOneWidget);
+    expect(find.textContaining('Axios/XHR'), findsOneWidget);
+
+    await tester.ensureVisible(title);
+    await tester.pumpAndSettle();
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    final axiosScenario = find.text('真实 Axios 1.6.2');
+    await tester.scrollUntilVisible(
+      axiosScenario,
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(axiosScenario, findsOneWidget);
+    expect(find.textContaining('UMD asset'), findsOneWidget);
   });
 
   testWidgets('registers host modules example page', (

@@ -526,7 +526,15 @@ final appApi = QuickjsHostMount(
   只实现明确声明的最小子集，不伪装成完整浏览器环境。
 - [x] `fetch`：`QuickjsFetchMount` 显式安装 Promise-based Fetch API；Native 底层使用 Dart
   `HttpClient`，Web 底层使用浏览器原生 `fetch`。支持 origin allowlist、超时、请求/响应大小限制、
-  生命周期取消、Headers，以及 Response text/json/arrayBuffer/clone；自动重定向关闭。
+  生命周期取消、默认请求头、Headers/Request/Response，以及 text/json/arrayBuffer/clone。
+  支持 `follow` / `error` / `manual` 重定向模式、最大跳转次数，并对每一跳重新校验 origin。
+  Web 受 Browser Fetch 限制，`manual` 优先返回可见的 3xx 响应，浏览器隐藏响应时由 mount
+  统一转换为 `opaqueredirect`；`maxRedirects` 和逐跳校验仅适用于 Native，Web 在响应后校验
+  最终 origin。
+  同一 mount 额外提供异步 `XMLHttpRequest` 兼容层，覆盖 Axios XHR adapter 所需的状态、事件、
+  header、timeout、abort、text/json/arraybuffer 响应能力，并提供 `AbortController` / `AbortSignal`；
+  已使用 Axios 1.6.2 UMD bundle 在 Native 与真实 Chrome 中验证 GET、POST、404、timeout、
+  cancel 和重定向；不支持同步 XHR。
 - [~] Web Crypto：环境补全 `globalThis.crypto`；`QuickjsWebCryptoMount()`
   已覆盖 `crypto.randomUUID()`、`crypto.getRandomValues()`，并通过 async provider 支持
   `crypto.subtle.digest()` 的 SHA-1 / SHA-256 / SHA-384 / SHA-512。该 preset 只作为最小兼容示例，
@@ -660,7 +668,9 @@ final appApi = QuickjsHostMount(
 - [x] Web 宿主环境 example 页面覆盖 `QuickjsHostMount.web()`、默认未启用检查、
   `window` / `self` / `location` / `navigator`、内存版 storage、轻量 `URL` 和 stop 重建后恢复。
 - [x] Fetch example 页面覆盖 `QuickjsFetchMount` origin allowlist、Native HttpClient、Web browser
-  fetch 和 Response JSON 读取；自动化测试使用本地 HTTP server 验证请求/响应与 origin 拒绝。
+  fetch 和 Response JSON 读取；自动化测试使用本地 HTTP server 验证请求/响应、默认 header、
+  重定向策略、origin 拒绝和 Axios 风格 XHR 调用；Example asset 内置 Axios 1.6.2 UMD bundle，
+  页面可直接验证真实 Axios 的 GET、POST、404、timeout、cancel 和重定向。
 - [x] Web Crypto example 页面覆盖 `QuickjsWebCryptoMount()`、默认未启用检查、
   `crypto.randomUUID()`、`crypto.getRandomValues()`、Flutter 原生 `crypto.subtle.digest()` 和 stop
   重建后恢复。
