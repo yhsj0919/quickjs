@@ -8,6 +8,59 @@ import 'dart:convert';
 /// `null` means the module cannot be resolved.
 typedef QuickjsModuleLoader = FutureOr<String?> Function(String moduleName);
 
+/// Callback used by an async host provider.
+///
+/// JavaScript wrappers call providers through a Promise-returning bridge. The
+/// callback receives already-converted JavaScript arguments and may return any
+/// value supported by the structured value codec.
+typedef QuickjsHostProviderCallback =
+    FutureOr<Object?> Function(
+      List<Object?> args,
+      QuickjsHostProviderContext context,
+    );
+
+/// Lifecycle context for one async host-provider invocation.
+///
+/// [cancelled] completes when the owning runtime is stopped, disposed, or
+/// rebuilt. Provider implementations that own cancellable work should stop it
+/// promptly, then call [throwIfCancelled] before returning a value.
+final class QuickjsHostProviderContext {
+  /// Creates an invocation context.
+  ///
+  /// Provider users normally receive this from the runtime rather than
+  /// constructing one directly.
+  QuickjsHostProviderContext();
+
+  final Completer<void> _cancelled = Completer<void>();
+  Object? _cancellationReason;
+
+  /// Completes when this invocation no longer belongs to a live runtime.
+  Future<void> get cancelled => _cancelled.future;
+
+  /// Whether the owning runtime has cancelled this invocation.
+  bool get isCancelled => _cancelled.isCompleted;
+
+  /// The runtime lifecycle error that caused cancellation, when available.
+  Object? get cancellationReason => _cancellationReason;
+
+  /// Throws [cancellationReason] if this invocation has been cancelled.
+  void throwIfCancelled() {
+    final reason = _cancellationReason;
+    if (reason != null) {
+      throw reason;
+    }
+  }
+
+  /// Cancels this invocation with [reason]. Repeated calls are ignored.
+  void cancel(Object reason) {
+    if (_cancelled.isCompleted) {
+      return;
+    }
+    _cancellationReason = reason;
+    _cancelled.complete();
+  }
+}
+
 /// Browser-like global aliases that can be explicitly installed into a runtime.
 final class QuickjsBrowserGlobals {
   const QuickjsBrowserGlobals({this.window = false, this.self = false});
@@ -46,13 +99,23 @@ final class QuickjsHostCapabilities {
 /// rebuilt after `stop()`. Use them for opt-in globals or polyfills such as
 /// `crypto`, `Buffer`, `location`, or other application-specific objects.
 final class QuickjsHostScript {
-  const QuickjsHostScript({required this.name, required this.source});
+  const QuickjsHostScript({
+    required this.name,
+    required this.source,
+    this.globals = const <String>[],
+  });
 
   /// Source name used in QuickJS stack traces.
   final String name;
 
   /// JavaScript source to evaluate in the runtime.
   final String source;
+
+  /// Global names installed by this script.
+  ///
+  /// Mount validation rejects duplicate declared globals before rebuilding a
+  /// runtime. Scripts that do not install globals may leave this empty.
+  final List<String> globals;
 }
 
 /// JavaScript module source explicitly registered with a runtime.
@@ -105,16 +168,61 @@ enum QuickjsHostModuleFormat {
   commonJs,
 }
 
-/// Explicit host environment bundle.
+/// Host function implementation available to startup scripts or host modules.
 ///
-/// This is a composable container for opt-in globals, startup scripts, and host
-/// modules. It does not expose any browser, Node, network, or filesystem API by
-/// itself; callers must pass concrete capabilities and sources explicitly.
-final class QuickjsHostEnvironment {
-  const QuickjsHostEnvironment({
-    this.hostCapabilities = QuickjsHostCapabilities.none,
-    this.hostScripts = const <QuickjsHostScript>[],
-    this.hostModules = const <QuickjsHostModule>[],
+/// Providers are intentionally not exposed as user-facing globals by
+/// themselves. A startup script or host module should wrap a provider into the
+/// desired JavaScript API shape, such as `fetch()` or `crypto.subtle.digest()`.
+final class QuickjsHostProvider {
+  const QuickjsHostProvider.async({
+    required this.name,
+    required this.callback,
+    this.debugName,
+    this.implementation = QuickjsHostProviderImplementation.dart,
+  });
+
+  /// Runtime-scoped provider name used by JavaScript wrappers.
+  final String name;
+
+  /// Optional readable name for debug snapshots.
+  final String? debugName;
+
+  /// Declared source of the provider implementation.
+  ///
+  /// This is inspector metadata and does not change callback behavior. All
+  /// current providers use the asynchronous callback bridge.
+  final QuickjsHostProviderImplementation implementation;
+
+  /// Dart/Flutter implementation. JS receives a Promise for each call.
+  ///
+  /// The per-call context is cancelled when the runtime stops, is disposed,
+  /// or is rebuilt. Await [QuickjsHostProviderContext.cancelled] when the
+  /// underlying operation supports cooperative cancellation.
+  final QuickjsHostProviderCallback callback;
+}
+
+/// Source of an async host-provider implementation.
+enum QuickjsHostProviderImplementation {
+  /// Pure Dart or Flutter code running in the host isolate.
+  dart,
+
+  /// A Dart callback backed by a platform API or platform channel.
+  platform,
+
+  /// A Dart callback backed by a browser/Web API.
+  web,
+}
+
+/// Named bundle of environment patches, modules, and host providers.
+///
+/// A mount installs one composable capability bundle into a runtime.
+base class QuickjsHostMount {
+  const QuickjsHostMount({
+    required this.name,
+    this.capabilities = QuickjsHostCapabilities.none,
+    this.environmentPatches = const <QuickjsHostScript>[],
+    this.modules = const <QuickjsHostModule>[],
+    this.providers = const <QuickjsHostProvider>[],
   });
 
   /// Creates a minimal browser-like global environment.
@@ -123,46 +231,32 @@ final class QuickjsHostEnvironment {
   /// startup-script implementations for `location`, `navigator`, `URL`,
   /// `localStorage`, and `sessionStorage`. It does not install `fetch`, Web
   /// Crypto, DOM APIs, networking, or platform storage.
-  factory QuickjsHostEnvironment.web({
+  factory QuickjsHostMount.web({
     String locationHref = 'about:blank',
     String userAgent = 'QuickJS',
     bool window = true,
     bool self = true,
     bool storage = true,
   }) {
-    return QuickjsHostEnvironment(
-      hostCapabilities: QuickjsHostCapabilities(
+    return QuickjsHostMount(
+      name: 'web',
+      capabilities: QuickjsHostCapabilities(
         browserGlobals: QuickjsBrowserGlobals(window: window, self: self),
       ),
-      hostScripts: <QuickjsHostScript>[
+      environmentPatches: <QuickjsHostScript>[
         QuickjsHostScript(
           name: 'host:web-globals.js',
+          globals: <String>[
+            'location',
+            'navigator',
+            'URL',
+            if (storage) 'localStorage',
+            if (storage) 'sessionStorage',
+          ],
           source: _webHostScriptSource(
             locationHref: locationHref,
             userAgent: userAgent,
             storage: storage,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Creates a minimal Web Crypto-like global environment.
-  ///
-  /// This installs `globalThis.crypto` with synchronous compatibility helpers
-  /// for `randomUUID()` and `getRandomValues()`. It does not install
-  /// `crypto.subtle` and does not expose platform-native random sources yet.
-  factory QuickjsHostEnvironment.webCrypto({
-    bool randomUUID = true,
-    bool getRandomValues = true,
-  }) {
-    return QuickjsHostEnvironment(
-      hostScripts: <QuickjsHostScript>[
-        QuickjsHostScript(
-          name: 'host:web-crypto.js',
-          source: _webCryptoHostScriptSource(
-            randomUUID: randomUUID,
-            getRandomValues: getRandomValues,
           ),
         ),
       ],
@@ -174,16 +268,18 @@ final class QuickjsHostEnvironment {
   /// The current essential preset installs `buffer` / `node:buffer` as both an
   /// ES module and a CommonJS module. Set [globalBuffer] to true to also install
   /// `globalThis.Buffer` as a startup global.
-  factory QuickjsHostEnvironment.essential({bool globalBuffer = false}) {
-    return QuickjsHostEnvironment(
-      hostScripts: <QuickjsHostScript>[
+  factory QuickjsHostMount.essential({bool globalBuffer = false}) {
+    return QuickjsHostMount(
+      name: 'essential',
+      environmentPatches: <QuickjsHostScript>[
         if (globalBuffer)
           const QuickjsHostScript(
             name: 'host:essential-buffer-global.js',
+            globals: <String>['Buffer'],
             source: _essentialBufferGlobalScript,
           ),
       ],
-      hostModules: const <QuickjsHostModule>[
+      modules: const <QuickjsHostModule>[
         QuickjsHostModule.esModule(
           specifier: 'buffer',
           source: _essentialBufferEsModuleSource,
@@ -203,7 +299,7 @@ final class QuickjsHostEnvironment {
   /// `Buffer` and `process` are not installed as globals unless explicitly
   /// requested. It does not install Node `crypto`, `fs`, networking, or a full
   /// npm resolver.
-  factory QuickjsHostEnvironment.node({
+  factory QuickjsHostMount.node({
     bool globalBuffer = false,
     bool globalProcess = false,
     Map<String, String> env = const <String, String>{},
@@ -215,21 +311,24 @@ final class QuickjsHostEnvironment {
       platform: platform,
       cwd: cwd,
     );
-    return QuickjsHostEnvironment(
-      hostScripts: <QuickjsHostScript>[
+    return QuickjsHostMount(
+      name: 'node',
+      environmentPatches: <QuickjsHostScript>[
         if (globalBuffer)
           const QuickjsHostScript(
             name: 'host:node-buffer-global.js',
+            globals: <String>['Buffer'],
             source: _essentialBufferGlobalScript,
           ),
         if (globalProcess)
           QuickjsHostScript(
             name: 'host:node-process-global.js',
+            globals: const <String>['process'],
             source:
                 '$processCoreSource\nObject.defineProperty(globalThis, "process", { value: process, configurable: true, enumerable: false, writable: true });\n',
           ),
       ],
-      hostModules: <QuickjsHostModule>[
+      modules: <QuickjsHostModule>[
         const QuickjsHostModule.esModule(
           specifier: 'buffer',
           source: _essentialBufferEsModuleSource,
@@ -267,17 +366,20 @@ final class QuickjsHostEnvironment {
     );
   }
 
-  /// Empty host environment bundle.
-  static const empty = QuickjsHostEnvironment();
+  /// Stable name used for conflict detection and debug inspection.
+  final String name;
 
-  /// Host capabilities installed before [hostScripts].
-  final QuickjsHostCapabilities hostCapabilities;
+  /// Runtime capabilities installed before environment patches.
+  final QuickjsHostCapabilities capabilities;
 
-  /// Startup/bootstrap scripts installed in list order.
-  final List<QuickjsHostScript> hostScripts;
+  /// Ordered scripts that complete the runtime global environment.
+  final List<QuickjsHostScript> environmentPatches;
 
-  /// Host modules available to `import` and `require`.
-  final List<QuickjsHostModule> hostModules;
+  /// ES module and CommonJS definitions included in this mount.
+  final List<QuickjsHostModule> modules;
+
+  /// Dart/Flutter providers included in this mount.
+  final List<QuickjsHostProvider> providers;
 }
 
 const _essentialBufferCoreSource = r'''
@@ -485,80 +587,6 @@ module.exports = {
 };
 ''';
 
-String _webCryptoHostScriptSource({
-  required bool randomUUID,
-  required bool getRandomValues,
-}) {
-  final installRandomUuid = randomUUID ? 'true' : 'false';
-  final installGetRandomValues = getRandomValues ? 'true' : 'false';
-  return '''
-(() => {
-  const crypto = (globalThis.crypto && typeof globalThis.crypto === 'object')
-    ? globalThis.crypto
-    : {};
-  const define = (name, value) => Object.defineProperty(crypto, name, {
-    value,
-    configurable: true,
-    enumerable: true,
-    writable: true,
-  });
-  const randomByte = () => Math.floor(Math.random() * 256) & 0xff;
-  const fillRandomBytes = (view) => {
-    for (let i = 0; i < view.length; i++) {
-      view[i] = randomByte();
-    }
-  };
-  const assertIntegerTypedArray = (value) => {
-    if (
-      !value ||
-      typeof value !== 'object' ||
-      !ArrayBuffer.isView(value) ||
-      value instanceof DataView ||
-      value instanceof Float32Array ||
-      value instanceof Float64Array
-    ) {
-      throw new TypeError('crypto.getRandomValues() requires an integer TypedArray');
-    }
-    if (value.byteLength > 65536) {
-      throw new Error('crypto.getRandomValues() quota exceeded');
-    }
-    return value;
-  };
-  if ($installGetRandomValues) {
-    define('getRandomValues', (array) => {
-      const target = assertIntegerTypedArray(array);
-      fillRandomBytes(new Uint8Array(target.buffer, target.byteOffset, target.byteLength));
-      return target;
-    });
-  }
-  if ($installRandomUuid) {
-    const hex = [];
-    for (let i = 0; i < 256; i++) {
-      hex[i] = (i + 0x100).toString(16).slice(1);
-    }
-    define('randomUUID', () => {
-      const bytes = new Uint8Array(16);
-      fillRandomBytes(bytes);
-      bytes[6] = (bytes[6] & 0x0f) | 0x40;
-      bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      return hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + '-' +
-        hex[bytes[4]] + hex[bytes[5]] + '-' +
-        hex[bytes[6]] + hex[bytes[7]] + '-' +
-        hex[bytes[8]] + hex[bytes[9]] + '-' +
-        hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] +
-        hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]];
-    });
-  }
-  Object.defineProperty(globalThis, 'crypto', {
-    value: crypto,
-    configurable: true,
-    enumerable: false,
-    writable: true,
-  });
-})()
-''';
-}
-
 String _webHostScriptSource({
   required String locationHref,
   required String userAgent,
@@ -652,9 +680,10 @@ final class QuickjsRuntimeOptions {
     this.stackLimitBytes,
     this.moduleLoader,
     this.hostCapabilities = QuickjsHostCapabilities.none,
-    this.hostScripts = const <QuickjsHostScript>[],
-    this.hostModules = const <QuickjsHostModule>[],
-    this.hostEnvironments = const <QuickjsHostEnvironment>[],
+    this.environmentPatches = const <QuickjsHostScript>[],
+    this.modules = const <QuickjsHostModule>[],
+    this.providers = const <QuickjsHostProvider>[],
+    this.mounts = const <QuickjsHostMount>[],
   });
 
   /// Maximum memory for a single runtime, in bytes.
@@ -684,16 +713,20 @@ final class QuickjsRuntimeOptions {
   /// User-provided JavaScript installed into this runtime at creation time.
   ///
   /// Defaults to an empty list. Scripts are installed in list order.
-  final List<QuickjsHostScript> hostScripts;
+  final List<QuickjsHostScript> environmentPatches;
 
   /// User-provided modules available to `import` and `require`.
   ///
   /// Defaults to an empty list. Host module specifiers are runtime-scoped.
-  final List<QuickjsHostModule> hostModules;
+  final List<QuickjsHostModule> modules;
 
-  /// User-provided host environment bundles.
+  /// User-provided providers available to startup scripts and host modules.
   ///
-  /// Bundles are expanded before direct [hostScripts] and [hostModules]. Direct
-  /// [hostCapabilities] are merged with bundle capabilities.
-  final List<QuickjsHostEnvironment> hostEnvironments;
+  /// Providers are installed before [environmentPatches]. They are exposed through the
+  /// non-enumerable `globalThis.__quickjsHostProviders` registry and return
+  /// Promises when called from JavaScript.
+  final List<QuickjsHostProvider> providers;
+
+  /// Named capability bundles installed before direct host configuration.
+  final List<QuickjsHostMount> mounts;
 }

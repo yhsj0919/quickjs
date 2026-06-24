@@ -1,5 +1,5 @@
-import 'quickjs_runtime_base.dart';
-import 'quickjs_runtime_options.dart';
+import '../runtime/quickjs_runtime_base.dart';
+import '../runtime/quickjs_runtime_options.dart';
 
 /// QuickJS 的平台 backend 抽象。
 ///

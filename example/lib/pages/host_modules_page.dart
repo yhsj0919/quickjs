@@ -83,7 +83,7 @@ class _HostModulesPageState extends State<HostModulesPage> {
   Quickjs? _quickjs;
   bool _disposed = false;
   bool _busy = false;
-  String _status = '正在创建启用 hostModules 的 runtime...';
+  String _status = '正在创建启用 modules 的 runtime...';
   final List<String> _log = <String>[];
 
   @override
@@ -95,7 +95,7 @@ class _HostModulesPageState extends State<HostModulesPage> {
   Future<void> _createRuntime() async {
     setState(() {
       _busy = true;
-      _status = '正在创建启用 hostModules 的 runtime...';
+      _status = '正在创建启用 modules 的 runtime...';
       _log.clear();
     });
 
@@ -106,7 +106,7 @@ class _HostModulesPageState extends State<HostModulesPage> {
 
       final quickjs = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[
+          modules: <QuickjsHostModule>[
             _hostMathModule,
             _hostPackageMainModule,
             _hostPackageDepModule,
@@ -126,7 +126,7 @@ class _HostModulesPageState extends State<HostModulesPage> {
       setState(() {
         _quickjs = quickjs;
         _busy = false;
-        _status = 'runtime 已就绪：hostModules 只能通过 import / require 使用';
+        _status = 'runtime 已就绪：modules 只能通过 import / require 使用';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -243,8 +243,8 @@ module.exports = first.count + "/" + second.count + "/" + globalThis.hostCommonJ
     await _capture('essential Buffer', () async {
       final quickjs = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.essential(globalBuffer: true),
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.essential(globalBuffer: true),
           ],
         ),
       );
@@ -267,7 +267,7 @@ globalThis.essentialBufferModuleDemo =
           'essential import "node:buffer" => $moduleResult\n'
           'essential global Buffer => $globalResult',
         );
-        _status = 'QuickjsHostEnvironment.essential() 的 Buffer 可用';
+        _status = 'QuickjsHostMount.essential() 的 Buffer 可用';
       } finally {
         await quickjs.dispose();
       }
@@ -278,8 +278,8 @@ globalThis.essentialBufferModuleDemo =
     await _capture('node preset', () async {
       final quickjs = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.node(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.node(
               globalBuffer: true,
               globalProcess: true,
               env: <String, String>{'APP_ENV': 'example'},
@@ -305,7 +305,7 @@ globalThis.nodePresetDemo = [
 ].join("/");
 ''', name: 'example:node-preset.mjs');
         final result = await quickjs.eval('globalThis.nodePresetDemo');
-        _log.insert(0, 'QuickjsHostEnvironment.node() => $result');
+        _log.insert(0, 'QuickjsHostMount.node() => $result');
         _status = 'node preset provides buffer/path/process/timers modules';
       } finally {
         await quickjs.dispose();
@@ -328,7 +328,7 @@ globalThis.hostModuleAfterStop = add(value, 1);
 ''', name: 'example:host-module-after-stop.js');
       final result = await quickjs.eval('globalThis.hostModuleAfterStop');
       _log.insert(0, 'stop 后再次导入 "app/math" => $result');
-      _status = 'stop / rebuild 后 hostModules 已重新可用';
+      _status = 'stop / rebuild 后 modules 已重新可用';
     });
   }
 
@@ -395,7 +395,7 @@ globalThis.hostModuleAfterStop = add(value, 1);
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsRuntimeOptions.hostModules + '
+              'QuickjsRuntimeOptions.modules + '
               'QuickjsHostModule.esModule/commonJs',
             ),
             const SizedBox(height: 16),

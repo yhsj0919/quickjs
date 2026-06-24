@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 
-import 'quickjs_runtime_options.dart';
+import '../runtime/quickjs_runtime_options.dart';
 
 /// Creates a [QuickjsModuleLoader] backed by a Flutter [AssetBundle].
 ///

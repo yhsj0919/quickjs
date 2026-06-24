@@ -3,8 +3,8 @@ import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
-import 'package:quickjs/src/quickjs_backend.dart';
-import 'package:quickjs/src/quickjs_runtime_base.dart';
+import 'package:quickjs/src/backend/quickjs_backend.dart';
+import 'package:quickjs/src/runtime/quickjs_runtime_base.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

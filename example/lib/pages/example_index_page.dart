@@ -16,6 +16,14 @@ class ExampleIndexPage extends StatelessWidget {
         itemBuilder: (context, index) {
           final page = examplePages[index];
           return ListTile(
+            leading: SizedBox(
+              width: 32,
+              child: Text(
+                (index + 1).toString().padLeft(2, '0'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
             title: Text(page.title),
             subtitle: Text(page.description),
             trailing: const Icon(Icons.chevron_right),

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
-/// 异步 API 演示：队列 eval、销毁 runtime、销毁后错误语义。
+/// 异步 API 演示：FIFO eval、Promise 求值和 runtime 生命周期错误。
 class AsyncApiPage extends StatefulWidget {
   const AsyncApiPage({super.key});
 
@@ -84,30 +84,73 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
       quickjs.eval('globalThis.queue = (globalThis.queue || "") + "C"'),
     ];
 
-    for (var index = 0; index < futures.length; index += 1) {
-      try {
-        final result = await futures[index];
-        if (!mounted || _disposed) {
-          return;
+    try {
+      final results = await Future.wait(futures);
+      if (!mounted || _disposed) {
+        return;
+      }
+      setState(() {
+        for (var index = 0; index < results.length; index += 1) {
+          _log.add('请求 ${index + 1}：${results[index]}');
         }
+        _status = results.join(' → ') == 'A → AB → ABC'
+            ? 'FIFO 顺序验证通过'
+            : 'FIFO 返回结果与预期不一致';
+      });
+    } catch (error) {
+      if (!mounted || _disposed) {
+        return;
+      }
+      setState(() {
+        _log.add('队列执行失败：${_describeError(error)}');
+        _status = '队列执行失败';
+      });
+    } finally {
+      if (mounted && !_disposed) {
         setState(() {
-          _log.add('请求 ${index + 1}：$result');
-        });
-      } catch (error) {
-        if (!mounted || _disposed) {
-          return;
-        }
-        setState(() {
-          _log.add('请求 ${index + 1} 失败：$error');
+          _busy = false;
         });
       }
     }
+  }
 
-    if (mounted && !_disposed) {
+  Future<void> _runAsyncEvaluation() async {
+    final quickjs = _quickjs;
+    if (quickjs == null) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = '正在等待 JavaScript Promise...';
+    });
+
+    try {
+      final result = await quickjs.evalAsync('''
+await new Promise((resolve) => setTimeout(resolve, 100));
+return { answer: 6 * 7, state: "resolved" };
+''', name: 'example:async-api.js');
+      if (!mounted || _disposed) {
+        return;
+      }
       setState(() {
-        _busy = false;
-        _status = '队列已执行完毕';
+        _log.add('evalAsync：$result');
+        _status = 'JavaScript Promise 已完成';
       });
+    } catch (error) {
+      if (!mounted || _disposed) {
+        return;
+      }
+      setState(() {
+        _log.add('evalAsync 失败：${_describeError(error)}');
+        _status = 'evalAsync 执行失败';
+      });
+    } finally {
+      if (mounted && !_disposed) {
+        setState(() {
+          _busy = false;
+        });
+      }
     }
   }
 
@@ -122,12 +165,17 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
       _status = '正在销毁 runtime...';
     });
 
-    await quickjs.dispose();
     try {
+      await quickjs.dispose();
       // 销毁后继续 eval 应返回 closed error，用于展示生命周期语义。
       await quickjs.eval('1 + 1');
+      if (mounted && !_disposed) {
+        _log.add('销毁后 eval 未返回预期错误');
+      }
     } catch (error) {
-      _log.add('销毁后继续 eval：${error.runtimeType}');
+      if (mounted && !_disposed) {
+        _log.add('销毁后继续 eval：${_describeError(error)}');
+      }
     }
 
     if (!mounted || _disposed) {
@@ -139,6 +187,13 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
       _busy = false;
       _status = 'runtime 已销毁';
     });
+  }
+
+  String _describeError(Object error) {
+    if (error is QuickjsException) {
+      return '${error.runtimeType}: ${error.message}';
+    }
+    return '${error.runtimeType}: $error';
   }
 
   @override
@@ -169,7 +224,13 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
               children: [
                 FilledButton(
                   onPressed: _busy || !hasRuntime ? null : _runQueuedEvals,
-                  child: const Text('执行排队 eval'),
+                  child: const Text('验证 FIFO eval'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _busy || !hasRuntime
+                      ? null
+                      : _runAsyncEvaluation,
+                  child: const Text('等待 Promise'),
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _disposeRuntime,
@@ -188,11 +249,16 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
                   border: Border.all(color: Theme.of(context).dividerColor),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _log.length,
-                  itemBuilder: (context, index) => Text(_log[index]),
-                ),
+                child: _log.isEmpty
+                    ? const Center(child: Text('点击按钮验证异步 API 行为'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _log.length,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(_log[index]),
+                        ),
+                      ),
               ),
             ),
           ],

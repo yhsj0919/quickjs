@@ -1,7 +1,8 @@
 // quickjs 包的公开导出入口。
-export 'src/quickjs.dart';
-export 'src/quickjs_asset_module_loader.dart';
-export 'src/quickjs_exception.dart';
-export 'src/quickjs_runtime_options.dart';
-export 'src/quickjs_source_map.dart';
-export 'src/quickjs_value.dart';
+export 'src/runtime/quickjs.dart';
+export 'src/module/quickjs_asset_module_loader.dart';
+export 'src/diagnostics/quickjs_exception.dart';
+export 'src/runtime/quickjs_runtime_options.dart';
+export 'src/diagnostics/quickjs_source_map.dart';
+export 'src/runtime/quickjs_value.dart';
+export 'src/module/quickjs_web_crypto_mount.dart';

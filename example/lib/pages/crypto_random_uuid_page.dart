@@ -38,9 +38,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
 
       final quickjs = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.webCrypto(),
-          ],
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleDigest: true)],
         ),
       );
       if (!mounted || _disposed) {
@@ -114,6 +112,20 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
     });
   }
 
+  Future<void> _runDigest() async {
+    await _capture('SHA-256 摘要', () async {
+      final result = await _requireRuntime().evalAsync('''
+const data = new Uint8Array([104, 101, 108, 108, 111]);
+const digest = await crypto.subtle.digest("SHA-256", data);
+return Array.from(new Uint8Array(digest))
+  .map((byte) => byte.toString(16).padStart(2, "0"))
+  .join("");
+''');
+      _log.insert(0, 'SHA-256("hello")\n$result');
+      _status = '已通过 Flutter 原生 crypto 生成 SHA-256';
+    });
+  }
+
   Future<void> _runStopRecovery() async {
     await _capture('stop 后恢复', () async {
       final quickjs = _requireRuntime();
@@ -125,7 +137,8 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
       await running;
       final result = await quickjs.eval(
         'typeof crypto.randomUUID() === "string" && '
-        'crypto.getRandomValues(new Uint8Array(1)) instanceof Uint8Array',
+        'crypto.getRandomValues(new Uint8Array(1)) instanceof Uint8Array && '
+        'typeof crypto.subtle.digest === "function"',
       );
       _log.insert(0, 'stop 后 Web Crypto 可用 => $result');
       _status = 'stop 后 runtime 已恢复，Web Crypto 可用';
@@ -195,7 +208,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsHostEnvironment.webCrypto()：显式安装 crypto.randomUUID() 和 crypto.getRandomValues()。',
+              'QuickjsWebCryptoMount()：显式安装 crypto.randomUUID()、crypto.getRandomValues() 和 Flutter 原生 crypto.subtle.digest()。',
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -209,6 +222,10 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
                 FilledButton.tonal(
                   onPressed: _busy || !hasRuntime ? null : _runGetRandomValues,
                   child: const Text('生成 getRandomValues()'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _busy || !hasRuntime ? null : _runDigest,
+                  child: const Text('生成 SHA-256'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _runDefaultDisabledCheck,

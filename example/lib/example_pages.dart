@@ -8,6 +8,7 @@ import 'pages/crypto_random_uuid_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/function_handle_page.dart';
 import 'pages/host_modules_page.dart';
+import 'pages/host_mounts_page.dart';
 import 'pages/memory_limit_page.dart';
 import 'pages/module_eval_page.dart';
 import 'pages/native_worker_page.dart';
@@ -23,6 +24,7 @@ import 'pages/web_host_environment_page.dart';
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
 // 页面注册表：每个新功能都应该在这里新增一个独立 example 页面。
 // 页面之间不能共享 Quickjs runtime，避免状态污染手动验收结果。
+// 新页面必须追加到列表末尾，已有页面顺序和首页序号保持稳定。
 final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '基础执行',
@@ -90,13 +92,13 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '宿主模块',
     description:
-        '使用 QuickjsRuntimeOptions.hostModules 注入 ES module 和 CommonJS 宿主模块，验证 cache、debugInspect、essential Buffer 与 node preset。',
+        '使用 QuickjsRuntimeOptions.modules 注入 ES module 和 CommonJS 宿主模块，验证 cache、debugInspect、essential Buffer 与 node preset。',
     builder: (_) => const HostModulesPage(),
   ),
   ExamplePageSpec(
     title: 'Web 宿主环境',
     description:
-        '使用 QuickjsHostEnvironment.web() 注入 window、location、navigator、URL 和内存版 storage。',
+        '使用 QuickjsHostMount.web() 注入 window、location、navigator、URL 和内存版 storage。',
     builder: (_) => const WebHostEnvironmentPage(),
   ),
   ExamplePageSpec(
@@ -125,7 +127,13 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: 'Web Crypto',
     description:
-        '通过 QuickjsHostEnvironment.webCrypto() 安装 crypto.randomUUID() 和 crypto.getRandomValues()。',
+        '通过 QuickjsWebCryptoMount() 安装 randomUUID、getRandomValues 和 Flutter 原生 subtle.digest。',
     builder: (_) => const CryptoRandomUuidPage(),
+  ),
+  ExamplePageSpec(
+    title: '能力批量挂载',
+    description:
+        '使用 QuickjsRuntimeOptions.mounts 和 Quickjs.mount() 批量安装环境补全、模块与 provider。',
+    builder: (_) => const HostMountsPage(),
   ),
 ];

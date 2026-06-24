@@ -3,12 +3,12 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'quickjs_backend.dart';
-import 'quickjs_backend_factory.dart';
-import 'quickjs_exception.dart';
+import '../backend/quickjs_backend.dart';
+import '../backend/quickjs_backend_factory.dart';
+import '../diagnostics/quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
-import 'quickjs_source_map.dart';
+import '../diagnostics/quickjs_source_map.dart';
 import 'quickjs_value.dart';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
@@ -267,6 +267,31 @@ enum QuickjsRuntimeState {
   failed,
 }
 
+/// Conflict handling for [Quickjs.mount].
+enum QuickjsHostMountConflictPolicy {
+  /// Reject duplicate mount names or capability declarations.
+  reject,
+
+  /// Replace an existing runtime-installed mount with the same name.
+  ///
+  /// Mounts supplied through [QuickjsRuntimeOptions.mounts] remain immutable,
+  /// and conflicts with other mounts are still rejected.
+  replace,
+}
+
+/// Structured host-provider metadata exposed by the inspector prototype.
+final class QuickjsHostProviderDebugInfo {
+  const QuickjsHostProviderDebugInfo({
+    required this.name,
+    required this.debugName,
+    required this.implementation,
+  });
+
+  final String name;
+  final String debugName;
+  final QuickjsHostProviderImplementation implementation;
+}
+
 /// Runtime debug snapshot exposed by the inspector prototype.
 final class QuickjsInspectorSnapshot {
   const QuickjsInspectorSnapshot({
@@ -275,6 +300,9 @@ final class QuickjsInspectorSnapshot {
     required this.running,
     required this.pendingEvaluations,
     required this.registeredCallbacks,
+    required this.registeredProviders,
+    this.providerDetails = const <QuickjsHostProviderDebugInfo>[],
+    required this.registeredMounts,
     required this.moduleNames,
     required this.sourceMapNames,
     required this.memoryLimitBytes,
@@ -287,6 +315,9 @@ final class QuickjsInspectorSnapshot {
   final bool running;
   final int pendingEvaluations;
   final List<String> registeredCallbacks;
+  final List<String> registeredProviders;
+  final List<QuickjsHostProviderDebugInfo> providerDetails;
+  final List<String> registeredMounts;
   final List<String> moduleNames;
   final List<String> sourceMapNames;
   final int? memoryLimitBytes;
@@ -330,7 +361,10 @@ class Quickjs {
       <String, QuickjsSourceMap>{};
   final Map<int, String> _callbackDebugNames = <int, String>{};
   final Set<String> _moduleDebugNames = <String>{};
+  final List<QuickjsHostMount> _runtimeMounts = <QuickjsHostMount>[];
   final Map<int, Map<int, Object>> _classInstances = <int, Map<int, Object>>{};
+  final Set<QuickjsHostProviderContext> _pendingHostProviderCalls =
+      <QuickjsHostProviderContext>{};
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
   static Future<Quickjs> create({
@@ -355,6 +389,88 @@ class Quickjs {
 
   /// 当前 runtime 生命周期状态。
   QuickjsRuntimeState get state => _state;
+
+  /// Mounts a capability bundle and rebuilds the current runtime.
+  ///
+  /// The first runtime-mounting implementation is intentionally atomic: the
+  /// runtime must be idle, the mount is validated against all existing static
+  /// and runtime mounts, then the runtime is rebuilt. Existing JavaScript
+  /// globals, module cache, bound callbacks, and handles are not preserved.
+  /// Successfully mounted bundles are reinstalled by later [stop] rebuilds.
+  /// [QuickjsHostMountConflictPolicy.replace] replaces only a same-name mount
+  /// previously installed through this method; initialization mounts remain
+  /// immutable and unrelated capability conflicts are still rejected.
+  Future<void> mount(
+    QuickjsHostMount mount, {
+    QuickjsHostMountConflictPolicy conflictPolicy =
+        QuickjsHostMountConflictPolicy.reject,
+  }) async {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      throw terminalError;
+    }
+    if (_state != QuickjsRuntimeState.ready ||
+        _running != null ||
+        _queue.isNotEmpty ||
+        _stopFuture != null) {
+      throw StateError('QuickJS host mounts can only be installed while idle');
+    }
+
+    final mountName = _validateHostMountName(mount.name);
+    final previousMounts = List<QuickjsHostMount>.of(_runtimeMounts);
+    final staticMountExists = _options.mounts.any(
+      (candidate) => _validateHostMountName(candidate.name) == mountName,
+    );
+    final runtimeMountIndex = _runtimeMounts.indexWhere(
+      (candidate) => _validateHostMountName(candidate.name) == mountName,
+    );
+    if (conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
+        staticMountExists) {
+      throw JsValueConversionException(
+        'QuickJS initialization mount cannot be replaced at runtime: $mountName',
+      );
+    }
+    if (conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
+        runtimeMountIndex >= 0) {
+      _runtimeMounts[runtimeMountIndex] = mount;
+    } else {
+      _runtimeMounts.add(mount);
+    }
+    try {
+      _validateStaticHostConfiguration();
+    } catch (_) {
+      _runtimeMounts
+        ..clear()
+        ..addAll(previousMounts);
+      rethrow;
+    }
+
+    _state = QuickjsRuntimeState.stopping;
+    final previousRuntime = _runtime;
+    try {
+      await previousRuntime.dispose();
+      await _replaceCurrentRuntime();
+      _state = QuickjsRuntimeState.ready;
+    } catch (error, stackTrace) {
+      try {
+        await _runtime.dispose();
+      } catch (_) {}
+      _runtimeMounts
+        ..clear()
+        ..addAll(previousMounts);
+      try {
+        await _replaceCurrentRuntime();
+        _state = QuickjsRuntimeState.ready;
+      } catch (recoveryError) {
+        try {
+          await _runtime.dispose();
+        } catch (_) {}
+        _failure = recoveryError;
+        _state = QuickjsRuntimeState.failed;
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
 
   /// Registers a source map for generated JavaScript [sourceName].
   ///
@@ -403,6 +519,11 @@ class Quickjs {
       registeredCallbacks: List<String>.unmodifiable(
         _callbackDebugNames.values.toList()..sort(),
       ),
+      registeredProviders: List<String>.unmodifiable(_debugProviderNames()),
+      providerDetails: List<QuickjsHostProviderDebugInfo>.unmodifiable(
+        _debugProviderDetails(),
+      ),
+      registeredMounts: List<String>.unmodifiable(_debugMountNames()),
       moduleNames: List<String>.unmodifiable(_debugModuleNames()),
       sourceMapNames: List<String>.unmodifiable(
         _sourceMaps.keys.toList()..sort(),
@@ -882,6 +1003,7 @@ class Quickjs {
   }
 
   Future<void> _installHostEnvironmentOnCurrentRuntime() async {
+    _validateStaticHostConfiguration();
     final capabilities = _effectiveHostCapabilities();
     if (!capabilities.isEmpty) {
       await _runtime.evaluate(
@@ -889,11 +1011,74 @@ class Quickjs {
         name: '<quickjs:host-capabilities>',
       );
     }
+    final providerNames = await _installHostProvidersOnCurrentRuntime();
+    if (providerNames.isNotEmpty) {
+      await _runtime.evaluate(
+        _wrapInstallHostProviderRegistry(providerNames),
+        name: '<quickjs:host-providers>',
+      );
+    }
     for (final script in _effectiveHostScripts()) {
       await _runtime.evaluate(
         script.source,
         name: _validateSourceName(script.name),
       );
+    }
+  }
+
+  Future<Map<String, String>> _installHostProvidersOnCurrentRuntime() async {
+    final providers = _effectiveHostProviders();
+    if (providers.isEmpty) {
+      return const <String, String>{};
+    }
+    final callbackNames = <String, String>{};
+    final seen = <String>{};
+    for (final provider in providers) {
+      final providerName = _validateHostProviderName(provider.name);
+      if (!seen.add(providerName)) {
+        throw JsValueConversionException(
+          'QuickJS host provider is already registered: $providerName',
+        );
+      }
+      final callbackId = _nextCallbackId++;
+      final callbackName = '__quickjsHostProvider_$callbackId';
+      final debugName = provider.debugName ?? providerName;
+      await _bindRuntimeCallback(
+        callbackId,
+        callbackName,
+        (args) => _invokeHostProvider(provider, args),
+        debugName: debugName,
+      );
+      callbackNames[providerName] = callbackName;
+    }
+    return callbackNames;
+  }
+
+  Future<Object?> _invokeHostProvider(
+    QuickjsHostProvider provider,
+    List<Object?> args,
+  ) async {
+    final context = QuickjsHostProviderContext();
+    _pendingHostProviderCalls.add(context);
+    final callbackFuture = Future<Object?>.sync(
+      () => provider.callback(args, context),
+    );
+    final cancelledFuture = context.cancelled.then<Object?>((_) {
+      throw context.cancellationReason ?? const JsCancelledException();
+    });
+    try {
+      return await Future.any<Object?>(<Future<Object?>>[
+        callbackFuture,
+        cancelledFuture,
+      ]);
+    } finally {
+      _pendingHostProviderCalls.remove(context);
+    }
+  }
+
+  void _cancelHostProviderCalls(Object reason) {
+    for (final context in _pendingHostProviderCalls.toList()) {
+      context.cancel(reason);
     }
   }
 
@@ -1025,6 +1210,7 @@ class Quickjs {
     final shouldCancelRunning = _runningRequest?.async == true;
     _state = QuickjsRuntimeState.closed;
     _classInstances.clear();
+    _cancelHostProviderCalls(JsRuntimeClosedException());
     _cancelQueued(JsRuntimeClosedException());
     if (shouldCancelRunning) {
       unawaited(_runtime.stop());
@@ -1050,7 +1236,9 @@ class Quickjs {
       return currentStop;
     }
 
-    _cancelQueued(JsCancelledException());
+    const cancellation = JsCancelledException();
+    _cancelHostProviderCalls(cancellation);
+    _cancelQueued(cancellation);
     final running = _running;
     if (running == null) {
       return Future<void>.value();
@@ -1066,10 +1254,7 @@ class Quickjs {
         .catchError((Object _) {})
         .then<void>((_) async {
           if (!_isTerminal) {
-            _classInstances.clear();
-            _runtime = await _backend.createRuntime(_options);
-            await _installConsoleOnCurrentRuntime();
-            await _installHostEnvironmentOnCurrentRuntime();
+            await _replaceCurrentRuntime();
             _state = QuickjsRuntimeState.ready;
           }
         })
@@ -1079,6 +1264,15 @@ class Quickjs {
         });
     _stopFuture = stopped;
     return stopped;
+  }
+
+  Future<void> _replaceCurrentRuntime() async {
+    _classInstances.clear();
+    _callbackDebugNames.clear();
+    _moduleDebugNames.clear();
+    _runtime = await _backend.createRuntime(_options);
+    await _installConsoleOnCurrentRuntime();
+    await _installHostEnvironmentOnCurrentRuntime();
   }
 
   Future<String> _enqueue(
@@ -1396,10 +1590,11 @@ class Quickjs {
   Future<void> _bindRuntimeCallback(
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
-  ) async {
+    Future<Object?> Function(List<Object?> args) callback, {
+    String? debugName,
+  }) async {
     await _runtime.bindCallback(callbackId, name, callback);
-    _callbackDebugNames[callbackId] = name;
+    _callbackDebugNames[callbackId] = debugName ?? name;
   }
 
   Future<void> _unbindRuntimeCallback(int callbackId) async {
@@ -1413,7 +1608,7 @@ class Quickjs {
     Iterable<String> Function(String source) specifiers,
     QuickjsHostModuleFormat format,
   ) async {
-    final hostModules = _hostModuleSourceMap(format);
+    final configuredModules = _hostModuleSourceMap(format);
     final loader = _options.moduleLoader;
     final modules = <String, String>{rootName: rootSource};
     final visiting = <String>{};
@@ -1433,7 +1628,8 @@ class Quickjs {
           if (modules.containsKey(resolved)) {
             continue;
           }
-          final loaded = hostModules[resolved] ?? await loader?.call(resolved);
+          final loaded =
+              configuredModules[resolved] ?? await loader?.call(resolved);
           if (loaded == null) {
             throw JsValueConversionException(
               'QuickJS module loader could not resolve "$specifier" from "$moduleName"',
@@ -1452,12 +1648,12 @@ class Quickjs {
   }
 
   Map<String, String> _hostModuleSourceMap(QuickjsHostModuleFormat format) {
-    final hostModules = _effectiveHostModules();
-    if (hostModules.isEmpty) {
+    final configuredModules = _effectiveHostModules();
+    if (configuredModules.isEmpty) {
       return const <String, String>{};
     }
     final modules = <String, String>{};
-    for (final module in hostModules) {
+    for (final module in configuredModules) {
       if (module.format != format) {
         continue;
       }
@@ -1480,11 +1676,90 @@ class Quickjs {
     return names.toList()..sort();
   }
 
+  List<String> _debugProviderNames() {
+    final names = <String>{
+      for (final provider in _effectiveHostProviders())
+        _validateHostProviderName(provider.name),
+    };
+    return names.toList()..sort();
+  }
+
+  List<QuickjsHostProviderDebugInfo> _debugProviderDetails() {
+    final details = <QuickjsHostProviderDebugInfo>[
+      for (final provider in _effectiveHostProviders())
+        QuickjsHostProviderDebugInfo(
+          name: _validateHostProviderName(provider.name),
+          debugName: provider.debugName ?? provider.name,
+          implementation: provider.implementation,
+        ),
+    ];
+    details.sort((left, right) => left.name.compareTo(right.name));
+    return details;
+  }
+
+  List<String> _debugMountNames() {
+    return <String>[
+      for (final mount in _allHostMounts) _validateHostMountName(mount.name),
+    ]..sort();
+  }
+
+  void _validateStaticHostConfiguration() {
+    final mountNames = <String>{};
+    for (final mount in _allHostMounts) {
+      final name = _validateHostMountName(mount.name);
+      if (!mountNames.add(name)) {
+        throw JsValueConversionException(
+          'QuickJS host mount is registered more than once: $name',
+        );
+      }
+    }
+
+    final globalNames = <String>{};
+    final capabilities = _effectiveHostCapabilities();
+    if (capabilities.browserGlobals.window) {
+      globalNames.add('window');
+    }
+    if (capabilities.browserGlobals.self) {
+      globalNames.add('self');
+    }
+
+    final patchNames = <String>{};
+    for (final patch in _effectiveHostScripts()) {
+      final name = _validateSourceName(patch.name);
+      if (!patchNames.add(name)) {
+        throw JsValueConversionException(
+          'QuickJS environment patch is registered more than once: $name',
+        );
+      }
+      for (final declaredGlobal in patch.globals) {
+        final globalName = _validateGlobalName(declaredGlobal);
+        if (!globalNames.add(globalName)) {
+          throw JsValueConversionException(
+            'QuickJS host global is registered more than once: $globalName',
+          );
+        }
+      }
+    }
+
+    final providerNames = <String>{};
+    for (final provider in _effectiveHostProviders()) {
+      final name = _validateHostProviderName(provider.name);
+      if (!providerNames.add(name)) {
+        throw JsValueConversionException(
+          'QuickJS host provider is registered more than once: $name',
+        );
+      }
+    }
+
+    _hostModuleSourceMap(QuickjsHostModuleFormat.esModule);
+    _hostModuleSourceMap(QuickjsHostModuleFormat.commonJs);
+  }
+
   QuickjsHostCapabilities _effectiveHostCapabilities() {
     var window = _options.hostCapabilities.browserGlobals.window;
     var self = _options.hostCapabilities.browserGlobals.self;
-    for (final environment in _options.hostEnvironments) {
-      final browserGlobals = environment.hostCapabilities.browserGlobals;
+    for (final mount in _allHostMounts) {
+      final browserGlobals = mount.capabilities.browserGlobals;
       window = window || browserGlobals.window;
       self = self || browserGlobals.self;
     }
@@ -1494,25 +1769,29 @@ class Quickjs {
   }
 
   List<QuickjsHostScript> _effectiveHostScripts() {
-    if (_options.hostEnvironments.isEmpty) {
-      return _options.hostScripts;
-    }
     return <QuickjsHostScript>[
-      for (final environment in _options.hostEnvironments)
-        ...environment.hostScripts,
-      ..._options.hostScripts,
+      for (final mount in _allHostMounts) ...mount.environmentPatches,
+      ..._options.environmentPatches,
+    ];
+  }
+
+  List<QuickjsHostProvider> _effectiveHostProviders() {
+    return <QuickjsHostProvider>[
+      for (final mount in _allHostMounts) ...mount.providers,
+      ..._options.providers,
     ];
   }
 
   List<QuickjsHostModule> _effectiveHostModules() {
-    if (_options.hostEnvironments.isEmpty) {
-      return _options.hostModules;
-    }
     return <QuickjsHostModule>[
-      for (final environment in _options.hostEnvironments)
-        ...environment.hostModules,
-      ..._options.hostModules,
+      for (final mount in _allHostMounts) ...mount.modules,
+      ..._options.modules,
     ];
+  }
+
+  Iterable<QuickjsHostMount> get _allHostMounts sync* {
+    yield* _options.mounts;
+    yield* _runtimeMounts;
   }
 }
 
@@ -1736,6 +2015,31 @@ String _wrapInstallHostCapabilities(QuickjsHostCapabilities capabilities) {
       writable: true,
     });
   }
+})()
+''';
+}
+
+String _wrapInstallHostProviderRegistry(Map<String, String> providers) {
+  final encodedProviders = jsonEncode(providers);
+  return '''
+(() => {
+  const bindings = $encodedProviders;
+  const registry = Object.create(null);
+  for (const name of Object.keys(bindings)) {
+    const callbackName = bindings[name];
+    Object.defineProperty(registry, name, {
+      value: (...args) => globalThis[callbackName](...args),
+      configurable: false,
+      enumerable: true,
+      writable: false,
+    });
+  }
+  Object.defineProperty(globalThis, '__quickjsHostProviders', {
+    value: Object.freeze(registry),
+    configurable: true,
+    enumerable: false,
+    writable: false,
+  });
 })()
 ''';
 }
@@ -2140,6 +2444,34 @@ String _validateModuleName(String name) {
   if (name.contains('\u0000')) {
     throw JsValueConversionException(
       'QuickJS module name must not contain NUL',
+    );
+  }
+  return name;
+}
+
+String _validateHostProviderName(String name) {
+  if (name.isEmpty) {
+    throw JsValueConversionException(
+      'QuickJS host provider name must not be empty',
+    );
+  }
+  if (name.contains('\u0000')) {
+    throw JsValueConversionException(
+      'QuickJS host provider name must not contain NUL',
+    );
+  }
+  return name;
+}
+
+String _validateHostMountName(String name) {
+  if (name.isEmpty) {
+    throw JsValueConversionException(
+      'QuickJS host mount name must not be empty',
+    );
+  }
+  if (name.contains('\u0000')) {
+    throw JsValueConversionException(
+      'QuickJS host mount name must not contain NUL',
     );
   }
   return name;

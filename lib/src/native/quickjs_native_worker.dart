@@ -5,12 +5,12 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 
-import '../quickjs_bindings.dart';
-import '../quickjs_callback_codec.dart';
-import '../quickjs_exception.dart';
-import '../quickjs_runtime_base.dart';
-import '../quickjs_runtime_options.dart';
-import '../quickjs_stream_bridge.dart';
+import 'quickjs_bindings.dart';
+import '../bridge/quickjs_callback_codec.dart';
+import '../diagnostics/quickjs_exception.dart';
+import '../runtime/quickjs_runtime_base.dart';
+import '../runtime/quickjs_runtime_options.dart';
+import '../bridge/quickjs_stream_bridge.dart';
 
 const String _messageTypeKey = 'type';
 const String _messageIdKey = 'id';

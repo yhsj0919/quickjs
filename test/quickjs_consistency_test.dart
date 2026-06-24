@@ -2045,7 +2045,7 @@ fail();
     test('captures registered host modules in debug snapshots', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[
+          modules: <QuickjsHostModule>[
             _hostMathModule,
             _hostBufferModule,
             _hostCommonJsModule,
@@ -2059,6 +2059,37 @@ fail();
       expect(
         snapshot.moduleNames,
         containsAll(['app/math', 'buffer', 'app/cjs']),
+      );
+    });
+
+    test('captures registered host providers in debug snapshots', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'debug.provider',
+              debugName: 'debug-provider-callback',
+              implementation: QuickjsHostProviderImplementation.platform,
+              callback: (_, _) => null,
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      final snapshot = await engine.debugInspect();
+
+      expect(snapshot.registeredProviders, contains('debug.provider'));
+      expect(snapshot.registeredCallbacks, contains('debug-provider-callback'));
+      expect(snapshot.providerDetails, hasLength(1));
+      expect(snapshot.providerDetails.single.name, 'debug.provider');
+      expect(
+        snapshot.providerDetails.single.debugName,
+        'debug-provider-callback',
+      );
+      expect(
+        snapshot.providerDetails.single.implementation,
+        QuickjsHostProviderImplementation.platform,
       );
     });
 
@@ -2110,7 +2141,7 @@ fail();
     test('installs host script crypto randomUUID consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
+          environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
         ),
       );
       addTearDown(engine.dispose);
@@ -2132,9 +2163,7 @@ fail();
     test('installs minimal web crypto environment consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.webCrypto(),
-          ],
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount()],
         ),
       );
       addTearDown(engine.dispose);
@@ -2165,8 +2194,8 @@ fail();
     test('can install selected web crypto helpers consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.webCrypto(getRandomValues: false),
+          mounts: <QuickjsHostMount>[
+            QuickjsWebCryptoMount(getRandomValues: false),
           ],
         ),
       );
@@ -2183,9 +2212,7 @@ fail();
     test('rejects invalid web crypto getRandomValues targets', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.webCrypto(),
-          ],
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount()],
         ),
       );
       addTearDown(engine.dispose);
@@ -2200,16 +2227,771 @@ fail();
       );
     });
 
-    test('installs configured host environment bundles consistently', () async {
+    test('installs Flutter-backed web crypto digest consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleDigest: true)],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync('''
+const data = new Uint8Array([104, 101, 108, 108, 111]);
+const digest = await crypto.subtle.digest('SHA-256', data);
+const hex = Array.from(new Uint8Array(digest))
+  .map((byte) => byte.toString(16).padStart(2, '0'))
+  .join('');
+return (digest instanceof ArrayBuffer) + '/' + hex;
+'''),
+        'true/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+      );
+    });
+
+    test('web crypto digest rejects unsupported algorithms', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleDigest: true)],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evalAsync(
+          "return await crypto.subtle.digest('MD5', new Uint8Array([1]));",
+        ),
+        throwsA(isA<JsException>()),
+      );
+    });
+
+    test('installs async host providers for startup scripts', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'app.hello',
+              callback: (args, _) {
+                return 'hello ${args.single}';
+              },
+            ),
+          ],
+          environmentPatches: const <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'host:app-provider.js',
+              source: '''
+Object.defineProperty(globalThis, 'app', {
+  value: {
+    hello(name) {
+      return globalThis.__quickjsHostProviders['app.hello'](name);
+    },
+  },
+  configurable: true,
+  enumerable: false,
+  writable: true,
+});
+''',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync("return await app.hello('QuickJS');"),
+        'hello QuickJS',
+      );
+    });
+
+    test(
+      'reinstalls async host providers after stop rebuilds runtime',
+      () async {
+        final engine = await Quickjs.create(
+          options: QuickjsRuntimeOptions(
+            providers: <QuickjsHostProvider>[
+              QuickjsHostProvider.async(
+                name: 'app.double',
+                callback: (args, _) => (args.single! as num).toInt() * 2,
+              ),
+            ],
+            environmentPatches: const <QuickjsHostScript>[
+              QuickjsHostScript(
+                name: 'host:provider-rebuild.js',
+                source: '''
+globalThis.app = {
+  double(value) {
+    return globalThis.__quickjsHostProviders['app.double'](value);
+  },
+};
+''',
+              ),
+            ],
+          ),
+        );
+        addTearDown(engine.dispose);
+
+        final running = engine.eval('while (true) {}');
+        await pumpEventQueue();
+        await engine.stop();
+        await expectLater(running, throwsA(isA<JsCancelledException>()));
+
+        expect(await engine.evalAsync('return await app.double(21);'), '42');
+      },
+    );
+
+    test('cancels pending async host providers on stop', () async {
+      final invoked = Completer<QuickjsHostProviderContext>();
+      var invocationCount = 0;
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'app.wait',
+              callback: (_, context) async {
+                invocationCount += 1;
+                if (invocationCount == 1) {
+                  invoked.complete(context);
+                  await context.cancelled;
+                  context.throwIfCancelled();
+                }
+                return 42;
+              },
+            ),
+          ],
+          environmentPatches: const <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'host:provider-cancel-stop.js',
+              source: '''
+globalThis.app = {
+  wait() {
+    return globalThis.__quickjsHostProviders['app.wait']();
+  },
+};
+''',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      final running = engine.evalAsync('return await app.wait();');
+      final context = await invoked.future.timeout(const Duration(seconds: 2));
+      final runningFailure = expectLater(
+        running,
+        throwsA(
+          anyOf(isA<JsCancelledException>(), isA<JsRuntimeClosedException>()),
+        ),
+      );
+
+      await engine.stop().timeout(const Duration(seconds: 2));
+      await runningFailure;
+      expect(context.isCancelled, isTrue);
+      expect(context.cancellationReason, isA<JsCancelledException>());
+      expect(await engine.evalAsync('return await app.wait();'), '42');
+    });
+
+    test('dispose detaches pending async host provider Futures', () async {
+      final invoked = Completer<QuickjsHostProviderContext>();
+      final providerResult = Completer<Object?>();
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'app.wait',
+              callback: (_, context) {
+                invoked.complete(context);
+                return providerResult.future;
+              },
+            ),
+          ],
+          environmentPatches: const <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'host:provider-cancel-dispose.js',
+              source: '''
+globalThis.app = {
+  wait() {
+    return globalThis.__quickjsHostProviders['app.wait']();
+  },
+};
+''',
+            ),
+          ],
+        ),
+      );
+
+      final running = engine.evalAsync('return await app.wait();');
+      final context = await invoked.future.timeout(const Duration(seconds: 2));
+      final runningFailure = expectLater(
+        running,
+        throwsA(
+          anyOf(isA<JsCancelledException>(), isA<JsRuntimeClosedException>()),
+        ),
+      );
+
+      await engine.dispose().timeout(const Duration(seconds: 2));
+      await runningFailure;
+      expect(context.isCancelled, isTrue);
+      expect(context.cancellationReason, isA<JsRuntimeClosedException>());
+    });
+
+    test('wraps async host providers from ES host modules', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'app.sum',
+              callback: (args, _) {
+                return args.fold<int>(
+                  0,
+                  (sum, value) => sum + (value! as num).toInt(),
+                );
+              },
+            ),
+          ],
+          modules: const <QuickjsHostModule>[
+            QuickjsHostModule.esModule(
+              specifier: 'app/provider',
+              source: '''
+export function sum(...values) {
+  return globalThis.__quickjsHostProviders['app.sum'](...values);
+}
+''',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalModule(
+          "import { sum } from 'app/provider'; globalThis.providerSumPromise = sum(1, 2, 3);",
+          name: 'app/provider-main.mjs',
+        ),
+        'undefined',
+      );
+      expect(
+        await engine.evalAsync('return await globalThis.providerSumPromise;'),
+        '6',
+      );
+    });
+
+    test('rejects duplicate async host provider names', () async {
+      await expectLater(
+        Quickjs.create(
+          options: QuickjsRuntimeOptions(
+            providers: <QuickjsHostProvider>[
+              QuickjsHostProvider.async(
+                name: 'app.hello',
+                callback: (_, _) => 1,
+              ),
+              QuickjsHostProvider.async(
+                name: 'app.hello',
+                callback: (_, _) => 2,
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+    });
+
+    test('installs named host mounts as one capability bundle', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount(
+              name: 'app-api',
+              capabilities: const QuickjsHostCapabilities(
+                browserGlobals: QuickjsBrowserGlobals(window: true),
+              ),
+              providers: <QuickjsHostProvider>[
+                QuickjsHostProvider.async(
+                  name: 'app.hello',
+                  callback: (args, _) => 'hello ${args.single}',
+                ),
+              ],
+              environmentPatches: const <QuickjsHostScript>[
+                QuickjsHostScript(
+                  name: 'mount:app-global.js',
+                  source: '''
+globalThis.app = {
+  hello(name) {
+    return globalThis.__quickjsHostProviders['app.hello'](name);
+  },
+};
+''',
+                ),
+              ],
+              modules: const <QuickjsHostModule>[
+                QuickjsHostModule.esModule(
+                  specifier: 'app/constants',
+                  source: 'export const answer = 42;',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync(
+          "return typeof window + '/' + await app.hello('mount');",
+        ),
+        'object/hello mount',
+      );
+      expect(
+        await engine.evalModule(
+          "import { answer } from 'app/constants'; globalThis.mountAnswer = answer;",
+          name: 'mount-main.mjs',
+        ),
+        'undefined',
+      );
+      expect(await engine.eval('mountAnswer'), '42');
+
+      final snapshot = await engine.debugInspect();
+      expect(snapshot.registeredMounts, contains('app-api'));
+      expect(snapshot.registeredProviders, contains('app.hello'));
+      expect(snapshot.moduleNames, contains('app/constants'));
+    });
+
+    test('reinstalls named host mounts after stop rebuilds runtime', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount(
+              name: 'app-rebuild',
+              environmentPatches: const <QuickjsHostScript>[
+                QuickjsHostScript(
+                  name: 'mount:rebuild.js',
+                  source: 'globalThis.mountedValue = 42;',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      final running = engine.eval('while (true) {}');
+      await pumpEventQueue();
+      await engine.stop();
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+
+      expect(await engine.eval('mountedValue'), '42');
+      expect(
+        (await engine.debugInspect()).registeredMounts,
+        contains('app-rebuild'),
+      );
+    });
+
+    test('installs named host mount presets consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.web(locationHref: 'https://example.test/app'),
+            QuickjsWebCryptoMount(subtleDigest: true),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync('''
+const digest = await crypto.subtle.digest('SHA-256', new Uint8Array([1]));
+return location.hostname + '/' + typeof crypto.randomUUID + '/' + digest.byteLength;
+'''),
+        'example.test/function/32',
+      );
+      expect(
+        (await engine.debugInspect()).registeredMounts,
+        containsAll(<String>['web', 'web-crypto']),
+      );
+    });
+
+    test('mounts capability bundles at runtime by rebuilding', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      await engine.eval('globalThis.beforeMount = 1');
+
+      await engine.mount(
+        QuickjsHostMount(
+          name: 'runtime-api',
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'runtime.echo',
+              callback: (args, _) => args.single,
+            ),
+          ],
+          environmentPatches: const <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'mount:runtime-api.js',
+              source: '''
+globalThis.runtimeApi = {
+  echo(value) {
+    return globalThis.__quickjsHostProviders['runtime.echo'](value);
+  },
+};
+''',
+            ),
+          ],
+          modules: const <QuickjsHostModule>[
+            QuickjsHostModule.esModule(
+              specifier: 'runtime/constants',
+              source: 'export const value = 7;',
+            ),
+          ],
+        ),
+      );
+
+      expect(await engine.eval('typeof beforeMount'), 'undefined');
+      expect(
+        await engine.evalAsync("return await runtimeApi.echo('mounted');"),
+        'mounted',
+      );
+      expect(
+        await engine.evalModule(
+          "import { value } from 'runtime/constants'; globalThis.runtimeConstant = value;",
+          name: 'runtime-main.mjs',
+        ),
+        'undefined',
+      );
+      expect(await engine.eval('runtimeConstant'), '7');
+      expect(
+        (await engine.debugInspect()).registeredMounts,
+        contains('runtime-api'),
+      );
+    });
+
+    test('replaces same-name runtime mounts atomically', () async {
+      QuickjsHostMount versionedMount(int version) {
+        return QuickjsHostMount(
+          name: 'versioned-runtime',
+          environmentPatches: <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'mount:versioned-runtime.js',
+              globals: const <String>['runtimeMountVersion'],
+              source: 'globalThis.runtimeMountVersion = $version;',
+            ),
+          ],
+        );
+      }
+
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      await engine.mount(versionedMount(1));
+      expect(await engine.eval('runtimeMountVersion'), '1');
+
+      await expectLater(
+        engine.mount(versionedMount(2)),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      expect(await engine.eval('runtimeMountVersion'), '1');
+
+      await engine.mount(
+        versionedMount(2),
+        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+      );
+      expect(await engine.eval('runtimeMountVersion'), '2');
+      expect(
+        (await engine.debugInspect()).registeredMounts,
+        contains('versioned-runtime'),
+      );
+
+      final running = engine.eval('while (true) {}');
+      await pumpEventQueue();
+      await engine.stop();
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+      expect(await engine.eval('runtimeMountVersion'), '2');
+    });
+
+    test('does not replace initialization mounts at runtime', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount(
+              name: 'static-mount',
+              environmentPatches: <QuickjsHostScript>[
+                QuickjsHostScript(
+                  name: 'mount:static.js',
+                  globals: <String>['staticMountValue'],
+                  source: 'globalThis.staticMountValue = 42;',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.mount(
+          const QuickjsHostMount(name: 'static-mount'),
+          conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      expect(await engine.eval('staticMountValue'), '42');
+      expect(engine.state, QuickjsRuntimeState.ready);
+    });
+
+    test('rolls back runtime mount replacement when rebuild fails', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      await engine.mount(
+        const QuickjsHostMount(
+          name: 'replace-rollback',
+          environmentPatches: <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'mount:replace-rollback.js',
+              globals: <String>['replaceRollbackValue'],
+              source: 'globalThis.replaceRollbackValue = 1;',
+            ),
+          ],
+        ),
+      );
+
+      await expectLater(
+        engine.mount(
+          const QuickjsHostMount(
+            name: 'replace-rollback',
+            environmentPatches: <QuickjsHostScript>[
+              QuickjsHostScript(
+                name: 'mount:replace-rollback.js',
+                globals: <String>['replaceRollbackValue'],
+                source: 'throw new Error("replacement install failed");',
+              ),
+            ],
+          ),
+          conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+        ),
+        throwsA(isA<JsException>()),
+      );
+
+      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(await engine.eval('replaceRollbackValue'), '1');
+      expect(
+        (await engine.debugInspect()).registeredMounts,
+        contains('replace-rollback'),
+      );
+    });
+
+    test('keeps runtime mounts across later stop rebuilds', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      await engine.mount(
+        const QuickjsHostMount(
+          name: 'runtime-rebuild',
+          environmentPatches: <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'mount:runtime-rebuild.js',
+              source: 'globalThis.runtimeMountedValue = 42;',
+            ),
+          ],
+        ),
+      );
+
+      final running = engine.eval('while (true) {}');
+      await pumpEventQueue();
+      await engine.stop();
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+
+      expect(await engine.eval('runtimeMountedValue'), '42');
+    });
+
+    test('rejects conflicting runtime mounts without rebuilding', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount(
+              name: 'existing',
+              providers: <QuickjsHostProvider>[
+                QuickjsHostProvider.async(
+                  name: 'existing.provider',
+                  callback: (_, _) => 42,
+                ),
+              ],
+              environmentPatches: <QuickjsHostScript>[
+                QuickjsHostScript(
+                  name: 'mount:existing.js',
+                  globals: <String>['existingValue'],
+                  source: 'globalThis.existingValue = 42;',
+                ),
+              ],
+              modules: <QuickjsHostModule>[
+                QuickjsHostModule.esModule(
+                  specifier: 'existing/module',
+                  source: 'export const value = 42;',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.mount(const QuickjsHostMount(name: 'existing')),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      await expectLater(
+        engine.mount(
+          QuickjsHostMount(
+            name: 'provider-conflict',
+            providers: <QuickjsHostProvider>[
+              QuickjsHostProvider.async(
+                name: 'existing.provider',
+                callback: (_, _) => 7,
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      await expectLater(
+        engine.mount(
+          const QuickjsHostMount(
+            name: 'module-conflict',
+            modules: <QuickjsHostModule>[
+              QuickjsHostModule.esModule(
+                specifier: 'existing/module',
+                source: 'export const value = 7;',
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      await expectLater(
+        engine.mount(
+          const QuickjsHostMount(
+            name: 'global-conflict',
+            environmentPatches: <QuickjsHostScript>[
+              QuickjsHostScript(
+                name: 'mount:global-conflict.js',
+                globals: <String>['existingValue'],
+                source: 'globalThis.existingValue = 7;',
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      expect(await engine.eval('existingValue'), '42');
+      expect(engine.state, QuickjsRuntimeState.ready);
+    });
+
+    test('rejects runtime mounts while JavaScript is running', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      final running = engine.eval('while (true) {}');
+      await pumpEventQueue();
+      await expectLater(
+        engine.mount(const QuickjsHostMount(name: 'busy')),
+        throwsA(isA<StateError>()),
+      );
+      await engine.stop();
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+    });
+
+    test(
+      'rejects duplicate host mount, patch, and declared global names',
+      () async {
+        await expectLater(
+          Quickjs.create(
+            options: const QuickjsRuntimeOptions(
+              mounts: <QuickjsHostMount>[
+                QuickjsHostMount(name: 'duplicate'),
+                QuickjsHostMount(name: 'duplicate'),
+              ],
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+
+        await expectLater(
+          Quickjs.create(
+            options: const QuickjsRuntimeOptions(
+              mounts: <QuickjsHostMount>[
+                QuickjsHostMount(
+                  name: 'first',
+                  environmentPatches: <QuickjsHostScript>[
+                    QuickjsHostScript(name: 'same.js', source: 'void 0;'),
+                  ],
+                ),
+                QuickjsHostMount(
+                  name: 'second',
+                  environmentPatches: <QuickjsHostScript>[
+                    QuickjsHostScript(name: 'same.js', source: 'void 0;'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+
+        await expectLater(
+          Quickjs.create(
+            options: const QuickjsRuntimeOptions(
+              mounts: <QuickjsHostMount>[
+                QuickjsHostMount(
+                  name: 'first-global',
+                  environmentPatches: <QuickjsHostScript>[
+                    QuickjsHostScript(
+                      name: 'first.js',
+                      globals: <String>['app'],
+                      source: 'globalThis.app = 1;',
+                    ),
+                  ],
+                ),
+                QuickjsHostMount(
+                  name: 'second-global',
+                  environmentPatches: <QuickjsHostScript>[
+                    QuickjsHostScript(
+                      name: 'second.js',
+                      globals: <String>['app'],
+                      source: 'globalThis.app = 2;',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+
+        await expectLater(
+          Quickjs.create(
+            options: const QuickjsRuntimeOptions(
               hostCapabilities: QuickjsHostCapabilities(
                 browserGlobals: QuickjsBrowserGlobals(window: true),
               ),
-              hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
-              hostModules: <QuickjsHostModule>[_hostMathModule],
+              environmentPatches: <QuickjsHostScript>[
+                QuickjsHostScript(
+                  name: 'window-conflict.js',
+                  globals: <String>['window'],
+                  source: 'globalThis.window = {};',
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+      },
+    );
+
+    test('installs configured host mounts consistently', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount(
+              name: 'configured',
+              capabilities: QuickjsHostCapabilities(
+                browserGlobals: QuickjsBrowserGlobals(window: true),
+              ),
+              environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
+              modules: <QuickjsHostModule>[_hostMathModule],
             ),
           ],
         ),
@@ -2232,8 +3014,8 @@ globalThis.hostEnvironmentModuleValue = add(value, 1);
     test('installs minimal web host environment consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.web(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.web(
               locationHref: 'https://example.com:8443/app?q=1#top',
               userAgent: 'quickjs-test',
             ),
@@ -2271,9 +3053,7 @@ globalThis.hostEnvironmentModuleValue = add(value, 1);
     test('installs essential buffer modules consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.essential(),
-          ],
+          mounts: <QuickjsHostMount>[QuickjsHostMount.essential()],
         ),
       );
       addTearDown(engine.dispose);
@@ -2307,8 +3087,8 @@ module.exports = Buffer.isBuffer(value) + '/' + value.toString() + '/' + value.l
     test('installs essential global Buffer when requested', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.essential(globalBuffer: true),
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.essential(globalBuffer: true),
           ],
         ),
       );
@@ -2325,8 +3105,8 @@ module.exports = Buffer.isBuffer(value) + '/' + value.toString() + '/' + value.l
     test('installs node preset modules without globals by default', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.node(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.node(
               env: <String, String>{'APP_ENV': 'test'},
               platform: 'test-platform',
               cwd: '/workspace/app',
@@ -2373,8 +3153,8 @@ globalThis.nodePresetValue = [
     test('installs node preset CommonJS modules consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.node(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.node(
               env: <String, String>{'MODE': 'cjs'},
               cwd: '/cjs',
             ),
@@ -2405,8 +3185,8 @@ module.exports = [
     test('installs node preset globals when requested', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.node(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.node(
               globalBuffer: true,
               globalProcess: true,
               env: <String, String>{'GLOBAL_MODE': 'enabled'},
@@ -2431,7 +3211,7 @@ module.exports = [
     test('loads configured ES host modules consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[_hostMathModule],
+          modules: <QuickjsHostModule>[_hostMathModule],
         ),
       );
       addTearDown(engine.dispose);
@@ -2449,7 +3229,7 @@ globalThis.hostModuleValue = add(value, 1);
     test('does not expose host modules as globals consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[_hostBufferModule],
+          modules: <QuickjsHostModule>[_hostBufferModule],
         ),
       );
       addTearDown(engine.dispose);
@@ -2471,8 +3251,8 @@ globalThis.hostBufferImportLabel = label;
     test('keeps global crypto and node crypto module separate', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
-          hostModules: <QuickjsHostModule>[_hostCryptoModule],
+          environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
+          modules: <QuickjsHostModule>[_hostCryptoModule],
         ),
       );
       addTearDown(engine.dispose);
@@ -2494,7 +3274,7 @@ globalThis.hostNodeCryptoValue =
       () async {
         final engine = await Quickjs.create(
           options: const QuickjsRuntimeOptions(
-            hostModules: <QuickjsHostModule>[_hostBufferModule],
+            modules: <QuickjsHostModule>[_hostBufferModule],
           ),
         );
         addTearDown(engine.dispose);
@@ -2516,7 +3296,7 @@ globalThis.hostNodeBufferValue = label + '/' + byteLength('abcd');
     test('loads relative dependencies between ES host modules', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[
+          modules: <QuickjsHostModule>[
             _hostPackageMainModule,
             _hostPackageDepModule,
           ],
@@ -2537,7 +3317,7 @@ globalThis.hostNodeBufferValue = label + '/' + byteLength('abcd');
     test('loads ES host module dependencies from moduleLoader', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostModules: const <QuickjsHostModule>[_hostModuleLoaderMainModule],
+          modules: const <QuickjsHostModule>[_hostModuleLoaderMainModule],
           moduleLoader: (name) => switch (name) {
             'loader/dep' => 'export const value = 40;',
             _ => null,
@@ -2557,7 +3337,7 @@ globalThis.hostLoaderDependencyValue = result;
     test('prefers ES host modules over moduleLoader consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostModules: const <QuickjsHostModule>[_hostMathModule],
+          modules: const <QuickjsHostModule>[_hostMathModule],
           moduleLoader: (name) => switch (name) {
             'app/math' =>
               'export const value = -1; export const add = () => -1;',
@@ -2578,7 +3358,7 @@ globalThis.hostPreferredValue = add(value, 1);
     test('caches ES host modules in one runtime consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[_hostCounterModule],
+          modules: <QuickjsHostModule>[_hostCounterModule],
         ),
       );
       addTearDown(engine.dispose);
@@ -2595,7 +3375,7 @@ globalThis.hostCounterResult = first + '/' + second + '/' + globalThis.hostModul
     test('loads configured CommonJS host modules consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[
+          modules: <QuickjsHostModule>[
             _hostCommonJsModule,
             _hostCommonJsLocalModule,
           ],
@@ -2615,7 +3395,7 @@ globalThis.hostCounterResult = first + '/' + second + '/' + globalThis.hostModul
     test('caches CommonJS host modules in one runtime consistently', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[_hostCommonJsCounterModule],
+          modules: <QuickjsHostModule>[_hostCommonJsCounterModule],
         ),
       );
       addTearDown(engine.dispose);
@@ -2633,7 +3413,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
     test('loads CommonJS host module dependencies from moduleLoader', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostModules: const <QuickjsHostModule>[_hostCommonJsLoaderMainModule],
+          modules: const <QuickjsHostModule>[_hostCommonJsLoaderMainModule],
           moduleLoader: (name) => switch (name) {
             'loader/cjs-dep' => 'exports.value = 40;',
             _ => null,
@@ -2656,7 +3436,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
       () async {
         final engine = await Quickjs.create(
           options: QuickjsRuntimeOptions(
-            hostModules: const <QuickjsHostModule>[_hostCommonJsModule],
+            modules: const <QuickjsHostModule>[_hostCommonJsModule],
             moduleLoader: (name) => switch (name) {
               'app/cjs' => 'module.exports = { value: -1 };',
               'app/local' => 'exports.value = 6;',
@@ -2681,7 +3461,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
       () async {
         final engine = await Quickjs.create(
           options: const QuickjsRuntimeOptions(
-            hostModules: <QuickjsHostModule>[_hostCommonJsBufferModule],
+            modules: <QuickjsHostModule>[_hostCommonJsBufferModule],
           ),
         );
         addTearDown(engine.dispose);
@@ -2697,26 +3477,20 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
     );
 
     test('rejects duplicate host module specifiers consistently', () async {
-      final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          hostModules: <QuickjsHostModule>[
-            QuickjsHostModule.esModule(
-              specifier: 'dup',
-              source: 'export const value = 1;',
-            ),
-            QuickjsHostModule.esModule(
-              specifier: 'node:dup',
-              source: 'export const value = 2;',
-            ),
-          ],
-        ),
-      );
-      addTearDown(engine.dispose);
-
       await expectLater(
-        engine.evalModule(
-          "import { value } from 'dup'; export default value;",
-          name: 'main.mjs',
+        Quickjs.create(
+          options: const QuickjsRuntimeOptions(
+            modules: <QuickjsHostModule>[
+              QuickjsHostModule.esModule(
+                specifier: 'dup',
+                source: 'export const value = 1;',
+              ),
+              QuickjsHostModule.esModule(
+                specifier: 'node:dup',
+                source: 'export const value = 2;',
+              ),
+            ],
+          ),
         ),
         throwsA(isA<JsValueConversionException>()),
       );
@@ -2744,8 +3518,8 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
           hostCapabilities: QuickjsHostCapabilities(
             browserGlobals: QuickjsBrowserGlobals(window: true),
           ),
-          hostScripts: <QuickjsHostScript>[_randomUuidHostScript],
-          hostModules: <QuickjsHostModule>[_hostMathModule],
+          environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
+          modules: <QuickjsHostModule>[_hostMathModule],
         ),
       );
       addTearDown(engine.dispose);

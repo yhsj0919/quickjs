@@ -221,35 +221,35 @@ export class QuickJS {
     /** The global object. Cached — do not dispose. */
     get global() {
         if (!this._global) {
-            this._global = new JSValueHandle(this, this.exports.qjs_get_global());
+            this._global = new JSValueHandle(this, this.exports.qjs_get_global(), true);
         }
         return this._global;
     }
     /** The undefined value. Cached — do not dispose. */
     get undefined() {
         if (!this._undefined) {
-            this._undefined = new JSValueHandle(this, this.exports.qjs_get_undefined());
+            this._undefined = new JSValueHandle(this, this.exports.qjs_get_undefined(), true);
         }
         return this._undefined;
     }
     /** The null value. Cached — do not dispose. */
     get null() {
         if (!this._null) {
-            this._null = new JSValueHandle(this, this.exports.qjs_get_null());
+            this._null = new JSValueHandle(this, this.exports.qjs_get_null(), true);
         }
         return this._null;
     }
     /** The true value. Cached — do not dispose. */
     get true() {
         if (!this._true) {
-            this._true = new JSValueHandle(this, this.exports.qjs_get_true());
+            this._true = new JSValueHandle(this, this.exports.qjs_get_true(), true);
         }
         return this._true;
     }
     /** The false value. Cached — do not dispose. */
     get false() {
         if (!this._false) {
-            this._false = new JSValueHandle(this, this.exports.qjs_get_false());
+            this._false = new JSValueHandle(this, this.exports.qjs_get_false(), true);
         }
         return this._false;
     }
@@ -1635,9 +1635,19 @@ export class JSValueHandle {
     /** @internal */
     ptr;
     disposed = false;
-    constructor(vm, ptr) {
+    /**
+     * When true, this handle is a cached singleton (e.g. `undefined`, `null`,
+     * `true`, `false`, the global object) and `dispose()` is a no-op. This
+     * prevents code that routinely disposes handles (such as the object/array
+     * branches of `hostToHandle`) from freeing the shared heap `JSValue*` that
+     * the cached singleton still references, which would corrupt later reads.
+     * @internal
+     */
+    singleton;
+    constructor(vm, ptr, singleton = false) {
         this.vm = vm;
         this.ptr = ptr;
+        this.singleton = singleton;
     }
     get isUndefined() {
         return this.vm._getExports().qjs_is_undefined(this.ptr) !== 0;
@@ -1951,6 +1961,12 @@ export class JSValueHandle {
      * Safe to call after the VM has been disposed (becomes a no-op).
      */
     dispose() {
+        // Cached singleton handles (undefined/null/true/false/global) share a
+        // single heap-allocated JSValue that the VM keeps referencing. Freeing it
+        // here would leave the cached handle pointing at freed memory, so disposing
+        // a singleton is intentionally a no-op.
+        if (this.singleton)
+            return;
         if (!this.disposed) {
             this.disposed = true;
             // If the VM is already disposed, the WASM instance is gone —

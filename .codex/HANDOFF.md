@@ -2,131 +2,95 @@
 
 ## Current State
 
-- `ROADMAP.md` 0.6.0 `module 与 asset` is complete.
-- ES module support now covers:
-  - `evalModule(source, name: ...)`
-  - static import dependency loading
-  - relative path resolution
-  - runtime-scoped imported module cache
-  - `QuickjsRuntimeOptions.moduleLoader`
-  - Flutter `AssetBundle` helper via `quickjsAssetModuleLoader()`
-  - package asset and web asset paths
-- Minimal CommonJS support is complete:
-  - `Quickjs.evalCommonJs()` / `evaluateCommonJs()`
-  - `require()`
-  - `module.exports`
-  - `exports`
-  - relative path resolution
-  - runtime-scoped CommonJS module cache
-- 0.7.0 function handle slice is implemented:
-  - `Quickjs.evaluateHandle()` / `evalHandle()`
-  - `QuickjsFunctionHandle.call(args, timeout: ...)`
-  - `QuickjsFunctionHandle.callAsync(args, timeout: ...)`
-  - `QuickjsFunctionHandle.dispose()`
-  - `QuickjsFunctionHandle.cancel()`
-  - runtime-owned hidden JS function registry
-  - `callAsync` timeout docs: timeout covers Promise pending; synchronous work before returning a Promise should use `call`
-  - native/web consistency tests cover call, callAsync Promise resolve/reject, structured args, non-function rejection, isolation, timeout, cancel, handle dispose, and runtime dispose errors
-- 0.7.0 object proxy minimal slice is implemented:
-  - `QuickjsObjectProxy`
-  - `QuickjsObjectAccessor`
-  - `Quickjs.bindObject(name, proxy)`
-  - `QuickjsObjectHandle.dispose()`
-  - readonly enumerable properties
-  - dynamic getter / setter descriptors
-  - getter descriptors return Promises on the JS side; setter descriptors dispatch through callback, but assignment expressions cannot await setter Promises because of JS accessor semantics
-  - methods routed through the existing Promise callback bridge
-  - object handle dispose deletes the JS global proxy, hidden method/accessor callback globals, and runtime-level callback registry entries
-  - leaked proxy/method/accessor references reject with a clear disposed error after object handle dispose
-  - native/web consistency tests cover readonly properties, dynamic accessors, getter errors, method calls, method errors, invalid descriptors, object handle dispose, leaked proxy/method/accessor references after dispose, dispose-after-runtime-dispose, and bind-after-dispose errors
-  - example page registered as `对象代理`
-- 0.7.0 Dart class / instance binding first slice is implemented:
-  - `QuickjsClass<T>`
-  - `QuickjsInstanceAccessor<T>`
-  - `Quickjs.bindClass<T>(jsName, definition)`
-  - `QuickjsClassHandle.dispose()`
-  - JS `new User(...)` returns an instance proxy synchronously while Dart construction runs through the Promise callback bridge
-  - instance getters and methods wait for Dart construction before touching the Dart instance
-  - setter assignment cannot await async setter errors because of JS accessor semantics
-  - Dart instances are stored in a runtime-owned class/instance table and cleared on class handle dispose, runtime dispose, or runtime stop/rebuild
-  - native/web consistency tests cover constructor binding, accessors, methods, constructor errors, class handle dispose, dispose-after-runtime-dispose, invalid descriptors, and bind-after-dispose errors
-  - lifecycle docs are in `docs/class_binding_lifecycle.md`
-  - example page registered as `Class Binding`
-  - instance finalizer is explicitly deferred; supported cleanup is explicit class handle dispose, runtime dispose, or runtime rebuild
-- The working tree may contain uncommitted 0.6.0 and 0.7.0 changes. Do not assume a clean tree.
+- The working tree contains uncommitted work spanning 0.6.0 through 0.9.0. Preserve it and do not assume a clean checkout.
+- Public imports still enter through `package:quickjs/quickjs.dart`, while implementation files are now grouped under:
+  - `lib/src/backend/`
+  - `lib/src/bridge/`
+  - `lib/src/diagnostics/`
+  - `lib/src/module/`
+  - `lib/src/runtime/`
+  - `lib/src/native/` and `lib/src/web/`
+- 0.6.0 module support is complete: ES modules, static imports, relative resolution, runtime module cache, asset loading, and minimal CommonJS.
+- 0.7.0 is complete except for JS-GC-driven Dart instance finalization:
+  - function handles with call, callAsync, cancel, timeout, and explicit disposal
+  - Dart object proxies with properties, accessors, methods, and explicit disposal
+  - Dart class/instance bindings with runtime-owned instance tables
+- 0.8.0 debug support is implemented:
+  - console log/warn/error forwarding
+  - source names and structured JS exceptions
+  - source-map registration and stack remapping
+  - `debugInspect()` and `debugEvaluateValue()` prototypes
+- 0.9.0 host capabilities are in active development:
+  - `QuickjsHostScript`, `QuickjsHostModule`, and async `QuickjsHostProvider`
+  - `QuickjsHostProviderContext` signals per-call cancellation during stop, dispose, and runtime rebuild
+  - `QuickjsHostProviderImplementation` declares Dart/platform/Web implementation metadata, exposed by `debugInspect().providerDetails`
+  - initialization mounts through `QuickjsRuntimeOptions.mounts`
+  - direct runtime configuration uses `environmentPatches`, `modules`, and `providers`; the old `hostScripts` / `hostModules` / `hostProviders` names are removed
+  - runtime mounts through `Quickjs.mount()`; the first implementation rebuilds the runtime atomically
+  - `QuickjsHostMountConflictPolicy.replace` atomically replaces a same-name runtime mount and restores the old mount/runtime if installation fails
+  - `QuickjsHostScript.globals` declares installed globals so duplicate globals are rejected before a mount rebuild
+  - `QuickjsHostMount.web()`, `.essential()`, and `.node()` presets
+  - `QuickjsWebCryptoMount()` provides randomUUID, getRandomValues, and provider-backed subtle.digest
+  - the old `QuickjsHostEnvironment` / `hostEnvironments` API has been removed
+- Example coverage includes host modules, Web host globals, Web Crypto, and bulk host mounts.
 
 ## Important Files
 
 - `ROADMAP.md`
-- `lib/src/quickjs.dart`
-- `lib/src/quickjs_runtime_options.dart`
-- `lib/src/quickjs_asset_module_loader.dart`
-- `lib/src/quickjs_runtime_base.dart`
+- `lib/quickjs.dart`
+- `lib/src/runtime/quickjs.dart`
+- `lib/src/runtime/quickjs_runtime_options.dart`
+- `lib/src/runtime/quickjs_runtime_base.dart`
+- `lib/src/module/quickjs_asset_module_loader.dart`
+- `lib/src/module/quickjs_web_crypto_mount.dart`
 - `lib/src/native/quickjs_native_worker.dart`
 - `lib/src/web/quickjs_web_backend.dart`
-- `lib/src/web/quickjs_web_loader.dart`
-- `assets/web/quickjs_bridge.mjs`
-- `assets/web/quickjs_web.js`
-- `assets/web/quickjs_web_worker.js`
-- `native/quickjs_bridge.c`
-- `native/quickjs_bridge.h`
 - `test/quickjs_consistency_test.dart`
-- `example/lib/pages/function_handle_page.dart`
-- `example/lib/pages/class_binding_page.dart`
-- `example/lib/pages/module_eval_page.dart`
 - `example/lib/example_pages.dart`
+- `example/lib/pages/host_modules_page.dart`
+- `example/lib/pages/host_mounts_page.dart`
+- `example/lib/pages/web_host_environment_page.dart`
+- `example/lib/pages/crypto_random_uuid_page.dart`
 - `example/test/widget_test.dart`
 
-## Verified Commands
+## Commands To Verify
 
-Run from `E:\quickjs` unless noted.
+Run from `E:\quickjs` unless noted:
 
 ```powershell
+dart format --output=none --set-exit-if-changed lib test example/lib example/test
 flutter analyze
 flutter test
-flutter test test\quickjs_consistency_test.dart
 flutter test test\quickjs_consistency_test.dart -d chrome
 cd example
 flutter test
 flutter build windows --debug
 ```
 
-Notes:
-
-- The Windows build succeeded after native bridge changes.
-- Windows build may still show existing C4819 encoding warnings for native files.
+The Windows build may still emit existing C4819 encoding warnings for native files.
 
 ## Next Recommended Step
 
-Continue with 0.8.0 debug/dev experience:
+Finish the remaining 0.9.0 lifecycle and conflict semantics before starting the 0.10.0 plugin API:
 
-1. Start with `console.log` / `console.warn` / `console.error` binding.
-2. Reuse the existing Promise callback bridge where possible, and keep behavior native/web consistent.
-3. Keep class binding explicit; do not add arbitrary Dart reflection.
-4. Avoid inheritance, static members, and automatic reflection until the first public API shape settles.
-
-The first class-binding slice is intentionally narrow and now has docs plus example UI. Instance finalizer is deferred by design.
+1. Add the remaining native/Web consistency coverage around provider isolation and dynamically loaded module conflicts.
+2. Document the npm pre-bundling strategy without adding a full npm resolver.
+3. Decide whether 0.9.0 should include `fetch` or defer it to a separate opt-in mount.
 
 ## Constraints To Preserve
 
-- Public API should continue to enter through `Quickjs`.
-- Do not expose raw native `JSValue`, `JSRuntime`, or `JSContext`.
-- Handles must be runtime-owned.
-- Worker backends should keep request / response / stop / dispose semantics.
-- Native and web behavior should stay covered by `test/quickjs_consistency_test.dart`.
-- Example pages should create and dispose their own `Quickjs` instances.
+- Keep `Quickjs` as the single public system entry point.
+- Do not expose raw native `JSValue`, `JSRuntime`, or `JSContext` values.
+- Runtime-owned handles, callbacks, providers, module caches, and class instances must not cross runtimes.
+- Keep native and Web request/response/stop/dispose semantics aligned and covered by consistency tests.
+- Host/platform capabilities remain opt-in. Core defaults must not expose network, filesystem, browser, or Node APIs.
+- Cross-isolate Dart/Flutter providers are asynchronous; do not present them as synchronous JavaScript APIs.
+- Runtime mounting currently rebuilds the runtime, so existing globals, module cache, manual callbacks, and handles are not retained.
+- Example pages create and dispose their own `Quickjs` instances.
 
-## Suggested Startup Procedure For Next Session
+## Startup Procedure
 
-1. Read this file.
-2. Read only `ROADMAP.md`.
-3. Check `git status --short`.
-4. For 0.7.0 function handles, read:
-   - `lib/src/quickjs.dart`
-   - `lib/src/quickjs_runtime_base.dart`
-   - `lib/src/native/quickjs_native_worker.dart`
-   - `lib/src/web/quickjs_web_backend.dart`
-   - `assets/web/quickjs_bridge.mjs`
-   - `native/quickjs_bridge.c`
-   - `test/quickjs_consistency_test.dart`
-5. Avoid `rg --files` or broad scans unless the targeted files contradict this handoff.
+1. Read this file and the relevant `ROADMAP.md` section.
+2. Run `git status --short` before editing.
+3. Inspect only the files related to the selected roadmap item; avoid broad rewrites in the dirty worktree.
+4. Keep public exports in `lib/quickjs.dart` and internal imports within the new directory structure.

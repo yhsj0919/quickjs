@@ -1,6 +1,6 @@
-import '../quickjs_backend.dart';
-import '../quickjs_runtime_base.dart';
-import '../quickjs_runtime_options.dart';
+import '../backend/quickjs_backend.dart';
+import '../runtime/quickjs_runtime_base.dart';
+import '../runtime/quickjs_runtime_options.dart';
 import 'quickjs_native_worker.dart';
 
 /// mobile / desktop 平台使用的 FFI backend。

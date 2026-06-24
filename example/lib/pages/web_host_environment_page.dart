@@ -38,8 +38,8 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
 
       final quickjs = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          hostEnvironments: <QuickjsHostEnvironment>[
-            QuickjsHostEnvironment.web(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount.web(
               locationHref: 'https://example.com:8443/app?q=1#top',
               userAgent: 'quickjs-example',
             ),
@@ -227,7 +227,7 @@ sessionStorage.setItem('answer', 7);
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsHostEnvironment.web(locationHref: ..., userAgent: ...)',
+              'QuickjsHostMount.web(locationHref: ..., userAgent: ...)',
             ),
             const SizedBox(height: 16),
             Wrap(

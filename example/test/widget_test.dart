@@ -13,6 +13,7 @@ import 'package:quickjs_example/example_pages.dart';
 void main() {
   testWidgets('renders example index', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
+    expect(find.text('01'), findsOneWidget);
 
     for (final page in examplePages) {
       final title = find.text(page.title);
@@ -26,6 +27,12 @@ void main() {
       expect(find.text(page.title), findsOneWidget);
       expect(find.text(page.description), findsOneWidget);
     }
+
+    expect(
+      find.text(examplePages.length.toString().padLeft(2, '0')),
+      findsOneWidget,
+    );
+    expect(examplePages.last.title, '能力批量挂载');
   });
 
   testWidgets('registers resource limit example page', (
@@ -96,7 +103,7 @@ void main() {
     }
     expect(title, findsOneWidget);
     expect(find.textContaining('runtime module cache'), findsOneWidget);
-    expect(find.textContaining('CommonJS'), findsOneWidget);
+    expect(find.textContaining('CommonJS'), findsWidgets);
   });
 
   testWidgets('registers host modules example page', (
@@ -114,7 +121,7 @@ void main() {
     }
     expect(title, findsOneWidget);
     expect(
-      find.textContaining('QuickjsRuntimeOptions.hostModules'),
+      find.textContaining('QuickjsRuntimeOptions.modules'),
       findsOneWidget,
     );
     expect(find.textContaining('CommonJS 宿主模块'), findsOneWidget);
@@ -122,6 +129,26 @@ void main() {
     expect(find.textContaining('debugInspect'), findsOneWidget);
     expect(find.textContaining('essential Buffer'), findsOneWidget);
     expect(find.textContaining('node preset'), findsOneWidget);
+  });
+
+  testWidgets('registers host mounts example page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    final title = find.text('能力批量挂载');
+    if (title.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        title,
+        120,
+        scrollable: find.byType(Scrollable),
+      );
+    }
+    expect(title, findsOneWidget);
+    expect(find.textContaining('QuickjsRuntimeOptions.mounts'), findsOneWidget);
+    expect(find.textContaining('Quickjs.mount()'), findsOneWidget);
+    expect(find.textContaining('provider'), findsOneWidget);
+    expect(find.text('替换运行时挂载'), findsOneWidget);
   });
 
   testWidgets('registers web host environment example page', (
@@ -138,7 +165,7 @@ void main() {
       );
     }
     expect(title, findsOneWidget);
-    expect(find.textContaining('QuickjsHostEnvironment.web()'), findsOneWidget);
+    expect(find.textContaining('QuickjsHostMount.web()'), findsOneWidget);
     expect(find.textContaining('navigator'), findsOneWidget);
   });
 
@@ -229,11 +256,9 @@ void main() {
       );
     }
     expect(title, findsOneWidget);
-    expect(
-      find.textContaining('QuickjsHostEnvironment.webCrypto()'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('crypto.randomUUID()'), findsOneWidget);
-    expect(find.textContaining('crypto.getRandomValues()'), findsOneWidget);
+    expect(find.textContaining('QuickjsWebCryptoMount()'), findsOneWidget);
+    expect(find.textContaining('randomUUID'), findsOneWidget);
+    expect(find.textContaining('getRandomValues'), findsOneWidget);
+    expect(find.textContaining('subtle.digest'), findsOneWidget);
   });
 }

@@ -328,8 +328,12 @@ flutter build windows
 ## 更新 Web WASM 资源
 
 ```powershell
-.\tool\fetch_web_assets.ps1
+.\tool\fetch_web_assets.ps1 -Version 3.0.1
 ```
+
+脚本先下载到临时目录，使用 unpkg metadata 中的 SHA-256 SRI 校验每个文件，
+再检查 WASM header 和 `version.js`。全部通过后才替换 `assets/web` 中的依赖资源；
+下载、校验或替换失败时保留原有资产。
 
 ## Web 调试
 
@@ -352,9 +356,9 @@ flutter run -d chrome
 ## 结构
 
 - `lib/quickjs.dart`：公开 package 入口。
-- `lib/src/quickjs.dart`：`Quickjs` 实现、请求队列、callback / handle / proxy 入口。
-- `lib/src/quickjs_runtime_options.dart`：资源限制与 module loader 配置。
-- `lib/src/quickjs_asset_module_loader.dart`：Flutter `AssetBundle` module loader helper。
+- `lib/src/runtime/quickjs.dart`：`Quickjs` 实现、请求队列、callback / handle / proxy 入口。
+- `lib/src/runtime/quickjs_runtime_options.dart`：资源限制与 module loader 配置。
+- `lib/src/module/quickjs_asset_module_loader.dart`：Flutter `AssetBundle` module loader helper。
 - `lib/src/native/`：native FFI backend 与 Dart isolate worker。
 - `lib/src/web/`：Flutter Web backend 与 JS interop loader。
 - `native/`：C FFI bridge。
