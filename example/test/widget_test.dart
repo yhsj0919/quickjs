@@ -145,7 +145,7 @@ void main() {
     expect(title, findsOneWidget);
     expect(find.textContaining('QuickjsFetchMount'), findsOneWidget);
     expect(find.textContaining('HttpClient'), findsOneWidget);
-    expect(find.textContaining('浏览器 fetch'), findsOneWidget);
+    expect(find.textContaining('origin allowlist'), findsOneWidget);
   });
 
   testWidgets('registers host modules example page', (

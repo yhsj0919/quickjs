@@ -32,9 +32,13 @@
   - `QuickjsHostMount.web()`, `.essential()`, and `.node()` presets
   - `QuickjsWebCryptoMount()` provides randomUUID, getRandomValues, and provider-backed subtle.digest
   - the old `QuickjsHostEnvironment` / `hostEnvironments` API has been removed
-- Example coverage includes host modules, Web host globals, Web Crypto, and bulk host mounts.
+- Example coverage includes host modules, Web host globals, Web Crypto, bulk host mounts,
+  and Fetch (`QuickjsFetchMount` with POST, FormData, XHR, redirects, and origin policy).
 - `docs/npm_bundling.md` and `example/npm_bundle` document and test the supported npm boundary: esbuild produces a self-contained ESM Flutter asset that is registered through `QuickjsRuntimeOptions.modules`; the dedicated `NPM Bundle` page shows only asset loading, module registration, and one exported method call.
-- `QuickjsFetchMount` is an opt-in mount with an exact origin allowlist, timeout and body limits; package:http uses HttpClient on native and browser fetch on Web, while the JS wrapper provides minimal Headers/Response APIs and disables redirects.
+- `QuickjsFetchMount` is an opt-in mount with an exact origin allowlist, timeout/body limits,
+  and configurable redirect following with per-hop allowlist checks; native uses HttpClient
+  and Web uses browser fetch; the JS wrapper exposes Fetch APIs plus an XHR compatibility
+  layer (`onload` / `onerror` properties; no `addEventListener`).
 
 ## Important Files
 
@@ -53,7 +57,9 @@
 - `example/lib/pages/host_mounts_page.dart`
 - `example/lib/pages/web_host_environment_page.dart`
 - `example/lib/pages/crypto_random_uuid_page.dart`
+- `example/lib/pages/fetch_page.dart`
 - `example/test/widget_test.dart`
+- `test/quickjs_fetch_mount_test.dart`
 
 ## Commands To Verify
 
@@ -78,11 +84,14 @@ re-running a passing full gate unless relevant files changed.
 
 ## Next Recommended Step
 
-Finish the remaining 0.9.0 lifecycle and conflict semantics before starting the 0.10.0 plugin API:
+Fetch (`QuickjsFetchMount`) is wrapped up for 0.9.0. Continue with the remaining 0.9.0
+lifecycle and conflict semantics before starting the 0.10.0 plugin API:
 
-1. Decide whether JS/worker-local providers belong in 0.9.0 or should remain deferred.
-2. Decide whether Node crypto belongs in 0.9.0 or should remain deferred.
-3. Run the full native/Web and example test suites before declaring the 0.9.0 slice complete.
+1. Close foundational gaps from 0.3.0 / test strategy: handle ownership rules, OOM/stack
+   overflow tests, example smoke automation.
+2. Decide whether JS/worker-local providers belong in 0.9.0 or should remain deferred.
+3. Decide whether Node crypto belongs in 0.9.0 or should remain deferred.
+4. Run the full native/Web and example test suites before declaring the 0.9.0 slice complete.
 
 ## Constraints To Preserve
 

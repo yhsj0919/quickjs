@@ -525,8 +525,14 @@ final appApi = QuickjsHostMount(
 - [x] `location` / `navigator` / `localStorage` / `sessionStorage`：环境补全。
   只实现明确声明的最小子集，不伪装成完整浏览器环境。
 - [x] `fetch`：`QuickjsFetchMount` 显式安装 Promise-based Fetch API；Native 底层使用 Dart
-  `HttpClient`，Web 底层使用浏览器原生 `fetch`。支持 origin allowlist、超时、请求/响应大小限制、
-  生命周期取消、Headers，以及 Response text/json/arrayBuffer/clone；自动重定向关闭。
+  `HttpClient`，Web 底层使用浏览器原生 `fetch`。支持 origin allowlist、超时、可配置
+  `maxRedirects`、请求/响应大小限制、生命周期取消，以及 Fetch 标准 `redirect` 选项（默认
+  `follow`，支持 `manual` / `error`，每次跳转校验 allowlist）。JS 侧提供 `fetch` /
+  `Request` / `Response` / `Headers` / `AbortController` / `FormData` / `URLSearchParams` /
+  `Blob` / `ReadableStream` / `XMLHttpRequest`（基于 fetch 的兼容层，使用 `onload` 等属性
+  回调，不含 `addEventListener`）。Response 支持 `text()` / `json()` / `arrayBuffer()` /
+  `blob()` / `bytes()` / `formData()` / `clone()`；字符串请求体自动设置
+  `text/plain;charset=UTF-8`。
 - [~] Web Crypto：环境补全 `globalThis.crypto`；`QuickjsWebCryptoMount()`
   已覆盖 `crypto.randomUUID()`、`crypto.getRandomValues()`，并通过 async provider 支持
   `crypto.subtle.digest()` 的 SHA-1 / SHA-256 / SHA-384 / SHA-512。该 preset 只作为最小兼容示例，
@@ -659,8 +665,10 @@ final appApi = QuickjsHostMount(
   环境补全、module、provider、冲突回滚、debug 挂载列表和 stop 重建后恢复。
 - [x] Web 宿主环境 example 页面覆盖 `QuickjsHostMount.web()`、默认未启用检查、
   `window` / `self` / `location` / `navigator`、内存版 storage、轻量 `URL` 和 stop 重建后恢复。
-- [x] Fetch example 页面覆盖 `QuickjsFetchMount` origin allowlist、Native HttpClient、Web browser
-  fetch 和 Response JSON 读取；自动化测试使用本地 HTTP server 验证请求/响应与 origin 拒绝。
+- [x] Fetch example 页面覆盖 `QuickjsFetchMount` origin allowlist、POST/FormData/XHR、
+  重定向 follow/manual/error、AbortSignal、Request 对象、blob/bytes，以及失败时 HTTP 调试输出；
+  `test/quickjs_fetch_mount_test.dart` 使用本地 HTTP server 验证请求/响应、Content-Type、
+  重定向与 origin 拒绝。
 - [x] Web Crypto example 页面覆盖 `QuickjsWebCryptoMount()`、默认未启用检查、
   `crypto.randomUUID()`、`crypto.getRandomValues()`、Flutter 原生 `crypto.subtle.digest()` 和 stop
   重建后恢复。
