@@ -2433,6 +2433,43 @@ globalThis.app = {
       expect(context.cancellationReason, isA<JsRuntimeClosedException>());
     });
 
+    test('keeps async host providers isolated per runtime', () async {
+      QuickjsRuntimeOptions providerOptions(String value) {
+        return QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.async(
+              name: 'app.identity',
+              callback: (_, _) => value,
+            ),
+          ],
+          environmentPatches: const <QuickjsHostScript>[
+            QuickjsHostScript(
+              name: 'host:provider-isolation.js',
+              globals: <String>['app'],
+              source: '''
+globalThis.app = {
+  identity() {
+    return globalThis.__quickjsHostProviders['app.identity']();
+  },
+};
+''',
+            ),
+          ],
+        );
+      }
+
+      final first = await Quickjs.create(options: providerOptions('first'));
+      final second = await Quickjs.create(options: providerOptions('second'));
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      expect(await first.evalAsync('return await app.identity();'), 'first');
+      expect(await second.evalAsync('return await app.identity();'), 'second');
+
+      await first.dispose();
+      expect(await second.evalAsync('return await app.identity();'), 'second');
+    });
+
     test('wraps async host providers from ES host modules', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
@@ -2673,13 +2710,28 @@ globalThis.runtimeApi = {
               source: 'globalThis.runtimeMountVersion = $version;',
             ),
           ],
+          modules: <QuickjsHostModule>[
+            QuickjsHostModule.esModule(
+              specifier: 'versioned/module',
+              source: 'export const value = $version;',
+            ),
+          ],
         );
+      }
+
+      Future<String> readVersionedModule(Quickjs engine) async {
+        await engine.evalModule('''
+import { value } from 'versioned/module';
+globalThis.versionedModuleValue = value;
+''', name: 'versioned-check.mjs');
+        return engine.eval('versionedModuleValue');
       }
 
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
       await engine.mount(versionedMount(1));
       expect(await engine.eval('runtimeMountVersion'), '1');
+      expect(await readVersionedModule(engine), '1');
 
       await expectLater(
         engine.mount(versionedMount(2)),
@@ -2692,6 +2744,7 @@ globalThis.runtimeApi = {
         conflictPolicy: QuickjsHostMountConflictPolicy.replace,
       );
       expect(await engine.eval('runtimeMountVersion'), '2');
+      expect(await readVersionedModule(engine), '2');
       expect(
         (await engine.debugInspect()).registeredMounts,
         contains('versioned-runtime'),
@@ -2702,6 +2755,70 @@ globalThis.runtimeApi = {
       await engine.stop();
       await expectLater(running, throwsA(isA<JsCancelledException>()));
       expect(await engine.eval('runtimeMountVersion'), '2');
+      expect(await readVersionedModule(engine), '2');
+    });
+
+    test('does not shadow modules already resolved by moduleLoader', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          moduleLoader: (name) => switch (name) {
+            'dynamic/value' => 'export const value = 42;',
+            'dynamic/cjs' => 'exports.value = 43;',
+            _ => null,
+          },
+        ),
+      );
+      addTearDown(engine.dispose);
+      await engine.evalModule('''
+import { value } from 'dynamic/value';
+globalThis.dynamicLoaderValue = value;
+''', name: 'dynamic-loader-main.mjs');
+      expect(await engine.eval('dynamicLoaderValue'), '42');
+
+      await expectLater(
+        engine.mount(
+          const QuickjsHostMount(
+            name: 'dynamic-shadow',
+            modules: <QuickjsHostModule>[
+              QuickjsHostModule.esModule(
+                specifier: 'dynamic/value',
+                source: 'export const value = 7;',
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+
+      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(await engine.eval('dynamicLoaderValue'), '42');
+      expect(
+        (await engine.debugInspect()).registeredMounts,
+        isNot(contains('dynamic-shadow')),
+      );
+
+      expect(
+        await engine.evalCommonJs(
+          "module.exports = require('dynamic/cjs').value;",
+          name: 'dynamic-loader-main.cjs',
+        ),
+        '43',
+      );
+      await expectLater(
+        engine.mount(
+          const QuickjsHostMount(
+            name: 'dynamic-cjs-shadow',
+            modules: <QuickjsHostModule>[
+              QuickjsHostModule.commonJs(
+                specifier: 'dynamic/cjs',
+                source: 'exports.value = 8;',
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      expect(engine.state, QuickjsRuntimeState.ready);
     });
 
     test('does not replace initialization mounts at runtime', () async {

@@ -7,11 +7,13 @@ import 'pages/console_page.dart';
 import 'pages/crypto_random_uuid_page.dart';
 import 'pages/exception_model_page.dart';
 import 'pages/function_handle_page.dart';
+import 'pages/fetch_page.dart';
 import 'pages/host_modules_page.dart';
 import 'pages/host_mounts_page.dart';
 import 'pages/memory_limit_page.dart';
 import 'pages/module_eval_page.dart';
 import 'pages/native_worker_page.dart';
+import 'pages/npm_bundle_page.dart';
 import 'pages/object_proxy_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
@@ -135,5 +137,17 @@ final List<ExamplePageSpec> examplePages = [
     description:
         '使用 QuickjsRuntimeOptions.mounts 和 Quickjs.mount() 批量安装环境补全、模块与 provider。',
     builder: (_) => const HostMountsPage(),
+  ),
+  ExamplePageSpec(
+    title: 'NPM Bundle',
+    description:
+        '加载 esbuild 生成的单文件 asset，注册为 ES module，并只调用 compareValues() 导出方法。',
+    builder: (_) => const NpmBundlePage(),
+  ),
+  ExamplePageSpec(
+    title: 'Fetch',
+    description:
+        '通过 QuickjsFetchMount 显式允许目标 origin，Native 使用 HttpClient，Web 使用浏览器 fetch。',
+    builder: (_) => const FetchPage(),
   ),
 ];

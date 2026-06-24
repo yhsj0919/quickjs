@@ -127,9 +127,88 @@ globalThis.answer = answer;
 print(await engine.eval('globalThis.answer')); // 42
 ```
 
+### 宿主能力批量挂载
+
+`QuickjsHostMount` 用一个有名称的能力包组合 environment patch、ES module 和
+Promise-based host provider。可在创建 runtime 时通过 `QuickjsRuntimeOptions.mounts`
+安装，也可在运行时通过 `Quickjs.mount()` 安装；运行时安装会重建 runtime，因此原有
+JS global 状态不会保留，已声明的初始化 mounts 会自动恢复。
+
+```dart
+final engine = await Quickjs.create(
+  options: const QuickjsRuntimeOptions(
+    mounts: <QuickjsHostMount>[
+      QuickjsHostMount(
+        name: 'app-base',
+        environmentPatches: <QuickjsHostScript>[
+          QuickjsHostScript(
+            name: 'mount:app-base.js',
+            source: 'globalThis.appVersion = "1.0";',
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+await engine.mount(
+  QuickjsHostMount(
+    name: 'app-api',
+    providers: <QuickjsHostProvider>[
+      QuickjsHostProvider.async(
+        name: 'app.double',
+        callback: (args, _) => (args.single! as num) * 2,
+      ),
+    ],
+    environmentPatches: const <QuickjsHostScript>[
+      QuickjsHostScript(
+        name: 'mount:app-api.js',
+        source: '''
+globalThis.app = {
+  double(value) {
+    return globalThis.__quickjsHostProviders['app.double'](value);
+  },
+};
+''',
+      ),
+    ],
+  ),
+);
+
+print(await engine.evalAsync('return await app.double(21);')); // 42
+```
+
+同名 runtime mount 默认会被拒绝；需要替换时显式传入
+`QuickjsHostMountConflictPolicy.replace`。`debugInspect()` 的
+`registeredMounts`、`registeredProviders` 可用于检查安装结果。
+
 最小 CommonJS 兼容层通过 `evalCommonJs()` / `evaluateCommonJs()` 提供，覆盖
 `require()`、`module.exports`、`exports`、相对路径解析和 runtime 级 CommonJS module
 cache。插件不内置完整 npm resolver；npm 包建议用 esbuild / Rollup / webpack 预打包。
+完整策略和可运行示例见 [`docs/npm_bundling.md`](docs/npm_bundling.md)。
+
+`QuickjsFetchMount` 可显式安装最小 Fetch API。必须声明允许访问的 origin：
+
+```dart
+final engine = await Quickjs.create(
+  options: QuickjsRuntimeOptions(
+    mounts: [
+      QuickjsFetchMount(
+        allowedOrigins: {'https://api.example.com'},
+      ),
+    ],
+  ),
+);
+
+final result = await engine.evalAsync('''
+const response = await fetch('https://api.example.com/data');
+return JSON.stringify(await response.json());
+''');
+```
+
+Native 底层使用 `HttpClient`，Web 底层使用浏览器原生 `fetch`。Web 请求仍受 CORS
+限制。当前最小实现支持 string/ArrayBuffer/Uint8Array 请求体以及
+`Response.text()`、`json()`、`arrayBuffer()`、`clone()`；自动重定向关闭。
 
 ### Function handle
 
@@ -239,8 +318,9 @@ try {
 ## 当前状态
 
 项目已经完成执行安全、runtime 隔离、结构化值转换、Promise callback、timer、流式
-callback、ES module / CommonJS、function handle、Dart object proxy 和第一版 class
-binding。下一阶段按 `ROADMAP.md` 进入 0.8.0 调试与开发体验。
+callback、ES module / CommonJS、function handle、Dart object proxy、第一版 class
+binding、调试基础能力和宿主能力挂载。下一阶段按 `ROADMAP.md` 进入 0.10.0 JS 插件入口
+与模块包。
 
 ### 已完成
 
@@ -272,10 +352,12 @@ binding。下一阶段按 `ROADMAP.md` 进入 0.8.0 调试与开发体验。
   handle dispose 已实现；instance finalizer 延后。
 - [x] `Quickjs.create(onConsole:)` 已支持 `console.log` / `console.warn` /
   `console.error` 事件；未配置 sink 时默认 no-op。
+- [x] `QuickjsRuntimeOptions.mounts` 与 `Quickjs.mount()` 支持批量安装 environment patch、
+  module 和 provider，并支持冲突检查、同名 runtime mount 替换与 runtime 重建恢复。
 - [x] example 已覆盖 basic eval、async API、runtime worker、queue/reentry、runtime
   isolation、exception model、resource limit、structured values、callback bridge、
-  timer/event-loop、stream callback、module、function handle、object proxy、class binding、
-  console。
+  timer/event-loop、stream callback、module、host module、host mount、function handle、
+  object proxy、class binding、console、Web host environment 和 Web Crypto。
 
 ### 部分完成
 
@@ -296,18 +378,17 @@ binding。下一阶段按 `ROADMAP.md` 进入 0.8.0 调试与开发体验。
   registered callbacks、手动执行表达式。
 - [ ] host capability / 生态兼容能力：`fetch`、`crypto`、`Buffer`、浏览器兼容对象、
   Node 兼容对象等可选注入。
-- [ ] npm bundle 支持文档与 example app smoke 自动化测试。
+- [x] npm bundle 支持文档、可构建 esbuild 示例和生成资产的 native/Web 自动化测试。
 
 ## 验证
 
-当前基础验证命令：
+日常开发优先运行定向测试。脚本会把完整输出写入 `build/verification-logs`，成功时仅
+输出阶段、耗时和结果，失败时输出日志末尾，避免 CI 或编码代理上下文被重复日志占满：
 
 ```powershell
-flutter analyze
-flutter test
-flutter test test\quickjs_consistency_test.dart -d chrome
-cd example
-flutter test
+.\tool\verify.cmd -TestPath test\quickjs_consistency_test.dart -PlainName "test name"
+.\tool\verify.cmd -TestPath test\quickjs_consistency_test.dart -PlainName "test name" -Web
+.\tool\verify.cmd -Mode full
 ```
 
 Windows FFI 相关代码变更后，需要重建 example，确保测试进程加载的是最新

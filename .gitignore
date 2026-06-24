@@ -34,3 +34,4 @@ third_party/quickjs-ng/build/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+/example/npm_bundle/node_modules/

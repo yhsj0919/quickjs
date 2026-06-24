@@ -430,6 +430,12 @@ class Quickjs {
         'QuickJS initialization mount cannot be replaced at runtime: $mountName',
       );
     }
+    final replacedMount =
+        conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
+            runtimeMountIndex >= 0
+        ? _runtimeMounts[runtimeMountIndex]
+        : null;
+    _validateMountAgainstLoadedModules(mount, replacedMount: replacedMount);
     if (conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
         runtimeMountIndex >= 0) {
       _runtimeMounts[runtimeMountIndex] = mount;
@@ -1753,6 +1759,26 @@ class Quickjs {
 
     _hostModuleSourceMap(QuickjsHostModuleFormat.esModule);
     _hostModuleSourceMap(QuickjsHostModuleFormat.commonJs);
+  }
+
+  void _validateMountAgainstLoadedModules(
+    QuickjsHostMount mount, {
+    QuickjsHostMount? replacedMount,
+  }) {
+    final replaceableNames = <String>{
+      if (replacedMount != null)
+        for (final module in replacedMount.modules)
+          _canonicalModuleName(_validateModuleName(module.specifier)),
+    };
+    for (final module in mount.modules) {
+      final name = _canonicalModuleName(_validateModuleName(module.specifier));
+      if (_moduleDebugNames.contains(name) &&
+          !replaceableNames.contains(name)) {
+        throw JsValueConversionException(
+          'QuickJS loaded module cannot be shadowed by a runtime mount: $name',
+        );
+      }
+    }
   }
 
   QuickjsHostCapabilities _effectiveHostCapabilities() {

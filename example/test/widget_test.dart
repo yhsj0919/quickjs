@@ -10,6 +10,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
 
+Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 100 && finder.evaluate().isEmpty; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+  }
+}
+
 void main() {
   testWidgets('renders example index', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
@@ -32,7 +41,7 @@ void main() {
       find.text(examplePages.length.toString().padLeft(2, '0')),
       findsOneWidget,
     );
-    expect(examplePages.last.title, '能力批量挂载');
+    expect(examplePages.last.title, 'Fetch');
   });
 
   testWidgets('registers resource limit example page', (
@@ -106,6 +115,39 @@ void main() {
     expect(find.textContaining('CommonJS'), findsWidgets);
   });
 
+  testWidgets('registers npm bundle example page', (WidgetTester tester) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    final title = find.text('NPM Bundle');
+    if (title.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        title,
+        120,
+        scrollable: find.byType(Scrollable),
+      );
+    }
+    expect(title, findsOneWidget);
+    expect(find.textContaining('单文件 asset'), findsOneWidget);
+    expect(find.textContaining('compareValues()'), findsOneWidget);
+  });
+
+  testWidgets('registers fetch example page', (WidgetTester tester) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    final title = find.text('Fetch');
+    if (title.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        title,
+        120,
+        scrollable: find.byType(Scrollable),
+      );
+    }
+    expect(title, findsOneWidget);
+    expect(find.textContaining('QuickjsFetchMount'), findsOneWidget);
+    expect(find.textContaining('HttpClient'), findsOneWidget);
+    expect(find.textContaining('浏览器 fetch'), findsOneWidget);
+  });
+
   testWidgets('registers host modules example page', (
     WidgetTester tester,
   ) async {
@@ -131,7 +173,7 @@ void main() {
     expect(find.textContaining('node preset'), findsOneWidget);
   });
 
-  testWidgets('registers host mounts example page', (
+  testWidgets('interacts with host mounts example page', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ExampleApp());
@@ -148,6 +190,33 @@ void main() {
     expect(find.textContaining('QuickjsRuntimeOptions.mounts'), findsOneWidget);
     expect(find.textContaining('Quickjs.mount()'), findsOneWidget);
     expect(find.textContaining('provider'), findsOneWidget);
+
+    await tester.ensureVisible(title);
+    await tester.pumpAndSettle();
+    await tester.tap(title);
+    final readyStatus = find.text('runtime 已就绪：example-initial 已挂载');
+    await _pumpUntilFound(tester, readyStatus);
+    expect(readyStatus, findsOneWidget);
+
+    await tester.tap(find.text('检查初始化挂载'));
+    final initialResult = find.text('初始化 mount => 21/21');
+    await _pumpUntilFound(tester, initialResult);
+    expect(initialResult, findsOneWidget);
+
+    await tester.tap(find.text('运行时挂载'));
+    final runtimeResult = find.text(
+      'Quickjs.mount() => 21/runtime-module-2/42',
+    );
+    await _pumpUntilFound(tester, runtimeResult);
+    expect(runtimeResult, findsOneWidget);
+
+    await tester.tap(find.text('替换运行时挂载'));
+    final replacementResult = find.text(
+      'replace mount => 21/runtime-module-3/63',
+    );
+    await _pumpUntilFound(tester, replacementResult);
+    expect(replacementResult, findsOneWidget);
+
     expect(find.text('替换运行时挂载'), findsOneWidget);
   });
 
