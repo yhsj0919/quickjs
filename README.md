@@ -207,8 +207,11 @@ return JSON.stringify(await response.json());
 ```
 
 Native 底层使用 `HttpClient`，Web 底层使用浏览器原生 `fetch`。Web 请求仍受 CORS
-限制。当前最小实现支持 string/ArrayBuffer/Uint8Array 请求体以及
-`Response.text()`、`json()`、`arrayBuffer()`、`clone()`；自动重定向关闭。
+限制。支持 `Request` / `Response` / `Headers` / `AbortController` / `FormData` /
+`URLSearchParams` / `Blob` / `XMLHttpRequest`，以及 `redirect: follow | manual | error`
+（默认 `follow`，可配置 `maxRedirects`）。请求体支持 string / ArrayBuffer / Uint8Array /
+FormData / URLSearchParams；Response 支持 `text()`、`json()`、`arrayBuffer()`、`blob()`、
+`bytes()`、`clone()` 等。
 
 ### Function handle
 
@@ -376,8 +379,8 @@ binding、调试基础能力和宿主能力挂载。下一阶段按 `ROADMAP.md`
 - [ ] source file name、sourcemap registry、stack remap。
 - [ ] debug mode / inspector 原型：globals、modules、memory、pending jobs、
   registered callbacks、手动执行表达式。
-- [ ] host capability / 生态兼容能力：`fetch`、`crypto`、`Buffer`、浏览器兼容对象、
-  Node 兼容对象等可选注入。
+- [~] host capability / 生态兼容能力：`fetch` 已通过 `QuickjsFetchMount` 提供；
+  `crypto`、`Buffer`、浏览器兼容对象、Node 兼容对象等可选注入仍在推进。
 - [x] npm bundle 支持文档、可构建 esbuild 示例和生成资产的 native/Web 自动化测试。
 
 ## 验证
