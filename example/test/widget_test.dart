@@ -342,5 +342,7 @@ void main() {
     expect(find.textContaining('randomUUID'), findsOneWidget);
     expect(find.textContaining('getRandomValues'), findsOneWidget);
     expect(find.textContaining('subtle.digest'), findsOneWidget);
+    expect(find.textContaining('subtle.sign'), findsOneWidget);
+    expect(find.textContaining('HMAC-SHA-256'), findsOneWidget);
   });
 }

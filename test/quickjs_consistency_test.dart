@@ -2163,7 +2163,9 @@ fail();
     test('installs minimal web crypto environment consistently', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount()],
+          mounts: <QuickjsHostMount>[
+            QuickjsWebCryptoMount(allowInsecureRandomFallback: true),
+          ],
         ),
       );
       addTearDown(engine.dispose);
@@ -2209,6 +2211,23 @@ fail();
       );
     });
 
+    test('rejects insecure web crypto random fallback by default', () async {
+      if (kIsWeb) {
+        return;
+      }
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.eval('crypto.getRandomValues(new Uint8Array(1))'),
+        throwsA(isA<JsException>()),
+      );
+    });
+
     test('rejects invalid web crypto getRandomValues targets', () async {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
@@ -2239,12 +2258,70 @@ fail();
         await engine.evalAsync('''
 const data = new Uint8Array([104, 101, 108, 108, 111]);
 const digest = await crypto.subtle.digest('SHA-256', data);
+const sha1Digest = await crypto.subtle.digest('SHA-1', data);
+const viewDigest = await crypto.subtle.digest(
+  { name: 'SHA-256' },
+  new Uint8Array([0, 104, 101, 108, 108, 111, 0]).subarray(1, 6),
+);
 const hex = Array.from(new Uint8Array(digest))
   .map((byte) => byte.toString(16).padStart(2, '0'))
   .join('');
-return (digest instanceof ArrayBuffer) + '/' + hex;
+const sha1Hex = Array.from(new Uint8Array(sha1Digest))
+  .map((byte) => byte.toString(16).padStart(2, '0'))
+  .join('');
+const viewHex = Array.from(new Uint8Array(viewDigest))
+  .map((byte) => byte.toString(16).padStart(2, '0'))
+  .join('');
+return (digest instanceof ArrayBuffer) + '/' + hex + '/' + sha1Hex + '/' + viewHex;
 '''),
-        'true/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+        'true/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824/aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+      );
+    });
+
+    test('installs Flutter-backed web crypto HMAC consistently', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleHmac: true)],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync('''
+const keyBytes = new Uint8Array([107, 101, 121]);
+const data = new Uint8Array([104, 101, 108, 108, 111]);
+const key256 = await crypto.subtle.importKey(
+  'raw',
+  keyBytes,
+  { name: 'HMAC', hash: 'SHA-256' },
+  false,
+  ['sign', 'verify']
+);
+const key1 = await crypto.subtle.importKey(
+  'raw',
+  keyBytes,
+  { name: 'HMAC', hash: { name: 'SHA-1' } },
+  false,
+  ['sign', 'verify']
+);
+const signature256 = await crypto.subtle.sign('HMAC', key256, data);
+const signature1 = await crypto.subtle.sign({ name: 'HMAC' }, key1, data);
+const hex256 = Array.from(new Uint8Array(signature256))
+  .map((byte) => byte.toString(16).padStart(2, '0'))
+  .join('');
+const hex1 = Array.from(new Uint8Array(signature1))
+  .map((byte) => byte.toString(16).padStart(2, '0'))
+  .join('');
+const valid = await crypto.subtle.verify('HMAC', key256, signature256, data);
+const invalid = await crypto.subtle.verify(
+  'HMAC',
+  key256,
+  signature256,
+  new Uint8Array([72, 69, 76, 76, 79])
+);
+return hex256 + '/' + hex1 + '/' + valid + '/' + invalid;
+'''),
+        '9307b3b915efb5171ff14d8cb55fbcc798c6c0ef1456d66ded1a6aa723a58b7b/b34ceac4516ff23a143e61d79d0fa7a4fbe5f266/true/false',
       );
     });
 
@@ -3239,11 +3316,17 @@ module.exports = Buffer.isBuffer(value) + '/' + value.toString() + '/' + value.l
       );
       await engine.evalModule('''
 import { Buffer } from 'node:buffer';
+import crypto, { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import process, { env, platform, cwd } from 'node:process';
 import { setTimeout } from 'node:timers';
+const bytes = randomBytes(4);
 globalThis.nodePresetValue = [
   Buffer.from('node').toString(),
+  Buffer.isBuffer(bytes),
+  bytes.length,
+  createHash('sha256').update('hello').digest('hex'),
+  crypto.createHash('sha256').update(Buffer.from('hello')).digest().toString('hex'),
   path.join('/app', 'src', '..', 'main.js'),
   path.basename('/app/main.js', '.js'),
   process.env.APP_ENV,
@@ -3258,12 +3341,12 @@ globalThis.nodePresetValue = [
 
       expect(
         await engine.eval('globalThis.nodePresetValue'),
-        'node|/app/main.js|main|test|test|test-platform|test-platform|/workspace/app|/workspace/app|function',
+        'node|true|4|2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824|2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824|/app/main.js|main|test|test|test-platform|test-platform|/workspace/app|/workspace/app|function',
       );
       final modules = (await engine.debugInspect()).moduleNames;
       expect(
         modules,
-        containsAll(<String>['buffer', 'path', 'process', 'timers']),
+        containsAll(<String>['buffer', 'crypto', 'path', 'process', 'timers']),
       );
     });
 
@@ -3283,11 +3366,16 @@ globalThis.nodePresetValue = [
       expect(
         await engine.evalCommonJs('''
 const { Buffer } = require('node:buffer');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const process = require('node:process');
 const timers = require('node:timers');
+const bytes = crypto.randomBytes(3);
 module.exports = [
   Buffer.from('cjs').toString(),
+  Buffer.isBuffer(bytes),
+  bytes.length,
+  crypto.createHash('sha256').update('hello').digest('hex'),
   path.dirname('/app/main.js'),
   path.extname('/app/main.js'),
   process.env.MODE,
@@ -3295,7 +3383,7 @@ module.exports = [
   typeof timers.clearTimeout
 ].join('|');
 ''', name: 'main.cjs'),
-        'cjs|/app|.js|cjs|/cjs|function',
+        'cjs|true|3|2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824|/app|.js|cjs|/cjs|function',
       );
     });
 

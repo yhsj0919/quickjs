@@ -44,15 +44,23 @@ function Invoke-LoggedCommand {
         }
     }
 
-    $process = Start-Process `
-        -FilePath $Executable `
-        -ArgumentList $escapedArguments `
-        -WorkingDirectory $WorkingDirectory `
-        -NoNewWindow `
-        -Wait `
-        -PassThru `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Executable
+    $startInfo.Arguments = ($escapedArguments -join ' ')
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    $null = $process.Start()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    Set-Content -Path $stdoutPath -Value $stdout -NoNewline
+    Set-Content -Path $stderrPath -Value $stderr -NoNewline
 
     $stopwatch.Stop()
     if ($process.ExitCode -eq 0) {
@@ -78,10 +86,11 @@ function Invoke-FlutterTest {
         [string[]]$ExtraArguments = @()
     )
 
+    $flutterCommand = Get-Command flutter -ErrorAction Stop
     Invoke-LoggedCommand `
         -Name $Name `
         -WorkingDirectory $WorkingDirectory `
-        -Executable 'flutter' `
+        -Executable $flutterCommand.Source `
         -Arguments (@('test', '--reporter', 'compact') + $ExtraArguments)
 }
 

@@ -38,7 +38,13 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
 
       final quickjs = await Quickjs.create(
         options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleDigest: true)],
+          mounts: <QuickjsHostMount>[
+            QuickjsWebCryptoMount(
+              allowInsecureRandomFallback: true,
+              subtleDigest: true,
+              subtleHmac: true,
+            ),
+          ],
         ),
       );
       if (!mounted || _disposed) {
@@ -126,6 +132,30 @@ return Array.from(new Uint8Array(digest))
     });
   }
 
+  Future<void> _runHmac() async {
+    await _capture('HMAC-SHA-256', () async {
+      final result = await _requireRuntime().evalAsync('''
+const keyBytes = new Uint8Array([107, 101, 121]);
+const data = new Uint8Array([104, 101, 108, 108, 111]);
+const key = await crypto.subtle.importKey(
+  "raw",
+  keyBytes,
+  { name: "HMAC", hash: "SHA-256" },
+  false,
+  ["sign", "verify"]
+);
+const signature = await crypto.subtle.sign("HMAC", key, data);
+const valid = await crypto.subtle.verify("HMAC", key, signature, data);
+const hex = Array.from(new Uint8Array(signature))
+  .map((byte) => byte.toString(16).padStart(2, "0"))
+  .join("");
+return hex + "\\nvalid=" + valid;
+''');
+      _log.insert(0, 'HMAC-SHA-256("hello")\n$result');
+      _status = 'HMAC-SHA-256 complete';
+    });
+  }
+
   Future<void> _runStopRecovery() async {
     await _capture('stop 后恢复', () async {
       final quickjs = _requireRuntime();
@@ -138,7 +168,8 @@ return Array.from(new Uint8Array(digest))
       final result = await quickjs.eval(
         'typeof crypto.randomUUID() === "string" && '
         'crypto.getRandomValues(new Uint8Array(1)) instanceof Uint8Array && '
-        'typeof crypto.subtle.digest === "function"',
+        'typeof crypto.subtle.digest === "function" && '
+        'typeof crypto.subtle.sign === "function"',
       );
       _log.insert(0, 'stop 后 Web Crypto 可用 => $result');
       _status = 'stop 后 runtime 已恢复，Web Crypto 可用';
@@ -210,6 +241,7 @@ return Array.from(new Uint8Array(digest))
             const Text(
               'QuickjsWebCryptoMount()：显式安装 crypto.randomUUID()、crypto.getRandomValues() 和 Flutter 原生 crypto.subtle.digest()。',
             ),
+            const Text('HMAC uses crypto.subtle.sign() / verify().'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -226,6 +258,10 @@ return Array.from(new Uint8Array(digest))
                 FilledButton.tonal(
                   onPressed: _busy || !hasRuntime ? null : _runDigest,
                   child: const Text('生成 SHA-256'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _busy || !hasRuntime ? null : _runHmac,
+                  child: const Text('HMAC-SHA-256'),
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : _runDefaultDisabledCheck,

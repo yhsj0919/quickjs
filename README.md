@@ -376,11 +376,12 @@ binding、调试基础能力和宿主能力挂载。下一阶段按 `ROADMAP.md`
 
 ### 后续计划
 
-- [ ] source file name、sourcemap registry、stack remap。
-- [ ] debug mode / inspector 原型：globals、modules、memory、pending jobs、
+- [x] source file name、sourcemap registry、stack remap。
+- [x] debug mode / inspector 原型：globals、modules、memory、pending jobs、
   registered callbacks、手动执行表达式。
-- [~] host capability / 生态兼容能力：`fetch` 已通过 `QuickjsFetchMount` 提供；
-  `crypto`、`Buffer`、浏览器兼容对象、Node 兼容对象等可选注入仍在推进。
+- [~] host capability / 生态兼容能力：`fetch` 已通过 `QuickjsFetchMount` 提供，Web Crypto、
+  Web 风格环境对象、Buffer、Node `crypto` 最小子集与部分 Node 兼容模块已提供；`fs`、完整
+  Web Crypto 和完整 npm resolver 不在当前第一版内。
 - [x] npm bundle 支持文档、可构建 esbuild 示例和生成资产的 native/Web 自动化测试。
 
 ## 验证
@@ -441,7 +442,9 @@ flutter run -d chrome
 
 - `lib/quickjs.dart`：公开 package 入口。
 - `lib/src/runtime/quickjs.dart`：`Quickjs` 实现、请求队列、callback / handle / proxy 入口。
-- `lib/src/runtime/quickjs_runtime_options.dart`：资源限制与 module loader 配置。
+- `lib/src/runtime/quickjs_runtime_options.dart`：runtime options、host module / provider /
+  mount 框架类型。
+- `lib/src/module/quickjs_*_host_mount.dart`：Web、Essential、Node 预制 host mount 实现。
 - `lib/src/module/quickjs_asset_module_loader.dart`：Flutter `AssetBundle` module loader helper。
 - `lib/src/native/`：native FFI backend 与 Dart isolate worker。
 - `lib/src/web/`：Flutter Web backend 与 JS interop loader。

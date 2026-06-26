@@ -129,7 +129,7 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: 'Web Crypto',
     description:
-        '通过 QuickjsWebCryptoMount() 安装 randomUUID、getRandomValues 和 Flutter 原生 subtle.digest。',
+        '通过 QuickjsWebCryptoMount() 安装 randomUUID、getRandomValues、Flutter 原生 subtle.digest 和 HMAC-SHA-256 crypto.subtle.sign/verify。',
     builder: (_) => const CryptoRandomUuidPage(),
   ),
   ExamplePageSpec(
