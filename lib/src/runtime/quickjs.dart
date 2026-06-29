@@ -8,8 +8,11 @@ import '../backend/quickjs_backend_factory.dart';
 import '../diagnostics/quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
+import 'quickjs_plugin.dart';
 import '../diagnostics/quickjs_source_map.dart';
 import 'quickjs_value.dart';
+
+part '../module/quickjs_text_encoding.dart';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
 typedef QuickjsConsoleSink = FutureOr<void> Function(QuickjsConsoleEvent event);
@@ -357,10 +360,12 @@ class Quickjs {
   int _nextCallbackId = 1;
   int _nextObjectProxyId = 1;
   int _nextClassBindingId = 1;
+  int _nextPluginCallId = 1;
   final Map<String, QuickjsSourceMap> _sourceMaps =
       <String, QuickjsSourceMap>{};
   final Map<int, String> _callbackDebugNames = <int, String>{};
   final Set<String> _moduleDebugNames = <String>{};
+  final Map<String, String> _moduleNamespaceGlobalNames = <String, String>{};
   final List<QuickjsHostMount> _runtimeMounts = <QuickjsHostMount>[];
   final Map<int, Map<int, Object>> _classInstances = <int, Map<int, Object>>{};
   final Set<QuickjsHostProviderContext> _pendingHostProviderCalls =
@@ -641,6 +646,145 @@ class Quickjs {
     Duration? timeout,
   }) {
     return evalModule(source, name: name, timeout: timeout);
+  }
+
+  /// Validates that a plugin entry module exposes every declared function.
+  Future<void> validatePlugin(QuickjsPlugin plugin, {Duration? timeout}) async {
+    final entry = plugin.manifest.entry;
+    final lifecycleExports = <String>[
+      if (plugin.manifest.init != null) plugin.manifest.init!,
+      if (plugin.manifest.dispose != null) plugin.manifest.dispose!,
+    ];
+    await _evaluateModuleNamespaceValue(
+      entry,
+      '''
+for (const name of ${jsonEncode(plugin.manifest.exports)}) {
+  if (typeof __quickjsModuleNamespace[name] !== 'function') {
+    throw new TypeError(
+      'QuickJS plugin export is not a function: ' +
+      ${jsonEncode(entry)} + '#' + name
+    );
+  }
+}
+for (const name of ${jsonEncode(lifecycleExports)}) {
+  if (typeof __quickjsModuleNamespace[name] !== 'function') {
+    throw new TypeError(
+      'QuickJS plugin lifecycle export is not a function: ' +
+      ${jsonEncode(entry)} + '#' + name
+    );
+  }
+}
+return JSON.stringify({ type: 'null' });
+''',
+      timeout: timeout,
+      name: 'plugin:${plugin.manifest.id}:validate',
+    );
+  }
+
+  /// Calls the plugin's optional init lifecycle export.
+  ///
+  /// If the manifest does not declare an init export, this is a no-op.
+  Future<Object?> initPlugin(
+    QuickjsPlugin plugin, {
+    Map<String, Object?> context = const <String, Object?>{},
+    Duration? timeout,
+  }) {
+    final init = plugin.manifest.init;
+    if (init == null) {
+      return Future<Object?>.value(null);
+    }
+    return callModule(
+      plugin.manifest.entry,
+      init,
+      <Object?>[context],
+      timeout: timeout,
+      name: 'plugin:${plugin.manifest.id}:init',
+    );
+  }
+
+  /// Calls the plugin's optional dispose lifecycle export.
+  ///
+  /// If the manifest does not declare a dispose export, this is a no-op.
+  Future<Object?> disposePlugin(QuickjsPlugin plugin, {Duration? timeout}) {
+    final dispose = plugin.manifest.dispose;
+    if (dispose == null) {
+      return Future<Object?>.value(null);
+    }
+    return callModule(
+      plugin.manifest.entry,
+      dispose,
+      const <Object?>[],
+      timeout: timeout,
+      name: 'plugin:${plugin.manifest.id}:dispose',
+    );
+  }
+
+  /// Calls a declared function from a plugin entry module.
+  Future<Object?> callPlugin(
+    QuickjsPlugin plugin,
+    String method,
+    List<Object?> args, {
+    Duration? timeout,
+  }) {
+    if (!plugin.manifest.exports.contains(method)) {
+      throw JsValueConversionException(
+        'QuickJS plugin export is not declared: ${plugin.manifest.id}#$method',
+      );
+    }
+    return callModule(
+      plugin.manifest.entry,
+      method,
+      args,
+      timeout: timeout,
+      name: 'plugin:${plugin.manifest.id}:$method',
+    );
+  }
+
+  /// Calls a plugin export by method name from the plugins mounted in this runtime.
+  ///
+  /// If [pluginId] is omitted, exactly one mounted plugin must declare [method].
+  /// When multiple plugins export the same method, pass [pluginId] to choose one.
+  Future<Object?> invokePlugin(
+    String method,
+    List<Object?> args, {
+    String? pluginId,
+    Duration? timeout,
+  }) async {
+    final plugin = _resolveMountedPlugin(method, pluginId: pluginId);
+    return callPlugin(plugin, method, args, timeout: timeout);
+  }
+
+  /// Calls a function export from an ES module and converts its awaited result.
+  Future<Object?> callModule(
+    String module,
+    String method,
+    List<Object?> args, {
+    Duration? timeout,
+    String? name,
+  }) {
+    final moduleName = _canonicalModuleName(_validateModuleName(module));
+    final encodedModule = jsonEncode(moduleName);
+    final encodedMethod = jsonEncode(method);
+    final encodedArgs = jsonEncode(<Object>[
+      for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
+    ]);
+    return _evaluateModuleNamespaceValue(
+      moduleName,
+      '''
+const method = $encodedMethod;
+const fn = __quickjsModuleNamespace[method];
+if (typeof fn !== 'function') {
+  throw new TypeError(
+    'QuickJS module export is not a function: ' + $encodedModule + '#' + method
+  );
+}
+const args = $encodedArgs.map((arg) => inflate(arg));
+const value = await fn(...args);
+return JSON.stringify(convert(value, new WeakSet()));
+''',
+      timeout: timeout,
+      name: name ?? 'module:$moduleName:$method',
+    );
   }
 
   /// Executes a minimal CommonJS module in the current runtime.
@@ -1010,6 +1154,10 @@ class Quickjs {
 
   Future<void> _installHostEnvironmentOnCurrentRuntime() async {
     _validateStaticHostConfiguration();
+    await _runtime.evaluate(
+      _wrapInstallTextEncoding(),
+      name: '<quickjs:text-encoding>',
+    );
     final capabilities = _effectiveHostCapabilities();
     if (!capabilities.isEmpty) {
       await _runtime.evaluate(
@@ -1203,6 +1351,118 @@ class Quickjs {
     };
   }
 
+  QuickjsPlugin _resolveMountedPlugin(String method, {String? pluginId}) {
+    final plugins = _mountedPlugins();
+    if (pluginId != null) {
+      for (final plugin in plugins) {
+        if (plugin.manifest.id == pluginId) {
+          if (!plugin.manifest.exports.contains(method)) {
+            throw JsValueConversionException(
+              'QuickJS plugin export is not declared: $pluginId#$method',
+            );
+          }
+          return plugin;
+        }
+      }
+      throw JsValueConversionException(
+        'QuickJS plugin is not mounted: $pluginId',
+      );
+    }
+
+    final matches = <QuickjsPlugin>[
+      for (final plugin in plugins)
+        if (plugin.manifest.exports.contains(method)) plugin,
+    ];
+    if (matches.isEmpty) {
+      throw JsValueConversionException(
+        'QuickJS plugin export is not declared by any mounted plugin: $method',
+      );
+    }
+    if (matches.length > 1) {
+      final ids = matches.map((plugin) => plugin.manifest.id).join(', ');
+      throw JsValueConversionException(
+        'QuickJS plugin export is ambiguous: $method is declared by $ids',
+      );
+    }
+    return matches.single;
+  }
+
+  List<QuickjsPlugin> _mountedPlugins() {
+    return <QuickjsPlugin>[
+      for (final mount in _allHostMounts)
+        if (mount is QuickjsPluginMount) mount.plugin,
+    ];
+  }
+
+  Future<Object?> _evaluateModuleNamespaceValue(
+    String module,
+    String asyncBody, {
+    Duration? timeout,
+    required String name,
+  }) async {
+    final validModule = _canonicalModuleName(_validateModuleName(module));
+    final callId = _nextPluginCallId++;
+    final resultName = '__quickjsPluginResult_$callId';
+    final encodedResultName = jsonEncode(resultName);
+    final namespaceName = await _ensureModuleNamespaceGlobal(
+      validModule,
+      timeout: timeout,
+    );
+    final encodedNamespaceName = jsonEncode(namespaceName);
+    final validName = _validateModuleName(name);
+    final payloadJson = await evalAsync(
+      '''
+const __quickjsModuleNamespace = globalThis[$encodedNamespaceName];
+const inflate = ${_dartValueInflateFunctionSource()};
+const convert = ${_jsValueConvertFunctionSource()};
+try {
+  globalThis[$encodedResultName] = (async () => {
+$asyncBody
+  })();
+  return await globalThis[$encodedResultName];
+} finally {
+  delete globalThis[$encodedResultName];
+}
+''',
+      timeout: timeout,
+      name: '$validName:result',
+    );
+    final payload = jsonDecode(payloadJson) as Map<String, Object?>;
+    if (payload['type'] == 'conversionError') {
+      throw JsValueConversionException(payload['message']! as String);
+    }
+    return _normalizeStructuredValue(payload);
+  }
+
+  Future<String> _ensureModuleNamespaceGlobal(
+    String module, {
+    Duration? timeout,
+  }) async {
+    final existing = _moduleNamespaceGlobalNames[module];
+    if (existing != null) {
+      return existing;
+    }
+
+    final namespaceName = '__quickjsModuleNamespace_${_nextPluginCallId++}';
+    final encodedModule = jsonEncode(module);
+    final encodedNamespaceName = jsonEncode(namespaceName);
+    await evalModule(
+      '''
+import * as namespace from $encodedModule;
+Object.defineProperty(globalThis, $encodedNamespaceName, {
+  value: namespace,
+  configurable: true,
+  enumerable: false,
+  writable: false,
+});
+''',
+      name: '<quickjs:module-namespace:$module>',
+      timeout: timeout,
+    );
+    _moduleNamespaceGlobalNames[module] = namespaceName;
+    return namespaceName;
+  }
+
   /// 释放当前实例持有的 runtime。
   ///
   /// dispose 会立即拒绝新请求，取消尚未开始的队列任务，并等待正在执行的任务收尾。
@@ -1276,6 +1536,7 @@ class Quickjs {
     _classInstances.clear();
     _callbackDebugNames.clear();
     _moduleDebugNames.clear();
+    _moduleNamespaceGlobalNames.clear();
     _runtime = await _backend.createRuntime(_options);
     await _installConsoleOnCurrentRuntime();
     await _installHostEnvironmentOnCurrentRuntime();
@@ -1796,9 +2057,53 @@ class Quickjs {
 
   List<QuickjsHostScript> _effectiveHostScripts() {
     return <QuickjsHostScript>[
+      ..._providerGlobalsHostScripts(),
       for (final mount in _allHostMounts) ...mount.environmentPatches,
       ..._options.environmentPatches,
     ];
+  }
+
+  List<QuickjsHostScript> _providerGlobalsHostScripts() {
+    final scripts = <QuickjsHostScript>[];
+    for (final mount in _allHostMounts) {
+      final script = _providerGlobalsHostScript(mount.providers, mount.name);
+      if (script != null) {
+        scripts.add(script);
+      }
+    }
+    final runtimeScript = _providerGlobalsHostScript(
+      _options.providers,
+      'runtime',
+    );
+    if (runtimeScript != null) {
+      scripts.add(runtimeScript);
+    }
+    return scripts;
+  }
+
+  QuickjsHostScript? _providerGlobalsHostScript(
+    List<QuickjsHostProvider> providers,
+    String scopeName,
+  ) {
+    final globals = <String, String>{};
+    for (final provider in providers) {
+      final globalName = provider.globalName;
+      if (globalName != null) {
+        if (globals.containsKey(globalName)) {
+          throw JsValueConversionException(
+            'QuickJS host global is registered more than once: $globalName',
+          );
+        }
+        globals[globalName] = provider.name;
+      }
+    }
+    if (globals.isEmpty) {
+      return null;
+    }
+    return QuickjsHostScript.providerGlobals(
+      name: '<quickjs:provider-globals:$scopeName>',
+      globals: globals,
+    );
   }
 
   List<QuickjsHostProvider> _effectiveHostProviders() {
@@ -2428,6 +2733,74 @@ String _dartValueInflateFunctionSource() {
       return new Date(payload.value);
     default:
       throw new TypeError('Unknown Dart value payload: ' + payload.type);
+  }
+}
+''';
+}
+
+String _jsValueConvertFunctionSource() {
+  return '''
+(value, seen) => {
+  const unsupported = (reason) => ({
+    type: 'conversionError',
+    message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
+  });
+  if (value === undefined) {
+    return { type: 'undefined' };
+  }
+  if (value === null) {
+    return { type: 'null' };
+  }
+  const valueType = typeof value;
+  if (valueType === 'bigint') {
+    return { type: 'bigint', value: value.toString() };
+  }
+  if (valueType === 'number' || valueType === 'boolean' || valueType === 'string') {
+    return { type: valueType, value };
+  }
+  if (valueType === 'symbol' || valueType === 'function') {
+    return unsupported(valueType);
+  }
+  if (value instanceof ArrayBuffer) {
+    return { type: 'bytes', value: Array.from(new Uint8Array(value)) };
+  }
+  if (value instanceof Uint8Array) {
+    return { type: 'bytes', value: Array.from(value) };
+  }
+  if (valueType !== 'object') {
+    return unsupported(valueType);
+  }
+  if (seen.has(value)) {
+    return unsupported('circular reference');
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const items = [];
+      for (const item of value) {
+        const converted = convert(item, seen);
+        if (converted.type === 'conversionError') {
+          return converted;
+        }
+        items.push(converted);
+      }
+      return { type: 'array', value: items };
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      const entries = {};
+      for (const key of Object.keys(value)) {
+        const converted = convert(value[key], seen);
+        if (converted.type === 'conversionError') {
+          return converted;
+        }
+        entries[key] = converted;
+      }
+      return { type: 'object', value: entries };
+    }
+    return unsupported(Object.prototype.toString.call(value));
+  } finally {
+    seen.delete(value);
   }
 }
 ''';

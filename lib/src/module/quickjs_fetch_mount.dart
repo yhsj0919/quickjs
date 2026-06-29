@@ -13,25 +13,18 @@ const _fetchProviderName = 'fetch.request';
 /// Opt-in Fetch API mount backed by the platform HTTP client.
 ///
 /// Native platforms use `dart:io`'s `HttpClient` through `package:http`.
-/// Web uses the browser's native `fetch`. Requests are restricted to the
-/// explicit [allowedOrigins] set. Redirect targets are checked against the
-/// same allow-list before they are followed.
+/// Web uses the browser's native `fetch`. Pass a non-empty [allowedOrigins]
+/// set to restrict requests and redirects to exact HTTP(S) origins. Leave it
+/// null or empty to allow every HTTP(S) origin.
 final class QuickjsFetchMount extends QuickjsHostMount {
   factory QuickjsFetchMount({
-    required Set<String> allowedOrigins,
+    Set<String>? allowedOrigins,
     Duration timeout = const Duration(seconds: 30),
     int maxRequestBytes = 1024 * 1024,
     int maxResponseBytes = 10 * 1024 * 1024,
     int maxRedirects = 5,
     Map<String, String> defaultHeaders = const <String, String>{},
   }) {
-    if (allowedOrigins.isEmpty) {
-      throw ArgumentError.value(
-        allowedOrigins,
-        'allowedOrigins',
-        'QuickjsFetchMount requires at least one allowed HTTP(S) origin',
-      );
-    }
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout', 'must be positive');
     }
@@ -57,13 +50,13 @@ final class QuickjsFetchMount extends QuickjsHostMount {
       );
     }
 
-    final origins = Set<String>.unmodifiable(
-      allowedOrigins.map(_normalizeAllowedOrigin),
-    );
+    final origins = allowedOrigins == null || allowedOrigins.isEmpty
+        ? null
+        : Set<String>.unmodifiable(allowedOrigins.map(_normalizeAllowedOrigin));
     final normalizedDefaultHeaders = Map<String, String>.unmodifiable(
       _normalizeRequestHeaders(defaultHeaders),
     );
-    final provider = QuickjsHostProvider.async(
+    final provider = QuickjsHostProvider.dart(
       name: _fetchProviderName,
       debugName: 'host:fetch.request',
       implementation: QuickjsHostProviderImplementation.platform,
@@ -100,7 +93,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
   }) : super(
          name: 'fetch',
          environmentPatches: <QuickjsHostScript>[
-           QuickjsHostScript(
+           QuickjsHostScript.js(
              name: 'host:fetch.js',
              globals: const <String>[
                'fetch',
@@ -118,7 +111,10 @@ final class QuickjsFetchMount extends QuickjsHostMount {
        );
 
   /// Exact normalized HTTP(S) origins this mount may access.
-  final Set<String> allowedOrigins;
+  ///
+  /// Null means every HTTP(S) origin is allowed by this mount. On Flutter Web,
+  /// browser CORS rules still apply.
+  final Set<String>? allowedOrigins;
 
   /// Maximum duration for request headers and response body consumption.
   final Duration timeout;
@@ -139,7 +135,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
 Future<Object?> _sendFetchRequest(
   List<Object?> args,
   QuickjsHostProviderContext context, {
-  required Set<String> allowedOrigins,
+  required Set<String>? allowedOrigins,
   required Duration timeout,
   required int maxRequestBytes,
   required int maxResponseBytes,
@@ -161,7 +157,7 @@ Future<Object?> _sendFetchRequest(
       'QuickJS fetch URL must be an absolute HTTP(S) URL',
     );
   }
-  if (!allowedOrigins.contains(uri.origin)) {
+  if (!_isAllowedOrigin(allowedOrigins, uri)) {
     throw JsValueConversionException(
       'QuickJS fetch origin is not allowed: ${uri.origin}',
     );
@@ -243,7 +239,7 @@ Future<Object?> _sendFetchRequest(
       if ((nextUri.scheme != 'http' && nextUri.scheme != 'https') ||
           nextUri.host.isEmpty ||
           nextUri.userInfo.isNotEmpty ||
-          !allowedOrigins.contains(nextUri.origin)) {
+          !_isAllowedOrigin(allowedOrigins, nextUri)) {
         throw StateError(
           'QuickJS fetch redirect origin is not allowed: ${nextUri.origin}',
         );
@@ -268,7 +264,7 @@ Future<Object?> _sendFetchRequest(
       http.BaseResponseWithUrl(:final url) => url,
       _ => response.request?.url ?? uri,
     };
-    if (!allowedOrigins.contains(responseUri.origin)) {
+    if (!_isAllowedOrigin(allowedOrigins, responseUri)) {
       throw StateError(
         'QuickJS fetch redirect origin is not allowed: ${responseUri.origin}',
       );
@@ -309,6 +305,10 @@ Future<Object?> _sendFetchRequest(
   } finally {
     client.close();
   }
+}
+
+bool _isAllowedOrigin(Set<String>? allowedOrigins, Uri uri) {
+  return allowedOrigins == null || allowedOrigins.contains(uri.origin);
 }
 
 Map<String, String> _normalizeRequestHeaders(Object? value) {

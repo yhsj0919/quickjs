@@ -201,7 +201,7 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
             ),
           ],
           environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'example:axios.js',
               source: axiosSource,
               globals: const <String>['axios'],

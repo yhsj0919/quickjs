@@ -295,7 +295,7 @@ void main() {
   // stack limit 应把递归栈溢出映射成稳定错误，并保持 runtime 可继续使用。
   test('stack limit rejects deep recursion', () async {
     final engine = await Quickjs.create(
-      options: const QuickjsRuntimeOptions(stackLimitBytes: 64 * 1024),
+      options: const QuickjsRuntimeOptions(stackLimitBytes: 256 * 1024),
     );
     addTearDown(engine.dispose);
 

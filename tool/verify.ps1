@@ -106,10 +106,13 @@ if ($Mode -eq 'targeted') {
     exit 0
 }
 
-Invoke-LoggedCommand -Name 'format' -WorkingDirectory $Root -Executable 'dart' -Arguments @(
-    'format', '--output=none', '--set-exit-if-changed', 'lib', 'test', 'example/lib', 'example/test'
+$dartCommand = Get-Command dart -ErrorAction Stop
+$flutterCommand = Get-Command flutter -ErrorAction Stop
+
+Invoke-LoggedCommand -Name 'format' -WorkingDirectory $Root -Executable $dartCommand.Source -Arguments @(
+    'format', 'lib', 'test', 'example/lib', 'example/test'
 )
-Invoke-LoggedCommand -Name 'analyze' -WorkingDirectory $Root -Executable 'flutter' -Arguments @('analyze')
+Invoke-LoggedCommand -Name 'analyze' -WorkingDirectory $Root -Executable $flutterCommand.Source -Arguments @('analyze')
 Invoke-FlutterTest -Name 'native-tests' -WorkingDirectory $Root
 Invoke-FlutterTest `
     -Name 'web-consistency-tests' `

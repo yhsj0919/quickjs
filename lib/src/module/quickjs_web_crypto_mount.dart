@@ -24,7 +24,7 @@ final class QuickjsWebCryptoMount extends QuickjsHostMount {
   }) : super(
          name: 'web-crypto',
          environmentPatches: <QuickjsHostScript>[
-           QuickjsHostScript(
+           QuickjsHostScript.js(
              name: 'host:web-crypto.js',
              globals: const <String>['crypto'],
              source: _webCryptoHostScriptSource(
@@ -45,7 +45,7 @@ final class QuickjsWebCryptoMount extends QuickjsHostMount {
        );
 }
 
-final QuickjsHostProvider _digestProvider = QuickjsHostProvider.async(
+final QuickjsHostProvider _digestProvider = QuickjsHostProvider.dart(
   name: _digestProviderName,
   debugName: 'host:webcrypto.subtle.digest',
   implementation: QuickjsHostProviderImplementation.dart,
@@ -61,7 +61,7 @@ final QuickjsHostProvider _digestProvider = QuickjsHostProvider.async(
   },
 );
 
-final QuickjsHostProvider _hmacProvider = QuickjsHostProvider.async(
+final QuickjsHostProvider _hmacProvider = QuickjsHostProvider.dart(
   name: _hmacProviderName,
   debugName: 'host:webcrypto.subtle.hmac',
   implementation: QuickjsHostProviderImplementation.dart,

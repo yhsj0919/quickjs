@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 
@@ -17,6 +19,22 @@ _TestUser _classTestUserConstructor(List<Object?> args) {
 }
 
 Object? _classTestUserNameGetter(_TestUser user) => user.name;
+
+final class _MemoryAssetBundle extends CachingAssetBundle {
+  _MemoryAssetBundle(this.assets);
+
+  final Map<String, String> assets;
+
+  @override
+  Future<ByteData> load(String key) async {
+    final value = assets[key];
+    if (value == null) {
+      throw FlutterError('Unable to load asset: $key');
+    }
+    final bytes = utf8.encode(value);
+    return ByteData.sublistView(Uint8List.fromList(bytes));
+  }
+}
 
 Future<void> _waitFor(bool Function() condition) async {
   final stopwatch = Stopwatch()..start();
@@ -44,7 +62,7 @@ QuickjsSourceMap _testSourceMap({String file = 'bundle.js'}) {
   });
 }
 
-const _randomUuidHostScript = QuickjsHostScript(
+const _randomUuidHostScript = QuickjsHostScript.js(
   name: 'host:crypto-random-uuid.js',
   source: r'''
 (() => {
@@ -205,6 +223,31 @@ void main() {
       );
       expect(await engine.eval('typeof console.warn'), 'function');
       expect(await engine.eval('typeof console.error'), 'function');
+    });
+
+    test('provides TextEncoder and TextDecoder by default', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync(r'''
+const encoder = new TextEncoder();
+const encoded = encoder.encode('hello 世界');
+const target = new Uint8Array(5);
+const into = encoder.encodeInto('hello', target);
+const decoded = new TextDecoder().decode(encoded);
+return [
+  encoder.encoding,
+  encoded instanceof Uint8Array,
+  Array.from(encoded).join(','),
+  decoded,
+  into.read,
+  into.written,
+  Array.from(target).join(',')
+].join('|');
+'''),
+        'utf-8|true|104,101,108,108,111,32,228,184,150,231,149,140|hello 世界|5|5|104,101,108,108,111',
+      );
     });
 
     test('emits console events to the configured sink', () async {
@@ -500,6 +543,614 @@ globalThis.moduleValue = add(value, 2);
         'undefined',
       );
       expect(await engine.eval('globalThis.moduleValue'), '42');
+    });
+
+    test('calls single-file plugin exports with structured values', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'api1',
+        version: '1.0.0',
+        exports: const <String>['hello', 'bytes'],
+        source: '''
+export async function hello(name, profile) {
+  return {
+    message: 'hello ' + name,
+    nested: profile.nested.ok,
+    answer: 42n,
+  };
+}
+export function bytes(input) {
+  return new Uint8Array([input[0], input[1], 255]);
+}
+''',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      expect(
+        await engine.invokePlugin('bytes', [
+          Uint8List.fromList([3, 4]),
+        ]),
+        orderedEquals(<int>[3, 4, 255]),
+      );
+      expect(
+        await engine.callPlugin(plugin, 'hello', [
+          'QuickJS',
+          {
+            'nested': {'ok': true},
+          },
+        ]),
+        {'message': 'hello QuickJS', 'nested': true, 'answer': BigInt.from(42)},
+      );
+      expect(
+        await engine.callPlugin(plugin, 'hello', [
+          'Again',
+          {
+            'nested': {'ok': false},
+          },
+        ]),
+        {'message': 'hello Again', 'nested': false, 'answer': BigInt.from(42)},
+      );
+      final bytes = await engine.callPlugin(plugin, 'bytes', [
+        Uint8List.fromList([1, 2]),
+      ]);
+      expect(bytes, isA<Uint8List>());
+      expect(bytes, orderedEquals(<int>[1, 2, 255]));
+    });
+
+    test('reuses plugin call namespace module across repeated calls', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'leakcheck',
+        version: '1.0.0',
+        exports: const <String>['echo'],
+        source: 'export function echo(value) { return value; }',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      for (var i = 0; i < 20; i++) {
+        expect(await engine.invokePlugin('echo', <Object?>[i]), i);
+      }
+
+      final snapshot = await engine.debugInspect();
+      expect(snapshot.moduleNames, contains('leakcheck/main'));
+      expect(
+        snapshot.moduleNames.where((name) => name.contains('leakcheck:echo')),
+        isEmpty,
+      );
+      expect(
+        snapshot.moduleNames.where(
+          (name) => name.contains('module-namespace:leakcheck/main'),
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('creates plugins from asset bundle sources', () async {
+      final bundle = _MemoryAssetBundle(<String, String>{
+        'assets/plugin-main.mjs':
+            'export function hello(name) { return "hello " + name; }',
+        'assets/pkg-main.mjs': '''
+import { suffix } from './helper';
+export function hello(name) {
+  return 'hello ' + name + suffix;
+}
+''',
+        'assets/pkg-helper.mjs': "export const suffix = ' from asset';",
+      });
+      final singleFile = await QuickjsPlugin.singleFileAsset(
+        id: 'asset1',
+        version: '1.0.0',
+        assetKey: 'assets/plugin-main.mjs',
+        exports: const <String>['hello'],
+        bundle: bundle,
+      );
+      final package = await QuickjsPlugin.asset(
+        manifest: const QuickjsPluginManifest(
+          id: 'asset2',
+          version: '1.0.0',
+          entry: 'asset2/main',
+          exports: <String>['hello'],
+        ),
+        modules: const <String, String>{
+          'asset2/main': 'assets/pkg-main.mjs',
+          'asset2/helper': 'assets/pkg-helper.mjs',
+        },
+        bundle: bundle,
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[singleFile.asMount(), package.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[
+          'single',
+        ], pluginId: 'asset1'),
+        'hello single',
+      );
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[
+          'package',
+        ], pluginId: 'asset2'),
+        'hello package from asset',
+      );
+    });
+
+    test('calls optional plugin lifecycle exports', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'lifecycle',
+        version: '1.0.0',
+        exports: const <String>['hello'],
+        init: 'init',
+        dispose: 'dispose',
+        source: '''
+let prefix = 'before';
+export function init(context) {
+  prefix = context.prefix;
+  globalThis.lifecycleLog = ['init:' + context.prefix];
+  return { initialized: true, prefix };
+}
+export function hello(name) {
+  return prefix + ' ' + name;
+}
+export function dispose() {
+  globalThis.lifecycleLog.push('dispose');
+  return globalThis.lifecycleLog;
+}
+''',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      expect(
+        await engine.initPlugin(
+          plugin,
+          context: <String, Object?>{'prefix': 'hello'},
+        ),
+        <String, Object?>{'initialized': true, 'prefix': 'hello'},
+      );
+      expect(
+        await engine.callPlugin(plugin, 'hello', const <Object?>['plugin']),
+        'hello plugin',
+      );
+      expect(await engine.disposePlugin(plugin), <Object?>[
+        'init:hello',
+        'dispose',
+      ]);
+    });
+
+    test('skips missing plugin lifecycle exports', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'nolifecycle',
+        version: '1.0.0',
+        exports: const <String>['hello'],
+        source: "export function hello() { return 'ok'; }",
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      expect(await engine.initPlugin(plugin), isNull);
+      expect(await engine.disposePlugin(plugin), isNull);
+      expect(await engine.invokePlugin('hello', const <Object?>[]), 'ok');
+    });
+
+    test('replaces runtime-mounted plugin versions after rebuild', () async {
+      QuickjsPlugin plugin(String version, String label) {
+        return QuickjsPlugin.singleFile(
+          id: 'replaceable',
+          version: version,
+          exports: const <String>['hello'],
+          source: "export function hello() { return '$label'; }",
+        );
+      }
+
+      final first = plugin('1.0.0', 'v1');
+      final second = plugin('2.0.0', 'v2');
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.mount(first.asMount());
+      expect(await engine.invokePlugin('hello', const <Object?>[]), 'v1');
+      await engine.mount(
+        second.asMount(),
+        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+      );
+      await engine.validatePlugin(second);
+      expect(await engine.invokePlugin('hello', const <Object?>[]), 'v2');
+    });
+
+    test('loads the same plugin into multiple isolated runtimes', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'multiRuntime',
+        version: '1.0.0',
+        exports: const <String>['next'],
+        source: '''
+let count = 0;
+export function next(label) {
+  count += 1;
+  return label + ':' + count;
+}
+''',
+      );
+      final first = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      final second = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      expect(
+        await first.invokePlugin('next', const <Object?>['first']),
+        'first:1',
+      );
+      expect(
+        await first.invokePlugin('next', const <Object?>['first']),
+        'first:2',
+      );
+      expect(
+        await second.invokePlugin('next', const <Object?>['second']),
+        'second:1',
+      );
+    });
+
+    test(
+      'requires explicit host mounts for plugin host capabilities',
+      () async {
+        final plugin = QuickjsPlugin.singleFile(
+          id: 'hostCapability',
+          version: '1.0.0',
+          exports: const <String>['readStorage'],
+          source: '''
+export function readStorage() {
+  localStorage.setItem('quickjs-plugin', 'enabled');
+  return localStorage.getItem('quickjs-plugin');
+}
+''',
+        );
+        final disabled = await Quickjs.create(
+          options: QuickjsRuntimeOptions(
+            mounts: <QuickjsHostMount>[plugin.asMount()],
+          ),
+        );
+        final enabled = await Quickjs.create(
+          options: QuickjsRuntimeOptions(
+            mounts: <QuickjsHostMount>[
+              QuickjsHostMount.web(),
+              plugin.asMount(),
+            ],
+          ),
+        );
+        addTearDown(disabled.dispose);
+        addTearDown(enabled.dispose);
+
+        await expectLater(
+          disabled.invokePlugin('readStorage', const <Object?>[]),
+          throwsA(isA<JsException>()),
+        );
+        expect(
+          await enabled.invokePlugin('readStorage', const <Object?>[]),
+          'enabled',
+        );
+      },
+    );
+
+    test('creates host scripts from asset bundle sources', () async {
+      final bundle = _MemoryAssetBundle(<String, String>{
+        'assets/bootstrap.js': 'globalThis.assetBootstrapValue = 42;',
+      });
+      final script = await QuickjsHostScript.asset(
+        name: 'asset:bootstrap.js',
+        assetKey: 'assets/bootstrap.js',
+        globals: const <String>['assetBootstrapValue'],
+        bundle: bundle,
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          environmentPatches: <QuickjsHostScript>[script],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(await engine.eval('assetBootstrapValue'), '42');
+    });
+
+    test('creates host global wrappers for Dart providers', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.dart(
+              name: 'example.echo',
+              callback: (args, _) => 'echo ${args.single}',
+            ),
+          ],
+          environmentPatches: <QuickjsHostScript>[
+            QuickjsHostScript.providerGlobals(
+              name: 'test:provider-globals.js',
+              globals: const <String, String>{'echo': 'example.echo'},
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(await engine.evalAsync("return await echo('ok');"), 'echo ok');
+    });
+
+    test('injects provider globals directly', () async {
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          providers: <QuickjsHostProvider>[
+            QuickjsHostProvider.global(
+              name: 'directEcho',
+              callback: (args, _) => 'direct ${args.single}',
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.evalAsync("return await directEcho('ok');"),
+        'direct ok',
+      );
+    });
+
+    test('calls multi-module plugin package exports', () async {
+      final plugin = QuickjsPlugin(
+        manifest: const QuickjsPluginManifest(
+          id: 'api2',
+          version: '1.0.0',
+          entry: 'api2/main',
+          exports: <String>['hello'],
+        ),
+        modules: const <QuickjsPluginModule>[
+          QuickjsPluginModule(
+            specifier: 'api2/main',
+            source: '''
+import { suffix } from './helper';
+export function hello(name) {
+  return 'hello ' + name + suffix;
+}
+''',
+          ),
+          QuickjsPluginModule(
+            specifier: 'api2/helper',
+            source: "export const suffix = ' from helper';",
+          ),
+        ],
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      expect(
+        await engine.callPlugin(plugin, 'hello', const <Object?>['package']),
+        'hello package from helper',
+      );
+    });
+
+    test('keeps same export names isolated by plugin namespace', () async {
+      QuickjsPlugin plugin(String id, String label) {
+        return QuickjsPlugin.singleFile(
+          id: id,
+          version: '1.0.0',
+          exports: const <String>['hello'],
+          source: "export function hello() { return '$label'; }",
+        );
+      }
+
+      final first = plugin('api3', 'first');
+      final second = plugin('api4', 'second');
+      final third = plugin('api5', 'third');
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            first.asMount(),
+            second.asMount(),
+            third.asMount(),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.callPlugin(first, 'hello', const <Object?>[]),
+        'first',
+      );
+      expect(
+        await engine.callPlugin(second, 'hello', const <Object?>[]),
+        'second',
+      );
+      expect(
+        await engine.callPlugin(third, 'hello', const <Object?>[]),
+        'third',
+      );
+      await expectLater(
+        engine.invokePlugin('hello', const <Object?>[]),
+        throwsA(
+          isA<JsValueConversionException>().having(
+            (error) => error.message,
+            'message',
+            contains('ambiguous'),
+          ),
+        ),
+      );
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[], pluginId: 'api3'),
+        'first',
+      );
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[], pluginId: 'api4'),
+        'second',
+      );
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[], pluginId: 'api5'),
+        'third',
+      );
+    });
+
+    test('reports plugin contract and module graph errors clearly', () async {
+      final notFunction = QuickjsPlugin.singleFile(
+        id: 'api5',
+        version: '1.0.0',
+        exports: const <String>['hello'],
+        source: 'export const hello = 1;',
+      );
+      final missingDependency = QuickjsPlugin.singleFile(
+        id: 'api6',
+        version: '1.0.0',
+        exports: const <String>['hello'],
+        source: '''
+import './missing';
+export function hello() {
+  return 'unreachable';
+}
+''',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            notFunction.asMount(),
+            missingDependency.asMount(),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.validatePlugin(notFunction),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('QuickJS plugin export is not a function'),
+          ),
+        ),
+      );
+      expect(
+        () => engine.callPlugin(notFunction, 'missing', const <Object?>[]),
+        throwsA(isA<JsValueConversionException>()),
+      );
+      await expectLater(
+        engine.validatePlugin(missingDependency),
+        throwsA(isA<JsValueConversionException>()),
+      );
+    });
+
+    test('rejects plugin namespace and duplicate module conflicts', () {
+      expect(
+        () => QuickjsPlugin(
+          manifest: const QuickjsPluginManifest(
+            id: 'bad',
+            version: '1.0.0',
+            entry: 'other/main',
+            exports: <String>['hello'],
+          ),
+          modules: const <QuickjsPluginModule>[
+            QuickjsPluginModule(
+              specifier: 'other/main',
+              source: "export function hello() { return 'bad'; }",
+            ),
+          ],
+        ),
+        throwsA(
+          isA<JsValueConversionException>().having(
+            (error) => error.message,
+            'message',
+            contains('must use namespace "bad/"'),
+          ),
+        ),
+      );
+      expect(
+        () => QuickjsPlugin(
+          manifest: const QuickjsPluginManifest(
+            id: 'dup',
+            version: '1.0.0',
+            entry: 'dup/main',
+            exports: <String>['hello'],
+          ),
+          modules: const <QuickjsPluginModule>[
+            QuickjsPluginModule(
+              specifier: 'dup/main',
+              source: "export function hello() { return 'first'; }",
+            ),
+            QuickjsPluginModule(
+              specifier: 'dup/main',
+              source: "export function hello() { return 'second'; }",
+            ),
+          ],
+        ),
+        throwsA(
+          isA<JsValueConversionException>().having(
+            (error) => error.message,
+            'message',
+            contains('declared more than once'),
+          ),
+        ),
+      );
+    });
+
+    test('reports invalid plugin lifecycle exports clearly', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'badlifecycle',
+        version: '1.0.0',
+        exports: const <String>['hello'],
+        init: 'init',
+        source: '''
+export const init = 1;
+export function hello() {
+  return 'ok';
+}
+''',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.validatePlugin(plugin),
+        throwsA(
+          isA<JsException>().having(
+            (error) => error.message,
+            'message',
+            contains('QuickJS plugin lifecycle export is not a function'),
+          ),
+        ),
+      );
     });
 
     test('caches imported ES modules in one runtime consistently', () async {
@@ -2066,7 +2717,7 @@ fail();
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'debug.provider',
               debugName: 'debug-provider-callback',
               implementation: QuickjsHostProviderImplementation.platform,
@@ -2345,7 +2996,7 @@ return hex256 + '/' + hex1 + '/' + valid + '/' + invalid;
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'app.hello',
               callback: (args, _) {
                 return 'hello ${args.single}';
@@ -2353,7 +3004,7 @@ return hex256 + '/' + hex1 + '/' + valid + '/' + invalid;
             ),
           ],
           environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'host:app-provider.js',
               source: '''
 Object.defineProperty(globalThis, 'app', {
@@ -2385,13 +3036,13 @@ Object.defineProperty(globalThis, 'app', {
         final engine = await Quickjs.create(
           options: QuickjsRuntimeOptions(
             providers: <QuickjsHostProvider>[
-              QuickjsHostProvider.async(
+              QuickjsHostProvider.dart(
                 name: 'app.double',
                 callback: (args, _) => (args.single! as num).toInt() * 2,
               ),
             ],
             environmentPatches: const <QuickjsHostScript>[
-              QuickjsHostScript(
+              QuickjsHostScript.js(
                 name: 'host:provider-rebuild.js',
                 source: '''
 globalThis.app = {
@@ -2421,7 +3072,7 @@ globalThis.app = {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'app.wait',
               callback: (_, context) async {
                 invocationCount += 1;
@@ -2435,7 +3086,7 @@ globalThis.app = {
             ),
           ],
           environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'host:provider-cancel-stop.js',
               source: '''
 globalThis.app = {
@@ -2472,7 +3123,7 @@ globalThis.app = {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'app.wait',
               callback: (_, context) {
                 invoked.complete(context);
@@ -2481,7 +3132,7 @@ globalThis.app = {
             ),
           ],
           environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'host:provider-cancel-dispose.js',
               source: '''
 globalThis.app = {
@@ -2514,13 +3165,13 @@ globalThis.app = {
       QuickjsRuntimeOptions providerOptions(String value) {
         return QuickjsRuntimeOptions(
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'app.identity',
               callback: (_, _) => value,
             ),
           ],
           environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'host:provider-isolation.js',
               globals: <String>['app'],
               source: '''
@@ -2551,7 +3202,7 @@ globalThis.app = {
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'app.sum',
               callback: (args, _) {
                 return args.fold<int>(
@@ -2593,11 +3244,11 @@ export function sum(...values) {
         Quickjs.create(
           options: QuickjsRuntimeOptions(
             providers: <QuickjsHostProvider>[
-              QuickjsHostProvider.async(
+              QuickjsHostProvider.dart(
                 name: 'app.hello',
                 callback: (_, _) => 1,
               ),
-              QuickjsHostProvider.async(
+              QuickjsHostProvider.dart(
                 name: 'app.hello',
                 callback: (_, _) => 2,
               ),
@@ -2618,13 +3269,13 @@ export function sum(...values) {
                 browserGlobals: QuickjsBrowserGlobals(window: true),
               ),
               providers: <QuickjsHostProvider>[
-                QuickjsHostProvider.async(
+                QuickjsHostProvider.dart(
                   name: 'app.hello',
                   callback: (args, _) => 'hello ${args.single}',
                 ),
               ],
               environmentPatches: const <QuickjsHostScript>[
-                QuickjsHostScript(
+                QuickjsHostScript.js(
                   name: 'mount:app-global.js',
                   source: '''
 globalThis.app = {
@@ -2675,7 +3326,7 @@ globalThis.app = {
             QuickjsHostMount(
               name: 'app-rebuild',
               environmentPatches: const <QuickjsHostScript>[
-                QuickjsHostScript(
+                QuickjsHostScript.js(
                   name: 'mount:rebuild.js',
                   source: 'globalThis.mountedValue = 42;',
                 ),
@@ -2731,13 +3382,13 @@ return location.hostname + '/' + typeof crypto.randomUUID + '/' + digest.byteLen
         QuickjsHostMount(
           name: 'runtime-api',
           providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.async(
+            QuickjsHostProvider.dart(
               name: 'runtime.echo',
               callback: (args, _) => args.single,
             ),
           ],
           environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'mount:runtime-api.js',
               source: '''
 globalThis.runtimeApi = {
@@ -2781,7 +3432,7 @@ globalThis.runtimeApi = {
         return QuickjsHostMount(
           name: 'versioned-runtime',
           environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'mount:versioned-runtime.js',
               globals: const <String>['runtimeMountVersion'],
               source: 'globalThis.runtimeMountVersion = $version;',
@@ -2905,7 +3556,7 @@ globalThis.dynamicLoaderValue = value;
             QuickjsHostMount(
               name: 'static-mount',
               environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript(
+                QuickjsHostScript.js(
                   name: 'mount:static.js',
                   globals: <String>['staticMountValue'],
                   source: 'globalThis.staticMountValue = 42;',
@@ -2935,7 +3586,7 @@ globalThis.dynamicLoaderValue = value;
         const QuickjsHostMount(
           name: 'replace-rollback',
           environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'mount:replace-rollback.js',
               globals: <String>['replaceRollbackValue'],
               source: 'globalThis.replaceRollbackValue = 1;',
@@ -2949,7 +3600,7 @@ globalThis.dynamicLoaderValue = value;
           const QuickjsHostMount(
             name: 'replace-rollback',
             environmentPatches: <QuickjsHostScript>[
-              QuickjsHostScript(
+              QuickjsHostScript.js(
                 name: 'mount:replace-rollback.js',
                 globals: <String>['replaceRollbackValue'],
                 source: 'throw new Error("replacement install failed");',
@@ -2976,7 +3627,7 @@ globalThis.dynamicLoaderValue = value;
         const QuickjsHostMount(
           name: 'runtime-rebuild',
           environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript(
+            QuickjsHostScript.js(
               name: 'mount:runtime-rebuild.js',
               source: 'globalThis.runtimeMountedValue = 42;',
             ),
@@ -2999,13 +3650,13 @@ globalThis.dynamicLoaderValue = value;
             QuickjsHostMount(
               name: 'existing',
               providers: <QuickjsHostProvider>[
-                QuickjsHostProvider.async(
+                QuickjsHostProvider.dart(
                   name: 'existing.provider',
                   callback: (_, _) => 42,
                 ),
               ],
               environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript(
+                QuickjsHostScript.js(
                   name: 'mount:existing.js',
                   globals: <String>['existingValue'],
                   source: 'globalThis.existingValue = 42;',
@@ -3032,7 +3683,7 @@ globalThis.dynamicLoaderValue = value;
           QuickjsHostMount(
             name: 'provider-conflict',
             providers: <QuickjsHostProvider>[
-              QuickjsHostProvider.async(
+              QuickjsHostProvider.dart(
                 name: 'existing.provider',
                 callback: (_, _) => 7,
               ),
@@ -3060,7 +3711,7 @@ globalThis.dynamicLoaderValue = value;
           const QuickjsHostMount(
             name: 'global-conflict',
             environmentPatches: <QuickjsHostScript>[
-              QuickjsHostScript(
+              QuickjsHostScript.js(
                 name: 'mount:global-conflict.js',
                 globals: <String>['existingValue'],
                 source: 'globalThis.existingValue = 7;',
@@ -3110,13 +3761,13 @@ globalThis.dynamicLoaderValue = value;
                 QuickjsHostMount(
                   name: 'first',
                   environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript(name: 'same.js', source: 'void 0;'),
+                    QuickjsHostScript.js(name: 'same.js', source: 'void 0;'),
                   ],
                 ),
                 QuickjsHostMount(
                   name: 'second',
                   environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript(name: 'same.js', source: 'void 0;'),
+                    QuickjsHostScript.js(name: 'same.js', source: 'void 0;'),
                   ],
                 ),
               ],
@@ -3132,7 +3783,7 @@ globalThis.dynamicLoaderValue = value;
                 QuickjsHostMount(
                   name: 'first-global',
                   environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript(
+                    QuickjsHostScript.js(
                       name: 'first.js',
                       globals: <String>['app'],
                       source: 'globalThis.app = 1;',
@@ -3142,7 +3793,7 @@ globalThis.dynamicLoaderValue = value;
                 QuickjsHostMount(
                   name: 'second-global',
                   environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript(
+                    QuickjsHostScript.js(
                       name: 'second.js',
                       globals: <String>['app'],
                       source: 'globalThis.app = 2;',
@@ -3162,7 +3813,7 @@ globalThis.dynamicLoaderValue = value;
                 browserGlobals: QuickjsBrowserGlobals(window: true),
               ),
               environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript(
+                QuickjsHostScript.js(
                   name: 'window-conflict.js',
                   globals: <String>['window'],
                   source: 'globalThis.window = {};',

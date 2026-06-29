@@ -8,6 +8,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 
 void main() {
+  test('QuickjsFetchMount allows every origin by default', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.write('default policy ok');
+      await request.response.close();
+    });
+
+    final origin = 'http://${server.address.address}:${server.port}';
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(
+        mounts: <QuickjsHostMount>[QuickjsFetchMount(maxResponseBytes: 4096)],
+      ),
+    );
+    addTearDown(engine.dispose);
+
+    expect(
+      await engine.evalAsync('''
+const response = await fetch('$origin/default');
+return await response.text();
+'''),
+      'default policy ok',
+    );
+  });
+
   test(
     'QuickjsFetchMount enforces policy and exposes Fetch response APIs',
     () async {

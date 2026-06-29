@@ -227,9 +227,7 @@ return { answer: 6 * 7, state: "resolved" };
                   child: const Text('验证 FIFO eval'),
                 ),
                 FilledButton.tonal(
-                  onPressed: _busy || !hasRuntime
-                      ? null
-                      : _runAsyncEvaluation,
+                  onPressed: _busy || !hasRuntime ? null : _runAsyncEvaluation,
                   child: const Text('等待 Promise'),
                 ),
                 OutlinedButton(

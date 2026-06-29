@@ -6,7 +6,7 @@ import 'package:quickjs/quickjs.dart';
 const _initialMount = QuickjsHostMount(
   name: 'example-initial',
   environmentPatches: <QuickjsHostScript>[
-    QuickjsHostScript(
+    QuickjsHostScript.js(
       name: 'mount:example-initial.js',
       globals: <String>['initialMountValue'],
       source: 'globalThis.initialMountValue = 21;',
@@ -121,13 +121,13 @@ globalThis.initialModuleValue = value;
     return QuickjsHostMount(
       name: 'example-runtime',
       providers: <QuickjsHostProvider>[
-        QuickjsHostProvider.async(
+        QuickjsHostProvider.dart(
           name: 'example.double',
           callback: (args, _) => (args.single! as num).toInt() * multiplier,
         ),
       ],
       environmentPatches: const <QuickjsHostScript>[
-        QuickjsHostScript(
+        QuickjsHostScript.js(
           name: 'mount:example-runtime.js',
           globals: <String>['runtimeApi'],
           source: '''

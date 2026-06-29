@@ -38,7 +38,11 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
       _quickjs = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
+      final quickjs = await Quickjs.create(
+        onConsole: (event) {
+          _appendLog('JS console.${event.level.name}: ${event.text}');
+        },
+      );
       await _bindCallbacks(quickjs);
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -65,7 +69,7 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
     await quickjs.bind('hostCount', (args) {
       final max = (args.single as num).toInt();
       return Stream<Object?>.periodic(
-        const Duration(milliseconds: 80),
+        const Duration(seconds: 1),
         (index) => index + 1,
       ).take(max);
     });
@@ -82,13 +86,14 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
     await _capture('Dart Stream -> JS for-await', () async {
       final result = await _requireRuntime().evalAsync('''
 const values = [];
-const stream = await hostCount(5);
+const stream = await hostCount(3);
 for await (const value of stream) {
+  console.log('Dart stream tick', value);
   values.push(value);
 }
 return values.join(',');
 ''');
-      _appendLog('JS for-await hostCount(5) => $result');
+      _appendLog('JS for-await hostCount(3) => $result');
     });
   }
 

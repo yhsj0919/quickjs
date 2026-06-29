@@ -16,13 +16,13 @@ QuickjsHostMount _quickjsNodeHostMount({
     name: 'node',
     environmentPatches: <QuickjsHostScript>[
       if (globalBuffer)
-        const QuickjsHostScript(
+        const QuickjsHostScript.js(
           name: 'host:node-buffer-global.js',
           globals: <String>['Buffer'],
           source: _essentialBufferGlobalScript,
         ),
       if (globalProcess)
-        QuickjsHostScript(
+        QuickjsHostScript.js(
           name: 'host:node-process-global.js',
           globals: const <String>['process'],
           source:

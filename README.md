@@ -141,7 +141,7 @@ final engine = await Quickjs.create(
       QuickjsHostMount(
         name: 'app-base',
         environmentPatches: <QuickjsHostScript>[
-          QuickjsHostScript(
+          QuickjsHostScript.js(
             name: 'mount:app-base.js',
             source: 'globalThis.appVersion = "1.0";',
           ),
@@ -155,13 +155,13 @@ await engine.mount(
   QuickjsHostMount(
     name: 'app-api',
     providers: <QuickjsHostProvider>[
-      QuickjsHostProvider.async(
+      QuickjsHostProvider.dart(
         name: 'app.double',
         callback: (args, _) => (args.single! as num) * 2,
       ),
     ],
     environmentPatches: const <QuickjsHostScript>[
-      QuickjsHostScript(
+      QuickjsHostScript.js(
         name: 'mount:app-api.js',
         source: '''
 globalThis.app = {

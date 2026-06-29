@@ -21,7 +21,7 @@ void main() {
           ),
         ],
         environmentPatches: <QuickjsHostScript>[
-          QuickjsHostScript(
+          QuickjsHostScript.js(
             name: 'test:axios.js',
             source: axiosSource,
             globals: const <String>['axios'],

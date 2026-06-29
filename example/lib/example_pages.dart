@@ -10,11 +10,13 @@ import 'pages/function_handle_page.dart';
 import 'pages/fetch_page.dart';
 import 'pages/host_modules_page.dart';
 import 'pages/host_mounts_page.dart';
+import 'pages/js_call_dart_plugin_page.dart';
 import 'pages/memory_limit_page.dart';
 import 'pages/module_eval_page.dart';
 import 'pages/native_worker_page.dart';
 import 'pages/npm_bundle_page.dart';
 import 'pages/object_proxy_page.dart';
+import 'pages/plugin_page.dart';
 import 'pages/queue_reentry_page.dart';
 import 'pages/runtime_isolation_page.dart';
 import 'pages/stream_callback_page.dart';
@@ -149,5 +151,16 @@ final List<ExamplePageSpec> examplePages = [
     description:
         '验证 QuickjsFetchMount 的 Fetch、Request、Response、重定向、自定义配置与 Axios/XHR 兼容协议。',
     builder: (_) => const FetchPage(),
+  ),
+  ExamplePageSpec(
+    title: 'JS 插件',
+    description:
+        '使用 QuickjsPlugin 注册单文件插件和多模块插件包，验证 validatePlugin、invokePlugin、structured codec 和错误返回。',
+    builder: (_) => const PluginPage(),
+  ),
+  ExamplePageSpec(
+    title: 'JsCallDart 插件',
+    description: '按 flutter_js main2.dart 的方式加载 asset 插件、注册 Dart 方法并运行 test2。',
+    builder: (_) => const JsCallDartPluginPage(),
   ),
 ];

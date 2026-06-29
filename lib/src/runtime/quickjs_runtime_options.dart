@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
+
+import '../diagnostics/quickjs_exception.dart';
+
 part '../module/quickjs_essential_host_mount.dart';
 part '../module/quickjs_node_host_mount.dart';
 part '../module/quickjs_web_host_mount.dart';
@@ -12,7 +16,7 @@ part '../module/quickjs_web_host_mount.dart';
 /// `null` means the module cannot be resolved.
 typedef QuickjsModuleLoader = FutureOr<String?> Function(String moduleName);
 
-/// Callback used by an async host provider.
+/// Callback used by a Dart host provider.
 ///
 /// JavaScript wrappers call providers through a Promise-returning bridge. The
 /// callback receives already-converted JavaScript arguments and may return any
@@ -103,11 +107,43 @@ final class QuickjsHostCapabilities {
 /// rebuilt after `stop()`. Use them for opt-in globals or polyfills such as
 /// `crypto`, `Buffer`, `location`, or other application-specific objects.
 final class QuickjsHostScript {
-  const QuickjsHostScript({
+  const QuickjsHostScript.js({
     required this.name,
     required this.source,
     this.globals = const <String>[],
   });
+
+  factory QuickjsHostScript.providerGlobals({
+    required String name,
+    required Map<String, String> globals,
+  }) {
+    final entries = globals.entries.map((entry) {
+      final globalName = _validateHostScriptGlobalName(entry.key);
+      final providerName = _validateHostScriptProviderName(entry.value);
+      return '''
+globalThis[${jsonEncode(globalName)}] = (...args) =>
+  globalThis.__quickjsHostProviders[${jsonEncode(providerName)}](...args);
+''';
+    }).join();
+    return QuickjsHostScript.js(
+      name: name,
+      source: entries,
+      globals: List<String>.unmodifiable(globals.keys),
+    );
+  }
+
+  static Future<QuickjsHostScript> asset({
+    required String name,
+    required String assetKey,
+    AssetBundle? bundle,
+    List<String> globals = const <String>[],
+  }) async {
+    return QuickjsHostScript.js(
+      name: name,
+      source: await (bundle ?? rootBundle).loadString(assetKey),
+      globals: globals,
+    );
+  }
 
   /// Source name used in QuickJS stack traces.
   final String name;
@@ -120,6 +156,30 @@ final class QuickjsHostScript {
   /// Mount validation rejects duplicate declared globals before rebuilding a
   /// runtime. Scripts that do not install globals may leave this empty.
   final List<String> globals;
+}
+
+String _validateHostScriptGlobalName(String name) {
+  final isIdentifier = RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(name);
+  if (!isIdentifier) {
+    throw JsValueConversionException(
+      'QuickJS host script global name must be a JavaScript identifier: $name',
+    );
+  }
+  return name;
+}
+
+String _validateHostScriptProviderName(String name) {
+  if (name.isEmpty) {
+    throw JsValueConversionException(
+      'QuickJS host script provider name must not be empty',
+    );
+  }
+  if (name.contains('\u0000')) {
+    throw JsValueConversionException(
+      'QuickJS host script provider name must not contain NUL',
+    );
+  }
+  return name;
 }
 
 /// JavaScript module source explicitly registered with a runtime.
@@ -178,18 +238,43 @@ enum QuickjsHostModuleFormat {
 /// themselves. A startup script or host module should wrap a provider into the
 /// desired JavaScript API shape, such as `fetch()` or `crypto.subtle.digest()`.
 final class QuickjsHostProvider {
-  const QuickjsHostProvider.async({
+  const QuickjsHostProvider.dart({
     required this.name,
     required this.callback,
     this.debugName,
+    this.globalName,
     this.implementation = QuickjsHostProviderImplementation.dart,
   });
+
+  factory QuickjsHostProvider.global({
+    required String name,
+    required QuickjsHostProviderCallback callback,
+    String? debugName,
+    QuickjsHostProviderImplementation implementation =
+        QuickjsHostProviderImplementation.dart,
+  }) {
+    final globalName = _validateHostScriptGlobalName(name);
+    return QuickjsHostProvider.dart(
+      name: 'global.$globalName',
+      globalName: globalName,
+      debugName: debugName,
+      implementation: implementation,
+      callback: callback,
+    );
+  }
 
   /// Runtime-scoped provider name used by JavaScript wrappers.
   final String name;
 
   /// Optional readable name for debug snapshots.
   final String? debugName;
+
+  /// Optional global function name installed as a direct wrapper for [name].
+  ///
+  /// Use this for simple `globalThis.foo(...)` APIs. Leave it null when a
+  /// startup script or module needs to expose a richer API shape, such as
+  /// `fetch()` or `crypto.subtle.digest()`.
+  final String? globalName;
 
   /// Declared source of the provider implementation.
   ///
@@ -205,7 +290,7 @@ final class QuickjsHostProvider {
   final QuickjsHostProviderCallback callback;
 }
 
-/// Source of an async host-provider implementation.
+/// Source of a host-provider implementation.
 enum QuickjsHostProviderImplementation {
   /// Pure Dart or Flutter code running in the host isolate.
   dart,

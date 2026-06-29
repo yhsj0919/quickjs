@@ -13,7 +13,7 @@ QuickjsHostMount _quickjsWebHostMount({
       browserGlobals: QuickjsBrowserGlobals(window: window, self: self),
     ),
     environmentPatches: <QuickjsHostScript>[
-      QuickjsHostScript(
+      QuickjsHostScript.js(
         name: 'host:web-globals.js',
         globals: <String>[
           'location',

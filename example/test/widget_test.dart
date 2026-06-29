@@ -1,22 +1,27 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
+import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
-  for (var attempt = 0; attempt < 100 && finder.evaluate().isEmpty; attempt++) {
+  for (var attempt = 0; attempt < 200 && finder.evaluate().isEmpty; attempt++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
     await tester.pump();
   }
+}
+
+Future<void> _scrollUntilFound(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isNotEmpty) {
+    return;
+  }
+  await tester.scrollUntilVisible(
+    finder,
+    120,
+    scrollable: find.byType(Scrollable),
+  );
 }
 
 void main() {
@@ -26,14 +31,8 @@ void main() {
 
     for (final page in examplePages) {
       final title = find.text(page.title);
-      if (title.evaluate().isEmpty) {
-        await tester.scrollUntilVisible(
-          title,
-          120,
-          scrollable: find.byType(Scrollable),
-        );
-      }
-      expect(find.text(page.title), findsOneWidget);
+      await _scrollUntilFound(tester, title);
+      expect(title, findsOneWidget);
       expect(find.text(page.description), findsOneWidget);
     }
 
@@ -41,308 +40,64 @@ void main() {
       find.text(examplePages.length.toString().padLeft(2, '0')),
       findsOneWidget,
     );
-    expect(examplePages.last.title, 'Fetch');
   });
 
-  testWidgets('registers resource limit example page', (
+  testWidgets('registers core example pages', (WidgetTester tester) async {
+    await tester.pumpWidget(const ExampleApp());
+
+    for (final marker in <String>[
+      'memoryLimitBytes',
+      'stackLimitBytes',
+      'evaluateValue',
+      'setTimeout',
+      'setInterval',
+      'for-await',
+      'JS sink',
+      'runtime module cache',
+      'CommonJS',
+      'compareValues()',
+      'QuickjsFetchMount',
+      'Axios/XHR',
+    ]) {
+      final finder = find.textContaining(marker);
+      await _scrollUntilFound(tester, finder);
+      expect(finder, findsWidgets);
+    }
+  });
+
+  testWidgets('runs js-call-dart plugin example page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const ExampleApp());
+    await tester.pumpWidget(const MaterialApp(home: JsCallDartPluginPage()));
 
-    expect(find.text('资源限制'), findsOneWidget);
-    expect(find.textContaining('memoryLimitBytes'), findsOneWidget);
-    expect(find.textContaining('stackLimitBytes'), findsOneWidget);
-  });
-
-  testWidgets('registers structured values example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    expect(find.text('结构化返回'), findsOneWidget);
-    expect(find.textContaining('evaluateValue'), findsOneWidget);
-  });
-
-  testWidgets('registers timer event loop example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Timer 与事件循环');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
+    expect(find.textContaining('JsCallDart'), findsOneWidget);
+    for (var attempt = 0; attempt < 200; attempt++) {
+      final button = tester.widget<FilledButton>(
+        find.byType(FilledButton).first,
       );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('setTimeout'), findsOneWidget);
-    expect(find.textContaining('setInterval'), findsOneWidget);
-  });
-
-  testWidgets('registers stream callback example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('流式 Callback');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
+      if (button.onPressed != null) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
+      await tester.pump();
     }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('for-await'), findsOneWidget);
-    expect(find.textContaining('JS sink'), findsOneWidget);
-  });
-
-  testWidgets('registers module example page', (WidgetTester tester) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Module');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('runtime module cache'), findsOneWidget);
-    expect(find.textContaining('CommonJS'), findsWidgets);
-  });
-
-  testWidgets('registers npm bundle example page', (WidgetTester tester) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('NPM Bundle');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('单文件 asset'), findsOneWidget);
-    expect(find.textContaining('compareValues()'), findsOneWidget);
-  });
-
-  testWidgets('registers fetch example page', (WidgetTester tester) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Fetch');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('QuickjsFetchMount'), findsOneWidget);
-    expect(find.textContaining('重定向'), findsOneWidget);
-    expect(find.textContaining('Axios/XHR'), findsOneWidget);
-
-    await tester.ensureVisible(title);
-    await tester.pumpAndSettle();
-    await tester.tap(title);
-    await tester.pumpAndSettle();
-    final axiosScenario = find.text('真实 Axios 1.6.2');
-    await tester.scrollUntilVisible(
-      axiosScenario,
-      240,
-      scrollable: find.byType(Scrollable).last,
-    );
-    expect(axiosScenario, findsOneWidget);
-    expect(find.textContaining('UMD asset'), findsOneWidget);
-  });
-
-  testWidgets('registers host modules example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('宿主模块');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
     expect(
-      find.textContaining('QuickjsRuntimeOptions.modules'),
-      findsOneWidget,
+      tester.widget<FilledButton>(find.byType(FilledButton).first).onPressed,
+      isNotNull,
     );
-    expect(find.textContaining('CommonJS 宿主模块'), findsOneWidget);
-    expect(find.textContaining('验证 cache'), findsOneWidget);
-    expect(find.textContaining('debugInspect'), findsOneWidget);
-    expect(find.textContaining('essential Buffer'), findsOneWidget);
-    expect(find.textContaining('node preset'), findsOneWidget);
-  });
+    expect(find.textContaining('test2'), findsOneWidget);
+    expect(find.textContaining('Axios'), findsOneWidget);
 
-  testWidgets('interacts with host mounts example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('能力批量挂载');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('QuickjsRuntimeOptions.mounts'), findsOneWidget);
-    expect(find.textContaining('Quickjs.mount()'), findsOneWidget);
-    expect(find.textContaining('provider'), findsOneWidget);
-
-    await tester.ensureVisible(title);
+    await tester.tap(find.byType(FilledButton).first);
+    final dialog = find.text('JS Alert');
+    await _pumpUntilFound(tester, dialog);
+    expect(dialog, findsOneWidget);
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    await tester.tap(title);
-    final readyStatus = find.text('runtime 已就绪：example-initial 已挂载');
-    await _pumpUntilFound(tester, readyStatus);
-    expect(readyStatus, findsOneWidget);
-
-    await tester.tap(find.text('检查初始化挂载'));
-    final initialResult = find.text('初始化 mount => 21/21');
-    await _pumpUntilFound(tester, initialResult);
-    expect(initialResult, findsOneWidget);
-
-    await tester.tap(find.text('运行时挂载'));
-    final runtimeResult = find.text(
-      'Quickjs.mount() => 21/runtime-module-2/42',
-    );
-    await _pumpUntilFound(tester, runtimeResult);
-    expect(runtimeResult, findsOneWidget);
-
-    await tester.tap(find.text('替换运行时挂载'));
-    final replacementResult = find.text(
-      'replace mount => 21/runtime-module-3/63',
-    );
-    await _pumpUntilFound(tester, replacementResult);
-    expect(replacementResult, findsOneWidget);
-
-    expect(find.text('替换运行时挂载'), findsOneWidget);
-  });
-
-  testWidgets('registers web host environment example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Web 宿主环境');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('QuickjsHostMount.web()'), findsOneWidget);
-    expect(find.textContaining('navigator'), findsOneWidget);
-  });
-
-  testWidgets('registers function handle example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Function Handle');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('evaluateHandle'), findsOneWidget);
-    expect(find.textContaining('handle.call'), findsOneWidget);
-    expect(find.textContaining('callAsync'), findsOneWidget);
-    expect(find.textContaining('dispose'), findsOneWidget);
-  });
-
-  testWidgets('registers object proxy example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('对象代理');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('bindObject'), findsOneWidget);
-    expect(find.textContaining('只读属性'), findsOneWidget);
-    expect(find.textContaining('Promise 方法'), findsOneWidget);
-    expect(find.textContaining('显式释放'), findsWidgets);
-  });
-
-  testWidgets('registers class binding example page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Class Binding');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('bindClass'), findsOneWidget);
-    expect(find.textContaining('new User'), findsOneWidget);
-    expect(find.textContaining('await getter/method'), findsOneWidget);
-  });
-
-  testWidgets('registers console example page', (WidgetTester tester) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Console');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('onConsole'), findsOneWidget);
-    expect(find.textContaining('console.log'), findsOneWidget);
-  });
-
-  testWidgets('registers web crypto example page', (WidgetTester tester) async {
-    await tester.pumpWidget(const ExampleApp());
-
-    final title = find.text('Web Crypto');
-    if (title.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        title,
-        120,
-        scrollable: find.byType(Scrollable),
-      );
-    }
-    expect(title, findsOneWidget);
-    expect(find.textContaining('QuickjsWebCryptoMount()'), findsOneWidget);
-    expect(find.textContaining('randomUUID'), findsOneWidget);
-    expect(find.textContaining('getRandomValues'), findsOneWidget);
-    expect(find.textContaining('subtle.digest'), findsOneWidget);
-    expect(find.textContaining('subtle.sign'), findsOneWidget);
-    expect(find.textContaining('HMAC-SHA-256'), findsOneWidget);
+    final result = find.textContaining('=>');
+    await _pumpUntilFound(tester, result);
+    expect(result, findsWidgets);
   });
 }

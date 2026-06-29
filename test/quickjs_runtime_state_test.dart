@@ -205,7 +205,8 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
     String name = '<eval>',
   }) {
     final effectiveCode = _stripSourceUrl(code);
-    if (_isInternalConsoleInstall(effectiveCode)) {
+    if (_isInternalConsoleInstall(effectiveCode) ||
+        _isInternalTextEncodingInstall(effectiveCode)) {
       return Future<String>.value('undefined');
     }
     evaluations.add(effectiveCode);
@@ -289,4 +290,9 @@ String _stripSourceUrl(String code) {
 bool _isInternalConsoleInstall(String code) {
   return code.contains('globalThis.console = globalThis.console || {}') ||
       code.contains("Object.defineProperty(globalThis, 'console'");
+}
+
+bool _isInternalTextEncodingInstall(String code) {
+  return code.contains("Object.defineProperty(globalThis, 'TextEncoder'") ||
+      code.contains("Object.defineProperty(globalThis, 'TextDecoder'");
 }

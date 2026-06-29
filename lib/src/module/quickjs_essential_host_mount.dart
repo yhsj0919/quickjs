@@ -5,7 +5,7 @@ QuickjsHostMount _quickjsEssentialHostMount({required bool globalBuffer}) {
     name: 'essential',
     environmentPatches: <QuickjsHostScript>[
       if (globalBuffer)
-        const QuickjsHostScript(
+        const QuickjsHostScript.js(
           name: 'host:essential-buffer-global.js',
           globals: <String>['Buffer'],
           source: _essentialBufferGlobalScript,
