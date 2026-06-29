@@ -1,0 +1,10 @@
+{
+  "id": "zipDemo",
+  "version": "1.0.0",
+  "entry": "zipDemo/main",
+  "exports": ["hello", "profile"],
+  "init": "init",
+  "metadata": {
+    "displayName": "Zip Demo Plugin"
+  }
+}

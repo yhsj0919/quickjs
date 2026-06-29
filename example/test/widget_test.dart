@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
 import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
+import 'package:quickjs_example/pages/zip_plugin_page.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 200 && finder.evaluate().isEmpty; attempt++) {
@@ -58,11 +59,22 @@ void main() {
       'compareValues()',
       'QuickjsFetchMount',
       'Axios/XHR',
+      'QuickjsZipPlugin.asset()',
     ]) {
       final finder = find.textContaining(marker);
       await _scrollUntilFound(tester, finder);
       expect(finder, findsWidgets);
     }
+  });
+
+  testWidgets('registers zip plugin example page', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ZipPluginPage()));
+
+    expect(find.text('Zip Plugin'), findsOneWidget);
+    expect(find.textContaining('QuickjsZipPlugin.asset()'), findsOneWidget);
+    expect(find.text('hello'), findsOneWidget);
+    expect(find.text('profile'), findsOneWidget);
+    expect(find.text('manifest'), findsOneWidget);
   });
 
   testWidgets('runs js-call-dart plugin example page', (

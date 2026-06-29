@@ -56,6 +56,7 @@ flutter:
     - assets/js/axios.js
     - assets/js/js_call_dart_plugin.mjs
     - assets/js/npm_bundle.mjs
+    - assets/plugins/zip_demo.zip
 
   # To add assets to your application, add an assets section, like this:
   # assets:

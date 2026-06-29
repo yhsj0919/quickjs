@@ -3,6 +3,8 @@ export 'src/runtime/quickjs.dart';
 export 'src/module/quickjs_asset_module_loader.dart';
 export 'src/diagnostics/quickjs_exception.dart';
 export 'src/runtime/quickjs_plugin.dart';
+export 'src/runtime/quickjs_plugin_tools.dart';
+export 'src/runtime/quickjs_zip_plugin.dart';
 export 'src/runtime/quickjs_runtime_options.dart';
 export 'src/diagnostics/quickjs_source_map.dart';
 export 'src/runtime/quickjs_value.dart';

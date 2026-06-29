@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -684,6 +685,279 @@ export function hello(name) {
           'package',
         ], pluginId: 'asset2'),
         'hello package from asset',
+      );
+    });
+
+    test('creates plugins from zip package bytes', () async {
+      final archive = Archive()
+        ..addFile(
+          ArchiveFile.string(
+            'manifest.json',
+            jsonEncode(<String, Object?>{
+              'id': 'zipApi',
+              'version': '1.0.0',
+              'entry': 'zipApi/main',
+              'exports': <String>['hello'],
+              'init': 'init',
+            }),
+          ),
+        )
+        ..addFile(
+          ArchiveFile.string('main.js', '''
+import { suffix } from './modules/helper.js';
+
+let prefix = 'hello';
+
+export function init(context) {
+  prefix = context.prefix;
+}
+
+export function hello(name) {
+  return prefix + ' ' + name + suffix;
+}
+'''),
+        )
+        ..addFile(
+          ArchiveFile.string(
+            'modules/helper.js',
+            "export const suffix = ' from zip';",
+          ),
+        );
+      final plugin = QuickjsZipPlugin.bytes(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      await engine.initPlugin(
+        plugin,
+        context: <String, Object?>{'prefix': 'hi'},
+      );
+      expect(
+        await engine.invokePlugin('hello', const <Object?>['plugin']),
+        'hi plugin from zip',
+      );
+    });
+
+    test(
+      'creates plugins from zip manifests with explicit file maps',
+      () async {
+        final archive = Archive()
+          ..addFile(
+            ArchiveFile.string(
+              'plugins/demo/quickjs-plugin.json',
+              jsonEncode(<String, Object?>{
+                'id': 'zipFiles',
+                'version': '1.0.0',
+                'entry': 'zipFiles/main',
+                'exports': <String>['hello'],
+                'files': <String, String>{
+                  'zipFiles/main': 'src/main.mjs',
+                  'zipFiles/lib/helper.mjs': 'src/helper.mjs',
+                },
+              }),
+            ),
+          )
+          ..addFile(
+            ArchiveFile.string('plugins/demo/src/main.mjs', '''
+import { suffix } from './lib/helper.mjs';
+
+export function hello(name) {
+  return 'hello ' + name + suffix;
+}
+'''),
+          )
+          ..addFile(
+            ArchiveFile.string(
+              'plugins/demo/src/helper.mjs',
+              "export const suffix = ' from mapped zip';",
+            ),
+          );
+        final plugin = QuickjsZipPlugin.bytes(
+          Uint8List.fromList(ZipEncoder().encode(archive)),
+          manifestPath: 'plugins/demo/quickjs-plugin.json',
+        );
+        final engine = await Quickjs.create(
+          options: QuickjsRuntimeOptions(
+            mounts: <QuickjsHostMount>[plugin.asMount()],
+          ),
+        );
+        addTearDown(engine.dispose);
+
+        await engine.validatePlugin(plugin);
+        expect(
+          await engine.invokePlugin('hello', const <Object?>['plugin']),
+          'hello plugin from mapped zip',
+        );
+      },
+    );
+
+    test('reports missing zip plugin manifests clearly', () {
+      final archive = Archive()
+        ..addFile(
+          ArchiveFile.string(
+            'main.js',
+            "export function hello() { return 'missing manifest'; }",
+          ),
+        );
+
+      expect(
+        () => QuickjsZipPlugin.bytes(
+          Uint8List.fromList(ZipEncoder().encode(archive)),
+        ),
+        throwsA(isA<JsValueConversionException>()),
+      );
+    });
+
+    test('wraps plugin lifecycle calls with a plugin client', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'clientApi',
+        version: '1.0.0',
+        exports: const <String>['hello'],
+        init: 'init',
+        dispose: 'dispose',
+        source: '''
+let prefix = 'hello';
+export function init(context) {
+  prefix = context.locale;
+  return prefix;
+}
+export function hello(name) {
+  return prefix + ' ' + name;
+}
+export function dispose() {
+  return prefix;
+}
+''',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+      final client = QuickjsPluginClient(engine, plugin);
+
+      await client.validate();
+      expect(await client.init(<String, Object?>{'locale': 'zh-CN'}), 'zh-CN');
+      expect(
+        await client.call('hello', const <Object?>['QuickJS']),
+        'zh-CN QuickJS',
+      );
+      expect(await client.dispose(), 'zh-CN');
+    });
+
+    test('exposes mounted plugin details in debug snapshots', () async {
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'debugApi',
+        version: '1.2.3',
+        exports: const <String>['hello'],
+        init: 'init',
+        dispose: 'dispose',
+        source: '''
+export function init() {}
+export function hello() { return 'debug'; }
+export function dispose() {}
+''',
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount(name: 'debug-plugin')],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      final snapshot = await engine.debugInspect();
+      expect(snapshot.pluginDetails, hasLength(1));
+      final detail = snapshot.pluginDetails.single;
+      expect(detail.id, 'debugApi');
+      expect(detail.version, '1.2.3');
+      expect(detail.entry, 'debugApi/main');
+      expect(detail.exports, const <String>['hello']);
+      expect(detail.init, 'init');
+      expect(detail.dispose, 'dispose');
+      expect(detail.mountName, 'debug-plugin');
+      expect(detail.moduleNames, const <String>['debugApi/main']);
+    });
+
+    test('creates plugin bundles from manifest assets', () async {
+      final bundle = _MemoryAssetBundle(<String, String>{
+        'assets/plugins/demo/manifest.json': jsonEncode(<String, Object?>{
+          'id': 'bundleApi',
+          'version': '1.0.0',
+          'entry': 'bundleApi/main',
+          'exports': <String>['hello'],
+        }),
+        'assets/plugins/demo/main.js': '''
+import { suffix } from './helper';
+export function hello(name) {
+  return 'hello ' + name + suffix;
+}
+''',
+        'assets/plugins/demo/modules/helper.js':
+            "export const suffix = ' from bundle';",
+      });
+      final plugin = await QuickjsPluginBundle.asset(
+        manifestAsset: 'assets/plugins/demo/manifest.json',
+        modules: const <String, String>{
+          'bundleApi/main': 'assets/plugins/demo/main.js',
+          'bundleApi/helper': 'assets/plugins/demo/modules/helper.js',
+        },
+        bundle: bundle,
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      expect(
+        await engine.invokePlugin('hello', const <Object?>['plugin']),
+        'hello plugin from bundle',
+      );
+    });
+
+    test('calls registered plugins as tool names', () async {
+      QuickjsPlugin plugin(String id, String label) {
+        return QuickjsPlugin.singleFile(
+          id: id,
+          version: '1.0.0',
+          exports: const <String>['run'],
+          source: "export function run(input) { return '$label:' + input; }",
+        );
+      }
+
+      final translator = plugin('translator', 'translate');
+      final summary = plugin('summary', 'summarize');
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[translator.asMount(), summary.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+      final tools = QuickjsToolRegistry(engine)
+        ..register(translator)
+        ..register(summary);
+
+      await tools.validateAll();
+      expect(
+        await tools.call('translator.run', const <Object?>['hello']),
+        'translate:hello',
+      );
+      expect(
+        await tools.call('summary.run', const <Object?>['article']),
+        'summarize:article',
+      );
+      expect(
+        () => tools.call('missing.run', const <Object?>[]),
+        throwsA(isA<JsValueConversionException>()),
       );
     });
 
@@ -2320,6 +2594,42 @@ return 'done';
       );
       await done.future.timeout(const Duration(seconds: 2));
       expect(values, ['chunk-1', 'chunk-2']);
+    });
+
+    test('wraps stream bindings with stream bridge helpers', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final sinkValues = <Object?>[];
+      final sinkDone = Completer<void>();
+
+      await QuickjsStreamBridge.bindDartStream(engine, 'hostCount', (args) {
+        final max = (args.single as num).toInt();
+        return Stream<Object?>.periodic(
+          const Duration(milliseconds: 10),
+          (index) => index + 1,
+        ).take(max);
+      });
+      final sink = await QuickjsStreamBridge.bindJsSink(engine, 'progress');
+      final subscription = sink.listen(
+        sinkValues.add,
+        onDone: sinkDone.complete,
+      );
+      addTearDown(subscription.cancel);
+
+      expect(
+        await engine.evalAsync('''
+const values = [];
+for await (const value of await hostCount(3)) {
+  values.push(value);
+  await progress.emit(value * 10);
+}
+await progress.close();
+return values.join(',');
+'''),
+        '1,2,3',
+      );
+      await sinkDone.future.timeout(const Duration(seconds: 2));
+      expect(sinkValues, [10, 20, 30]);
     });
 
     test('keeps stream and sink bindings isolated per runtime', () async {

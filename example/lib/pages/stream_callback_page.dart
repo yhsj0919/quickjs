@@ -66,7 +66,7 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
   }
 
   Future<void> _bindCallbacks(Quickjs quickjs) async {
-    await quickjs.bind('hostCount', (args) {
+    await QuickjsStreamBridge.bindDartStream(quickjs, 'hostCount', (args) {
       final max = (args.single as num).toInt();
       return Stream<Object?>.periodic(
         const Duration(seconds: 1),
@@ -74,7 +74,10 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
       ).take(max);
     });
 
-    final sinkStream = await quickjs.bindSink('progress');
+    final sinkStream = await QuickjsStreamBridge.bindJsSink(
+      quickjs,
+      'progress',
+    );
     _sinkSubscription = sinkStream.listen(
       (value) => _appendLog('Dart 收到 JS sink: $value'),
       onError: (Object error) => _appendLog('JS sink error: $error'),

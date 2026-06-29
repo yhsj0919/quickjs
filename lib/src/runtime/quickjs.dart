@@ -295,6 +295,29 @@ final class QuickjsHostProviderDebugInfo {
   final QuickjsHostProviderImplementation implementation;
 }
 
+/// Structured mounted-plugin metadata exposed by the inspector prototype.
+final class QuickjsPluginDebugInfo {
+  const QuickjsPluginDebugInfo({
+    required this.id,
+    required this.version,
+    required this.entry,
+    required this.exports,
+    required this.mountName,
+    required this.moduleNames,
+    this.init,
+    this.dispose,
+  });
+
+  final String id;
+  final String version;
+  final String entry;
+  final List<String> exports;
+  final String mountName;
+  final List<String> moduleNames;
+  final String? init;
+  final String? dispose;
+}
+
 /// Runtime debug snapshot exposed by the inspector prototype.
 final class QuickjsInspectorSnapshot {
   const QuickjsInspectorSnapshot({
@@ -305,6 +328,7 @@ final class QuickjsInspectorSnapshot {
     required this.registeredCallbacks,
     required this.registeredProviders,
     this.providerDetails = const <QuickjsHostProviderDebugInfo>[],
+    this.pluginDetails = const <QuickjsPluginDebugInfo>[],
     required this.registeredMounts,
     required this.moduleNames,
     required this.sourceMapNames,
@@ -320,6 +344,7 @@ final class QuickjsInspectorSnapshot {
   final List<String> registeredCallbacks;
   final List<String> registeredProviders;
   final List<QuickjsHostProviderDebugInfo> providerDetails;
+  final List<QuickjsPluginDebugInfo> pluginDetails;
   final List<String> registeredMounts;
   final List<String> moduleNames;
   final List<String> sourceMapNames;
@@ -533,6 +558,9 @@ class Quickjs {
       registeredProviders: List<String>.unmodifiable(_debugProviderNames()),
       providerDetails: List<QuickjsHostProviderDebugInfo>.unmodifiable(
         _debugProviderDetails(),
+      ),
+      pluginDetails: List<QuickjsPluginDebugInfo>.unmodifiable(
+        _debugPluginDetails(),
       ),
       registeredMounts: List<String>.unmodifiable(_debugMountNames()),
       moduleNames: List<String>.unmodifiable(_debugModuleNames()),
@@ -1961,6 +1989,28 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
         ),
     ];
     details.sort((left, right) => left.name.compareTo(right.name));
+    return details;
+  }
+
+  List<QuickjsPluginDebugInfo> _debugPluginDetails() {
+    final details = <QuickjsPluginDebugInfo>[
+      for (final mount in _allHostMounts)
+        if (mount is QuickjsPluginMount)
+          QuickjsPluginDebugInfo(
+            id: mount.plugin.manifest.id,
+            version: mount.plugin.manifest.version,
+            entry: mount.plugin.manifest.entry,
+            exports: List<String>.unmodifiable(mount.plugin.manifest.exports),
+            mountName: _validateHostMountName(mount.name),
+            moduleNames: List<String>.unmodifiable(
+              mount.plugin.modules.map((module) => module.specifier).toList()
+                ..sort(),
+            ),
+            init: mount.plugin.manifest.init,
+            dispose: mount.plugin.manifest.dispose,
+          ),
+    ];
+    details.sort((left, right) => left.id.compareTo(right.id));
     return details;
   }
 

@@ -1228,9 +1228,52 @@ export function formatName(value) {
 }
 ```
 
-quickjs 不强制读取 `manifest.json` 文件格式；应用层或插件管理器可以把这份 JSON 转换成
-`QuickjsPluginManifest`，再把模块文件映射为 `QuickjsPluginModule`。`exports` 声明 Dart
-侧可调用的业务函数，`init` / `dispose` 是可选生命周期导出，未声明时会跳过。
+quickjs 不强制插件只能使用目录或 zip。应用层可以手动把 manifest JSON 转换成
+`QuickjsPluginManifest`，再把模块文件映射为 `QuickjsPluginModule`；如果插件已经打成 zip，
+也可以直接用 `QuickjsZipPlugin` 解包成 `QuickjsPlugin`。`exports` 声明 Dart 侧可调用的业务函数，
+`init` / `dispose` 是可选生命周期导出，未声明时会跳过。
+
+zip 插件包示例：
+
+```text
+manifest.json
+main.js
+modules/helper.js
+```
+
+`manifest.json`：
+
+```json
+{
+  "id": "zipApi",
+  "version": "1.0.0",
+  "entry": "zipApi/main",
+  "exports": ["hello"]
+}
+```
+
+Dart：
+
+```dart
+final plugin = await QuickjsZipPlugin.asset(
+  assetKey: 'assets/plugins/zip_api.zip',
+);
+```
+
+如果 zip 内部路径和模块 specifier 不是默认映射关系，可以在 manifest 里显式声明 `files`：
+
+```json
+{
+  "id": "zipApi",
+  "version": "1.0.0",
+  "entry": "zipApi/main",
+  "exports": ["hello"],
+  "files": {
+    "zipApi/main": "src/main.mjs",
+    "zipApi/lib/helper.mjs": "src/helper.mjs"
+  }
+}
+```
 
 ## 35. 安装插件
 
@@ -1289,6 +1332,49 @@ final result = await quickjs.callPlugin(
 
 ```dart
 await quickjs.validatePlugin(plugin);
+```
+
+常用语法糖：
+
+```dart
+final client = QuickjsPluginClient(quickjs, plugin);
+
+await client.validate();
+await client.init({'locale': 'zh-CN'});
+final result = await client.call('hello', ['QuickJS']);
+await client.dispose();
+```
+
+从 manifest asset 和模块 asset map 创建插件包：
+
+```dart
+final plugin = await QuickjsPluginBundle.asset(
+  manifestAsset: 'assets/plugins/demo/manifest.json',
+  modules: const <String, String>{
+    'demo/main': 'assets/plugins/demo/main.js',
+    'demo/helper': 'assets/plugins/demo/modules/helper.js',
+  },
+);
+```
+
+把多个插件注册成工具集：
+
+```dart
+final tools = QuickjsToolRegistry(quickjs)
+  ..register(translatorPlugin)
+  ..register(summaryPlugin);
+
+final text = await tools.call('translator.translate', ['hello']);
+```
+
+Stream helper 只是命名语法糖，不新增 runtime API：
+
+```dart
+final progress = await QuickjsStreamBridge.bindJsSink(quickjs, 'progress');
+
+await QuickjsStreamBridge.bindDartStream(quickjs, 'hostCount', (_) {
+  return Stream.periodic(const Duration(seconds: 1), (i) => i + 1).take(3);
+});
 ```
 
 ## 37. 插件调用 Dart 方法
@@ -1416,6 +1502,7 @@ final snapshot = await quickjs.debugInspect(includeGlobals: true);
 print(snapshot.state);
 print(snapshot.registeredProviders);
 print(snapshot.registeredMounts);
+print(snapshot.pluginDetails);
 print(snapshot.moduleNames);
 print(snapshot.globals);
 ```
@@ -1430,6 +1517,7 @@ print(snapshot.globals);
 - `registeredProviders`
 - `providerDetails`
 - `registeredMounts`
+- `pluginDetails`
 - `moduleNames`
 - `sourceMapNames`
 - `memoryLimitBytes`

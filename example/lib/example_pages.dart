@@ -23,6 +23,7 @@ import 'pages/stream_callback_page.dart';
 import 'pages/structured_values_page.dart';
 import 'pages/timer_event_loop_page.dart';
 import 'pages/web_host_environment_page.dart';
+import 'pages/zip_plugin_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
 // 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
@@ -157,6 +158,12 @@ final List<ExamplePageSpec> examplePages = [
     description:
         '使用 QuickjsPlugin 注册单文件插件和多模块插件包，验证 validatePlugin、invokePlugin、structured codec 和错误返回。',
     builder: (_) => const PluginPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Zip Plugin',
+    description:
+        'Load a zipped plugin asset with QuickjsZipPlugin.asset(), validate it, run init(), and call exported methods.',
+    builder: (_) => const ZipPluginPage(),
   ),
   ExamplePageSpec(
     title: 'JsCallDart 插件',
