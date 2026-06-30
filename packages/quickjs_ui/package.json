@@ -1,0 +1,13 @@
+{
+  "name": "quickjs_ui",
+  "private": true,
+  "type": "module",
+  "main": "js/quickjs_ui.js",
+  "types": "js/quickjs_ui.d.ts",
+  "exports": {
+    ".": {
+      "types": "./js/quickjs_ui.d.ts",
+      "default": "./js/quickjs_ui.js"
+    }
+  }
+}

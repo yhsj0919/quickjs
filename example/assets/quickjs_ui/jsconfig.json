@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": {
+      "quickjs_ui": [
+        "../../../packages/quickjs_ui/js/quickjs_ui.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "*.mjs"
+  ]
+}

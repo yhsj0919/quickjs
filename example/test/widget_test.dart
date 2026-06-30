@@ -3,7 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
 import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_bundle_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/zip_plugin_page.dart';
+import 'package:quickjs_example/quickjs_ui_example_pages.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 200 && finder.evaluate().isEmpty; attempt++) {
@@ -28,6 +32,8 @@ Future<void> _scrollUntilFound(WidgetTester tester, Finder finder) async {
 void main() {
   testWidgets('renders example index', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
+    expect(find.text('Core'), findsOneWidget);
+    expect(find.text('quickjs_ui'), findsOneWidget);
     expect(find.text('01'), findsOneWidget);
 
     for (final page in examplePages) {
@@ -41,6 +47,48 @@ void main() {
       find.text(examplePages.length.toString().padLeft(2, '0')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('registers quickjs_ui example pages', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ExampleApp());
+    await tester.tap(find.text('quickjs_ui'));
+    await tester.pumpAndSettle();
+
+    for (final page in quickjsUiExamplePages) {
+      expect(find.text(page.title), findsOneWidget);
+      expect(find.text(page.description), findsOneWidget);
+    }
+  });
+
+  testWidgets('registers quickjs_ui counter page', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiCounterPage()));
+
+    expect(find.text('QuickJS UI Counter'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui bundle counter page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiBundleCounterPage()),
+    );
+
+    expect(find.text('QuickJS UI Bundle Counter'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui network counter page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiNetworkCounterPage()),
+    );
+
+    expect(find.text('QuickJS UI Network Counter'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
   testWidgets('registers core example pages', (WidgetTester tester) async {

@@ -238,6 +238,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  quickjs_ui:
+    dependency: "direct main"
+    description:
+      path: "../packages/quickjs_ui"
+      relative: true
+    source: path
+    version: "0.1.0"
   sky_engine:
     dependency: transitive
     description: flutter
