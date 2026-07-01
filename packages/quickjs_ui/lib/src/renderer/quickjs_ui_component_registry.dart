@@ -59,7 +59,7 @@ Widget _buildText(QuickjsUiRenderContext context, QuickjsUiNode node) {
   return Text(
     data,
     textAlign: QuickjsUiProps.textAlign(node.props['textAlign']),
-    style: QuickjsUiProps.textStyle(node.props['style']),
+    style: context.textStyle(node.props['style']),
   );
 }
 
@@ -99,7 +99,7 @@ Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final decoration = QuickjsUiProps.boxDecoration(node.props);
+  final decoration = context.boxDecoration(node.props);
   final opacity = QuickjsUiProps.opacity(node.props['opacity']);
   final child = Container(
     width: QuickjsUiProps.doubleValue(node.props['width']),
@@ -109,9 +109,7 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
     alignment: QuickjsUiProps.alignment(node.props['alignment']),
     decoration: decoration,
     color: decoration == null
-        ? QuickjsUiProps.color(
-            node.props['color'] ?? node.props['backgroundColor'],
-          )
+        ? context.color(node.props['color'] ?? node.props['backgroundColor'])
         : null,
     child: context.child(node),
   );

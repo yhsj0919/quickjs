@@ -107,7 +107,7 @@ class _NetworkActions extends StatelessWidget {
       spacing: 8,
       children: <Widget>[
         FilledButton.tonal(onPressed: onRefresh, child: const Text('Refresh')),
-        FilledButton(onPressed: onReload, child: const Text('Reload')),
+        FilledButton(onPressed: onReload, child: const Text('Reload source')),
       ],
     );
   }

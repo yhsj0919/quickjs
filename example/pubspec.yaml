@@ -61,6 +61,7 @@ flutter:
     - assets/js/npm_bundle.mjs
     - assets/quickjs_ui/counter_page.mjs
     - assets/quickjs_ui/controls_page.mjs
+    - assets/quickjs_ui/todo_page.mjs
     - assets/quickjs_ui/quickjs_ui.schema.json
     - assets/quickjs_ui/schema_preview.json
     - assets/quickjs_ui/bundle_counter/pages/main.mjs

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+typedef QuickjsUiColorResolver = Color? Function(Object? value);
+typedef QuickjsUiTextStyleResolver = TextStyle? Function(Object? value);
+
 final class QuickjsUiProps {
   const QuickjsUiProps._();
 
@@ -71,9 +74,13 @@ final class QuickjsUiProps {
     return (doubleValue(value, name: 'opacity') ?? 1).clamp(0, 1).toDouble();
   }
 
-  static Color? color(Object? value) {
+  static Color? color(Object? value, {QuickjsUiColorResolver? resolveColor}) {
     if (value == null) {
       return null;
+    }
+    final resolved = resolveColor?.call(value);
+    if (resolved != null) {
+      return resolved;
     }
     if (value is int) {
       return Color(value);
@@ -283,13 +290,21 @@ final class QuickjsUiProps {
     };
   }
 
-  static TextStyle? textStyle(Object? value) {
+  static TextStyle? textStyle(
+    Object? value, {
+    QuickjsUiColorResolver? resolveColor,
+    QuickjsUiTextStyleResolver? resolveTextStyle,
+  }) {
     if (value == null) {
       return null;
     }
+    final resolved = resolveTextStyle?.call(value);
+    if (resolved != null) {
+      return resolved;
+    }
     final props = map(value, name: 'Text style');
     return TextStyle(
-      color: color(props['color']),
+      color: color(props['color'], resolveColor: resolveColor),
       fontSize: doubleValue(props['fontSize'], name: 'fontSize'),
       fontWeight: fontWeight(props['fontWeight']),
       letterSpacing: doubleValue(props['letterSpacing'], name: 'letterSpacing'),
@@ -331,7 +346,10 @@ final class QuickjsUiProps {
     };
   }
 
-  static BoxDecoration? boxDecoration(Map<String, Object?> props) {
+  static BoxDecoration? boxDecoration(
+    Map<String, Object?> props, {
+    QuickjsUiColorResolver? resolveColor,
+  }) {
     final decoration = map(props['decoration'], name: 'Container decoration');
     final merged = <String, Object?>{
       ...decoration,
@@ -343,9 +361,9 @@ final class QuickjsUiProps {
       if (props.containsKey('borderColor')) 'borderColor': props['borderColor'],
       if (props.containsKey('borderWidth')) 'borderWidth': props['borderWidth'],
     };
-    final background = color(merged['color']);
+    final background = color(merged['color'], resolveColor: resolveColor);
     final radius = borderRadius(merged['borderRadius']);
-    final border = _border(merged);
+    final border = _border(merged, resolveColor: resolveColor);
     if (background == null && radius == null && border == null) {
       return null;
     }
@@ -356,7 +374,10 @@ final class QuickjsUiProps {
     );
   }
 
-  static BoxBorder? _border(Map<String, Object?> props) {
+  static BoxBorder? _border(
+    Map<String, Object?> props, {
+    QuickjsUiColorResolver? resolveColor,
+  }) {
     final border = props['border'] == null
         ? const <String, Object?>{}
         : map(props['border'], name: 'Container border');
@@ -366,7 +387,7 @@ final class QuickjsUiProps {
       return null;
     }
     return Border.all(
-      color: color(colorValue) ?? Colors.black,
+      color: color(colorValue, resolveColor: resolveColor) ?? Colors.black,
       width: doubleValue(widthValue, name: 'border width') ?? 1,
     );
   }

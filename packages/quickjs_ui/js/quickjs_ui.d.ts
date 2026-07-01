@@ -105,10 +105,128 @@ export type CrossAxisAlignment =
   | 'stretch'
   | 'baseline';
 
+export type Alignment =
+  | 'topLeft'
+  | 'topCenter'
+  | 'topRight'
+  | 'centerLeft'
+  | 'center'
+  | 'centerRight'
+  | 'bottomLeft'
+  | 'bottomCenter'
+  | 'bottomRight';
+
+export type BoxFit =
+  | 'fill'
+  | 'contain'
+  | 'cover'
+  | 'fitWidth'
+  | 'fitHeight'
+  | 'none'
+  | 'scaleDown';
+
+export type Axis = 'vertical' | 'horizontal';
+
+export type StackFit = 'loose' | 'expand' | 'passthrough';
+
+export type TextAlign =
+  | 'left'
+  | 'right'
+  | 'center'
+  | 'justify'
+  | 'start'
+  | 'end';
+
+export type FontWeight =
+  | 100
+  | 200
+  | 300
+  | 400
+  | 500
+  | 600
+  | 700
+  | 800
+  | 900
+  | 'normal'
+  | 'bold'
+  | 'w100'
+  | 'w200'
+  | 'w300'
+  | 'w400'
+  | 'w500'
+  | 'w600'
+  | 'w700'
+  | 'w800'
+  | 'w900';
+
+export type TextInputType =
+  | 'text'
+  | 'multiline'
+  | 'number'
+  | 'phone'
+  | 'datetime'
+  | 'emailAddress'
+  | 'url'
+  | 'visiblePassword';
+
+export type TextInputAction =
+  | 'none'
+  | 'unspecified'
+  | 'done'
+  | 'go'
+  | 'search'
+  | 'send'
+  | 'next'
+  | 'previous'
+  | 'continueAction'
+  | 'join'
+  | 'route'
+  | 'emergencyCall'
+  | 'newline';
+
+export type ThemeColorToken =
+  | '$primary'
+  | '$onPrimary'
+  | '$primaryContainer'
+  | '$onPrimaryContainer'
+  | '$secondary'
+  | '$onSecondary'
+  | '$secondaryContainer'
+  | '$onSecondaryContainer'
+  | '$tertiary'
+  | '$onTertiary'
+  | '$surface'
+  | '$onSurface'
+  | '$surfaceVariant'
+  | '$background'
+  | '$onBackground'
+  | '$error'
+  | '$onError'
+  | '$outline';
+
+export type ThemeTextStyleToken =
+  | '$text.displayLarge'
+  | '$text.displayMedium'
+  | '$text.displaySmall'
+  | '$text.headlineLarge'
+  | '$text.headlineMedium'
+  | '$text.headlineSmall'
+  | '$text.titleLarge'
+  | '$text.titleMedium'
+  | '$text.titleSmall'
+  | '$text.bodyLarge'
+  | '$text.bodyMedium'
+  | '$text.bodySmall'
+  | '$text.labelLarge'
+  | '$text.labelMedium'
+  | '$text.labelSmall';
+
+export type ColorValue = string | number | ThemeColorToken;
+
 export type TextStyle = {
-  color?: string | number;
+  color?: ColorValue;
   fontSize?: number;
-  fontWeight?: 'normal' | 'bold' | 'w400' | 'w500' | 'w600' | 'w700';
+  fontWeight?: FontWeight;
 };
 
 export type EdgeInsets =
@@ -126,8 +244,8 @@ export type EdgeInsets =
 export type TextProps = {
   data?: string;
   text?: string;
-  textAlign?: 'left' | 'right' | 'center' | 'start' | 'end';
-  style?: TextStyle;
+  textAlign?: TextAlign;
+  style?: TextStyle | ThemeTextStyleToken;
 };
 
 export type ButtonProps = {
@@ -147,21 +265,21 @@ export type ContainerProps = {
   height?: number;
   padding?: EdgeInsets;
   margin?: EdgeInsets;
-  alignment?: string;
-  color?: string | number;
-  backgroundColor?: string | number;
+  alignment?: Alignment;
+  color?: ColorValue;
+  backgroundColor?: ColorValue;
 };
 
 export type ImageProps = {
   src: string;
   width?: number;
   height?: number;
-  fit?: 'fill' | 'contain' | 'cover' | 'fitWidth' | 'fitHeight' | 'none' | 'scaleDown';
+  fit?: BoxFit;
 };
 
 export type ListViewProps = {
   children?: QuickjsUiNode[];
-  scrollDirection?: 'vertical' | 'horizontal';
+  scrollDirection?: Axis;
   shrinkWrap?: boolean;
   padding?: EdgeInsets;
 };
@@ -175,8 +293,8 @@ export type TextFieldProps = {
   autofocus?: boolean;
   obscureText?: boolean;
   maxLines?: number;
-  keyboardType?: 'text' | 'multiline' | 'number' | 'phone' | 'datetime' | 'emailAddress' | 'url' | 'visiblePassword';
-  textInputAction?: 'none' | 'unspecified' | 'done' | 'go' | 'search' | 'send' | 'next' | 'previous' | 'continueAction' | 'join' | 'route' | 'emergencyCall' | 'newline';
+  keyboardType?: TextInputType;
+  textInputAction?: TextInputAction;
   onChanged?: QuickjsUiEvent;
   onSubmitted?: QuickjsUiEvent;
   onFocus?: QuickjsUiEvent;
@@ -185,8 +303,8 @@ export type TextFieldProps = {
 
 export type StackProps = {
   children?: QuickjsUiNode[];
-  alignment?: string;
-  fit?: 'loose' | 'expand' | 'passthrough';
+  alignment?: Alignment;
+  fit?: StackFit;
 };
 
 export type PaddingProps = {

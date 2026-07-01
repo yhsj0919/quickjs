@@ -57,7 +57,9 @@ class _QuickjsUiSchemaPageState extends State<QuickjsUiSchemaPage> {
                   )
                 : _node == null
                 ? const Center(child: CircularProgressIndicator())
-                : QuickjsUiRenderer(onEvent: _handleEvent).build(_node!),
+                : QuickjsUiRenderer(
+                    onEvent: _handleEvent,
+                  ).build(_node!, buildContext: context),
           ),
         ],
       ),

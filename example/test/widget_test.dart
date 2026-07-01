@@ -9,6 +9,7 @@ import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
 import 'package:quickjs_example/pages/zip_plugin_page.dart';
 import 'package:quickjs_example/quickjs_ui_example_pages.dart';
 
@@ -93,7 +94,8 @@ void main() {
     );
 
     expect(find.text('QuickJS UI Network Counter'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    expect(find.text('Reload source'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui controls page', (
@@ -102,6 +104,21 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiControlsPage()));
 
     expect(find.text('QuickJS UI Controls'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('ThemeData tokens from JS'));
+    expect(find.text('ThemeData tokens from JS'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiTodoPage()));
+
+    expect(find.text('QuickJS UI Todo List'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('Add todo'));
+    expect(find.textContaining('QuickJS UI todo error'), findsNothing);
+    expect(find.text('Add todo'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Review quickjs_ui 0.2 roadmap'));
+    expect(find.text('Review quickjs_ui 0.2 roadmap'), findsOneWidget);
+    expect(find.text('Try ThemeData tokens from JS'), findsOneWidget);
+    expect(find.text('Add todo'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui JSON schema page', (

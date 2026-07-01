@@ -283,7 +283,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
     try {
       final rendered = QuickjsUiRenderer(
         onEvent: _controller.dispatch,
-      ).build(node);
+      ).build(node, buildContext: context);
       _reportFirstRender();
       return rendered;
     } catch (error) {

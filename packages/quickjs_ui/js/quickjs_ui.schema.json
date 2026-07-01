@@ -111,27 +111,39 @@
         {
           "type": "string",
           "pattern": "^(#|0x|0X)?[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\$(theme\\.|color\\.|colors\\.)?[A-Za-z][A-Za-z0-9.]*$"
         }
       ]
     },
     "textStyle": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "color": { "$ref": "#/$defs/color" },
-        "fontSize": { "type": "number" },
-        "fontWeight": {
-          "oneOf": [
-            { "type": "number", "enum": [100, 200, 300, 400, 500, 600, 700, 800, 900] },
-            {
-              "type": "string",
-              "enum": ["normal", "bold", "w100", "w200", "w300", "w400", "w500", "w600", "w700", "w800", "w900"]
-            }
-          ]
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\$(text\\.|textTheme\\.)?[A-Za-z][A-Za-z0-9.]*$"
         },
-        "letterSpacing": { "type": "number" },
-        "height": { "type": "number" }
-      }
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "color": { "$ref": "#/$defs/color" },
+            "fontSize": { "type": "number" },
+            "fontWeight": {
+              "oneOf": [
+                { "type": "number", "enum": [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+                {
+                  "type": "string",
+                  "enum": ["normal", "bold", "w100", "w200", "w300", "w400", "w500", "w600", "w700", "w800", "w900"]
+                }
+              ]
+            },
+            "letterSpacing": { "type": "number" },
+            "height": { "type": "number" }
+          }
+        }
+      ]
     },
     "boxDecoration": {
       "type": "object",

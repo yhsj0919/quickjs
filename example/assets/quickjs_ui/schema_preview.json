@@ -5,7 +5,7 @@
     {
       "type": "Text",
       "data": "Pure JSON UI schema",
-      "style": { "fontSize": 22, "fontWeight": "w700" }
+      "style": "$text.titleMedium"
     },
     {
       "type": "Padding",
@@ -14,7 +14,7 @@
         "type": "Container",
         "padding": { "all": 12 },
         "decoration": {
-          "color": "#fff7ed",
+          "color": "$primaryContainer",
           "borderRadius": 10,
           "border": { "color": "#fed7aa", "width": 1 }
         },
@@ -50,7 +50,7 @@
             "type": "Container",
             "width": 220,
             "height": 96,
-            "backgroundColor": "#263238",
+            "backgroundColor": "$primary",
             "borderRadius": 14
           },
           {
@@ -66,7 +66,7 @@
             "child": {
               "type": "Text",
               "data": "JSON Stack + Image",
-              "style": { "color": "#ffffff", "fontSize": 13, "fontWeight": "w600" }
+              "style": { "color": "$onPrimary", "fontSize": 13, "fontWeight": "w600" }
             }
           }
         ]
@@ -78,7 +78,7 @@
         "type": "Container",
         "padding": { "horizontal": 14, "vertical": 8 },
         "decoration": {
-          "color": "#e3f2fd",
+          "color": "$secondaryContainer",
           "borderRadius": 999,
           "border": { "color": "#64b5f6", "width": 1 }
         },

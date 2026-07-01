@@ -139,6 +139,19 @@ void main() {
             as Map<String, Object?>;
     expect(props.keys, containsAll(<String>['onChanged', 'onSubmitted']));
     expect(props.keys, containsAll(<String>['onFocus', 'onBlur']));
+
+    final color = defs['color']! as Map<String, Object?>;
+    final colorVariants = color['oneOf']! as List<Object?>;
+    expect(
+      colorVariants.any(
+        (variant) =>
+            variant is Map<String, Object?> &&
+            '${variant['pattern']}'.contains(r'^\$'),
+      ),
+      isTrue,
+    );
+    final textStyle = defs['textStyle']! as Map<String, Object?>;
+    expect(textStyle['oneOf'], isA<List<Object?>>());
   });
 
   test('runtime helper is generated from JS helper source', () {
@@ -211,6 +224,68 @@ void main() {
       Border.all(color: const Color(0xff445566), width: 2),
     );
     expect(find.text('Box'), findsOneWidget);
+  });
+
+  testWidgets('resolves ThemeData color and text style tokens', (tester) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'color': r'$primary',
+      'child': <String, Object?>{
+        'type': 'Column',
+        'children': <Object?>[
+          <String, Object?>{
+            'type': 'Text',
+            'data': 'Theme title',
+            'style': r'$text.titleMedium',
+          },
+          <String, Object?>{
+            'type': 'Text',
+            'data': 'Theme color',
+            'style': <String, Object?>{'color': r'$onPrimary'},
+          },
+        ],
+      },
+    });
+    const primary = Color(0xff0057b8);
+    const onPrimary = Color(0xffffffff);
+    const titleStyle = TextStyle(fontSize: 19, fontWeight: FontWeight.w600);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: primary,
+          ).copyWith(primary: primary, onPrimary: onPrimary),
+          textTheme: const TextTheme(titleMedium: titleStyle),
+        ),
+        home: Builder(
+          builder: (context) {
+            return QuickjsUiRenderer(
+              onEvent: (_) {},
+            ).build(node, buildContext: context);
+          },
+        ),
+      ),
+    );
+
+    final container = tester.widget<Container>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration! as BoxDecoration).color == primary,
+      ),
+    );
+    expect((container.decoration! as BoxDecoration).color, primary);
+    final resolvedTitleStyle = tester
+        .widget<Text>(find.text('Theme title'))
+        .style;
+    expect(resolvedTitleStyle?.fontSize, titleStyle.fontSize);
+    expect(resolvedTitleStyle?.fontWeight, titleStyle.fontWeight);
+    expect(
+      tester.widget<Text>(find.text('Theme color')).style?.color,
+      onPrimary,
+    );
   });
 
   testWidgets('renders 0.2 layout and media widgets', (tester) async {
@@ -788,6 +863,67 @@ export default Page({
       'network.cacheHit',
     ]);
     expect(events.last.fromCache, isTrue);
+  });
+
+  test('network loader revalidates changed bundle resources', () async {
+    var version = 1;
+    final requests = <QuickjsUiNetworkRequest>[];
+    final loader = QuickjsUiNetworkLoader(
+      fetch: (request) async {
+        requests.add(request);
+        final uri = request.uri.toString();
+        if (uri == 'https://example.com/ui/pages/main.mjs') {
+          return QuickjsUiNetworkResponse(
+            body: '''
+import { Page } from 'quickjs_ui';
+import { title } from '../components/title.mjs';
+
+export default Page({
+  build() {
+    return title();
+  }
+});
+''',
+            headers: <String, String>{'etag': '"entry-v$version"'},
+          );
+        }
+        if (uri == 'https://example.com/ui/components/title.mjs') {
+          return QuickjsUiNetworkResponse(
+            body:
+                '''
+import { Text } from 'quickjs_ui';
+
+export function title() {
+  return Text('Remote version $version');
+}
+''',
+            headers: <String, String>{'etag': '"title-v$version"'},
+          );
+        }
+        return const QuickjsUiNetworkResponse(body: '', statusCode: 404);
+      },
+    );
+    final url = Uri.parse('https://example.com/ui/pages/main.mjs');
+
+    final first = await loader.load(url: url);
+
+    expect(first.modules['components/title.mjs'], contains('Remote version 1'));
+    expect(requests, hasLength(2));
+
+    version = 2;
+    final second = await loader.load(url: url);
+
+    expect(
+      second.modules['components/title.mjs'],
+      contains('Remote version 2'),
+    );
+    expect(requests, hasLength(4));
+    expect(requests[2].headers, <String, String>{
+      'if-none-match': '"entry-v1"',
+    });
+    expect(requests[3].headers, <String, String>{
+      'if-none-match': '"title-v1"',
+    });
   });
 
   test('setState updates JS-owned state and refreshes rendered node', () async {
