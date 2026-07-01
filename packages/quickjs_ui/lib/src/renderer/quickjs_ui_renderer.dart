@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_component_registry.dart';
-import 'quickjs_ui_node.dart';
 import 'quickjs_ui_render_context.dart';
 
 final class QuickjsUiRenderer {

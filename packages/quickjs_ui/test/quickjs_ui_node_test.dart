@@ -1,8 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
-import 'dart:io';
 
 void main() {
   test('parses serializable ui nodes', () {
@@ -103,6 +105,48 @@ void main() {
     );
   });
 
+  test('ships JSON Schema for supported UI nodes', () {
+    final file = File('js/quickjs_ui.schema.json');
+    final schema = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+    final defs = schema[r'$defs']! as Map<String, Object?>;
+    final node = defs['node']! as Map<String, Object?>;
+    final variants = node['oneOf']! as List<Object?>;
+
+    expect(schema[r'$schema'], 'https://json-schema.org/draft/2020-12/schema');
+    expect(schema['title'], 'quickjs_ui UI schema');
+    expect(
+      variants.map((variant) => (variant! as Map<String, Object?>)[r'$ref']),
+      containsAll(<String>[
+        '#/\$defs/text',
+        '#/\$defs/elevatedButton',
+        '#/\$defs/row',
+        '#/\$defs/column',
+        '#/\$defs/container',
+        '#/\$defs/image',
+        '#/\$defs/listView',
+        '#/\$defs/textField',
+        '#/\$defs/stack',
+        '#/\$defs/padding',
+        '#/\$defs/center',
+        '#/\$defs/sizedBox',
+      ]),
+    );
+
+    final textField = defs['textField']! as Map<String, Object?>;
+    final allOf = textField['allOf']! as List<Object?>;
+    final props =
+        (allOf.last! as Map<String, Object?>)['properties']!
+            as Map<String, Object?>;
+    expect(props.keys, containsAll(<String>['onChanged', 'onSubmitted']));
+    expect(props.keys, containsAll(<String>['onFocus', 'onBlur']));
+  });
+
+  test('runtime helper is generated from JS helper source', () {
+    final source = File('js/quickjs_ui.js').readAsStringSync();
+
+    expect(quickjsUiHelperModuleSource, source);
+  });
+
   testWidgets('renders basic Flutter widgets and dispatches button event', (
     tester,
   ) async {
@@ -145,13 +189,19 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      MaterialApp(
+        home: Center(child: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      ),
     );
 
     final opacity = tester.widget<Opacity>(find.byType(Opacity));
     expect(opacity.opacity, 0.5);
-    final container = tester.widget<Container>(find.byType(Container));
-    expect(tester.getSize(find.byType(Container)), const Size(80, 40));
+    final containerFinder = find.descendant(
+      of: find.byType(Opacity),
+      matching: find.byType(Container),
+    );
+    final container = tester.widget<Container>(containerFinder);
+    expect(tester.getSize(containerFinder), const Size(80, 40));
     expect(container.padding, const EdgeInsets.symmetric(horizontal: 8));
     final decoration = container.decoration! as BoxDecoration;
     expect(decoration.color, const Color(0xff112233));
@@ -161,6 +211,168 @@ void main() {
       Border.all(color: const Color(0xff445566), width: 2),
     );
     expect(find.text('Box'), findsOneWidget);
+  });
+
+  testWidgets('renders 0.2 layout and media widgets', (tester) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ListView',
+      'padding': 8,
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'Padding',
+          'padding': <String, Object?>{'horizontal': 4},
+          'child': <String, Object?>{
+            'type': 'Center',
+            'child': <String, Object?>{
+              'type': 'SizedBox',
+              'width': 100,
+              'height': 40,
+              'child': <String, Object?>{'type': 'Text', 'data': 'Sized'},
+            },
+          },
+        },
+        <String, Object?>{
+          'type': 'Stack',
+          'alignment': 'center',
+          'children': <Object?>[
+            <String, Object?>{
+              'type': 'Container',
+              'width': 32,
+              'height': 24,
+              'color': '#000000',
+            },
+            <String, Object?>{'type': 'Text', 'data': 'Overlay'},
+          ],
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+    );
+
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    expect(listView.shrinkWrap, isTrue);
+    expect(listView.padding, const EdgeInsets.all(8));
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Padding &&
+            widget.padding == const EdgeInsets.symmetric(horizontal: 4),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(Center), findsOneWidget);
+    expect(tester.getSize(find.byType(SizedBox).first), const Size(100, 40));
+    final stack = tester.widget<Stack>(find.byType(Stack));
+    expect(stack.alignment, Alignment.center);
+    expect(find.text('Overlay'), findsOneWidget);
+  });
+
+  test('builds Image widget props without loading image bytes', () {
+    final registry = QuickjsUiComponentRegistry.defaults();
+    final context = QuickjsUiRenderContext(
+      buildNode: (_) => const SizedBox.shrink(),
+      onEvent: (_) {},
+    );
+    final image =
+        registry.build(
+              context,
+              QuickjsUiNode.fromMap(<String, Object?>{
+                'type': 'Image',
+                'src': 'assets/avatar.png',
+                'width': 32,
+                'height': 24,
+                'fit': 'cover',
+              }),
+            )
+            as Image;
+
+    expect(image.image, isA<AssetImage>());
+    expect(image.width, 32);
+    expect(image.height, 24);
+    expect(image.fit, BoxFit.cover);
+  });
+
+  testWidgets('renders TextField events and controlled value', (tester) async {
+    final events = <Map<String, Object?>>[];
+    QuickjsUiNode node(String value) {
+      return QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'TextField',
+        'value': value,
+        'labelText': 'Name',
+        'hintText': 'Enter name',
+        'textInputAction': 'done',
+        'onChanged': <String, Object?>{'method': 'setName'},
+        'onSubmitted': <String, Object?>{'method': 'submitName'},
+      });
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node('A')),
+        ),
+      ),
+    );
+
+    expect(find.text('A'), findsOneWidget);
+    expect(find.text('Name'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Ada');
+    expect(events.single, <String, Object?>{
+      'method': 'setName',
+      'value': 'Ada',
+    });
+
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(events.last, <String, Object?>{
+      'method': 'submitName',
+      'value': 'Ada',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node('Grace')),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Grace'), findsOneWidget);
+  });
+
+  testWidgets('renders TextField focus and blur events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'TextField',
+      'value': 'Ada',
+      'onFocus': <String, Object?>{'method': 'focusName'},
+      'onBlur': <String, Object?>{'method': 'blurName'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(events.single, <String, Object?>{
+      'method': 'focusName',
+      'value': 'Ada',
+    });
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    expect(events.last, <String, Object?>{
+      'method': 'blurName',
+      'value': 'Ada',
+    });
   });
 
   testWidgets('renders custom registry component', (tester) async {
@@ -222,6 +434,79 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('Unknown quickjs_ui node type'), findsOneWidget);
+  });
+
+  testWidgets('QuickjsUiView shows default error overlay with resource', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuickjsUiView.asset(path: 'assets/quickjs_ui/missing_page.mjs'),
+      ),
+    );
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find.text('quickjs_ui error').evaluate().isNotEmpty) {
+        break;
+      }
+    }
+
+    expect(find.text('quickjs_ui error'), findsOneWidget);
+    expect(find.textContaining('schema path: root'), findsOneWidget);
+    expect(find.text('source: asset'), findsOneWidget);
+    expect(
+      find.textContaining('resource: assets/quickjs_ui/missing_page.mjs'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('QuickjsUiErrorOverlay renders schema and resource details', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: QuickjsUiErrorOverlay(
+          error: FormatException('bad node', 'preview.json', 7),
+          details: QuickjsUiErrorDetails(
+            source: 'asset',
+            resourceKey: 'assets/quickjs_ui/schema_preview.json',
+            schemaPath: 'root.children[0]',
+            routeName: 'schema_preview',
+            action: 'render',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('quickjs_ui error'), findsOneWidget);
+    expect(find.textContaining('message: bad node'), findsOneWidget);
+    expect(
+      find.textContaining('resource: assets/quickjs_ui/schema_preview.json'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('schema path: root.children[0]'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('route: schema_preview'), findsOneWidget);
+    expect(find.textContaining('schema offset: 7'), findsOneWidget);
+  });
+
+  testWidgets('QuickjsUiView uses emptyBuilder before first node', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuickjsUiView.plugin(
+          _counterPlugin(),
+          placeholder: const Text('Placeholder state'),
+          emptyBuilder: (_) => const Text('Empty state'),
+        ),
+      ),
+    );
+
+    expect(find.text('Empty state'), findsOneWidget);
+    expect(find.text('Placeholder state'), findsNothing);
   });
 
   testWidgets('QuickjsUiView.asset creates a multi-file asset view', (

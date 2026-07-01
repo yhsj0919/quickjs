@@ -57,6 +57,16 @@ final class QuickjsUiProps {
     throw FormatException('quickjs_ui $name must be an int');
   }
 
+  static bool? boolValue(Object? value, {String name = 'bool property'}) {
+    if (value == null) {
+      return null;
+    }
+    if (value is bool) {
+      return value;
+    }
+    throw FormatException('quickjs_ui $name must be a bool');
+  }
+
   static double opacity(Object? value) {
     return (doubleValue(value, name: 'opacity') ?? 1).clamp(0, 1).toDouble();
   }
@@ -178,6 +188,60 @@ final class QuickjsUiProps {
       'none' => BoxFit.none,
       'scaleDown' => BoxFit.scaleDown,
       _ => throw const FormatException('Unknown quickjs_ui BoxFit'),
+    };
+  }
+
+  static Axis axis(Object? value) {
+    return switch (value) {
+      null => Axis.vertical,
+      'vertical' => Axis.vertical,
+      'horizontal' => Axis.horizontal,
+      _ => throw const FormatException('Unknown quickjs_ui axis'),
+    };
+  }
+
+  static StackFit stackFit(Object? value) {
+    return switch (value) {
+      null => StackFit.loose,
+      'loose' => StackFit.loose,
+      'expand' => StackFit.expand,
+      'passthrough' => StackFit.passthrough,
+      _ => throw const FormatException('Unknown quickjs_ui StackFit'),
+    };
+  }
+
+  static TextInputType? textInputType(Object? value) {
+    return switch (value) {
+      null => null,
+      'text' => TextInputType.text,
+      'multiline' => TextInputType.multiline,
+      'number' => TextInputType.number,
+      'phone' => TextInputType.phone,
+      'datetime' => TextInputType.datetime,
+      'emailAddress' => TextInputType.emailAddress,
+      'url' => TextInputType.url,
+      'visiblePassword' => TextInputType.visiblePassword,
+      _ => throw const FormatException('Unknown quickjs_ui TextInputType'),
+    };
+  }
+
+  static TextInputAction? textInputAction(Object? value) {
+    return switch (value) {
+      null => null,
+      'none' => TextInputAction.none,
+      'unspecified' => TextInputAction.unspecified,
+      'done' => TextInputAction.done,
+      'go' => TextInputAction.go,
+      'search' => TextInputAction.search,
+      'send' => TextInputAction.send,
+      'next' => TextInputAction.next,
+      'previous' => TextInputAction.previous,
+      'continueAction' => TextInputAction.continueAction,
+      'join' => TextInputAction.join,
+      'route' => TextInputAction.route,
+      'emergencyCall' => TextInputAction.emergencyCall,
+      'newline' => TextInputAction.newline,
+      _ => throw const FormatException('Unknown quickjs_ui TextInputAction'),
     };
   }
 

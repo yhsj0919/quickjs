@@ -1,15 +1,18 @@
 import 'package:flutter/widgets.dart';
 import 'package:quickjs/quickjs.dart';
 
-import 'quickjs_ui_bundle.dart';
-import 'quickjs_ui_controller.dart';
-import 'quickjs_ui_network_loader.dart';
-import 'quickjs_ui_renderer.dart';
+import '../renderer/quickjs_ui_renderer.dart';
+import '../resource/quickjs_ui_bundle.dart';
+import '../resource/quickjs_ui_network_loader.dart';
+import '../runtime/quickjs_ui_controller.dart';
+import 'quickjs_ui_error_overlay.dart';
 
 typedef QuickjsUiErrorBuilder =
     Widget Function(BuildContext context, Object error);
 
 typedef QuickjsUiLoadingBuilder = Widget Function(BuildContext context);
+
+typedef QuickjsUiEmptyBuilder = Widget Function(BuildContext context);
 
 final class QuickjsUiView extends StatefulWidget {
   const QuickjsUiView({
@@ -23,6 +26,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
+    this.emptyBuilder,
     this.onFirstRender,
   }) : _source = plugin != null
            ? _QuickjsUiViewSource.plugin
@@ -43,6 +47,7 @@ final class QuickjsUiView extends StatefulWidget {
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
+    QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
   }) {
     return QuickjsUiView._(
@@ -55,6 +60,7 @@ final class QuickjsUiView extends StatefulWidget {
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
+      emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
     );
   }
@@ -69,6 +75,7 @@ final class QuickjsUiView extends StatefulWidget {
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
+    QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
   }) {
     return QuickjsUiView._(
@@ -82,6 +89,7 @@ final class QuickjsUiView extends StatefulWidget {
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
+      emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
     );
   }
@@ -96,6 +104,7 @@ final class QuickjsUiView extends StatefulWidget {
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
+    QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
   }) {
     return QuickjsUiView._(
@@ -109,6 +118,7 @@ final class QuickjsUiView extends StatefulWidget {
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
+      emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
     );
   }
@@ -125,6 +135,7 @@ final class QuickjsUiView extends StatefulWidget {
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
+    QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
   }) {
     return QuickjsUiView._(
@@ -141,6 +152,7 @@ final class QuickjsUiView extends StatefulWidget {
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
+      emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
     );
   }
@@ -161,6 +173,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
+    this.emptyBuilder,
     this.onFirstRender,
   });
 
@@ -177,6 +190,7 @@ final class QuickjsUiView extends StatefulWidget {
   final Widget? placeholder;
   final QuickjsUiLoadingBuilder? loadingBuilder;
   final QuickjsUiErrorBuilder? errorBuilder;
+  final QuickjsUiEmptyBuilder? emptyBuilder;
   final VoidCallback? onFirstRender;
   final _QuickjsUiViewSource _source;
 
@@ -247,7 +261,10 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
       if (builder != null) {
         return builder(context, error);
       }
-      return ErrorWidget(error);
+      return QuickjsUiErrorOverlay(
+        error: error,
+        details: _errorDetails(schemaPath: 'root'),
+      );
     }
 
     if (_controller.isLoading) {
@@ -258,7 +275,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
 
     final node = _controller.node;
     if (node == null) {
-      return widget.placeholder ?? const SizedBox.shrink();
+      return widget.emptyBuilder?.call(context) ??
+          widget.placeholder ??
+          const SizedBox.shrink();
     }
 
     try {
@@ -268,16 +287,27 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
       _reportFirstRender();
       return rendered;
     } catch (error) {
-      return _buildError(context, error);
+      return _buildError(context, error, schemaPath: 'root');
     }
   }
 
-  Widget _buildError(BuildContext context, Object error) {
+  Widget _buildError(BuildContext context, Object error, {String? schemaPath}) {
     final builder = widget.errorBuilder;
     if (builder != null) {
       return builder(context, error);
     }
-    return ErrorWidget(error);
+    return QuickjsUiErrorOverlay(
+      error: error,
+      details: _errorDetails(schemaPath: schemaPath),
+    );
+  }
+
+  QuickjsUiErrorDetails _errorDetails({String? schemaPath}) {
+    return QuickjsUiErrorDetails(
+      source: widget._source.name,
+      resourceKey: widget.networkUrl?.toString() ?? widget._path,
+      schemaPath: schemaPath,
+    );
   }
 
   void _reportFirstRender() {

@@ -1,15 +1,18 @@
 import 'package:flutter/widgets.dart';
 
-import 'quickjs_ui_node.dart';
+import '../schema/quickjs_ui_node.dart';
+
+// Keep the public constructor parameter named `buildNode`.
+// ignore_for_file: prefer_initializing_formals
 
 typedef QuickjsUiEventHandler = void Function(Map<String, Object?> event);
 typedef QuickjsUiNodeBuilder = Widget Function(QuickjsUiNode node);
 
 final class QuickjsUiRenderContext {
   const QuickjsUiRenderContext({
-    required this._buildNode,
+    required QuickjsUiNodeBuilder buildNode,
     required this.onEvent,
-  });
+  }) : _buildNode = buildNode;
 
   final QuickjsUiNodeBuilder _buildNode;
   final QuickjsUiEventHandler onEvent;

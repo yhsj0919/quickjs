@@ -152,6 +152,60 @@ export type ContainerProps = {
   backgroundColor?: string | number;
 };
 
+export type ImageProps = {
+  src: string;
+  width?: number;
+  height?: number;
+  fit?: 'fill' | 'contain' | 'cover' | 'fitWidth' | 'fitHeight' | 'none' | 'scaleDown';
+};
+
+export type ListViewProps = {
+  children?: QuickjsUiNode[];
+  scrollDirection?: 'vertical' | 'horizontal';
+  shrinkWrap?: boolean;
+  padding?: EdgeInsets;
+};
+
+export type TextFieldProps = {
+  value?: string;
+  initialValue?: string;
+  labelText?: string;
+  hintText?: string;
+  enabled?: boolean;
+  autofocus?: boolean;
+  obscureText?: boolean;
+  maxLines?: number;
+  keyboardType?: 'text' | 'multiline' | 'number' | 'phone' | 'datetime' | 'emailAddress' | 'url' | 'visiblePassword';
+  textInputAction?: 'none' | 'unspecified' | 'done' | 'go' | 'search' | 'send' | 'next' | 'previous' | 'continueAction' | 'join' | 'route' | 'emergencyCall' | 'newline';
+  onChanged?: QuickjsUiEvent;
+  onSubmitted?: QuickjsUiEvent;
+  onFocus?: QuickjsUiEvent;
+  onBlur?: QuickjsUiEvent;
+};
+
+export type StackProps = {
+  children?: QuickjsUiNode[];
+  alignment?: string;
+  fit?: 'loose' | 'expand' | 'passthrough';
+};
+
+export type PaddingProps = {
+  padding?: EdgeInsets;
+  child?: QuickjsUiNode;
+};
+
+export type CenterProps = {
+  child?: QuickjsUiNode;
+  widthFactor?: number;
+  heightFactor?: number;
+};
+
+export type SizedBoxProps = {
+  child?: QuickjsUiNode;
+  width?: number;
+  height?: number;
+};
+
 export declare function Text(
   data: string,
   props?: Omit<TextProps, 'data'>
@@ -161,6 +215,13 @@ export declare function ElevatedButton(props: ButtonProps): QuickjsUiNode;
 export declare function Row(props: FlexProps): QuickjsUiNode;
 export declare function Column(props: FlexProps): QuickjsUiNode;
 export declare function Container(props: ContainerProps): QuickjsUiNode;
+export declare function Image(props: ImageProps): QuickjsUiNode;
+export declare function ListView(props: ListViewProps): QuickjsUiNode;
+export declare function TextField(props: TextFieldProps): QuickjsUiNode;
+export declare function Stack(props: StackProps): QuickjsUiNode;
+export declare function Padding(props: PaddingProps): QuickjsUiNode;
+export declare function Center(props: CenterProps): QuickjsUiNode;
+export declare function SizedBox(props: SizedBoxProps): QuickjsUiNode;
 
 export declare const ui: {
   Text(data: string, props?: Omit<TextProps, 'data'>): QuickjsUiNode;
@@ -169,4 +230,11 @@ export declare const ui: {
   Row(props: FlexProps): QuickjsUiNode;
   Column(props: FlexProps): QuickjsUiNode;
   Container(props: ContainerProps): QuickjsUiNode;
+  Image(props: ImageProps): QuickjsUiNode;
+  ListView(props: ListViewProps): QuickjsUiNode;
+  TextField(props: TextFieldProps): QuickjsUiNode;
+  Stack(props: StackProps): QuickjsUiNode;
+  Padding(props: PaddingProps): QuickjsUiNode;
+  Center(props: CenterProps): QuickjsUiNode;
+  SizedBox(props: SizedBoxProps): QuickjsUiNode;
 };

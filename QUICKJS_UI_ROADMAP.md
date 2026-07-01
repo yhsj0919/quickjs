@@ -16,6 +16,8 @@
   `QuickjsHostMount`，不做隐式全局能力注入。
 - [ ] 双向调用只传递 structured value，不传递 Flutter Widget、Dart object handle、JS function handle
   或不可序列化对象。
+- [ ] 每个新增 quickjs_ui 能力必须同步补 example 测试页或更新现有测试页，并注册到示例入口；后续开发默认执行，
+  不再依赖单独提醒。
 
 ### 核心边界
 
@@ -414,6 +416,8 @@ Flutter 风格对象写法：
   opacity 等 Flutter 风格属性。
 - [x] 引入 `QuickjsUiComponentRegistry` 和 `QuickjsUiRenderContext`，先用于内置组件注册和 renderer 拆分。
 - [ ] 保持公开 JS 写法为 `export default Page(...)`，不回退到全局导出函数协议。
+- [x] 自动生成 `quickjs_ui_helpers.dart` 中的 runtime helper module：以 `js/quickjs_ui.js` 为唯一源码生成 Dart raw string，
+  并在测试中校验生成产物未过期，避免 JS helper、类型声明和运行时注入模块不一致。
 - [x] 测试：session lifecycle、props parser、unknown component、custom registry smoke、renderer error boundary。
 
 ### 0.2：资源加载、多文件页面与表单
@@ -436,15 +440,16 @@ Flutter 风格对象写法：
 - [x] `QuickjsUiController.refresh()`：只用当前 state 重新 render，不重新加载资源。
 - [x] `QuickjsUiController.restart()`：使用当前 plugin 重新初始化页面，不重新加载资源。
 - [x] `QuickjsUiController.reload()`：重新加载 asset/file/network 源码并重建页面。
-- [ ] `QuickjsUiNetworkLoader`：补充持久缓存策略和 checksum 校验。
-- [ ] 支持 `Image/ListView/TextField`。
-- [ ] 支持 input `onChanged` 事件。
-- [ ] 支持 `TextField` 受控输入、focus/blur、submit 和基础软键盘配置。
-- [ ] 补充 JSON Schema，用于编辑器提示和页面对象校验。
+- [x] 支持 `Image/ListView/TextField`。
+- [x] 支持 input `onChanged` 事件。
+- [x] 支持 `TextField` 受控输入、submit 和基础软键盘配置。
+- [x] 支持 `TextField` focus/blur 事件。
+- [x] 补充 JSON Schema，用于编辑器提示和页面对象校验。
 - [ ] 支持动态局部刷新：通过 key/type/props diff 跳过未变化节点。
-- [ ] 支持 loading / error / empty 状态 builder。
-- [ ] 支持首版 error overlay 和 schema/resource 错误定位。
-- [ ] 支持基础 `ThemeData` token 注入和 `Stack/Padding/Center/SizedBox`。
+- [x] 支持 loading / error / empty 状态 builder。
+- [x] 支持首版 error overlay 和 schema/resource 错误定位。
+- [x] 支持 `Stack/Padding/Center/SizedBox`。
+- [ ] 支持基础 `ThemeData` token 注入。
 - [x] example：多文件 bundle counter 页面。
 - [ ] example：todo list、profile form、多文件 profile page、第三方图片/主题资源。
 - [ ] 测试：asset page、bundle page、remote refresh、relative resource resolve、list render、input event、
@@ -504,10 +509,23 @@ Flutter 风格对象写法：
 - [ ] 定义 `quickjs_ui_manifest.json`。
 - [ ] 支持 entry/resources/routes/permissions/version/checksum。
 - [ ] 支持 asset/plugin zip/远程 bundle 的统一加载和缓存策略。
+- [ ] `QuickjsUiNetworkLoader`：补充持久缓存策略和 checksum 校验（从 0.2 延期）。
 - [ ] 支持开发模式 cache busting 和生产模式 version/checksum 缓存。
 - [ ] 支持远程 bundle force refresh、conditional refresh、stale-while-revalidate。
 - [ ] example：zip UI bundle 页面。
 - [ ] 测试：manifest parse、checksum mismatch、cache hit/miss、remote refresh strategy、permission declaration。
+
+### 0.6：页面包保护评估（可放弃）
+
+在 manifest、checksum、缓存和权限模型稳定后，再重新评估页面包加密/混淆是否值得做。该能力只作为发布保护候选项：
+如果实现成本、调试成本、密钥管理风险或实际收益不匹配，可以明确不做。
+
+- [ ] 评估 JS 页面包混淆：bundle 合并、minify、symbol rename、去注释、可选字符串混淆。
+- [ ] 评估资源加密：manifest 声明 `encoding`、`hash`、`iv`、`size`，loader 校验后解密再加载。
+- [ ] 评估密钥策略：本地内置 key、服务端短期 key、版本/设备/用户绑定，不把加密误当成强安全边界。
+- [ ] 优先保证签名/checksum/allowlist/permissions，防篡改和授权校验优先级高于加密。
+- [ ] `quickjs_ui_dev_server.dart` 保持默认明文开发；如需要，只增加 `prod-preview`/`encrypted` 模式模拟生产包。
+- [ ] 测试候选：obfuscated bundle load、encrypted resource decode、checksum mismatch、missing key、wrong key、dev 明文模式。
 
 ### 0.6+：可选 DSL
 

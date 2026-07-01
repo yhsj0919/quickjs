@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:quickjs/quickjs.dart';
 
+import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
-import 'quickjs_ui_node.dart';
 
 final class QuickjsUiSession {
   // Keep the public constructor parameter named `engine`.

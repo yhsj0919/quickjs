@@ -8,6 +8,7 @@
     ".": {
       "types": "./js/quickjs_ui.d.ts",
       "default": "./js/quickjs_ui.js"
-    }
+    },
+    "./schema": "./js/quickjs_ui.schema.json"
   }
 }

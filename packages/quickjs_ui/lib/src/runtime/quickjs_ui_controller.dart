@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:quickjs/quickjs.dart';
 
-import 'quickjs_ui_node.dart';
+import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_session.dart';
 
 typedef QuickjsUiPluginLoader = Future<QuickjsPlugin> Function();

@@ -60,10 +60,14 @@ flutter:
     - assets/js/js_call_dart_plugin.mjs
     - assets/js/npm_bundle.mjs
     - assets/quickjs_ui/counter_page.mjs
+    - assets/quickjs_ui/controls_page.mjs
+    - assets/quickjs_ui/quickjs_ui.schema.json
+    - assets/quickjs_ui/schema_preview.json
     - assets/quickjs_ui/bundle_counter/pages/main.mjs
     - assets/quickjs_ui/bundle_counter/components/counter_card.mjs
     - assets/quickjs_ui/bundle_counter/components/action_row.mjs
     - assets/plugins/zip_demo.zip
+    - web/icons/Icon-192.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

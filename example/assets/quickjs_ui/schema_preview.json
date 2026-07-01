@@ -1,0 +1,92 @@
+{
+  "type": "ListView",
+  "padding": { "all": 16 },
+  "children": [
+    {
+      "type": "Text",
+      "data": "Pure JSON UI schema",
+      "style": { "fontSize": 22, "fontWeight": "w700" }
+    },
+    {
+      "type": "Padding",
+      "padding": { "top": 12, "bottom": 12 },
+      "child": {
+        "type": "Container",
+        "padding": { "all": 12 },
+        "decoration": {
+          "color": "#fff7ed",
+          "borderRadius": 10,
+          "border": { "color": "#fed7aa", "width": 1 }
+        },
+        "child": {
+          "type": "Column",
+          "crossAxisAlignment": "stretch",
+          "children": [
+            {
+              "type": "Text",
+              "data": "This page is loaded from a .json asset, parsed as QuickjsUiNode, and rendered without JS."
+            },
+            {
+              "type": "TextField",
+              "value": "JSON value",
+              "labelText": "JSON TextField",
+              "textInputAction": "done",
+              "onChanged": { "method": "jsonChanged" },
+              "onFocus": { "method": "jsonFocus" },
+              "onBlur": { "method": "jsonBlur" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "SizedBox",
+      "height": 120,
+      "child": {
+        "type": "Stack",
+        "alignment": "center",
+        "children": [
+          {
+            "type": "Container",
+            "width": 220,
+            "height": 96,
+            "backgroundColor": "#263238",
+            "borderRadius": 14
+          },
+          {
+            "type": "Image",
+            "src": "web/icons/Icon-192.png",
+            "width": 54,
+            "height": 54,
+            "fit": "contain"
+          },
+          {
+            "type": "Padding",
+            "padding": { "top": 72 },
+            "child": {
+              "type": "Text",
+              "data": "JSON Stack + Image",
+              "style": { "color": "#ffffff", "fontSize": 13, "fontWeight": "w600" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Center",
+      "child": {
+        "type": "Container",
+        "padding": { "horizontal": 14, "vertical": 8 },
+        "decoration": {
+          "color": "#e3f2fd",
+          "borderRadius": 999,
+          "border": { "color": "#64b5f6", "width": 1 }
+        },
+        "child": {
+          "type": "Text",
+          "data": "Validated against quickjs_ui.schema.json"
+        }
+      }
+    }
+  ]
+}

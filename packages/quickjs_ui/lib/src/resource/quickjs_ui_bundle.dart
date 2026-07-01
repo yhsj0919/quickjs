@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:quickjs/quickjs.dart';
 
+import '../runtime/quickjs_ui_page_plugin.dart';
 import 'quickjs_ui_network_loader.dart';
-import 'quickjs_ui_page_plugin.dart';
 import 'quickjs_ui_resource_resolver.dart';
 
 final class QuickjsUiBundle {

@@ -11,22 +11,65 @@ class QuickjsUiCounterPage extends StatefulWidget {
 }
 
 class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
+  late final QuickjsUiController _controller;
   final Stopwatch _stopwatch = Stopwatch()..start();
   Duration? _firstRenderElapsed;
+  String _status = 'Waiting for first render';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = QuickjsUiController()..addListener(_handleControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_handleControllerChanged);
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final canControl = _controller.plugin != null && !_controller.isLoading;
     return Scaffold(
-      appBar: AppBar(title: const Text('QuickJS UI Counter')),
+      appBar: AppBar(
+        title: const Text('QuickJS UI Counter'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Refresh render',
+            icon: const Icon(Icons.refresh),
+            onPressed: canControl
+                ? () => _runControllerCommand('refresh', _controller.refresh)
+                : null,
+          ),
+          IconButton(
+            tooltip: 'Restart page',
+            icon: const Icon(Icons.restart_alt),
+            onPressed: canControl
+                ? () => _runControllerCommand('restart', _controller.restart)
+                : null,
+          ),
+          IconButton(
+            tooltip: 'Reload source',
+            icon: const Icon(Icons.sync),
+            onPressed: canControl
+                ? () => _runControllerCommand('reload', _controller.reload)
+                : null,
+          ),
+        ],
+      ),
       body: Stack(
         children: <Widget>[
           QuickjsUiView.asset(
             path: QuickjsUiCounterPage.path,
+            controller: _controller,
             initialProps: const <String, Object?>{
               'title': 'QuickJS UI',
               'initialCount': 0,
             },
             loadingBuilder: (_) => const _DelayedLoadingIndicator(),
+            emptyBuilder: (_) => const Center(child: Text('Preparing page...')),
             errorBuilder: (_, error) {
               return Padding(
                 padding: const EdgeInsets.all(16),
@@ -39,7 +82,10 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
             left: 12,
             right: 12,
             bottom: 12,
-            child: _RenderTimingBanner(elapsed: _firstRenderElapsed),
+            child: _RenderTimingBanner(
+              elapsed: _firstRenderElapsed,
+              status: _status,
+            ),
           ),
         ],
       ),
@@ -58,7 +104,39 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
     );
     setState(() {
       _firstRenderElapsed = elapsed;
+      _status = 'rendered';
     });
+  }
+
+  Future<void> _runControllerCommand(
+    String label,
+    Future<void> Function() command,
+  ) async {
+    setState(() {
+      _status = '$label running';
+    });
+    try {
+      await command();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '$label done';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '$label failed: $error';
+      });
+    }
+  }
+
+  void _handleControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 }
 
@@ -96,15 +174,17 @@ class _DelayedLoadingIndicatorState extends State<_DelayedLoadingIndicator> {
 }
 
 class _RenderTimingBanner extends StatelessWidget {
-  const _RenderTimingBanner({required this.elapsed});
+  const _RenderTimingBanner({required this.elapsed, required this.status});
 
   final Duration? elapsed;
+  final String status;
 
   @override
   Widget build(BuildContext context) {
-    final text = elapsed == null
+    final timing = elapsed == null
         ? 'QuickJS UI rendering...'
         : 'QuickJS UI first render: ${elapsed!.inMilliseconds} ms';
+    final text = '$timing | $status';
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
