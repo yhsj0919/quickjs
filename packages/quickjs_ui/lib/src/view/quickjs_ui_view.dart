@@ -201,6 +201,7 @@ final class QuickjsUiView extends StatefulWidget {
 final class _QuickjsUiViewState extends State<QuickjsUiView> {
   late QuickjsUiController _controller;
   late bool _ownsController;
+  late QuickjsUiRenderer _renderer;
   QuickjsUiNetworkLoader? _networkLoader;
   bool _reportedFirstRender = false;
 
@@ -210,6 +211,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
     _controller = widget.controller ?? QuickjsUiController();
     _ownsController = widget.controller == null;
     _controller.addListener(_handleControllerChanged);
+    _renderer = QuickjsUiRenderer(onEvent: _controller.dispatch);
     _load();
   }
 
@@ -224,6 +226,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
       _controller = widget.controller ?? QuickjsUiController();
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
+      _renderer = QuickjsUiRenderer(onEvent: _controller.dispatch);
     }
     if (oldWidget.plugin != widget.plugin ||
         oldWidget._path != widget._path ||
@@ -281,9 +284,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
     }
 
     try {
-      final rendered = QuickjsUiRenderer(
-        onEvent: _controller.dispatch,
-      ).build(node, buildContext: context);
+      final rendered = _renderer.build(node, buildContext: context);
       _reportFirstRender();
       return rendered;
     } catch (error) {

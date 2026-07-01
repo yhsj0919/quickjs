@@ -6,8 +6,10 @@ import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_bundle_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
 import 'package:quickjs_example/pages/zip_plugin_page.dart';
@@ -29,7 +31,7 @@ Future<void> _scrollUntilFound(WidgetTester tester, Finder finder) async {
   await tester.scrollUntilVisible(
     finder,
     120,
-    scrollable: find.byType(Scrollable),
+    scrollable: find.byType(Scrollable).last,
   );
 }
 
@@ -61,7 +63,9 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final page in quickjsUiExamplePages) {
-      expect(find.text(page.title), findsOneWidget);
+      final title = find.text(page.title);
+      await _scrollUntilFound(tester, title);
+      expect(title, findsOneWidget);
       expect(find.text(page.description), findsOneWidget);
     }
   });
@@ -106,6 +110,8 @@ void main() {
     expect(find.text('QuickJS UI Controls'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('ThemeData tokens from JS'));
     expect(find.text('ThemeData tokens from JS'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Third-party image resource'));
+    expect(find.text('Third-party image resource'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {
@@ -119,6 +125,57 @@ void main() {
     expect(find.text('Review quickjs_ui 0.2 roadmap'), findsOneWidget);
     expect(find.text('Try ThemeData tokens from JS'), findsOneWidget);
     expect(find.text('Add todo'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui profile form page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiProfileFormPage()),
+    );
+
+    expect(find.text('QuickJS UI Profile Form'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('Save profile'));
+    expect(find.textContaining('QuickJS UI profile form error'), findsNothing);
+    expect(find.text('Ada Lovelace'), findsWidgets);
+    expect(find.text('ada@example.com'), findsWidgets);
+    expect(find.text('Save profile'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(1), 'invalid-email');
+    await _pumpUntilFound(tester, find.text('Enter a valid email address'));
+    await tester.tap(find.text('Save profile'));
+    await _pumpUntilFound(
+      tester,
+      find.text('Fix validation errors before saving'),
+    );
+    expect(find.text('Enter a valid email address'), findsOneWidget);
+    expect(find.text('Fix validation errors before saving'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(1), 'ada@quickjs.dev');
+    await _pumpUntilFound(tester, find.text('Ada Lovelace · ada@quickjs.dev'));
+    await tester.tap(find.text('Save profile'));
+    await _pumpUntilFound(tester, find.text('Saved profile for Ada Lovelace'));
+    expect(find.text('Enter a valid email address'), findsNothing);
+    expect(find.text('Saved profile for Ada Lovelace'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui diff refresh page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiDiffPage()));
+
+    expect(find.text('QuickJS UI 局部刷新'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('Refresh changed node'));
+    expect(find.textContaining('QuickJS UI diff error'), findsNothing);
+    expect(find.text('Stable builds: 1'), findsOneWidget);
+    expect(find.text('Changed builds: 1'), findsOneWidget);
+
+    await tester.tap(find.text('Refresh changed node'));
+    await _pumpUntilFound(tester, find.text('Changed keyed node from JS #1'));
+
+    expect(find.text('Stable builds: 1'), findsOneWidget);
+    expect(find.text('Changed builds: 2'), findsOneWidget);
+    expect(find.text('Changed keyed node from JS #1'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui JSON schema page', (

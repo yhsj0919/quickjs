@@ -476,6 +476,42 @@ void main() {
     expect(find.text('Custom'), findsOneWidget);
   });
 
+  test('renderer skips unchanged keyed nodes', () {
+    final builds = <String, int>{};
+    final registry = QuickjsUiComponentRegistry.defaults()
+      ..register('Probe', (context, node) {
+        final id = '${node.props['id']}';
+        builds[id] = (builds[id] ?? 0) + 1;
+        return Text('$id:${node.props['label']}');
+      });
+    final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
+
+    QuickjsUiNode tree(String changedLabel) {
+      return QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'Column',
+        'children': <Object?>[
+          <String, Object?>{
+            'type': 'Probe',
+            'key': 'stable-probe',
+            'id': 'stable',
+            'label': 'same',
+          },
+          <String, Object?>{
+            'type': 'Probe',
+            'key': 'changed-probe',
+            'id': 'changed',
+            'label': changedLabel,
+          },
+        ],
+      });
+    }
+
+    renderer.build(tree('first'));
+    renderer.build(tree('second'));
+
+    expect(builds, <String, int>{'stable': 1, 'changed': 2});
+  });
+
   test('throws for unknown registry component', () {
     final node = QuickjsUiNode.fromMap(<String, Object?>{'type': 'Missing'});
     final renderer = QuickjsUiRenderer(onEvent: (_) {});
