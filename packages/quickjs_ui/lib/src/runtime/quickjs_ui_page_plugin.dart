@@ -11,6 +11,7 @@ final class QuickjsUiPagePlugin {
     String version = '0.1.0',
     AssetBundle? bundle,
     String entryName = 'page',
+    List<String> permissions = const <String>[],
   }) async {
     final source = await (bundle ?? rootBundle).loadString(path);
     return singleFile(
@@ -18,6 +19,7 @@ final class QuickjsUiPagePlugin {
       version: version,
       source: source,
       entryName: entryName,
+      permissions: permissions,
     );
   }
 
@@ -26,6 +28,7 @@ final class QuickjsUiPagePlugin {
     required String version,
     required String source,
     String entryName = 'page',
+    List<String> permissions = const <String>[],
   }) {
     final pageSpecifier = '$id/$entryName';
     final adapterSpecifier = '$id/main';
@@ -34,8 +37,9 @@ final class QuickjsUiPagePlugin {
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: const <String>['render', 'dispatch'],
+        exports: const <String>['render', 'dispatch', 'lifecycle'],
         init: 'init',
+        permissions: permissions,
       ),
       modules: <QuickjsPluginModule>[
         QuickjsPluginModule(specifier: pageSpecifier, source: source),
@@ -61,6 +65,13 @@ export function render(state, props) {
 
 export function dispatch(state, event, props) {
   return page.dispatch(state, event, props);
+}
+
+export function lifecycle(state, event, props) {
+  if (typeof page.lifecycle !== 'function') {
+    return state;
+  }
+  return page.lifecycle(state, event, props);
 }
 ''';
   }

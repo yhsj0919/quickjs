@@ -8,7 +8,9 @@ import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
@@ -205,6 +207,56 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('action: render'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui host capabilities page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiHostCapabilitiesPage()),
+    );
+
+    expect(find.text('QuickJS UI 宿主能力'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('调用 toast'));
+    expect(find.text('调用 toast'), findsOneWidget);
+    expect(find.text('调用 navigationIntent'), findsOneWidget);
+    expect(find.text('调用 dialog'), findsOneWidget);
+    expect(find.text('调用 snackbar'), findsOneWidget);
+    expect(find.text('调用 bottom sheet'), findsOneWidget);
+    expect(find.text('调用 add(20, 22)'), findsOneWidget);
+    await _pumpUntilFound(tester, find.textContaining('已挂载 API'));
+    expect(find.textContaining('toast'), findsWidgets);
+    expect(find.textContaining('navigationIntent'), findsWidgets);
+    await _pumpUntilFound(tester, find.textContaining('生命周期：mount'));
+    expect(find.textContaining('生命周期：mount'), findsOneWidget);
+    expect(find.text('检查 network 默认关闭'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui permission policy page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiPermissionPage()));
+
+    expect(find.text('QuickJS UI 权限策略'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('结果：不限制策略 已加载'));
+    expect(find.text('权限测试 JS 页面'), findsWidgets);
+    expect(find.text('结果：不限制策略 已加载'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('限制策略：允许'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('结果：限制策略：允许 已加载'));
+    expect(find.text('结果：限制策略：允许 已加载'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('限制策略：拒绝'));
+    await tester.pump();
+    await _pumpUntilFound(
+      tester,
+      find.textContaining('权限拦截：QuickjsUiPermissionException'),
+    );
+    expect(
+      find.textContaining('权限拦截：QuickjsUiPermissionException'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('registers core example pages', (WidgetTester tester) async {

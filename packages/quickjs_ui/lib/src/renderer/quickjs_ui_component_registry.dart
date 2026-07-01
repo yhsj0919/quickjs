@@ -82,6 +82,7 @@ Widget _buildRow(QuickjsUiRenderContext context, QuickjsUiNode node) {
     crossAxisAlignment: QuickjsUiProps.crossAxisAlignment(
       node.props['crossAxisAlignment'],
     ),
+    spacing: _gap(node),
     children: context.children(node),
   );
 }
@@ -94,6 +95,7 @@ Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
     crossAxisAlignment: QuickjsUiProps.crossAxisAlignment(
       node.props['crossAxisAlignment'],
     ),
+    spacing: _gap(node),
     children: context.children(node),
   );
 }
@@ -144,14 +146,38 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final axis = QuickjsUiProps.axis(node.props['scrollDirection']);
   return ListView(
-    scrollDirection: QuickjsUiProps.axis(node.props['scrollDirection']),
+    scrollDirection: axis,
     shrinkWrap:
         QuickjsUiProps.boolValue(node.props['shrinkWrap']) ??
         (node.props['shrinkWrap'] == null),
     padding: QuickjsUiProps.edgeInsets(node.props['padding']),
-    children: context.children(node),
+    children: _childrenWithGap(context, node, axis),
   );
+}
+
+List<Widget> _childrenWithGap(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+  Axis axis,
+) {
+  final children = context.children(node);
+  final gap = _gap(node);
+  if (children.length < 2 || gap <= 0) {
+    return children;
+  }
+  return <Widget>[
+    for (var index = 0; index < children.length; index++) ...<Widget>[
+      if (index > 0)
+        axis == Axis.horizontal ? SizedBox(width: gap) : SizedBox(height: gap),
+      children[index],
+    ],
+  ];
+}
+
+double _gap(QuickjsUiNode node) {
+  return QuickjsUiProps.doubleValue(node.props['gap'], name: 'gap') ?? 0;
 }
 
 Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {

@@ -54,6 +54,26 @@ export type QuickjsUiPageMethod<State, Props> = (
   event?: QuickjsUiEvent
 ) => State | Promise<State>;
 
+export type QuickjsUiLifecycleType =
+  | 'mount'
+  | 'show'
+  | 'hide'
+  | 'pause'
+  | 'resume'
+  | 'dispose';
+
+export type QuickjsUiLifecycleEvent = {
+  type: QuickjsUiLifecycleType;
+  payload?: JsonValue;
+};
+
+export type QuickjsUiLifecycleHook<State, Props> = (
+  state: State,
+  payload?: JsonValue,
+  props?: Props,
+  event?: QuickjsUiLifecycleEvent
+) => State | Promise<State>;
+
 export type QuickjsUiPageActions<Page> = {
   [Key in keyof Page as Key extends QuickjsUiReservedPageKeys
     ? never
@@ -73,6 +93,12 @@ export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> 
     props: Props,
     page: QuickjsUiMethodActions
   ) => QuickjsUiNode;
+  onMount?: QuickjsUiLifecycleHook<State, Props>;
+  onShow?: QuickjsUiLifecycleHook<State, Props>;
+  onHide?: QuickjsUiLifecycleHook<State, Props>;
+  onPause?: QuickjsUiLifecycleHook<State, Props>;
+  onResume?: QuickjsUiLifecycleHook<State, Props>;
+  onDispose?: QuickjsUiLifecycleHook<State, Props>;
   [key: string]: unknown;
 };
 
@@ -256,6 +282,7 @@ export type ButtonProps = {
 export type FlexProps = {
   mainAxisAlignment?: MainAxisAlignment;
   crossAxisAlignment?: CrossAxisAlignment;
+  gap?: number;
   children?: QuickjsUiNode[];
 };
 
@@ -282,6 +309,7 @@ export type ListViewProps = {
   scrollDirection?: Axis;
   shrinkWrap?: boolean;
   padding?: EdgeInsets;
+  gap?: number;
 };
 
 export type TextFieldProps = {
@@ -356,3 +384,50 @@ export declare const ui: {
   Center(props: CenterProps): QuickjsUiNode;
   SizedBox(props: SizedBoxProps): QuickjsUiNode;
 };
+
+export type QuickjsUiHostApi = {
+  toast?: (
+    message: string,
+    options?: Record<string, JsonValue>
+  ) => Promise<JsonValue>;
+  confirm?: (
+    message: string,
+    options?: Record<string, JsonValue>
+  ) => Promise<boolean>;
+  dialog?: (payload: {
+    title?: string;
+    message?: string;
+    content?: QuickjsUiNode;
+    actions?: JsonValue[];
+    [key: string]: JsonValue | QuickjsUiNode | undefined;
+  }) => Promise<JsonValue>;
+  snackbar?: (payload: {
+    message: string;
+    [key: string]: JsonValue | undefined;
+  }) => Promise<JsonValue>;
+  bottomSheet?: (payload: {
+    title?: string;
+    message?: string;
+    content?: QuickjsUiNode;
+    [key: string]: JsonValue | QuickjsUiNode | undefined;
+  }) => Promise<JsonValue>;
+  navigationIntent?: (
+    intent: Record<string, JsonValue>
+  ) => Promise<JsonValue>;
+  clipboard?: {
+    readText(): Promise<string | null>;
+    writeText(text: string): Promise<JsonValue>;
+  };
+  storage?: {
+    getItem(key: string): Promise<JsonValue>;
+    setItem(key: string, value: JsonValue): Promise<boolean>;
+    removeItem(key: string): Promise<JsonValue>;
+  };
+  network?: (request: Record<string, JsonValue>) => Promise<JsonValue>;
+  fileSystem?: (operation: Record<string, JsonValue>) => Promise<JsonValue>;
+  nativeCall?: (method: string, payload?: JsonValue) => Promise<JsonValue>;
+};
+
+declare global {
+  var quickjsUiHost: QuickjsUiHostApi | undefined;
+}

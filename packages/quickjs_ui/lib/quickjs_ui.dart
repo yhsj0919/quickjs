@@ -1,3 +1,5 @@
+export 'src/host/quickjs_ui_host_capabilities.dart';
+export 'src/host/quickjs_ui_permission_policy.dart';
 export 'src/renderer/quickjs_ui_component_registry.dart';
 export 'src/renderer/quickjs_ui_render_context.dart';
 export 'src/renderer/quickjs_ui_renderer.dart';

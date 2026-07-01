@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
+
+Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 100 && finder.evaluate().isEmpty; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+  }
+}
 
 void main() {
   test('parses serializable ui nodes', () {
@@ -77,6 +87,7 @@ void main() {
   "id": "quickjs_ui_bundle_counter",
   "version": "0.2.0",
   "entry": "pages/counter.mjs",
+  "permissions": ["toast", "app.customEcho"],
   "modules": [
     "pages/counter.mjs",
     "components/label.mjs"
@@ -92,6 +103,11 @@ void main() {
     expect(bundle.id, 'quickjs_ui_bundle_counter');
     expect(bundle.version, '0.2.0');
     expect(bundle.entry, 'pages/counter.mjs');
+    expect(bundle.permissions, <String>['toast', 'app.customEcho']);
+    expect(bundle.toPlugin().manifest.permissions, <String>[
+      'toast',
+      'app.customEcho',
+    ]);
     expect(bundle.modules.keys, <String>[
       'pages/counter.mjs',
       'components/label.mjs',
@@ -102,6 +118,69 @@ void main() {
         from: 'pages/counter.mjs',
       ),
       'components/label.mjs',
+    );
+  });
+
+  test('validates quickjs_ui permissions only when policy is restricted', () {
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_permission_test',
+      version: '0.3.0',
+      permissions: const <String>['toast', 'app.customEcho'],
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  build() {
+    return Text('permission test');
+  }
+});
+''',
+    );
+
+    expect(
+      () => const QuickjsUiPermissionPolicy.unrestricted().validate(
+        plugin: plugin,
+        grantedPermissions: const <String>[],
+      ),
+      returnsNormally,
+    );
+    expect(
+      () =>
+          QuickjsUiPermissionPolicy.restricted(
+            allowed: const <String>['toast', 'app.customEcho'],
+          ).validate(
+            plugin: plugin,
+            grantedPermissions: const <String>['toast', 'app.customEcho'],
+          ),
+      returnsNormally,
+    );
+    expect(
+      () =>
+          QuickjsUiPermissionPolicy.restricted(
+            allowed: const <String>['toast'],
+          ).validate(
+            plugin: plugin,
+            grantedPermissions: const <String>['toast', 'app.customEcho'],
+          ),
+      throwsA(
+        isA<QuickjsUiPermissionException>().having(
+          (error) => error.deniedByPolicy,
+          'deniedByPolicy',
+          contains('app.customEcho'),
+        ),
+      ),
+    );
+    expect(
+      () => QuickjsUiPermissionPolicy.restricted(
+        allowed: const <String>['toast', 'app.customEcho'],
+      ).validate(plugin: plugin, grantedPermissions: const <String>['toast']),
+      throwsA(
+        isA<QuickjsUiPermissionException>().having(
+          (error) => error.missingGrants,
+          'missingGrants',
+          contains('app.customEcho'),
+        ),
+      ),
     );
   });
 
@@ -160,6 +239,472 @@ void main() {
     expect(quickjsUiHelperModuleSource, source);
   });
 
+  test('dispatches page lifecycle hooks', () async {
+    final disposed = Completer<void>();
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(
+        mounts: <QuickjsHostMount>[
+          QuickjsHostMount(
+            name: 'lifecycle-test',
+            providers: <QuickjsHostProvider>[
+              QuickjsHostProvider.dart(
+                name: 'test.disposed',
+                callback: (_, _) {
+                  if (!disposed.isCompleted) {
+                    disposed.complete();
+                  }
+                  return true;
+                },
+              ),
+            ],
+            environmentPatches: const <QuickjsHostScript>[
+              QuickjsHostScript.js(
+                name: 'lifecycle-test:globals.js',
+                globals: <String>['quickjsUiTest'],
+                source: '''
+globalThis.quickjsUiTest = {
+  disposed() {
+    return globalThis.__quickjsHostProviders['test.disposed']();
+  },
+};
+''',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    addTearDown(engine.dispose);
+    final controller = QuickjsUiController(engine: engine);
+    addTearDown(controller.dispose);
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_lifecycle_test',
+      version: '0.3.0',
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+function append(state, value) {
+  return { ...state, events: [...state.events, value] };
+}
+
+export default Page({
+  createState() {
+    return { events: [] };
+  },
+  build(state) {
+    return Text(state.events.join('|'));
+  },
+  onMount(state) {
+    return append(state, 'mount');
+  },
+  onPause(state) {
+    return append(state, 'pause');
+  },
+  onResume(state) {
+    return append(state, 'resume');
+  },
+  async onDispose(state) {
+    await quickjsUiTest.disposed();
+    return state;
+  }
+});
+''',
+    );
+
+    await controller.loadPlugin(plugin);
+    await controller.lifecycle('mount');
+    await controller.lifecycle('pause');
+    await controller.lifecycle('resume');
+
+    expect((controller.state! as Map)['events'], <Object?>[
+      'mount',
+      'pause',
+      'resume',
+    ]);
+    expect(controller.node?.props['data'], 'mount|pause|resume');
+
+    controller.dispose();
+    await disposed.future.timeout(const Duration(seconds: 2));
+  });
+
+  test('forwards JS console events from owned runtime', () async {
+    final events = <QuickjsConsoleEvent>[];
+    final controller = QuickjsUiController(onConsole: events.add);
+    addTearDown(controller.dispose);
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_console_test',
+      version: '0.3.0',
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return {};
+  },
+  build() {
+    return Text('console');
+  },
+  onMount(state) {
+    console.log('lifecycle state', JSON.stringify(state));
+    return state;
+  }
+});
+''',
+    );
+
+    await controller.loadPlugin(plugin);
+    await controller.lifecycle('mount');
+
+    expect(events, hasLength(1));
+    expect(events.single.level, QuickjsConsoleLevel.log);
+    expect(events.single.text, contains('lifecycle state'));
+  });
+
+  test('runs dispose lifecycle before closing owned runtime', () async {
+    final disposed = Completer<QuickjsConsoleEvent>();
+    final controller = QuickjsUiController(
+      onConsole: (event) {
+        if (event.text.contains('dispose state') && !disposed.isCompleted) {
+          disposed.complete(event);
+        }
+      },
+    );
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_dispose_console_test',
+      version: '0.3.0',
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { value: 1 };
+  },
+  build() {
+    return Text('dispose');
+  },
+  onDispose(state) {
+    console.log('dispose state', JSON.stringify(state));
+    return state;
+  }
+});
+''',
+    );
+
+    await controller.loadPlugin(plugin);
+    controller.dispose();
+    final event = await disposed.future.timeout(const Duration(seconds: 2));
+
+    expect(event.level, QuickjsConsoleLevel.log);
+    expect(event.text, contains('"value":1'));
+  });
+
+  test('builds configurable host capabilities as mounts', () async {
+    final calls = <String>[];
+    final capabilities = QuickjsUiHostCapabilities.system(
+      options: const QuickjsUiHostCapabilityOptions(
+        enabled: <QuickjsUiHostCapability>{
+          QuickjsUiHostCapability.toast,
+          QuickjsUiHostCapability.confirm,
+          QuickjsUiHostCapability.storage,
+        },
+      ),
+      handlers: QuickjsUiHostApiHandlers(
+        onToast: (message, options) {
+          calls.add('toast:$message:${options['source']}');
+          return <String, Object?>{'shown': true, 'message': message};
+        },
+        onConfirm: (message, _) {
+          calls.add('confirm:$message');
+          return true;
+        },
+      ),
+      storage: const <String, Object?>{'boot': 'ready'},
+    );
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(mounts: capabilities.mounts),
+    );
+    addTearDown(engine.dispose);
+
+    expect(capabilities.permissions, contains('toast'));
+    expect(
+      await engine.evalAsync(
+        "return JSON.stringify(await quickjsUiHost.toast('Saved', { source: 'test' }));",
+      ),
+      '{"shown":true,"message":"Saved"}',
+    );
+    expect(
+      await engine.evalAsync(
+        "return await quickjsUiHost.confirm('Continue?');",
+      ),
+      'true',
+    );
+    expect(
+      await engine.evalAsync(
+        "await quickjsUiHost.storage.setItem('name', 'Ada'); return await quickjsUiHost.storage.getItem('name');",
+      ),
+      'Ada',
+    );
+    expect(await engine.eval('typeof quickjsUiHost.network'), 'undefined');
+    expect(calls, <String>['toast:Saved:test', 'confirm:Continue?']);
+  });
+
+  test('cancels pending host capability provider on stop', () async {
+    final invoked = Completer<QuickjsHostProviderContext>();
+    var invocationCount = 0;
+    final capabilities = QuickjsUiHostCapabilities(
+      groups: <QuickjsUiCapabilityGroup>[
+        QuickjsUiCapabilityGroup.methods(
+          name: 'app-wait',
+          namespace: 'app',
+          globalName: 'quickjsUiApp',
+          methods: <QuickjsUiHostMethod>[
+            QuickjsUiHostMethod(
+              name: 'wait',
+              callback: (_, context) async {
+                invocationCount += 1;
+                if (invocationCount == 1) {
+                  invoked.complete(context);
+                  await context.cancelled;
+                  context.throwIfCancelled();
+                }
+                return 42;
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(mounts: capabilities.mounts),
+    );
+    addTearDown(engine.dispose);
+
+    final running = engine.evalAsync('return await quickjsUiApp.wait();');
+    final context = await invoked.future.timeout(const Duration(seconds: 2));
+    final runningFailure = expectLater(
+      running,
+      throwsA(
+        anyOf(isA<JsCancelledException>(), isA<JsRuntimeClosedException>()),
+      ),
+    );
+
+    await engine.stop().timeout(const Duration(seconds: 2));
+    await runningFailure;
+    expect(context.isCancelled, isTrue);
+    expect(context.cancellationReason, isA<JsCancelledException>());
+    expect(await engine.evalAsync('return await quickjsUiApp.wait();'), '42');
+  });
+
+  test('describes host capability methods for policy and tooling', () {
+    final capabilities = QuickjsUiHostCapabilities(
+      groups: <QuickjsUiCapabilityGroup>[
+        QuickjsUiCapabilityGroup.system(
+          options: const QuickjsUiHostCapabilityOptions(
+            enabled: <QuickjsUiHostCapability>{
+              QuickjsUiHostCapability.toast,
+              QuickjsUiHostCapability.storage,
+            },
+          ),
+        ),
+        const QuickjsUiCapabilityGroup(
+          name: 'app-custom',
+          mounts: <QuickjsHostMount>[QuickjsHostMount(name: 'app-custom')],
+          permissions: <String>{'app.customEcho'},
+          methods: <QuickjsUiHostMethodDeclaration>[
+            QuickjsUiHostMethodDeclaration(
+              name: 'quickjsUiApp.customEcho',
+              providerName: 'app.customEcho',
+              inputSchema: <String, Object?>{
+                'type': 'object',
+                'properties': <String, Object?>{
+                  'value': <String, Object?>{'type': 'string'},
+                },
+                'required': <String>['value'],
+              },
+              outputSchema: <String, Object?>{'type': 'string'},
+            ),
+          ],
+        ),
+      ],
+    );
+
+    expect(
+      capabilities.methods.map((method) => method.name),
+      containsAll(<String>[
+        'quickjsUiHost.toast',
+        'quickjsUiHost.storage.getItem',
+        'quickjsUiHost.storage.setItem',
+        'quickjsUiHost.storage.removeItem',
+        'quickjsUiApp.customEcho',
+      ]),
+    );
+    expect(
+      capabilities.methodMaps.last,
+      containsPair('providerName', 'app.customEcho'),
+    );
+    expect(
+      capabilities.methodMaps.last['inputSchema'],
+      containsPair('required', <String>['value']),
+    );
+  });
+
+  test('builds custom method capability groups with minimal injection API', () {
+    final group = QuickjsUiCapabilityGroup.methods(
+      name: 'app-math',
+      namespace: 'app',
+      globalName: 'quickjsUiApp',
+      methods: <QuickjsUiHostMethod>[
+        QuickjsUiHostMethod(
+          name: 'add',
+          inputSchema: const <String, Object?>{'type': 'object'},
+          outputSchema: const <String, Object?>{'type': 'number'},
+          callback: (args, _) => (args[0] as num) + (args[1] as num),
+        ),
+      ],
+    );
+    final capabilities = QuickjsUiHostCapabilities(
+      groups: <QuickjsUiCapabilityGroup>[group],
+    );
+
+    expect(capabilities.permissions, contains('app.add'));
+    expect(capabilities.methods.single.name, 'quickjsUiApp.add');
+    expect(capabilities.methods.single.providerName, 'app.add');
+    expect(capabilities.mounts.single.providers.single.name, 'app.add');
+    expect(
+      capabilities.mounts.single.environmentPatches.single.source,
+      contains('quickjsUiApp'),
+    );
+    expect(
+      capabilities.mounts.single.environmentPatches.single.source,
+      contains('"add"'),
+    );
+  });
+
+  test('builds custom function capability groups from names and bodies', () {
+    final group = QuickjsUiCapabilityGroup.functions(
+      name: 'app-functions',
+      namespace: 'app',
+      globalName: 'quickjsUiApp',
+      functions: <String, Function>{
+        'add': (num a, num b) => a + b,
+        'echo': (Object? value) => 'echo:$value',
+      },
+    );
+    final capabilities = QuickjsUiHostCapabilities(
+      groups: <QuickjsUiCapabilityGroup>[group],
+    );
+
+    expect(
+      capabilities.permissions,
+      containsAll(<String>['app.add', 'app.echo']),
+    );
+    expect(
+      capabilities.methods.map((method) => method.name),
+      containsAll(<String>['quickjsUiApp.add', 'quickjsUiApp.echo']),
+    );
+    expect(
+      capabilities.mounts.single.providers.map((provider) => provider.name),
+      containsAll(<String>['app.add', 'app.echo']),
+    );
+    expect(
+      capabilities.mounts.single.environmentPatches.single.source,
+      contains('"add"'),
+    );
+  });
+
+  test('requires method declarations for exposed host providers', () {
+    QuickjsHostMount mountWithProvider(String providerName) {
+      return QuickjsHostMount(
+        name: providerName,
+        providers: <QuickjsHostProvider>[
+          QuickjsHostProvider.dart(
+            name: providerName,
+            callback: (_, _) => null,
+          ),
+        ],
+      );
+    }
+
+    expect(
+      () => QuickjsUiHostCapabilities(
+        groups: <QuickjsUiCapabilityGroup>[
+          QuickjsUiCapabilityGroup(
+            name: 'missing-method',
+            mounts: <QuickjsHostMount>[mountWithProvider('app.missing')],
+          ),
+        ],
+      ).mounts,
+      throwsStateError,
+    );
+    expect(
+      () => QuickjsUiHostCapabilities(
+        groups: <QuickjsUiCapabilityGroup>[
+          QuickjsUiCapabilityGroup(
+            name: 'unknown-provider',
+            mounts: <QuickjsHostMount>[mountWithProvider('app.actual')],
+            methods: const <QuickjsUiHostMethodDeclaration>[
+              QuickjsUiHostMethodDeclaration(
+                name: 'quickjsUiApp.actual',
+                providerName: 'app.other',
+              ),
+            ],
+          ),
+        ],
+      ).mounts,
+      throwsStateError,
+    );
+    expect(
+      QuickjsUiHostCapabilities(
+        groups: <QuickjsUiCapabilityGroup>[
+          QuickjsUiCapabilityGroup(
+            name: 'declared-provider',
+            mounts: <QuickjsHostMount>[mountWithProvider('app.declared')],
+            methods: const <QuickjsUiHostMethodDeclaration>[
+              QuickjsUiHostMethodDeclaration(
+                name: 'quickjsUiApp.declared',
+                providerName: 'app.declared',
+                inputSchema: <String, Object?>{'type': 'object'},
+                outputSchema: <String, Object?>{'type': 'null'},
+              ),
+            ],
+          ),
+        ],
+      ).mounts,
+      hasLength(1),
+    );
+  });
+
+  test('merges host capability groups with explicit conflict policy', () {
+    QuickjsUiCapabilityGroup group(String name) {
+      return QuickjsUiCapabilityGroup(
+        name: name,
+        namespace: name,
+        mounts: const <QuickjsHostMount>[QuickjsHostMount(name: 'same')],
+      );
+    }
+
+    expect(
+      () => QuickjsUiHostCapabilities(
+        groups: <QuickjsUiCapabilityGroup>[group('first'), group('second')],
+      ).mounts,
+      throwsStateError,
+    );
+    expect(
+      QuickjsUiHostCapabilities(
+        groups: <QuickjsUiCapabilityGroup>[group('first'), group('second')],
+        conflictPolicy: QuickjsUiCapabilityConflictPolicy.replace,
+      ).mounts,
+      hasLength(1),
+    );
+    expect(
+      QuickjsUiHostCapabilities(
+        groups: <QuickjsUiCapabilityGroup>[group('first'), group('second')],
+        conflictPolicy: QuickjsUiCapabilityConflictPolicy.namespace,
+      ).mounts.map((mount) => mount.name),
+      <String>['same', 'second:same:1'],
+    );
+  });
+
   testWidgets('renders basic Flutter widgets and dispatches button event', (
     tester,
   ) async {
@@ -184,6 +729,38 @@ void main() {
     expect(find.text('Count: 0'), findsOneWidget);
     await tester.tap(find.text('Add'));
     expect(events.single, <String, Object?>{'action': 'increment'});
+  });
+
+  testWidgets('renders gap between flex children', (tester) async {
+    final columnNode = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'gap': 8,
+      'children': <Object?>[
+        <String, Object?>{'type': 'Text', 'data': 'A'},
+        <String, Object?>{'type': 'Text', 'data': 'B'},
+      ],
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(columnNode)),
+    );
+
+    expect(find.text('A'), findsOneWidget);
+    expect(find.text('B'), findsOneWidget);
+    expect(tester.widget<Column>(find.byType(Column)).spacing, 8);
+
+    final rowNode = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Row',
+      'gap': 6,
+      'children': <Object?>[
+        <String, Object?>{'type': 'Text', 'data': 'C'},
+        <String, Object?>{'type': 'Text', 'data': 'D'},
+      ],
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(rowNode)),
+    );
+
+    expect(tester.widget<Row>(find.byType(Row)).spacing, 6);
   });
 
   testWidgets('renders Container decoration props', (tester) async {
@@ -620,6 +1197,67 @@ void main() {
     expect(find.text('Placeholder state'), findsNothing);
   });
 
+  testWidgets('QuickjsUiView dispatches mount lifecycle after first render', (
+    tester,
+  ) async {
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_view_lifecycle_test',
+      version: '0.3.0',
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { event: 'waiting' };
+  },
+  build(state) {
+    return Text(state.event);
+  },
+  onMount(state) {
+    return { ...state, event: 'mount' };
+  }
+});
+''',
+    );
+
+    await tester.pumpWidget(MaterialApp(home: QuickjsUiView.plugin(plugin)));
+    await _pumpUntilFound(tester, find.text('mount'));
+
+    expect(find.text('mount'), findsOneWidget);
+  });
+
+  test('bundle plugins expose lifecycle export', () async {
+    final bundle = QuickjsUiBundle(
+      id: 'quickjs_ui_bundle_lifecycle_test',
+      version: '0.3.0',
+      entry: 'main.mjs',
+      modules: const <String, String>{
+        'main.mjs': '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { event: 'waiting' };
+  },
+  build(state) {
+    return Text(state.event);
+  },
+  onMount(state) {
+    return { ...state, event: 'mount' };
+  }
+});
+''',
+      },
+    );
+    final controller = QuickjsUiController();
+    addTearDown(controller.dispose);
+
+    await controller.loadPlugin(bundle.toPlugin());
+    await controller.lifecycle('mount');
+
+    expect(controller.node?.props['data'], 'mount');
+  });
+
   testWidgets('QuickjsUiView.asset creates a multi-file asset view', (
     tester,
   ) async {
@@ -674,6 +1312,116 @@ void main() {
 
     expect(session.state, <String, Object?>{'count': 9});
     expect(session.node?.children.first.props['data'], 'Count: 9');
+  });
+
+  test('supports async init and dispatch state updates', () async {
+    final engine = await Quickjs.create();
+    final controller = QuickjsUiController(engine: engine);
+    addTearDown(controller.dispose);
+
+    await controller.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_async_state',
+        version: '0.3.0',
+        source: '''
+import { Column, Page, Text } from 'quickjs_ui';
+
+export default Page({
+  async createState() {
+    await Promise.resolve();
+    return { count: 1 };
+  },
+  build(state) {
+    return Column({
+      children: [
+        Text(`Count: \${state.count}`)
+      ]
+    });
+  },
+  async increment(state) {
+    await Promise.resolve();
+    return { ...state, count: state.count + 1 };
+  }
+});
+''',
+      ),
+    );
+
+    expect(controller.state, <String, Object?>{'count': 1});
+    expect(controller.node?.children.first.props['data'], 'Count: 1');
+
+    await controller.dispatch(<String, Object?>{'action': 'increment'});
+
+    expect(controller.state, <String, Object?>{'count': 2});
+    expect(controller.node?.children.first.props['data'], 'Count: 2');
+  });
+
+  test('ignores pending async dispatch result after dispose', () async {
+    final pending = Completer<Object?>();
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(
+        mounts: <QuickjsHostMount>[
+          QuickjsHostMount(
+            name: 'quickjs_ui:test:wait',
+            providers: <QuickjsHostProvider>[
+              QuickjsHostProvider.dart(
+                name: 'quickjs_ui.test.wait',
+                callback: (_, _) => pending.future,
+              ),
+            ],
+            environmentPatches: const <QuickjsHostScript>[
+              QuickjsHostScript.js(
+                name: 'quickjs_ui:test:wait.js',
+                globals: <String>['quickjsUiTestWait'],
+                source: '''
+globalThis.quickjsUiTestWait = function quickjsUiTestWait() {
+  return globalThis.__quickjsHostProviders['quickjs_ui.test.wait']();
+};
+''',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    addTearDown(engine.dispose);
+    final controller = QuickjsUiController(engine: engine);
+
+    await controller.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_pending_dispatch',
+        version: '0.3.0',
+        source: '''
+import { Column, Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { count: 0 };
+  },
+  build(state) {
+    return Column({
+      children: [
+        Text(`Count: \${state.count}`)
+      ]
+    });
+  },
+  async increment(state) {
+    await quickjsUiTestWait();
+    return { ...state, count: state.count + 1 };
+  }
+});
+''',
+      ),
+    );
+    final dispatch = controller.dispatch(<String, Object?>{
+      'action': 'increment',
+    });
+    controller.dispose();
+    pending.complete(null);
+
+    await dispatch;
+
+    expect(controller.state, <String, Object?>{'count': 0});
   });
 
   test('controller refresh, restart and reload use distinct paths', () async {

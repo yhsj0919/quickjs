@@ -4,7 +4,9 @@ import 'pages/quickjs_ui_counter_page.dart';
 import 'pages/quickjs_ui_controls_page.dart';
 import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
+import 'pages/quickjs_ui_host_capabilities_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
+import 'pages/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui_profile_form_page.dart';
 import 'pages/quickjs_ui_schema_page.dart';
 import 'pages/quickjs_ui_todo_page.dart';
@@ -55,5 +57,15 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     title: 'QuickJS UI 局部刷新',
     description: '可视化 stable key 节点在局部刷新中被跳过、变化节点重新构建。',
     builder: (_) => const QuickjsUiDiffPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 宿主能力',
+    description: '通过 QuickjsUiHostCapabilities 组合系统默认能力和自定义宿主调用。',
+    builder: (_) => const QuickjsUiHostCapabilitiesPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 权限策略',
+    description: '单独测试页面声明 permissions、unrestricted 策略和 restricted 授权拦截。',
+    builder: (_) => const QuickjsUiPermissionPage(),
   ),
 ];

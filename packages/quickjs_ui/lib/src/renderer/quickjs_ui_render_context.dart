@@ -77,6 +77,7 @@ final class QuickjsUiRenderContext {
       'ontertiary' => scheme.onTertiary,
       'surface' => scheme.surface,
       'onsurface' => scheme.onSurface,
+      'surfacecontainerhighest' => scheme.surfaceContainerHighest,
       'surfacevariant' => scheme.surfaceContainerHighest,
       'background' => scheme.surface,
       'onbackground' => scheme.onSurface,

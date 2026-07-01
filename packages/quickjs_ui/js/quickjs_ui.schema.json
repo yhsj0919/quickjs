@@ -220,7 +220,8 @@
             "crossAxisAlignment": {
               "type": "string",
               "enum": ["start", "end", "center", "stretch", "baseline"]
-            }
+            },
+            "gap": { "type": "number", "minimum": 0 }
           }
         }
       ]
@@ -309,7 +310,8 @@
             "type": { "const": "ListView" },
             "scrollDirection": { "type": "string", "enum": ["vertical", "horizontal"] },
             "shrinkWrap": { "type": "boolean" },
-            "padding": { "$ref": "#/$defs/edgeInsets" }
+            "padding": { "$ref": "#/$defs/edgeInsets" },
+            "gap": { "type": "number", "minimum": 0 }
           }
         }
       ]

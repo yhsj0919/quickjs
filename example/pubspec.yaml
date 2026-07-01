@@ -62,6 +62,8 @@ flutter:
     - assets/quickjs_ui/counter_page.mjs
     - assets/quickjs_ui/controls_page.mjs
     - assets/quickjs_ui/diff_page.mjs
+    - assets/quickjs_ui/host_capabilities_page.mjs
+    - assets/quickjs_ui/permission_page.mjs
     - assets/quickjs_ui/profile_form_page.mjs
     - assets/quickjs_ui/todo_page.mjs
     - assets/quickjs_ui/quickjs_ui.schema.json
