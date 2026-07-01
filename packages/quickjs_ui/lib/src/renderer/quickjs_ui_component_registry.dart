@@ -130,7 +130,15 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final fit = QuickjsUiProps.boxFit(node.props['fit']);
   final uri = Uri.tryParse(source);
   if (uri != null && uri.hasScheme && uri.scheme.startsWith('http')) {
-    return Image.network(source, width: width, height: height, fit: fit);
+    return Image.network(
+      source,
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (_, _, _) {
+        return SizedBox(width: width, height: height);
+      },
+    );
   }
   return Image.asset(source, width: width, height: height, fit: fit);
 }

@@ -56,6 +56,34 @@ export default Page({
                     padding: {all: 12},
                     margin: {bottom: 12},
                     decoration: {
+                        color: '$surface',
+                        borderRadius: 10,
+                        border: {color: '$outline', width: 1}
+                    },
+                    child: Column({
+                        crossAxisAlignment: 'stretch',
+                        children: [
+                            Text('Third-party image resource', {
+                                style: {fontWeight: 'w700'}
+                            }),
+                            Padding({
+                                padding: {top: 8, bottom: 8},
+                                child: Image({
+                                    src: 'https://picsum.photos/seed/quickjs-ui/320/120',
+                                    height: 120,
+                                    fit: 'cover'
+                                })
+                            }),
+                            Text('Loaded with Image.network and styled by ThemeData tokens.', {
+                                style: {color: '$outline', fontSize: 13}
+                            })
+                        ]
+                    })
+                }),
+                Container({
+                    padding: {all: 12},
+                    margin: {bottom: 12},
+                    decoration: {
                         color: '#f4f7fb',
                         borderRadius: 10,
                         border: {color: '#c7d2e3', width: 1}
