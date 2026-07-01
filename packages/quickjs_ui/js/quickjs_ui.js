@@ -14,6 +14,21 @@ export function Page(page) {
     },
     render(state, props) {
       return page.build(state, props, actions);
+    },
+    lifecycle(state, event, props) {
+      const type = event?.type;
+      const hook =
+        type === 'mount' ? page.onMount :
+        type === 'show' ? page.onShow :
+        type === 'hide' ? page.onHide :
+        type === 'pause' ? page.onPause :
+        type === 'resume' ? page.onResume :
+        type === 'dispose' ? page.onDispose :
+        undefined;
+      if (typeof hook !== 'function') {
+        return state;
+      }
+      return hook(state, event?.payload, props, event);
     }
   };
   if (!page.dispatch) {

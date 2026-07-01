@@ -1,29 +1,39 @@
 import 'dart:async';
 
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:quickjs/quickjs.dart';
 
+import '../host/quickjs_ui_permission_policy.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
 
 final class QuickjsUiSession {
-  // Keep the public constructor parameter named `engine`.
-  // ignore: prefer_initializing_formals
-  QuickjsUiSession({Quickjs? engine}) : _engine = engine;
+  // Keep the public constructor parameters named `engine` and `onConsole`.
+  QuickjsUiSession({Quickjs? engine, QuickjsConsoleSink? onConsole})
+    : _engine = engine,
+      _onConsole = onConsole;
 
   Quickjs? _engine;
+  final QuickjsConsoleSink? _onConsole;
   QuickjsPlugin? _plugin;
   QuickjsPluginClient? _client;
   Map<String, Object?> _props = const <String, Object?>{};
   List<QuickjsHostMount> _mounts = const <QuickjsHostMount>[];
+  Set<String> _grantedPermissions = const <String>{};
+  QuickjsUiPermissionPolicy? _permissionPolicy;
   Object? _state;
   QuickjsUiNode? _node;
   bool _ownsEngine = false;
   bool _disposed = false;
+  bool _disposeLifecycleSent = false;
 
   Quickjs? get engine => _engine;
   QuickjsPlugin? get plugin => _plugin;
   Map<String, Object?> get props => _props;
   List<QuickjsHostMount> get mounts => _mounts;
+  Set<String> get grantedPermissions => _grantedPermissions;
+  QuickjsUiPermissionPolicy? get permissionPolicy => _permissionPolicy;
   Object? get state => _state;
   QuickjsUiNode? get node => _node;
   bool get isDisposed => _disposed;
@@ -32,32 +42,61 @@ final class QuickjsUiSession {
     QuickjsPlugin plugin, {
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    Iterable<String> grantedPermissions = const <String>[],
+    QuickjsUiPermissionPolicy? permissionPolicy,
   }) async {
     _ensureActive();
+    permissionPolicy?.validate(
+      plugin: plugin,
+      grantedPermissions: grantedPermissions,
+    );
+    final ownsCreatedEngine = _engine == null;
     final engine =
         _engine ??
         await Quickjs.create(
+          onConsole: _onConsole,
           options: QuickjsRuntimeOptions(
             mounts: <QuickjsHostMount>[quickjsUiHelperMount, ...mounts],
           ),
         );
-    _ownsEngine = _engine == null;
+    if (_disposed) {
+      if (ownsCreatedEngine) {
+        unawaited(engine.dispose());
+      }
+      return;
+    }
+    _ownsEngine = ownsCreatedEngine;
     _engine = engine;
     if (!_ownsEngine) {
       await _ensureHelperModuleMounted(engine);
+      if (_disposed) {
+        return;
+      }
     }
     await engine.mount(
       plugin.asMount(name: 'quickjs_ui:page:${plugin.manifest.id}'),
       conflictPolicy: QuickjsHostMountConflictPolicy.replace,
     );
+    if (_disposed) {
+      return;
+    }
     _plugin = plugin;
     _props = Map<String, Object?>.unmodifiable(initialProps);
     _mounts = List<QuickjsHostMount>.unmodifiable(mounts);
+    _grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
+    _permissionPolicy = permissionPolicy;
     _client = QuickjsPluginClient(engine, plugin);
     await _client!.validate();
-    _state = plugin.manifest.init == null
+    if (_disposed) {
+      return;
+    }
+    final initialState = plugin.manifest.init == null
         ? <String, Object?>{}
         : await _client!.init(_props);
+    if (_disposed) {
+      return;
+    }
+    _state = initialState;
     await refresh();
   }
 
@@ -68,6 +107,9 @@ final class QuickjsUiSession {
       event,
       _props,
     ]);
+    if (_disposed) {
+      return;
+    }
     if (nextState != null) {
       _state = nextState;
     }
@@ -90,12 +132,51 @@ final class QuickjsUiSession {
     await refresh();
   }
 
+  Future<void> lifecycle(
+    String type, {
+    Object? payload,
+    bool render = true,
+  }) async {
+    _ensureActive();
+    final plugin = _plugin;
+    if (plugin == null || !plugin.manifest.exports.contains('lifecycle')) {
+      return;
+    }
+    if (type == 'dispose') {
+      if (_disposeLifecycleSent) {
+        return;
+      }
+      _disposeLifecycleSent = true;
+    }
+    final event = <String, Object?>{'type': type};
+    if (payload != null) {
+      event['payload'] = payload;
+    }
+    final nextState = await _requireClient().call('lifecycle', <Object?>[
+      _state,
+      event,
+      _props,
+    ]);
+    if (_disposed) {
+      return;
+    }
+    if (nextState != null) {
+      _state = nextState;
+    }
+    if (render) {
+      await refresh();
+    }
+  }
+
   Future<void> refresh() async {
     _ensureActive();
     final rendered = await _requireClient().call('render', <Object?>[
       _state,
       _props,
     ]);
+    if (_disposed) {
+      return;
+    }
     if (rendered is! Map) {
       throw const FormatException(
         'quickjs_ui render() must return a UI node object',
@@ -112,7 +193,13 @@ final class QuickjsUiSession {
     if (plugin == null) {
       return;
     }
-    await loadPlugin(plugin, initialProps: _props, mounts: _mounts);
+    await loadPlugin(
+      plugin,
+      initialProps: _props,
+      mounts: _mounts,
+      grantedPermissions: _grantedPermissions,
+      permissionPolicy: _permissionPolicy,
+    );
   }
 
   void attach(Quickjs engine) {
@@ -125,19 +212,45 @@ final class QuickjsUiSession {
     if (_disposed) {
       return;
     }
-    _disposed = true;
     final client = _client;
     final plugin = _plugin;
     final engine = _engine;
+    final ownsEngine = _ownsEngine;
+    final disposeLifecycle = _sendDisposeLifecycle(client, plugin);
+    _disposed = true;
     _client = null;
     _engine = null;
     _plugin = null;
-    if (client != null && plugin?.manifest.dispose != null) {
-      unawaited(client.dispose().catchError((_) => null));
+    unawaited(
+      disposeLifecycle.then((_) async {
+        if (client != null && plugin?.manifest.dispose != null) {
+          await client.dispose().catchError((_) => null);
+        }
+        if (ownsEngine) {
+          await (engine?.dispose() ?? Future<void>.value());
+        }
+      }),
+    );
+  }
+
+  Future<void> _sendDisposeLifecycle(
+    QuickjsPluginClient? client,
+    QuickjsPlugin? plugin,
+  ) async {
+    if (_disposeLifecycleSent ||
+        client == null ||
+        plugin == null ||
+        !plugin.manifest.exports.contains('lifecycle')) {
+      return;
     }
-    if (_ownsEngine) {
-      unawaited(engine?.dispose() ?? Future<void>.value());
-    }
+    _disposeLifecycleSent = true;
+    await client
+        .call('lifecycle', <Object?>[
+          _state,
+          const <String, Object?>{'type': 'dispose'},
+          _props,
+        ])
+        .catchError((_) => null);
   }
 
   QuickjsPluginClient _requireClient() {

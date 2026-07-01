@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:quickjs/quickjs.dart';
 
+import '../host/quickjs_ui_permission_policy.dart';
 import '../renderer/quickjs_ui_renderer.dart';
 import '../resource/quickjs_ui_bundle.dart';
 import '../resource/quickjs_ui_network_loader.dart';
@@ -22,6 +25,9 @@ final class QuickjsUiView extends StatefulWidget {
     this.bundleRoot,
     this.initialProps = const <String, Object?>{},
     this.mounts = const <QuickjsHostMount>[],
+    this.grantedPermissions = const <String>{},
+    this.permissionPolicy,
+    this.onConsole,
     this.controller,
     this.placeholder,
     this.loadingBuilder,
@@ -43,7 +49,10 @@ final class QuickjsUiView extends StatefulWidget {
     Key? key,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    Iterable<String> grantedPermissions = const <String>[],
+    QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -56,6 +65,9 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.plugin,
       initialProps: initialProps,
       mounts: mounts,
+      grantedPermissions: grantedPermissions,
+      permissionPolicy: permissionPolicy,
+      onConsole: onConsole,
       controller: controller,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
@@ -71,7 +83,10 @@ final class QuickjsUiView extends StatefulWidget {
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    Iterable<String> grantedPermissions = const <String>[],
+    QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -85,6 +100,9 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.asset,
       initialProps: initialProps,
       mounts: mounts,
+      grantedPermissions: grantedPermissions,
+      permissionPolicy: permissionPolicy,
+      onConsole: onConsole,
       controller: controller,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
@@ -100,7 +118,10 @@ final class QuickjsUiView extends StatefulWidget {
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    Iterable<String> grantedPermissions = const <String>[],
+    QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -114,6 +135,9 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.file,
       initialProps: initialProps,
       mounts: mounts,
+      grantedPermissions: grantedPermissions,
+      permissionPolicy: permissionPolicy,
+      onConsole: onConsole,
       controller: controller,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
@@ -131,7 +155,10 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiNetworkLogHandler? onNetworkLog,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    Iterable<String> grantedPermissions = const <String>[],
+    QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -148,6 +175,9 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.network,
       initialProps: initialProps,
       mounts: mounts,
+      grantedPermissions: grantedPermissions,
+      permissionPolicy: permissionPolicy,
+      onConsole: onConsole,
       controller: controller,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
@@ -169,6 +199,9 @@ final class QuickjsUiView extends StatefulWidget {
     required this._source,
     this.initialProps = const <String, Object?>{},
     this.mounts = const <QuickjsHostMount>[],
+    this.grantedPermissions = const <String>{},
+    this.permissionPolicy,
+    this.onConsole,
     this.controller,
     this.placeholder,
     this.loadingBuilder,
@@ -186,6 +219,9 @@ final class QuickjsUiView extends StatefulWidget {
   final QuickjsUiNetworkLogHandler? onNetworkLog;
   final Map<String, Object?> initialProps;
   final List<QuickjsHostMount> mounts;
+  final Iterable<String> grantedPermissions;
+  final QuickjsUiPermissionPolicy? permissionPolicy;
+  final QuickjsConsoleSink? onConsole;
   final QuickjsUiController? controller;
   final Widget? placeholder;
   final QuickjsUiLoadingBuilder? loadingBuilder;
@@ -198,7 +234,8 @@ final class QuickjsUiView extends StatefulWidget {
   State<QuickjsUiView> createState() => _QuickjsUiViewState();
 }
 
-final class _QuickjsUiViewState extends State<QuickjsUiView> {
+final class _QuickjsUiViewState extends State<QuickjsUiView>
+    with WidgetsBindingObserver {
   late QuickjsUiController _controller;
   late bool _ownsController;
   late QuickjsUiRenderer _renderer;
@@ -208,7 +245,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? QuickjsUiController();
+    WidgetsBinding.instance.addObserver(this);
+    _controller =
+        widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
     _ownsController = widget.controller == null;
     _controller.addListener(_handleControllerChanged);
     _renderer = QuickjsUiRenderer(onEvent: _controller.dispatch);
@@ -223,7 +262,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
       if (_ownsController) {
         _controller.dispose();
       }
-      _controller = widget.controller ?? QuickjsUiController();
+      _controller =
+          widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
       _renderer = QuickjsUiRenderer(onEvent: _controller.dispatch);
@@ -237,23 +277,48 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
         oldWidget.onNetworkLog != widget.onNetworkLog ||
         oldWidget._source != widget._source ||
         oldWidget.initialProps != widget.initialProps ||
-        oldWidget.mounts != widget.mounts) {
+        oldWidget.mounts != widget.mounts ||
+        !_stringIterableSetEquals(
+          oldWidget.grantedPermissions,
+          widget.grantedPermissions,
+        ) ||
+        oldWidget.permissionPolicy != widget.permissionPolicy) {
       if (oldWidget.networkFetch != widget.networkFetch ||
           oldWidget.onNetworkLog != widget.onNetworkLog ||
           oldWidget.networkUrl != widget.networkUrl) {
         _networkLoader = null;
       }
+      _reportedFirstRender = false;
       _load();
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_handleControllerChanged);
     if (_ownsController) {
       _controller.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (_controller.plugin == null || _controller.isDisposed) {
+      return;
+    }
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(_controller.lifecycle('resume'));
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        unawaited(_controller.lifecycle('pause'));
+      case AppLifecycleState.detached:
+        unawaited(_controller.lifecycle('dispose', render: false));
+    }
   }
 
   @override
@@ -319,6 +384,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         widget.onFirstRender?.call();
+        unawaited(_controller.lifecycle('mount'));
       }
     });
   }
@@ -332,6 +398,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
         _loadPlugin,
         initialProps: widget.initialProps,
         mounts: widget.mounts,
+        grantedPermissions: widget.grantedPermissions,
+        permissionPolicy: widget.permissionPolicy,
       );
     } catch (error) {
       if (mounted) {
@@ -391,3 +459,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView> {
 }
 
 enum _QuickjsUiViewSource { plugin, asset, file, network }
+
+bool _stringIterableSetEquals(Iterable<String> left, Iterable<String> right) {
+  final leftSet = left.toSet();
+  final rightSet = right.toSet();
+  return leftSet.length == rightSet.length && leftSet.containsAll(rightSet);
+}

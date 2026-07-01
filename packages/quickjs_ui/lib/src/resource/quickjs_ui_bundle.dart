@@ -13,12 +13,14 @@ final class QuickjsUiBundle {
     required this.version,
     required this.entry,
     required this.modules,
+    this.permissions = const <String>[],
   });
 
   final String id;
   final String version;
   final String entry;
   final Map<String, String> modules;
+  final List<String> permissions;
 
   static Future<QuickjsUiBundle> asset({
     required String path,
@@ -149,6 +151,7 @@ final class QuickjsUiBundle {
       version: version,
       entry: entry,
       modules: Map<String, String>.unmodifiable(modules),
+      permissions: _stringList(manifest['permissions'], 'permissions'),
     );
   }
 
@@ -160,8 +163,9 @@ final class QuickjsUiBundle {
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: const <String>['render', 'dispatch'],
+        exports: const <String>['render', 'dispatch', 'lifecycle'],
         init: 'init',
+        permissions: permissions,
       ),
       modules: <QuickjsPluginModule>[
         for (final module in modules.entries)
@@ -179,6 +183,20 @@ final class QuickjsUiBundle {
       ],
     );
   }
+}
+
+List<String> _stringList(Object? value, String name) {
+  if (value == null) {
+    return const <String>[];
+  }
+  if (value is! List) {
+    throw FormatException(
+      'quickjs_ui bundle manifest "$name" must be an array',
+    );
+  }
+  return List<String>.unmodifiable(
+    value.map((item) => _string(item, '$name[]')),
+  );
 }
 
 String _string(Object? value, String name) {
