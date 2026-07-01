@@ -5,7 +5,10 @@ import 'package:quickjs_example/example_pages.dart';
 import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_bundle_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
 import 'package:quickjs_example/pages/zip_plugin_page.dart';
 import 'package:quickjs_example/quickjs_ui_example_pages.dart';
 
@@ -66,7 +69,9 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiCounterPage()));
 
     expect(find.text('QuickJS UI Counter'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byTooltip('Refresh render'), findsOneWidget);
+    expect(find.byTooltip('Restart page'), findsOneWidget);
+    expect(find.byTooltip('Reload source'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui bundle counter page', (
@@ -89,6 +94,43 @@ void main() {
 
     expect(find.text('QuickJS UI Network Counter'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui controls page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiControlsPage()));
+
+    expect(find.text('QuickJS UI Controls'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui JSON schema page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiSchemaPage()));
+
+    expect(find.text('QuickJS UI JSON Schema'), findsOneWidget);
+    await _pumpUntilFound(tester, find.textContaining('quickjs_ui UI schema'));
+    expect(find.textContaining('12 node variants'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('Pure JSON UI schema'));
+    expect(find.text('Pure JSON UI schema'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui error overlay page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiErrorPage()));
+
+    expect(find.text('QuickJS UI Error Overlay'), findsOneWidget);
+    expect(
+      find.textContaining('schema path: root.children[2]'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('resource: assets/quickjs_ui/controls_page.mjs'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('action: render'), findsOneWidget);
   });
 
   testWidgets('registers core example pages', (WidgetTester tester) async {

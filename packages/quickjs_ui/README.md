@@ -59,15 +59,37 @@ same for local filesystem entries. For manual plugin construction, use
 `QuickjsUiPagePlugin.singleFile(...)`, `QuickjsUiPagePlugin.asset(path: ...)`, or
 `QuickjsUiBundle.asset(path: ...)`.
 
-Supported widgets in 0.1:
+Supported widgets:
 
 - `Text`
 - `ElevatedButton`
 - `Row`
 - `Column`
 - `Container`
+- `Image`
+- `ListView`
+- `TextField`
+- `Stack`
+- `Padding`
+- `Center`
+- `SizedBox`
+
+`TextField` supports controlled `value`, `onChanged`, `onSubmitted`, `onFocus`,
+and `onBlur` event descriptors. Flutter dispatches the current string value
+with each event.
+
+`QuickjsUiView` exposes `loadingBuilder`, `errorBuilder`, and `emptyBuilder` for
+the page loading, failure, and no-rendered-node states. `placeholder` remains as
+a compatibility fallback for loading and empty states.
 
 `packages/quickjs_ui/js/quickjs_ui.js` and
 `packages/quickjs_ui/js/quickjs_ui.d.ts` provide `Page()` and named control
 helpers for editor hints. They are authoring helpers; the runtime still
 consumes plain object UI schema.
+
+`packages/quickjs_ui/js/quickjs_ui.schema.json` provides the first JSON Schema
+for editor hints and CI checks against plain object UI schema.
+
+`lib/src/runtime/quickjs_ui_helpers.g.dart` is generated from
+`packages/quickjs_ui/js/quickjs_ui.js`. After editing the JS helper, run
+`dart run tool/generate_quickjs_ui_helpers.dart` from `packages/quickjs_ui`.
