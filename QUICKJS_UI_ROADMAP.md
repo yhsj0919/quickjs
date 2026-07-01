@@ -431,7 +431,7 @@ Flutter 风格对象写法：
 - [x] `QuickjsUiBundle.manifestAsset()`：加载 manifest 描述的发布/远程包格式。
 - [x] `QuickjsUiResourceResolver`：统一处理相对路径、asset key、plugin zip 资源和资源错误。
 - [x] `QuickjsUiController.reload()`。
-- [ ] network bundle 开启后支持基础 `refresh()`：重新拉取入口/manifest/resources 并刷新页面。
+- [x] network bundle 开启后支持基础 `reload()`：重新拉取入口/manifest/resources 并刷新页面。
 - [x] `QuickjsUiNetworkLoader`：支持 network `.mjs` 加载、相对 import 解析、可替换 fetch client 和结构化状态码错误。
 - [x] tool：`quickjs_ui_dev_server.dart`，本地 HTTP 服务 `example/assets/quickjs_ui`，用于 network 页面开发调试。
 - [x] example：network counter 页面，通过 `QuickjsUiView.network(url)` 加载本地 dev server 页面。
@@ -449,10 +449,11 @@ Flutter 风格对象写法：
 - [x] 支持 loading / error / empty 状态 builder。
 - [x] 支持首版 error overlay 和 schema/resource 错误定位。
 - [x] 支持 `Stack/Padding/Center/SizedBox`。
-- [ ] 支持基础 `ThemeData` token 注入。
+- [x] 支持基础 `ThemeData` token 注入。
 - [x] example：多文件 bundle counter 页面。
-- [ ] example：todo list、profile form、多文件 profile page、第三方图片/主题资源。
-- [ ] 测试：asset page、bundle page、remote refresh、relative resource resolve、list render、input event、
+- [x] example：todo list。
+- [ ] example：profile form、多文件 profile page、第三方图片/主题资源。
+- [ ] 测试：asset page、bundle page、relative resource resolve、list render、input event、
   runtime rebuild、unchanged node skip、resource error boundary、theme token、controlled input。
 
 ### 0.3：宿主能力与页面能力边界

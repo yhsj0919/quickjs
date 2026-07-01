@@ -5,6 +5,7 @@ import 'pages/quickjs_ui_controls_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui_schema_page.dart';
+import 'pages/quickjs_ui_todo_page.dart';
 
 final List<ExamplePageSpec> quickjsUiExamplePages = [
   ExamplePageSpec(
@@ -22,6 +23,11 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     description:
         '测试 Image、ListView、TextField、Stack、Padding、Center、SizedBox 等 0.2 控件。',
     builder: (_) => const QuickjsUiControlsPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI Todo List',
+    description: '使用 JS 页面测试 ListView、TextField、事件、受控输入和 ThemeData token。',
+    builder: (_) => const QuickjsUiTodoPage(),
   ),
   ExamplePageSpec(
     title: 'QuickJS UI JSON Schema',

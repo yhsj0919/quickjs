@@ -13,11 +13,12 @@ final class QuickjsUiRenderer {
   final QuickjsUiEventHandler onEvent;
   final QuickjsUiComponentRegistry registry;
 
-  Widget build(QuickjsUiNode node) {
+  Widget build(QuickjsUiNode node, {BuildContext? buildContext}) {
     late final QuickjsUiRenderContext context;
     context = QuickjsUiRenderContext(
       buildNode: (node) => registry.build(context, node),
       onEvent: onEvent,
+      buildContext: buildContext,
     );
     return registry.build(context, node);
   }
