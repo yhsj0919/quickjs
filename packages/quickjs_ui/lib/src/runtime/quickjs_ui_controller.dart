@@ -186,6 +186,28 @@ final class QuickjsUiController extends ChangeNotifier {
     }
   }
 
+  Future<void> routeLifecycle(
+    String type, {
+    Object? payload,
+    bool render = true,
+  }) async {
+    _ensureActive();
+    _error = null;
+    try {
+      await _session.routeLifecycle(type, payload: payload, render: render);
+      if (_disposed) {
+        return;
+      }
+      notifyListeners();
+    } catch (error) {
+      if (_disposed) {
+        return;
+      }
+      _error = error;
+      notifyListeners();
+    }
+  }
+
   void attach(Quickjs engine) {
     _ensureActive();
     _session.attach(engine);

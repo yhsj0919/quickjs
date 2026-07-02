@@ -29,6 +29,7 @@ final class QuickjsUiSession {
   bool _disposeLifecycleSent = false;
   int _activeCalls = 0;
   Future<void> _operationTail = Future<void>.value();
+  Future<void> _routeLifecycleTail = Future<void>.value();
 
   Quickjs? get engine => _engine;
   QuickjsPlugin? get plugin => _plugin;
@@ -146,36 +147,17 @@ final class QuickjsUiSession {
     bool render = true,
   }) async {
     return _enqueue(() async {
-      _ensureActive();
-      final plugin = _plugin;
-      if (plugin == null || !plugin.manifest.exports.contains('lifecycle')) {
-        return;
-      }
-      if (type == 'dispose') {
-        if (_disposeLifecycleSent) {
-          return;
-        }
-        _disposeLifecycleSent = true;
-      }
-      final event = <String, Object?>{'type': type};
-      if (payload != null) {
-        event['payload'] = payload;
-      }
-      final nextState = await _clientCall('lifecycle', <Object?>[
-        _state,
-        event,
-        _props,
-      ]);
-      if (_disposed) {
-        return;
-      }
-      final didUpdateState = nextState != null;
-      if (didUpdateState) {
-        _state = nextState;
-      }
-      if (render && didUpdateState) {
-        await _refreshImpl();
-      }
+      await _lifecycleImpl(type, payload: payload, render: render);
+    });
+  }
+
+  Future<void> routeLifecycle(
+    String type, {
+    Object? payload,
+    bool render = true,
+  }) {
+    return _enqueueRouteLifecycle(() async {
+      await _lifecycleImpl(type, payload: payload, render: render);
     });
   }
 
@@ -270,6 +252,49 @@ final class QuickjsUiSession {
     final result = _operationTail.then((_) => action());
     _operationTail = result.then((_) {}, onError: (_) {});
     return result;
+  }
+
+  Future<T> _enqueueRouteLifecycle<T>(Future<T> Function() action) {
+    final result = _routeLifecycleTail.then((_) => action());
+    _routeLifecycleTail = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<void> _lifecycleImpl(
+    String type, {
+    Object? payload,
+    bool render = true,
+  }) async {
+    _ensureActive();
+    final plugin = _plugin;
+    if (plugin == null || !plugin.manifest.exports.contains('lifecycle')) {
+      return;
+    }
+    if (type == 'dispose') {
+      if (_disposeLifecycleSent) {
+        return;
+      }
+      _disposeLifecycleSent = true;
+    }
+    final event = <String, Object?>{'type': type};
+    if (payload != null) {
+      event['payload'] = payload;
+    }
+    final nextState = await _clientCall('lifecycle', <Object?>[
+      _state,
+      event,
+      _props,
+    ]);
+    if (_disposed) {
+      return;
+    }
+    final didUpdateState = nextState != null;
+    if (didUpdateState) {
+      _state = nextState;
+    }
+    if (render && didUpdateState) {
+      await _refreshImpl();
+    }
   }
 
   QuickjsPluginClient _requireClient() {

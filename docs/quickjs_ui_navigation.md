@@ -4,6 +4,52 @@
 internal routing. JS pages send structured navigation intents through
 `quickjsUiNavigation`.
 
+## Route model
+
+`quickjsUiNavigation` is an independent JSUI router API. It is injected per
+JSUI route entry and is not an alias for `quickjsUiHost.navigationIntent`.
+
+The router follows Flutter `Navigator.push` semantics:
+
+- `push()` mutates the route stack immediately and resolves when that route is
+  later popped with a result.
+- `replace()` consumes the current route immediately and resolves to `true` for
+  the replacing page. If the current route was opened by `push()`, that pending
+  push result completes with `null`; it does not wait for the replacement page
+  to pop.
+- `pop(result)` completes the pending `push()` result for the previous page.
+- `onRouteEnter`, `onRouteLeave`, and `onRouteResult` are lifecycle
+  notifications. They are not the primary data return path.
+
+Route lifecycle notifications use a dedicated route lifecycle queue instead of
+the page session's normal dispatch/render queue. This keeps `onRouteLeave`
+ordered with other route events even when the current JS handler is suspended at
+`await quickjsUiNavigation.push()`.
+
+Each `quickjsUiNavigation` object is bound to the page that received it. A page
+can only navigate while it is the current JSUI route entry, and only one
+navigation operation from that entry may be pending. Repeated calls from the
+same callback after a push/replace, or calls from a page that is no longer
+current, reject instead of growing the stack.
+
+```js
+async openChild(state, _payload, props) {
+  const result = await quickjsUiNavigation.push({
+    route: 'quickjs-ui.navigation.child',
+    path: './navigation_child_page.mjs',
+    params: { itemId: props.itemId }
+  });
+  return { ...state, result };
+}
+```
+
+Rollback note: the previous experimental behavior treated `await
+quickjsUiNavigation.push()` as "navigation accepted" and expected pages to read
+the returned route result from `onRouteResult`. That behavior is intentionally
+rolled back. `onRouteResult` remains as an observer-style lifecycle hook only.
+The old `quickjsUiHost.navigationIntent` capability is also not part of JSUI
+internal routing; use it only for app-defined host capabilities.
+
 ## Host controlled JSUI routing
 
 JSUI pages may open another JSUI page with a relative path:
