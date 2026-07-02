@@ -49,40 +49,12 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
 
   Future<void> _openDetail(BuildContext context) async {
     final registry = _routeRegistry(context);
-    final capabilities = QuickjsUiHostCapabilities(
-      groups: <QuickjsUiCapabilityGroup>[
-        QuickjsUiCapabilityGroup.system(
-          options: const QuickjsUiHostCapabilityOptions(
-            enabled: <QuickjsUiHostCapability>{
-              QuickjsUiHostCapability.navigation,
-            },
-          ),
-          handlers: QuickjsUiHostApiHandlers(
-            onNavigationIntent: QuickjsUiNavigator.navigationHandler(
-              context,
-              registry,
-            ),
-          ),
-        ),
-        QuickjsUiCapabilityGroup.functions(
-          name: 'quickjs_ui:navigation:route',
-          namespace: 'quickjs_ui.navigation',
-          globalName: 'quickjsUiNavigation',
-          functions: <String, Function>{
-            'pop': (Object? result) {
-              Navigator.of(context).pop(result);
-              return true;
-            },
-          },
-        ),
-      ],
-    );
     final result = await QuickjsUiNavigator.pushAsset(
       context,
       title: 'JSUI 详情',
       path: QuickjsUiNavigationPage.detailPath,
       initialProps: const <String, Object?>{'itemId': 42, 'title': '来自原生列表页'},
-      mounts: capabilities.mounts,
+      routeRegistry: registry,
     );
     if (!mounted) {
       return;

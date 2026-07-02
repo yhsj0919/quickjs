@@ -274,14 +274,68 @@ void main() {
 
     expect(find.text('JSUI 详情页'), findsOneWidget);
     expect(find.text('itemId: 42'), findsWidgets);
+    expect(find.text('detail count: 0'), findsOneWidget);
+    expect(find.text('详情计数 +1'), findsOneWidget);
+    expect(find.text('打开 JSUI 子页'), findsOneWidget);
     expect(find.text('打开原生设置页'), findsOneWidget);
     expect(find.text('打开未注册页面'), findsOneWidget);
 
+    await tester.tap(find.text('详情计数 +1'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('detail count: 1'));
+
+    await tester.tap(find.text('打开 JSUI 子页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('JSUI 子页'));
+
+    expect(find.text('JSUI 子页'), findsOneWidget);
+    expect(find.text('parent count: 1'), findsOneWidget);
+    expect(find.text('child local count: 11'), findsOneWidget);
+
+    await tester.tap(find.text('替换当前 JSUI 子页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('source: jsui-child-replaced'));
+
+    expect(find.text('JSUI 子页'), findsOneWidget);
+    expect(find.text('source: jsui-child-replaced'), findsOneWidget);
+    expect(find.text('parent count: 30'), findsOneWidget);
+    expect(find.text('child local count: 40'), findsOneWidget);
+
+    await tester.tap(find.text('子页计数 +1'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('child local count: 41'));
+
+    await tester.tap(find.text('返回 JSUI 详情页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('JSUI 详情页'));
+    await _pumpUntilFound(tester, find.textContaining('jsui-child'));
+
+    expect(find.text('detail count: 1'), findsOneWidget);
+    expect(find.textContaining('"from":"jsui-child"'), findsOneWidget);
+    expect(find.textContaining('"localCount":41'), findsOneWidget);
+
+    await tester.tap(find.text('打开 JSUI 子页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('JSUI 子页'));
+
+    await tester.pageBack();
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('JSUI 详情页'));
+
+    expect(find.text('JSUI 子页'), findsNothing);
+    expect(find.text('detail count: 1'), findsOneWidget);
+
     await tester.tap(find.text('打开未注册页面'));
     await tester.pump();
-    await _pumpUntilFound(tester, find.textContaining('missing route rejected'));
+    await _pumpUntilFound(
+      tester,
+      find.textContaining('missing route rejected'),
+    );
 
-    expect(find.textContaining('quickjs-ui.navigation.missing'), findsOneWidget);
+    expect(
+      find.textContaining('quickjs-ui.navigation.missing'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('打开原生设置页'));
     await tester.pump();

@@ -12,7 +12,7 @@
 - [ ] Flutter 默认只负责页面绘制：把 JS 返回的 UI schema 渲染为原生 Widget，并处理 layout、paint、
   input bridge 和生命周期挂接。
 - [ ] Flutter 不默认接管业务状态；除非宿主显式暴露 provider / host API，否则状态来源只在 JS 页面内。
-- [ ] JS 与 Flutter 可以互相调用，但必须通过显式注册的 host API、action handler、route registry 或
+- [ ] JS 与 Flutter 可以互相调用，但必须通过显式注册的 host API、action handler、原生 route registry 或
   `QuickjsHostMount`，不做隐式全局能力注入。
 - [ ] 双向调用只传递 structured value，不传递 Flutter Widget、Dart object handle、JS function handle
   或不可序列化对象。
@@ -253,18 +253,24 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 
 ### 原生页面与 JSUI 导航
 
-导航属于 `quickjs_ui` / 应用层集成能力，不进入 `quickjs` core。第一版使用显式 host API 和
-Flutter adapter 连接原生页面与 JSUI 页面。
+导航属于 `quickjs_ui` / 应用层集成能力，不进入 `quickjs` core。原生页面与 JSUI 页面互通使用显式 host API 和
+Flutter adapter；JSUI 页面之间的路由栈由 `quickjs_ui` 自己管理，宿主只参与权限、来源和边界策略判断。
 
-- [ ] `QuickjsUiNavigator`：封装 JSUI 页面 push/pop/replace，并接入 Flutter `Navigator`。
-- [ ] 原生 Flutter 页面 -> JSUI 页面：支持传入 `initialProps` / route params，例如
+- [x] `QuickjsUiNavigator`：封装原生 -> JSUI、JSUI -> 原生以及 JSUI -> JSUI 的 push/pop/replace，并接入 Flutter `Navigator`。
+- [x] 原生 Flutter 页面 -> JSUI 页面：支持传入 `initialProps` / route params，例如
   `QuickjsUiNavigator.pushAsset(context, 'assets/pages/detail.js', props: {'id': 1})`。
-- [ ] JSUI 页面 -> 原生 Flutter 页面：通过显式 action descriptor 或 host API 发起导航，例如
+- [x] JSUI 页面 -> 原生 Flutter 页面：通过显式 action descriptor 或 host API 发起导航，例如
   `{ action: 'native.push', route: 'settings', params: {...} }`。
-- [ ] JSUI 页面 -> JSUI 页面：支持按 asset/plugin route 跳转，并传递 JSON-compatible params。
-- [ ] 页面返回值：支持 `pop(result)`，result 走 structured value codec，可被原生页面或上一个 JSUI 页面接收。
-- [ ] route params 与 result 必须是 JSON-compatible / structured value，不传 Dart object、Widget、JS function handle。
-- [ ] 导航权限由应用层 route registry 控制；JSUI 不能任意打开未注册原生页面。
+- [x] JSUI 页面 -> JSUI 页面：由 `quickjsUiNavigation.push/replace/pop` 执行并传递 JSON-compatible params，支持按当前页面解析
+  `./` / `../` 相对路径；
+  新 JSUI 页面不需要由宿主逐个注册，宿主只校验是否允许本次跳转、目标资源是否可加载以及权限是否满足。
+- [x] 页面返回值：支持 `pop(result)`，result 走 structured value codec，可被原生页面或上一个 JSUI 页面接收。
+- [x] route params 与 result 必须是 JSON-compatible / structured value，不传 Dart object、Widget、JS function handle。
+- [x] JSUI router 默认保持被 push 页面状态；返回上一页时恢复原 state/schema，除非显式配置为重建或资源 reload。
+- [x] 导航权限由应用层原生 route registry 和 JSUI 跳转策略共同控制；JSUI 不能任意打开未注册原生页面，
+  也不能绕过宿主对 JSUI 资源来源、bundle 边界和 permissions 的限制。
+- [x] JSUI 支持消费系统返回事件：当 JSUI 内部路由栈不为空时，系统返回优先触发 JSUI `pop()`；
+  只有 JSUI router 未消费返回事件时，才继续交给 Flutter `Navigator` 处理。
 - [ ] 支持生命周期事件：页面进入/返回时向 JSUI 派发 `onRouteEnter`、`onRouteResult`、`onRouteLeave`
   或等价事件。
 
@@ -505,14 +511,19 @@ Flutter 风格对象写法：
 - [x] 实现 `QuickjsUiNavigator` 和 route registry。
 - [x] 原生 Flutter 页面 push JSUI 页面并传参。
 - [x] JSUI 页面请求打开原生 Flutter 页面并传参。
-- [ ] JSUI 页面 push 另一个 JSUI 页面并传参。
+- [x] JSUI 页面通过 `quickjsUiNavigation.push({ route, path, params })` push 另一个 JSUI 页面并传参，
+  支持通过 `./` / `../` 相对路径打开新页面；该跳转由 JSUI router 自主管理，
+  新页面不需要宿主 route registry 逐个注册，宿主只限制是否允许跳转和加载目标资源。
 - [x] 支持 `pop(result)` 和 route result 回传。
-- [x] JSUI 页面支持通过显式按钮返回原生页并传 structured result；系统返回箭头保留无参数返回。
+- [x] JSUI 页面支持通过显式按钮返回原生页并传 structured result；系统返回事件可被 JSUI 消费，
+  当 JSUI 内部路由栈不为空时优先触发 JSUI `pop()`，否则再回退到原生返回。
+- [x] 支持 JSUI router `replace({ route, path, params })` 替换当前页。
 - [ ] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场。
 - [ ] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`。
-- [ ] 支持页面 state snapshot，用于 route 返回、后台恢复和开发 reload 场景。
-- [x] example：原生列表页 -> JSUI 详情页 -> 原生设置页 -> 返回结果。
-- [x] 测试：params 传递、result 回传。
+- [x] 支持 JSUI 页面跳转状态保持：JSUI router 持有已 push 页面的 state/schema snapshot，用于 route 返回、
+  后台恢复和开发 reload 场景。
+- [x] example：原生列表页 -> JSUI 详情页 -> JSUI 子页 -> 原生设置页 -> 返回结果。
+- [x] 测试：params 传递、result 回传、JSUI 父页状态保持、系统返回优先 JSUI pop。
 - [x] 测试：未注册 route 拒绝。
 - [x] 测试：dispose 后 pending navigation 取消。
 

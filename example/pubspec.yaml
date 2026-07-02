@@ -63,6 +63,7 @@ flutter:
     - assets/quickjs_ui/controls_page.mjs
     - assets/quickjs_ui/diff_page.mjs
     - assets/quickjs_ui/host_capabilities_page.mjs
+    - assets/quickjs_ui/navigation_child_page.mjs
     - assets/quickjs_ui/navigation_detail_page.mjs
     - assets/quickjs_ui/permission_page.mjs
     - assets/quickjs_ui/profile_form_page.mjs

@@ -23,6 +23,9 @@ export function Page(page) {
         type === 'hide' ? page.onHide :
         type === 'pause' ? page.onPause :
         type === 'resume' ? page.onResume :
+        type === 'routeEnter' ? page.onRouteEnter :
+        type === 'routeLeave' ? page.onRouteLeave :
+        type === 'routeResult' ? page.onRouteResult :
         type === 'dispose' ? page.onDispose :
         undefined;
       if (typeof hook !== 'function') {
@@ -73,6 +76,9 @@ function pageMethods(page) {
     'onHide',
     'onPause',
     'onResume',
+    'onRouteEnter',
+    'onRouteLeave',
+    'onRouteResult',
     'onDispose',
     'methods'
   ]);
