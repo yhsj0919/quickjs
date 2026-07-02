@@ -1093,6 +1093,42 @@ export default Page({
     expect(find.text('Custom'), findsOneWidget);
   });
 
+  testWidgets('QuickjsUiView renders custom registry component', (
+    tester,
+  ) async {
+    final registry = QuickjsUiComponentRegistry.defaults()
+      ..register('Badge', (context, node) {
+        return DecoratedBox(
+          decoration: const BoxDecoration(color: Color(0xffeeeeee)),
+          child: context.child(node) ?? const SizedBox.shrink(),
+        );
+      });
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_custom_registry_view',
+      version: '0.4.0',
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  build() {
+    return {
+      type: 'Badge',
+      child: Text('Custom from view')
+    };
+  }
+});
+''',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiView.plugin(plugin, registry: registry)),
+    );
+    await _pumpUntilFound(tester, find.text('Custom from view'));
+
+    expect(find.byType(DecoratedBox), findsOneWidget);
+    expect(find.text('Custom from view'), findsOneWidget);
+  });
+
   test('renderer skips unchanged keyed nodes', () {
     final builds = <String, int>{};
     final registry = QuickjsUiComponentRegistry.defaults()
