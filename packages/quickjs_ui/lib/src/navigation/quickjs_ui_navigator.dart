@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
-import '../host/quickjs_ui_host_capabilities.dart';
 import '../resource/quickjs_ui_resource_resolver.dart';
 import '../runtime/quickjs_ui_controller.dart';
 import '../view/quickjs_ui_view.dart';
@@ -313,17 +312,15 @@ class _QuickjsUiRouter extends StatefulWidget {
 }
 
 class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
-  final List<_QuickjsUiRouterEntry> _stack = <_QuickjsUiRouterEntry>[];
+  late final _QuickjsUiRouteStack _routes;
 
   @override
   void initState() {
     super.initState();
-    _stack.add(
-      _QuickjsUiRouterEntry(
-        route: widget.root,
-        params: widget.initialProps,
-        onConsole: widget.onConsole,
-      ),
+    _routes = _QuickjsUiRouteStack(
+      root: widget.root,
+      initialProps: widget.initialProps,
+      onConsole: widget.onConsole,
     );
   }
 
@@ -333,26 +330,17 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     if (oldWidget.root.path != widget.root.path ||
         oldWidget.root.bundleRoot != widget.root.bundleRoot ||
         oldWidget.initialProps != widget.initialProps) {
-      for (final entry in _stack) {
-        entry.dispose();
-      }
-      _stack
-        ..clear()
-        ..add(
-          _QuickjsUiRouterEntry(
-            route: widget.root,
-            params: widget.initialProps,
-            onConsole: widget.onConsole,
-          ),
-        );
+      _routes.reset(
+        root: widget.root,
+        initialProps: widget.initialProps,
+        onConsole: widget.onConsole,
+      );
     }
   }
 
   @override
   void dispose() {
-    for (final entry in _stack) {
-      entry.dispose();
-    }
+    _routes.dispose();
     super.dispose();
   }
 
@@ -362,16 +350,16 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     // ignore: deprecated_member_use
     return WillPopScope(
       onWillPop: () async {
-        if (_stack.length <= 1) {
+        if (_routes.length <= 1) {
           return true;
         }
         await _popJsRoute(null, waitForRouteLeave: true);
         return false;
       },
       child: IndexedStack(
-        index: _stack.length - 1,
+        index: _routes.length - 1,
         children: <Widget>[
-          for (final entry in _stack)
+          for (final entry in _routes.entries)
             QuickjsUiView.asset(
               key: entry.key,
               path: entry.route.path,
@@ -393,156 +381,189 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     if (cached != null) {
       return cached;
     }
-    final capabilities = QuickjsUiHostCapabilities(
-      conflictPolicy: QuickjsUiCapabilityConflictPolicy.replace,
-      groups: <QuickjsUiCapabilityGroup>[
-        QuickjsUiCapabilityGroup.system(
-          options: const QuickjsUiHostCapabilityOptions(
-            enabled: <QuickjsUiHostCapability>{
-              QuickjsUiHostCapability.navigation,
-            },
-          ),
-          handlers: QuickjsUiHostApiHandlers(
-            onNavigationIntent: _handleNavigationIntent,
-          ),
-        ),
-        QuickjsUiCapabilityGroup.functions(
-          name: 'quickjs_ui:router',
-          namespace: 'quickjs_ui.navigation',
-          globalName: 'quickjsUiNavigation',
-          functions: <String, Function>{
-            'push': (Object? target, [Object? params]) {
-              return _handleNavigationIntent(_navigationIntent(target, params));
-            },
-            'replace': (Object? target, [Object? params]) {
-              return _handleNavigationIntent(
-                _navigationIntent(target, params),
-                replace: true,
-              );
-            },
-            'pop': (Object? result) => _popJsRoute(result),
-          },
-        ),
-      ],
-    );
     return entry.mounts = <QuickjsHostMount>[
       ...entry.route.mounts,
-      ...capabilities.mounts,
+      _navigationMountFor(entry),
     ];
   }
 
-  Future<Object?> _handleNavigationIntent(
-    Map<String, Object?> intent, {
+  QuickjsHostMount _navigationMountFor(_QuickjsUiRouterEntry source) {
+    return QuickjsHostMount(
+      name: 'quickjs_ui:router:${source.id}',
+      providers: <QuickjsHostProvider>[
+        QuickjsHostProvider.dart(
+          name: 'quickjs_ui.navigation.${source.id}.push',
+          debugName: 'quickjs_ui navigation push',
+          callback: (args, _) {
+            return _handleNavigationIntent(
+              source: source,
+              intent: _navigationIntent(
+                args.isEmpty ? null : args[0],
+                args.length > 1 ? args[1] : null,
+              ),
+            );
+          },
+        ),
+        QuickjsHostProvider.dart(
+          name: 'quickjs_ui.navigation.${source.id}.replace',
+          debugName: 'quickjs_ui navigation replace',
+          callback: (args, _) {
+            return _handleNavigationIntent(
+              source: source,
+              intent: _navigationIntent(
+                args.isEmpty ? null : args[0],
+                args.length > 1 ? args[1] : null,
+              ),
+              replace: true,
+            );
+          },
+        ),
+        QuickjsHostProvider.dart(
+          name: 'quickjs_ui.navigation.${source.id}.pop',
+          debugName: 'quickjs_ui navigation pop',
+          callback: (args, _) {
+            _ensureNavigationSource(source, 'pop');
+            return _popJsRoute(args.isEmpty ? null : args[0]);
+          },
+        ),
+      ],
+      environmentPatches: <QuickjsHostScript>[
+        QuickjsHostScript.js(
+          name: 'quickjs_ui:router:${source.id}:globals.js',
+          globals: const <String>['quickjsUiNavigation'],
+          source:
+              '''
+(() => {
+  const providers = globalThis.__quickjsHostProviders;
+  globalThis.quickjsUiNavigation = Object.freeze({
+    push(target, params) {
+      return providers['quickjs_ui.navigation.${source.id}.push'](target, params);
+    },
+    replace(target, params) {
+      return providers['quickjs_ui.navigation.${source.id}.replace'](target, params);
+    },
+    pop(result) {
+      return providers['quickjs_ui.navigation.${source.id}.pop'](result);
+    }
+  });
+})();
+''',
+        ),
+      ],
+    );
+  }
+
+  Future<Object?> _handleNavigationIntent({
+    required _QuickjsUiRouterEntry source,
+    required Map<String, Object?> intent,
     bool replace = false,
   }) async {
-    final routeName = _routeName(intent);
-    final params = _params(intent['params']);
-    final transition = _transitionFromIntent(intent['transition']);
-    final nativeBuilder = widget.registry.nativeRoutes[routeName];
-    if (nativeBuilder != null) {
-      final route = _quickjsUiRoute<Object?>(
-        settings: RouteSettings(name: routeName, arguments: params),
-        transition: transition,
-        builder: (context) => nativeBuilder(context, params),
-      );
-      if (replace) {
-        final routeLeave = _sendRouteLeave(
-          _stack.last,
-          to: routeName,
-          params: params,
-          action: 'replace',
+    _lockNavigationSource(source, replace ? 'replace' : 'push');
+    try {
+      final routeName = _routeName(intent);
+      final params = _params(intent['params']);
+      final transition = _transitionFromIntent(intent['transition']);
+      final nativeBuilder = widget.registry.nativeRoutes[routeName];
+      if (nativeBuilder != null) {
+        final route = _quickjsUiRoute<Object?>(
+          settings: RouteSettings(name: routeName, arguments: params),
+          transition: transition,
+          builder: (context) => nativeBuilder(context, params),
         );
-        scheduleMicrotask(() async {
-          await routeLeave;
-          if (mounted) {
-            unawaited(
-              Navigator.of(context).pushReplacement<Object?, Object?>(route),
-            );
-          }
-        });
-        return true;
-      }
-      final current = _stack.last;
-      _scheduleRouteLeave(
-        current,
-        to: routeName,
-        params: params,
-        action: 'push',
-      );
-      return Navigator.of(context).push<Object?>(route).then((result) {
+        if (replace) {
+          unawaited(
+            _sendRouteLeave(
+              source,
+              to: routeName,
+              params: params,
+              action: 'replace',
+            ),
+          );
+          unawaited(
+            Navigator.of(context).pushReplacement<Object?, Object?>(route),
+          );
+          return true;
+        }
+        unawaited(
+          _sendRouteLeave(
+            source,
+            to: routeName,
+            params: params,
+            action: 'push',
+          ),
+        );
+        final result = await Navigator.of(context).push<Object?>(route);
+        source.navigationLocked = false;
         _scheduleRouteResultAndEnter(
-          current,
+          source,
           from: routeName,
           result: result,
           action: 'push',
         );
         return result;
-      });
-    }
-
-    final jsRoute = _jsRoute(intent, routeName);
-    if (jsRoute != null) {
-      await _ensureJsRouteAllowed(
-        intent: intent,
-        route: jsRoute,
-        routeName: routeName,
-        params: params,
-        action: replace ? 'replace' : 'push',
-      );
-      if (replace) {
-        final routeLeave = _sendRouteLeave(
-          _stack.last,
-          to: _routeIdentity(jsRoute),
-          params: params,
-          action: 'replace',
-        );
-        scheduleMicrotask(() async {
-          await routeLeave;
-          if (mounted) {
-            _replaceJsRoute(jsRoute, params);
-          }
-        });
-        return true;
       }
-      return _pushJsRoute(jsRoute, params);
+
+      final jsRoute = _jsRoute(source, intent, routeName);
+      if (jsRoute != null) {
+        await _ensureJsRouteAllowed(
+          source: source,
+          intent: intent,
+          route: jsRoute,
+          routeName: routeName,
+          params: params,
+          action: replace ? 'replace' : 'push',
+        );
+        if (replace) {
+          unawaited(
+            _sendRouteLeave(
+              source,
+              to: _routeIdentity(jsRoute),
+              params: params,
+              action: 'replace',
+            ),
+          );
+          _replaceJsRoute(jsRoute, params);
+          return true;
+        }
+        unawaited(
+          _sendRouteLeave(
+            source,
+            to: _routeIdentity(jsRoute),
+            params: params,
+            action: 'push',
+          ),
+        );
+        return _pushJsRoute(source, jsRoute, params);
+      }
+      throw StateError('quickjs_ui route "$routeName" is not registered');
+    } catch (_) {
+      source.navigationLocked = false;
+      rethrow;
     }
-    throw StateError('quickjs_ui route "$routeName" is not registered');
   }
 
   Future<Object?> _pushJsRoute(
+    _QuickjsUiRouterEntry source,
     QuickjsUiAssetRoute route,
     Map<String, Object?> params,
   ) {
-    _scheduleRouteLeave(
-      _stack.last,
-      to: _routeIdentity(route),
-      params: params,
-      action: 'push',
-    );
-    final entry = _QuickjsUiRouterEntry(
+    assert(source.navigationLocked);
+    final result = _routes.push(
       route: route,
       params: params,
-      result: Completer<Object?>(),
       onConsole: widget.onConsole,
     );
     setState(() {
-      _stack.add(entry);
+      // The route stack is already mutated by _routes.push().
     });
-    return entry.result!.future;
+    return result;
   }
 
   bool _replaceJsRoute(QuickjsUiAssetRoute route, Map<String, Object?> params) {
-    final current = _stack.removeLast();
-    final entry = _QuickjsUiRouterEntry(
-      route: route,
-      params: params,
-      result: current.result,
-      onConsole: widget.onConsole,
-    );
+    _routes.replace(route: route, params: params, onConsole: widget.onConsole);
     setState(() {
-      _stack.add(entry);
+      // The route stack is already mutated by _routes.replace().
     });
-    current.dispose();
     return true;
   }
 
@@ -550,45 +571,75 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     Object? result, {
     bool waitForRouteLeave = false,
   }) async {
-    if (_stack.length <= 1) {
-      final root = _stack.last;
+    if (_routes.length <= 1) {
+      final root = _routes.top;
       final navigator = Navigator.of(context);
-      if (waitForRouteLeave) {
-        await _sendRouteLeave(
-          root,
-          to: 'native',
-          result: result,
-          action: 'pop',
+      final routeLeave = _sendRouteLeave(
+        root,
+        to: 'native',
+        result: result,
+        action: 'pop',
+      );
+      if (!waitForRouteLeave) {
+        unawaited(
+          routeLeave.whenComplete(() {
+            if (mounted) {
+              navigator.pop(result);
+            }
+          }),
         );
-      } else {
-        _scheduleRouteLeave(root, to: 'native', result: result, action: 'pop');
+        return true;
       }
+      await routeLeave;
       navigator.pop(result);
       return true;
     }
-    final entry = _stack.last;
-    final previous = _stack[_stack.length - 2];
+    final entry = _routes.top;
+    final previous = _routes.previous;
     final from = _entryRouteIdentity(entry);
-    late final Future<void> routeLeave;
-    if (waitForRouteLeave) {
-      routeLeave = _sendRouteLeave(
-        entry,
-        to: _entryRouteIdentity(previous),
-        result: result,
-        action: 'pop',
+    final routeLeave = _sendRouteLeave(
+      entry,
+      to: _entryRouteIdentity(previous),
+      result: result,
+      action: 'pop',
+    );
+    if (!waitForRouteLeave) {
+      unawaited(
+        routeLeave.whenComplete(() {
+          _finishJsRoutePop(
+            entry: entry,
+            previous: previous,
+            from: from,
+            result: result,
+          );
+        }),
       );
-      await routeLeave;
-    } else {
-      routeLeave = _sendRouteLeave(
-        entry,
-        to: _entryRouteIdentity(previous),
-        result: result,
-        action: 'pop',
-      );
+      return true;
     }
-    _stack.removeLast();
+    await routeLeave;
+    _finishJsRoutePop(
+      entry: entry,
+      previous: previous,
+      from: from,
+      result: result,
+    );
+    return true;
+  }
+
+  void _finishJsRoutePop({
+    required _QuickjsUiRouterEntry entry,
+    required _QuickjsUiRouterEntry previous,
+    required String from,
+    Object? result,
+  }) {
+    if (!mounted || _routes.isEmpty || !identical(_routes.top, entry)) {
+      entry.dispose();
+      return;
+    }
+    _routes.removeTop();
+    previous.navigationLocked = false;
     entry.complete(result);
-    unawaited(routeLeave.whenComplete(entry.dispose));
+    entry.dispose();
     if (mounted) {
       setState(() {});
     }
@@ -598,7 +649,6 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
       result: result,
       action: 'pop',
     );
-    return true;
   }
 
   void _routeEnter(
@@ -617,7 +667,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
       payload['from'] = from;
       payload['result'] = result;
     }
-    unawaited(entry.controller.lifecycle('routeEnter', payload: payload));
+    unawaited(entry.controller.routeLifecycle('routeEnter', payload: payload));
   }
 
   Future<void> _sendRouteLeave(
@@ -641,27 +691,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     if (action == 'pop') {
       payload['result'] = result;
     }
-    return entry.controller.lifecycle('routeLeave', payload: payload);
-  }
-
-  void _scheduleRouteLeave(
-    _QuickjsUiRouterEntry entry, {
-    required String to,
-    Map<String, Object?>? params,
-    Object? result,
-    required String action,
-  }) {
-    scheduleMicrotask(() {
-      unawaited(
-        _sendRouteLeave(
-          entry,
-          to: to,
-          params: params,
-          result: result,
-          action: action,
-        ),
-      );
-    });
+    return entry.controller.routeLifecycle('routeLeave', payload: payload);
   }
 
   void _scheduleRouteResultAndEnter(
@@ -670,11 +700,11 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     Object? result,
     required String action,
   }) {
-    scheduleMicrotask(() async {
+    unawaited(() async {
       if (!mounted || entry.controller.isDisposed) {
         return;
       }
-      await entry.controller.lifecycle(
+      await entry.controller.routeLifecycle(
         'routeResult',
         payload: <String, Object?>{
           'from': from,
@@ -684,10 +714,14 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
         },
       );
       _routeEnter(entry, from: from, result: result);
-    });
+    }());
   }
 
-  QuickjsUiAssetRoute? _jsRoute(Map<String, Object?> intent, String routeName) {
+  QuickjsUiAssetRoute? _jsRoute(
+    _QuickjsUiRouterEntry source,
+    Map<String, Object?> intent,
+    String routeName,
+  ) {
     final transition = _transitionFromIntent(intent['transition']);
     final registered = widget.registry.jsRoutes[routeName];
     if (registered != null) {
@@ -704,7 +738,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     }
     final path = intent['path'];
     if (path is String && path.isNotEmpty) {
-      final currentRoute = _stack.last.route;
+      final currentRoute = source.route;
       final bundleRoot = intent['bundleRoot'];
       final title = intent['title'];
       return QuickjsUiAssetRoute(
@@ -719,6 +753,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
   }
 
   Future<void> _ensureJsRouteAllowed({
+    required _QuickjsUiRouterEntry source,
     required Map<String, Object?> intent,
     required QuickjsUiAssetRoute route,
     required String routeName,
@@ -730,7 +765,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
       route: routeName,
       path: path is String ? path : null,
       resolvedPath: route.path,
-      from: _entryRouteIdentity(_stack.last),
+      from: _entryRouteIdentity(source),
       action: action,
       params: params,
       isRegistered: widget.registry.jsRoutes.containsKey(routeName),
@@ -742,6 +777,102 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
       );
     }
   }
+
+  void _ensureNavigationSource(_QuickjsUiRouterEntry source, String action) {
+    if (_routes.isEmpty || !identical(_routes.top, source)) {
+      throw StateError(
+        'quickjs_ui navigation.$action was ignored because the page is no longer current',
+      );
+    }
+    if (source.navigationLocked) {
+      throw StateError(
+        'quickjs_ui navigation.$action was ignored because another navigation is pending',
+      );
+    }
+  }
+
+  void _lockNavigationSource(_QuickjsUiRouterEntry source, String action) {
+    _ensureNavigationSource(source, action);
+    source.navigationLocked = true;
+  }
+}
+
+final class _QuickjsUiRouteStack {
+  _QuickjsUiRouteStack({
+    required QuickjsUiAssetRoute root,
+    required Map<String, Object?> initialProps,
+    QuickjsConsoleSink? onConsole,
+  }) {
+    reset(root: root, initialProps: initialProps, onConsole: onConsole);
+  }
+
+  final List<_QuickjsUiRouterEntry> _entries = <_QuickjsUiRouterEntry>[];
+
+  List<_QuickjsUiRouterEntry> get entries {
+    return List<_QuickjsUiRouterEntry>.unmodifiable(_entries);
+  }
+
+  int get length => _entries.length;
+  bool get isEmpty => _entries.isEmpty;
+  _QuickjsUiRouterEntry get top => _entries.last;
+  _QuickjsUiRouterEntry get previous => _entries[_entries.length - 2];
+
+  void reset({
+    required QuickjsUiAssetRoute root,
+    required Map<String, Object?> initialProps,
+    QuickjsConsoleSink? onConsole,
+  }) {
+    dispose();
+    _entries.add(
+      _QuickjsUiRouterEntry(
+        route: root,
+        params: initialProps,
+        onConsole: onConsole,
+      ),
+    );
+  }
+
+  Future<Object?> push({
+    required QuickjsUiAssetRoute route,
+    required Map<String, Object?> params,
+    QuickjsConsoleSink? onConsole,
+  }) {
+    final result = Completer<Object?>();
+    _entries.add(
+      _QuickjsUiRouterEntry(
+        route: route,
+        params: params,
+        result: result,
+        onConsole: onConsole,
+      ),
+    );
+    return result.future;
+  }
+
+  void replace({
+    required QuickjsUiAssetRoute route,
+    required Map<String, Object?> params,
+    QuickjsConsoleSink? onConsole,
+  }) {
+    final current = _entries.removeLast();
+    current.complete(null);
+    _entries.add(
+      _QuickjsUiRouterEntry(route: route, params: params, onConsole: onConsole),
+    );
+    current.dispose();
+  }
+
+  _QuickjsUiRouterEntry removeTop() {
+    return _entries.removeLast();
+  }
+
+  void dispose() {
+    for (final entry in _entries) {
+      entry.complete(null);
+      entry.dispose();
+    }
+    _entries.clear();
+  }
 }
 
 final class _QuickjsUiRouterEntry {
@@ -750,14 +881,17 @@ final class _QuickjsUiRouterEntry {
     required this.params,
     QuickjsConsoleSink? onConsole,
     this.result,
-  }) : controller = QuickjsUiController(onConsole: onConsole);
+  }) : id = _nextQuickjsUiRouterEntryId++,
+       controller = QuickjsUiController(onConsole: onConsole);
 
+  final int id;
   final QuickjsUiAssetRoute route;
   final Map<String, Object?> params;
   final Completer<Object?>? result;
   final QuickjsUiController controller;
   final GlobalKey key = GlobalKey();
   List<QuickjsHostMount>? mounts;
+  bool navigationLocked = false;
 
   void complete(Object? value) {
     if (result == null || result!.isCompleted) {
@@ -772,6 +906,8 @@ final class _QuickjsUiRouterEntry {
     }
   }
 }
+
+int _nextQuickjsUiRouterEntryId = 0;
 
 String _routeName(Map<String, Object?> intent) {
   final route = intent['route'];
