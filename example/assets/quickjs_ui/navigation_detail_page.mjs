@@ -16,6 +16,7 @@ export default Page({
 
   createState() {
     return {
+      count: 0,
       result: '等待原生页面返回'
     };
   },
@@ -31,6 +32,7 @@ export default Page({
         }),
         Text(`itemId: ${props.itemId ?? 'none'}`),
         Text(`title: ${props.title ?? 'none'}`),
+        Text(`detail count: ${state.count}`),
         Container({
           padding: 12,
           decoration: {
@@ -38,6 +40,14 @@ export default Page({
             borderRadius: 8
           },
           child: Text(`route result: ${state.result}`)
+        }),
+        ElevatedButton({
+          child: Text('详情计数 +1'),
+          onPressed: page.increment()
+        }),
+        ElevatedButton({
+          child: Text('打开 JSUI 子页'),
+          onPressed: page.openJsuiChild()
         }),
         ElevatedButton({
           child: Text('打开原生设置页'),
@@ -56,7 +66,7 @@ export default Page({
   },
 
   async openNativeSettings(state, _payload, props) {
-    const result = await quickjsUiHost.navigationIntent({
+    const result = await quickjsUiNavigation.push({
       route: 'quickjs-ui.navigation.settings',
       params: {
         source: 'jsui-detail',
@@ -70,9 +80,32 @@ export default Page({
     };
   },
 
+  increment(state) {
+    return {
+      ...state,
+      count: state.count + 1
+    };
+  },
+
+  async openJsuiChild(state, _payload, props) {
+    const result = await quickjsUiNavigation.push({
+      route: 'quickjs-ui.navigation.child',
+      path: './navigation_child_page.mjs',
+      params: {
+        source: 'jsui-detail',
+        itemId: props.itemId,
+        count: state.count
+      }
+    });
+    return {
+      ...state,
+      result: describe(result)
+    };
+  },
+
   async openMissingRoute(state) {
     try {
-      await quickjsUiHost.navigationIntent({
+      await quickjsUiNavigation.push({
         route: 'quickjs-ui.navigation.missing',
         params: { source: 'jsui-detail' }
       });

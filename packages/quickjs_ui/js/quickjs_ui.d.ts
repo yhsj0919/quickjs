@@ -44,6 +44,9 @@ export type QuickjsUiReservedPageKeys =
   | 'onHide'
   | 'onPause'
   | 'onResume'
+  | 'onRouteEnter'
+  | 'onRouteLeave'
+  | 'onRouteResult'
   | 'onDispose'
   | 'methods';
 
@@ -60,6 +63,9 @@ export type QuickjsUiLifecycleType =
   | 'hide'
   | 'pause'
   | 'resume'
+  | 'routeEnter'
+  | 'routeLeave'
+  | 'routeResult'
   | 'dispose';
 
 export type QuickjsUiLifecycleEvent = {
@@ -98,6 +104,9 @@ export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> 
   onHide?: QuickjsUiLifecycleHook<State, Props>;
   onPause?: QuickjsUiLifecycleHook<State, Props>;
   onResume?: QuickjsUiLifecycleHook<State, Props>;
+  onRouteEnter?: QuickjsUiLifecycleHook<State, Props>;
+  onRouteLeave?: QuickjsUiLifecycleHook<State, Props>;
+  onRouteResult?: QuickjsUiLifecycleHook<State, Props>;
   onDispose?: QuickjsUiLifecycleHook<State, Props>;
   [key: string]: unknown;
 };
@@ -428,6 +437,28 @@ export type QuickjsUiHostApi = {
   nativeCall?: (method: string, payload?: JsonValue) => Promise<JsonValue>;
 };
 
+export type QuickjsUiNavigationTarget =
+  | string
+  | {
+      route?: string;
+      path?: string;
+      params?: Record<string, JsonValue>;
+      [key: string]: JsonValue | undefined;
+    };
+
+export type QuickjsUiNavigationApi = {
+  push?: (
+    target: QuickjsUiNavigationTarget,
+    params?: Record<string, JsonValue>
+  ) => Promise<JsonValue>;
+  replace?: (
+    target: QuickjsUiNavigationTarget,
+    params?: Record<string, JsonValue>
+  ) => Promise<boolean>;
+  pop?: (result?: JsonValue) => boolean;
+};
+
 declare global {
   var quickjsUiHost: QuickjsUiHostApi | undefined;
+  var quickjsUiNavigation: QuickjsUiNavigationApi | undefined;
 }
