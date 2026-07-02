@@ -6,6 +6,7 @@ class QuickjsUiNavigationPage extends StatefulWidget {
 
   static const String detailPath =
       'assets/quickjs_ui/navigation_detail_page.mjs';
+  static const String childPath = 'assets/quickjs_ui/navigation_child_page.mjs';
 
   @override
   State<QuickjsUiNavigationPage> createState() =>
@@ -14,6 +15,8 @@ class QuickjsUiNavigationPage extends StatefulWidget {
 
 class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
   String _result = '等待 JSUI 页面返回';
+  String _policyLog = '等待 JSUI 内部跳转请求';
+  final Set<String> _trustedJsuiPaths = <String>{};
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +29,27 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
           const SizedBox(height: 8),
           const Text(
             '此页验证原生 Flutter -> JSUI -> 原生 Flutter -> route result 回传。',
+          ),
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('JSUI 内部跳转策略'),
+                  const SizedBox(height: 6),
+                  Text(_policyLog),
+                  const SizedBox(height: 6),
+                  Text(
+                    _trustedJsuiPaths.isEmpty
+                        ? '尚未记住任何页面授权'
+                        : '已始终允许：${_trustedJsuiPaths.join(', ')}',
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           ListTile(
@@ -48,13 +72,20 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
   }
 
   Future<void> _openDetail(BuildContext context) async {
-    final registry = _routeRegistry(context);
     final result = await QuickjsUiNavigator.pushAsset(
       context,
       title: 'JSUI 详情',
       path: QuickjsUiNavigationPage.detailPath,
       initialProps: const <String, Object?>{'itemId': 42, 'title': '来自原生列表页'},
-      routeRegistry: registry,
+      transition: const QuickjsUiRouteTransition.fade(
+        duration: Duration(milliseconds: 180),
+      ),
+      onConsole: (event) {
+        debugPrint(
+          '[quickjs_ui navigation console.${event.level.name}] ${event.text}',
+        );
+      },
+      routeRegistry: _routeRegistry(),
     );
     if (!mounted) {
       return;
@@ -63,16 +94,87 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
       _result = '$result';
     });
   }
+
+  QuickjsUiRouteRegistry _routeRegistry() {
+    return QuickjsUiRouteRegistry(
+      nativeRoutes: <String, QuickjsUiNativeRouteBuilder>{
+        'quickjs-ui.navigation.settings': (context, params) =>
+            _NativeSettingsPage(params: params),
+      },
+      jsRoutePolicy: QuickjsUiJsRoutePolicy(
+        allowedPaths: const <String>{QuickjsUiNavigationPage.childPath},
+        onRequest: _handleJsRouteRequest,
+      ),
+    );
+  }
+
+  Future<bool> _handleJsRouteRequest(QuickjsUiJsRouteRequest request) async {
+    if (_trustedJsuiPaths.contains(request.resolvedPath)) {
+      final message =
+          '已记住并允许 ${request.action}: '
+          '${request.resolvedPath} <- ${request.from}';
+      debugPrint('[quickjs_ui navigation policy] $message');
+      if (mounted) {
+        setState(() {
+          _policyLog = message;
+        });
+      }
+      return true;
+    }
+
+    final decision = await showDialog<_JsuiRouteDecision>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('允许 JSUI 内部跳转？'),
+          content: Text(
+            '来源：${request.from}\n'
+            '目标：${request.resolvedPath}\n'
+            '动作：${request.action}',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(_JsuiRouteDecision.deny),
+              child: const Text('禁止'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(_JsuiRouteDecision.allowOnce),
+              child: const Text('仅本次允许'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(_JsuiRouteDecision.allowPath),
+              child: const Text('始终允许此页面'),
+            ),
+          ],
+        );
+      },
+    );
+    final allowed =
+        decision == _JsuiRouteDecision.allowOnce ||
+        decision == _JsuiRouteDecision.allowPath;
+    if (decision == _JsuiRouteDecision.allowPath && mounted) {
+      setState(() {
+        _trustedJsuiPaths.add(request.resolvedPath);
+      });
+    }
+    final message =
+        '${allowed ? '允许' : '拒绝'} ${request.action}: '
+        '${request.resolvedPath} <- ${request.from}'
+        '${decision == _JsuiRouteDecision.allowPath ? '（已记住）' : ''}';
+    debugPrint('[quickjs_ui navigation policy] $message');
+    if (mounted) {
+      setState(() {
+        _policyLog = message;
+      });
+    }
+    return allowed;
+  }
 }
 
-QuickjsUiRouteRegistry _routeRegistry(BuildContext context) {
-  return QuickjsUiRouteRegistry(
-    nativeRoutes: <String, QuickjsUiNativeRouteBuilder>{
-      'quickjs-ui.navigation.settings': (context, params) =>
-          _NativeSettingsPage(params: params),
-    },
-  );
-}
+enum _JsuiRouteDecision { deny, allowOnce, allowPath }
 
 class _NativeSettingsPage extends StatelessWidget {
   const _NativeSettingsPage({required this.params});

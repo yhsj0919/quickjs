@@ -381,11 +381,15 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       return;
     }
     _reportedFirstRender = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        widget.onFirstRender?.call();
-        unawaited(_controller.lifecycle('mount'));
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        return;
       }
+      await _controller.lifecycle('mount');
+      if (!mounted) {
+        return;
+      }
+      widget.onFirstRender?.call();
     });
   }
 

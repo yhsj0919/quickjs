@@ -514,18 +514,23 @@ Flutter 风格对象写法：
 - [x] JSUI 页面通过 `quickjsUiNavigation.push({ route, path, params })` push 另一个 JSUI 页面并传参，
   支持通过 `./` / `../` 相对路径打开新页面；该跳转由 JSUI router 自主管理，
   新页面不需要宿主 route registry 逐个注册，宿主只限制是否允许跳转和加载目标资源。
+- [x] JSUI 内部跳转支持宿主策略：可预设 route/path allowlist，也可通过实时回调提醒宿主并决定允许或拒绝。
 - [x] 支持 `pop(result)` 和 route result 回传。
 - [x] JSUI 页面支持通过显式按钮返回原生页并传 structured result；系统返回事件可被 JSUI 消费，
   当 JSUI 内部路由栈不为空时优先触发 JSUI `pop()`，否则再回退到原生返回。
 - [x] 支持 JSUI router `replace({ route, path, params })` 替换当前页。
-- [ ] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场。
-- [ ] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`。
+- [x] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场；JSUI 内部 router
+  动画并入 0.4 可见性生命周期与动画能力处理。
+- [x] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`。
 - [x] 支持 JSUI 页面跳转状态保持：JSUI router 持有已 push 页面的 state/schema snapshot，用于 route 返回、
   后台恢复和开发 reload 场景。
 - [x] example：原生列表页 -> JSUI 详情页 -> JSUI 子页 -> 原生设置页 -> 返回结果。
 - [x] 测试：params 传递、result 回传、JSUI 父页状态保持、系统返回优先 JSUI pop。
 - [x] 测试：未注册 route 拒绝。
 - [x] 测试：dispose 后 pending navigation 取消。
+- [x] 测试：JSUI route policy allowlist / guard、transition intent 到 Flutter route 映射。
+- [x] 0.3.1 收尾：导航互通、宿主策略、route lifecycle、Flutter route transition、示例页和文档已同步；
+  JSUI 内部 router 动画顺延到 0.4。
 
 ### 0.4：组件化
 
@@ -533,6 +538,8 @@ Flutter 风格对象写法：
 - [ ] JS 侧轻量组件约定：组件仍返回 UI schema，不直接返回 Widget。
 - [ ] 支持 props 下发和事件上抛的受限协议。
 - [ ] 支持完整页面可见性生命周期：`onShow`、`onHide`、`onMount`、`onDispose`。
+- [ ] JSUI router 内部 push / replace / pop 支持 animated transition，同时保留已 push 页面
+  state/schema snapshot，并与 `onShow` / `onHide` 顺序对齐。
 - [ ] 支持滚动控制和常用手势：`onScroll`、`scrollTo`、longPress、drag/swipe 的受限事件模型。
 - [ ] 支持事件节流/合并策略，避免 scroll/drag/text composing 高频跨边界调用。
 - [ ] 支持基础隐式动画和列表 item enter/exit/reorder 过渡。

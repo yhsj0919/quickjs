@@ -451,5 +451,5 @@ flutter run -d chrome
 - `native/`：C FFI bridge。
 - `assets/web/`：Web Worker、WASM bridge 与 quickjs-wasi 资源。
 - `third_party/quickjs`：QuickJS 源码。
-- `docs/`：补充设计与生命周期文档。
+- `docs/`：补充设计与生命周期文档，包括 quickjs_ui 导航与宿主策略。
 - `example/`：手动 smoke test app 与 example 页面。

@@ -11,6 +11,11 @@ function describe(value) {
   }
 }
 
+function logLifecycle(hook, payload) {
+  const message = `${hook}: ${describe(payload)}`;
+  console.log(`[quickjs_ui route lifecycle] detail ${message}`);
+}
+
 export default Page({
   name: 'quickjs-ui-navigation-detail',
 
@@ -68,6 +73,12 @@ export default Page({
   async openNativeSettings(state, _payload, props) {
     const result = await quickjsUiNavigation.push({
       route: 'quickjs-ui.navigation.settings',
+      transition: {
+        type: 'slide',
+        from: 'right',
+        durationMs: 220,
+        curve: 'easeOutCubic'
+      },
       params: {
         source: 'jsui-detail',
         itemId: props.itemId,
@@ -88,19 +99,26 @@ export default Page({
   },
 
   async openJsuiChild(state, _payload, props) {
-    const result = await quickjsUiNavigation.push({
-      route: 'quickjs-ui.navigation.child',
-      path: './navigation_child_page.mjs',
-      params: {
-        source: 'jsui-detail',
-        itemId: props.itemId,
-        count: state.count
-      }
-    });
-    return {
-      ...state,
-      result: describe(result)
-    };
+    try {
+      const result = await quickjsUiNavigation.push({
+        route: 'quickjs-ui.navigation.child',
+        path: './navigation_child_page.mjs',
+        params: {
+          source: 'jsui-detail',
+          itemId: props.itemId,
+          count: state.count
+        }
+      });
+      return {
+        ...state,
+        result: describe(result)
+      };
+    } catch (error) {
+      return {
+        ...state,
+        result: `jsui child rejected: ${error?.message ?? String(error)}`
+      };
+    }
   },
 
   async openMissingRoute(state) {
@@ -119,6 +137,18 @@ export default Page({
         result: `missing route rejected: ${error?.message ?? String(error)}`
       };
     }
+  },
+
+  onRouteEnter(state, payload) {
+    logLifecycle('onRouteEnter', payload);
+  },
+
+  onRouteLeave(state, payload) {
+    logLifecycle('onRouteLeave', payload);
+  },
+
+  onRouteResult(state, payload) {
+    logLifecycle('onRouteResult', payload);
   },
 
   popToNativeList(state, _payload, props) {

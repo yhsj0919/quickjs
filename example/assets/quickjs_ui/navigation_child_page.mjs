@@ -1,5 +1,21 @@
 import { Column, Container, ElevatedButton, Page, Text } from 'quickjs_ui';
 
+function describe(value) {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return String(value);
+  }
+}
+
+function logLifecycle(hook, payload) {
+  const message = `${hook}: ${describe(payload)}`;
+  console.log(`[quickjs_ui route lifecycle] child ${message}`);
+}
+
 export default Page({
   name: 'quickjs-ui-navigation-child',
 
@@ -63,6 +79,18 @@ export default Page({
       }
     });
     return state;
+  },
+
+  onRouteEnter(state, payload) {
+    logLifecycle('onRouteEnter', payload);
+  },
+
+  onRouteLeave(state, payload) {
+    logLifecycle('onRouteLeave', payload);
+  },
+
+  onRouteResult(state, payload) {
+    logLifecycle('onRouteResult', payload);
   },
 
   popToDetail(state, _payload, props) {
