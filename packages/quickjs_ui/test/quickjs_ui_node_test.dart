@@ -1424,6 +1424,71 @@ export default Page({
     expect(controller.state, <String, Object?>{'count': 0});
   });
 
+  test('cancels pending navigation provider after dispose', () async {
+    final invoked = Completer<QuickjsHostProviderContext>();
+    final capabilities = QuickjsUiHostCapabilities(
+      groups: <QuickjsUiCapabilityGroup>[
+        QuickjsUiCapabilityGroup.methods(
+          name: 'quickjs_ui:test:navigation',
+          namespace: 'quickjs_ui.host',
+          globalName: 'quickjsUiHost',
+          methods: <QuickjsUiHostMethod>[
+            QuickjsUiHostMethod(
+              name: 'navigationIntent',
+              permission: 'navigation',
+              callback: (_, context) async {
+                invoked.complete(context);
+                await context.cancelled;
+                context.throwIfCancelled();
+                return <String, Object?>{'unexpected': true};
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+    final controller = QuickjsUiController();
+
+    await controller.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_pending_navigation',
+        version: '0.3.1',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { status: 'idle' };
+  },
+  build(state) {
+    return Text(state.status);
+  },
+  async openRoute(state) {
+    await quickjsUiHost.navigationIntent({
+      route: 'quickjs-ui.pending',
+      params: { source: 'test' }
+    });
+    return { ...state, status: 'returned' };
+  }
+});
+''',
+      ),
+      mounts: capabilities.mounts,
+    );
+
+    final dispatch = controller.dispatch(<String, Object?>{
+      'action': 'openRoute',
+    });
+    final context = await invoked.future.timeout(const Duration(seconds: 2));
+
+    controller.dispose();
+    await context.cancelled.timeout(const Duration(seconds: 2));
+    await dispatch;
+
+    expect(context.isCancelled, isTrue);
+    expect(context.cancellationReason, isA<JsRuntimeClosedException>());
+  });
+
   test('controller refresh, restart and reload use distinct paths', () async {
     final engine = await Quickjs.create();
     final controller = QuickjsUiController(engine: engine);

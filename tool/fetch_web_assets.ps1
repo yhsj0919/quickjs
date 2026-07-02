@@ -4,7 +4,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$')]
-    [string]$Version = "3.0.1",
+    [string]$Version = "3.0.2",
 
     [ValidatePattern('^https?://')]
     [string]$RegistryBaseUrl = "https://unpkg.com"
