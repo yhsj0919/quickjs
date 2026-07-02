@@ -9,6 +9,7 @@ import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_navigation_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
@@ -257,6 +258,52 @@ void main() {
       find.textContaining('权限拦截：QuickjsUiPermissionException'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('runs quickjs_ui native and JSUI navigation page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiNavigationPage()));
+
+    expect(find.text('QuickJS UI 页面互通'), findsOneWidget);
+    expect(find.text('打开 JSUI 详情页'), findsOneWidget);
+
+    await tester.tap(find.text('打开 JSUI 详情页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('JSUI 详情页'));
+
+    expect(find.text('JSUI 详情页'), findsOneWidget);
+    expect(find.text('itemId: 42'), findsWidgets);
+    expect(find.text('打开原生设置页'), findsOneWidget);
+    expect(find.text('打开未注册页面'), findsOneWidget);
+
+    await tester.tap(find.text('打开未注册页面'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.textContaining('missing route rejected'));
+
+    expect(find.textContaining('quickjs-ui.navigation.missing'), findsOneWidget);
+
+    await tester.tap(find.text('打开原生设置页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.text('原生设置页'));
+
+    expect(find.text('此页由 JSUI navigationIntent 打开。'), findsOneWidget);
+    expect(find.textContaining('itemId: 42'), findsWidgets);
+
+    await tester.tap(find.text('保存并返回结果'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.textContaining('"saved":true'));
+
+    expect(find.textContaining('"saved":true'), findsOneWidget);
+    expect(find.textContaining('"source":"jsui-detail"'), findsOneWidget);
+
+    await tester.tap(find.text('返回原生列表页'));
+    await tester.pump();
+    await _pumpUntilFound(tester, find.textContaining('from'));
+
+    expect(find.text('QuickJS UI 页面互通'), findsOneWidget);
+    expect(find.textContaining('from: jsui-detail'), findsOneWidget);
+    expect(find.textContaining('itemId: 42'), findsWidgets);
   });
 
   testWidgets('registers core example pages', (WidgetTester tester) async {

@@ -5,6 +5,7 @@ import 'pages/quickjs_ui_controls_page.dart';
 import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_host_capabilities_page.dart';
+import 'pages/quickjs_ui_navigation_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui_profile_form_page.dart';
@@ -67,5 +68,10 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     title: 'QuickJS UI 权限策略',
     description: '单独测试页面声明 permissions、unrestricted 策略和 restricted 授权拦截。',
     builder: (_) => const QuickjsUiPermissionPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 页面互通',
+    description: '测试原生 Flutter 页面、JSUI 页面、原生设置页之间的参数和结果回传。',
+    builder: (_) => const QuickjsUiNavigationPage(),
   ),
 ];

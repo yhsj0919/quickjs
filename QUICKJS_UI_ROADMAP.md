@@ -502,16 +502,19 @@ Flutter 风格对象写法：
 
 ### 0.3.1：原生 / JSUI 页面互通
 
-- [ ] 实现 `QuickjsUiNavigator` 和 route registry。
-- [ ] 原生 Flutter 页面 push JSUI 页面并传参。
-- [ ] JSUI 页面请求打开原生 Flutter 页面并传参。
+- [x] 实现 `QuickjsUiNavigator` 和 route registry。
+- [x] 原生 Flutter 页面 push JSUI 页面并传参。
+- [x] JSUI 页面请求打开原生 Flutter 页面并传参。
 - [ ] JSUI 页面 push 另一个 JSUI 页面并传参。
-- [ ] 支持 `pop(result)` 和 route result 回传。
+- [x] 支持 `pop(result)` 和 route result 回传。
+- [x] JSUI 页面支持通过显式按钮返回原生页并传 structured result；系统返回箭头保留无参数返回。
 - [ ] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场。
 - [ ] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`。
 - [ ] 支持页面 state snapshot，用于 route 返回、后台恢复和开发 reload 场景。
-- [ ] example：原生列表页 -> JSUI 详情页 -> 原生设置页 -> 返回结果。
-- [ ] 测试：params 传递、result 回传、未注册 route 拒绝、dispose 后 pending navigation 取消。
+- [x] example：原生列表页 -> JSUI 详情页 -> 原生设置页 -> 返回结果。
+- [x] 测试：params 传递、result 回传。
+- [x] 测试：未注册 route 拒绝。
+- [x] 测试：dispose 后 pending navigation 取消。
 
 ### 0.4：组件化
 

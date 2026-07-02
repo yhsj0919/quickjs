@@ -27,6 +27,7 @@ final class QuickjsUiSession {
   bool _ownsEngine = false;
   bool _disposed = false;
   bool _disposeLifecycleSent = false;
+  int _activeCalls = 0;
 
   Quickjs? get engine => _engine;
   QuickjsPlugin? get plugin => _plugin;
@@ -102,7 +103,7 @@ final class QuickjsUiSession {
 
   Future<void> dispatch(Map<String, Object?> event) async {
     _ensureActive();
-    final nextState = await _requireClient().call('dispatch', <Object?>[
+    final nextState = await _clientCall('dispatch', <Object?>[
       _state,
       event,
       _props,
@@ -152,7 +153,7 @@ final class QuickjsUiSession {
     if (payload != null) {
       event['payload'] = payload;
     }
-    final nextState = await _requireClient().call('lifecycle', <Object?>[
+    final nextState = await _clientCall('lifecycle', <Object?>[
       _state,
       event,
       _props,
@@ -170,10 +171,7 @@ final class QuickjsUiSession {
 
   Future<void> refresh() async {
     _ensureActive();
-    final rendered = await _requireClient().call('render', <Object?>[
-      _state,
-      _props,
-    ]);
+    final rendered = await _clientCall('render', <Object?>[_state, _props]);
     if (_disposed) {
       return;
     }
@@ -216,7 +214,10 @@ final class QuickjsUiSession {
     final plugin = _plugin;
     final engine = _engine;
     final ownsEngine = _ownsEngine;
-    final disposeLifecycle = _sendDisposeLifecycle(client, plugin);
+    final hasActiveCalls = _activeCalls > 0;
+    final disposeLifecycle = hasActiveCalls
+        ? Future<void>.value()
+        : _sendDisposeLifecycle(client, plugin);
     _disposed = true;
     _client = null;
     _engine = null;
@@ -244,13 +245,11 @@ final class QuickjsUiSession {
       return;
     }
     _disposeLifecycleSent = true;
-    await client
-        .call('lifecycle', <Object?>[
-          _state,
-          const <String, Object?>{'type': 'dispose'},
-          _props,
-        ])
-        .catchError((_) => null);
+    await _clientCallWith(client, 'lifecycle', <Object?>[
+      _state,
+      const <String, Object?>{'type': 'dispose'},
+      _props,
+    ]).catchError((_) => null);
   }
 
   QuickjsPluginClient _requireClient() {
@@ -259,6 +258,23 @@ final class QuickjsUiSession {
       throw StateError('QuickjsUiSession has no loaded page');
     }
     return client;
+  }
+
+  Future<Object?> _clientCall(String name, List<Object?> args) {
+    return _clientCallWith(_requireClient(), name, args);
+  }
+
+  Future<Object?> _clientCallWith(
+    QuickjsPluginClient client,
+    String name,
+    List<Object?> args,
+  ) async {
+    _activeCalls += 1;
+    try {
+      return await client.call(name, args);
+    } finally {
+      _activeCalls -= 1;
+    }
   }
 
   void _ensureActive() {
