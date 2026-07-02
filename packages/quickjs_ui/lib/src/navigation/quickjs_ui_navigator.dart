@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../resource/quickjs_ui_resource_resolver.dart';
+import '../renderer/quickjs_ui_component_registry.dart';
 import '../runtime/quickjs_ui_controller.dart';
 import '../view/quickjs_ui_view.dart';
 
@@ -176,6 +177,7 @@ final class QuickjsUiNavigator {
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
     QuickjsUiRouteTransition? transition,
+    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     QuickjsUiRouteRegistry? routeRegistry,
   }) {
@@ -190,6 +192,7 @@ final class QuickjsUiNavigator {
           initialProps: initialProps,
           mounts: mounts,
           transition: transition,
+          registry: registry,
           onConsole: onConsole,
           routeRegistry: routeRegistry,
         ),
@@ -201,6 +204,7 @@ final class QuickjsUiNavigator {
     BuildContext context, {
     required QuickjsUiRouteRegistry registry,
     required Map<String, Object?> intent,
+    QuickjsUiComponentRegistry? rendererRegistry,
   }) {
     final route = _routeName(intent);
     final params = _params(intent['params']);
@@ -225,6 +229,7 @@ final class QuickjsUiNavigator {
         initialProps: params,
         mounts: jsRoute.mounts,
         transition: transition ?? jsRoute.transition,
+        registry: rendererRegistry,
         routeRegistry: registry,
       );
     }
@@ -232,8 +237,17 @@ final class QuickjsUiNavigator {
   }
 
   static Future<Object?> Function(Map<String, Object?> intent)
-  navigationHandler(BuildContext context, QuickjsUiRouteRegistry registry) {
-    return (intent) => pushIntent(context, registry: registry, intent: intent);
+  navigationHandler(
+    BuildContext context,
+    QuickjsUiRouteRegistry registry, {
+    QuickjsUiComponentRegistry? rendererRegistry,
+  }) {
+    return (intent) => pushIntent(
+      context,
+      registry: registry,
+      intent: intent,
+      rendererRegistry: rendererRegistry,
+    );
   }
 }
 
@@ -245,6 +259,7 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
     this.bundleRoot,
     this.title,
     this.transition,
+    this.registry,
     this.onConsole,
     this.routeRegistry,
   });
@@ -255,18 +270,20 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
   final Map<String, Object?> initialProps;
   final List<QuickjsHostMount> mounts;
   final QuickjsUiRouteTransition? transition;
+  final QuickjsUiComponentRegistry? registry;
   final QuickjsConsoleSink? onConsole;
   final QuickjsUiRouteRegistry? routeRegistry;
 
   @override
   Widget build(BuildContext context) {
-    final registry = routeRegistry;
-    final content = registry == null
+    final routeRegistry = this.routeRegistry;
+    final content = routeRegistry == null
         ? QuickjsUiView.asset(
             path: path,
             bundleRoot: bundleRoot,
             initialProps: initialProps,
             mounts: mounts,
+            registry: registry,
             onConsole: onConsole,
             loadingBuilder: (_) =>
                 const Center(child: CircularProgressIndicator()),
@@ -280,7 +297,8 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
               transition: transition,
             ),
             initialProps: initialProps,
-            registry: registry,
+            registry: routeRegistry,
+            rendererRegistry: this.registry,
             onConsole: onConsole,
           );
     final routeTitle = title;
@@ -299,12 +317,14 @@ class _QuickjsUiRouter extends StatefulWidget {
     required this.root,
     required this.initialProps,
     required this.registry,
+    this.rendererRegistry,
     this.onConsole,
   });
 
   final QuickjsUiAssetRoute root;
   final Map<String, Object?> initialProps;
   final QuickjsUiRouteRegistry registry;
+  final QuickjsUiComponentRegistry? rendererRegistry;
   final QuickjsConsoleSink? onConsole;
 
   @override
@@ -367,6 +387,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
               initialProps: entry.params,
               mounts: _mountsFor(entry),
               controller: entry.controller,
+              registry: widget.rendererRegistry,
               loadingBuilder: (_) =>
                   const Center(child: CircularProgressIndicator()),
               onFirstRender: () => _routeEnter(entry),

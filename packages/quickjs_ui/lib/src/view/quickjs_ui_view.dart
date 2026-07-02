@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../host/quickjs_ui_permission_policy.dart';
+import '../renderer/quickjs_ui_component_registry.dart';
 import '../renderer/quickjs_ui_renderer.dart';
 import '../resource/quickjs_ui_bundle.dart';
 import '../resource/quickjs_ui_network_loader.dart';
@@ -29,6 +30,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.permissionPolicy,
     this.onConsole,
     this.controller,
+    this.registry,
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
@@ -52,6 +54,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -69,6 +72,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -86,6 +90,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -104,6 +109,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -121,6 +127,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -139,6 +146,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -158,6 +166,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -179,6 +188,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -203,6 +213,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.permissionPolicy,
     this.onConsole,
     this.controller,
+    this.registry,
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
@@ -223,6 +234,7 @@ final class QuickjsUiView extends StatefulWidget {
   final QuickjsUiPermissionPolicy? permissionPolicy;
   final QuickjsConsoleSink? onConsole;
   final QuickjsUiController? controller;
+  final QuickjsUiComponentRegistry? registry;
   final Widget? placeholder;
   final QuickjsUiLoadingBuilder? loadingBuilder;
   final QuickjsUiErrorBuilder? errorBuilder;
@@ -250,7 +262,10 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
     _ownsController = widget.controller == null;
     _controller.addListener(_handleControllerChanged);
-    _renderer = QuickjsUiRenderer(onEvent: _controller.dispatch);
+    _renderer = QuickjsUiRenderer(
+      registry: widget.registry,
+      onEvent: _controller.dispatch,
+    );
     _load();
   }
 
@@ -266,7 +281,15 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
-      _renderer = QuickjsUiRenderer(onEvent: _controller.dispatch);
+      _renderer = QuickjsUiRenderer(
+        registry: widget.registry,
+        onEvent: _controller.dispatch,
+      );
+    } else if (oldWidget.registry != widget.registry) {
+      _renderer = QuickjsUiRenderer(
+        registry: widget.registry,
+        onEvent: _controller.dispatch,
+      );
     }
     if (oldWidget.plugin != widget.plugin ||
         oldWidget._path != widget._path ||
