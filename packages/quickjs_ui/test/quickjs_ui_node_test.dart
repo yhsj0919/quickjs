@@ -16,6 +16,16 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   }
 }
 
+final class _RouteCaptureObserver extends NavigatorObserver {
+  final List<Route<dynamic>> pushed = <Route<dynamic>>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route);
+    super.didPush(route, previousRoute);
+  }
+}
+
 void main() {
   test('parses serializable ui nodes', () {
     final node = QuickjsUiNode.fromMap(<String, Object?>{
@@ -303,6 +313,15 @@ export default Page({
   onResume(state) {
     return append(state, 'resume');
   },
+  onRouteEnter(state, payload) {
+    return append(state, `enter:\${payload.route}`);
+  },
+  onRouteLeave(state, payload) {
+    return append(state, `leave:\${payload.to}`);
+  },
+  onRouteResult(state, payload) {
+    return append(state, `result:\${payload.from}:\${payload.result.value}`);
+  },
   async onDispose(state) {
     await quickjsUiTest.disposed();
     return state;
@@ -315,13 +334,34 @@ export default Page({
     await controller.lifecycle('mount');
     await controller.lifecycle('pause');
     await controller.lifecycle('resume');
+    await controller.lifecycle(
+      'routeEnter',
+      payload: const <String, Object?>{'route': 'detail'},
+    );
+    await controller.lifecycle(
+      'routeLeave',
+      payload: const <String, Object?>{'to': 'child'},
+    );
+    await controller.lifecycle(
+      'routeResult',
+      payload: const <String, Object?>{
+        'from': 'child',
+        'result': <String, Object?>{'value': 'ok'},
+      },
+    );
 
     expect((controller.state! as Map)['events'], <Object?>[
       'mount',
       'pause',
       'resume',
+      'enter:detail',
+      'leave:child',
+      'result:child:ok',
     ]);
-    expect(controller.node?.props['data'], 'mount|pause|resume');
+    expect(
+      controller.node?.props['data'],
+      'mount|pause|resume|enter:detail|leave:child|result:child:ok',
+    );
 
     controller.dispose();
     await disposed.future.timeout(const Duration(seconds: 2));
@@ -1487,6 +1527,95 @@ export default Page({
 
     expect(context.isCancelled, isTrue);
     expect(context.cancellationReason, isA<JsRuntimeClosedException>());
+  });
+
+  testWidgets('maps navigation transition intent to Flutter route', (
+    WidgetTester tester,
+  ) async {
+    final observer = _RouteCaptureObserver();
+    final registry = QuickjsUiRouteRegistry(
+      nativeRoutes: <String, QuickjsUiNativeRouteBuilder>{
+        'native.detail': (context, params) =>
+            const Scaffold(body: Text('native detail')),
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorObservers: <NavigatorObserver>[observer],
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () {
+                unawaited(
+                  QuickjsUiNavigator.pushIntent(
+                    context,
+                    registry: registry,
+                    intent: const <String, Object?>{
+                      'route': 'native.detail',
+                      'transition': <String, Object?>{
+                        'type': 'fade',
+                        'durationMs': 120,
+                        'curve': 'easeOut',
+                      },
+                    },
+                  ),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    observer.pushed.clear();
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+
+    expect(observer.pushed, hasLength(1));
+    expect(observer.pushed.single, isA<PageRouteBuilder<Object?>>());
+    expect(observer.pushed.single.settings.name, 'native.detail');
+  });
+
+  test('applies JSUI route policy allowlist and guard', () async {
+    final requests = <QuickjsUiJsRouteRequest>[];
+    var allowFromGuard = true;
+    final policy = QuickjsUiJsRoutePolicy(
+      allowedPaths: const <String>{'assets/quickjs_ui/allowed_page.mjs'},
+      onRequest: (request) {
+        requests.add(request);
+        return allowFromGuard;
+      },
+    );
+    const allowedRequest = QuickjsUiJsRouteRequest(
+      route: 'quickjs-ui.allowed',
+      path: './allowed_page.mjs',
+      resolvedPath: 'assets/quickjs_ui/allowed_page.mjs',
+      from: 'assets/quickjs_ui/main.mjs',
+      action: 'push',
+      params: <String, Object?>{'id': 1},
+      isRegistered: false,
+    );
+    const deniedByAllowlist = QuickjsUiJsRouteRequest(
+      route: 'quickjs-ui.denied',
+      path: './denied_page.mjs',
+      resolvedPath: 'assets/quickjs_ui/denied_page.mjs',
+      from: 'assets/quickjs_ui/main.mjs',
+      action: 'push',
+      params: <String, Object?>{},
+      isRegistered: false,
+    );
+
+    expect(await policy.allows(allowedRequest), isTrue);
+    expect(requests, <QuickjsUiJsRouteRequest>[allowedRequest]);
+
+    expect(await policy.allows(deniedByAllowlist), isFalse);
+    expect(requests, <QuickjsUiJsRouteRequest>[allowedRequest]);
+
+    allowFromGuard = false;
+    expect(await policy.allows(allowedRequest), isFalse);
+    expect(requests, <QuickjsUiJsRouteRequest>[allowedRequest, allowedRequest]);
   });
 
   test('controller refresh, restart and reload use distinct paths', () async {

@@ -11,14 +11,139 @@ import '../view/quickjs_ui_view.dart';
 typedef QuickjsUiNativeRouteBuilder =
     Widget Function(BuildContext context, Map<String, Object?> params);
 
+typedef QuickjsUiJsRouteGuard =
+    FutureOr<bool> Function(QuickjsUiJsRouteRequest request);
+
+enum QuickjsUiRouteTransitionKind { material, none, fade, slide, scale }
+
+final class QuickjsUiRouteTransition {
+  const QuickjsUiRouteTransition({
+    required this.kind,
+    this.duration = const Duration(milliseconds: 300),
+    this.reverseDuration,
+    this.curve = Curves.easeInOut,
+    this.beginOffset = const Offset(1, 0),
+    this.beginScale = 0.92,
+  });
+
+  const QuickjsUiRouteTransition.material()
+    : this(kind: QuickjsUiRouteTransitionKind.material);
+
+  const QuickjsUiRouteTransition.none()
+    : this(
+        kind: QuickjsUiRouteTransitionKind.none,
+        duration: Duration.zero,
+        reverseDuration: Duration.zero,
+        curve: Curves.linear,
+      );
+
+  const QuickjsUiRouteTransition.fade({
+    Duration duration = const Duration(milliseconds: 220),
+    Duration? reverseDuration,
+    Curve curve = Curves.easeInOut,
+  }) : this(
+         kind: QuickjsUiRouteTransitionKind.fade,
+         duration: duration,
+         reverseDuration: reverseDuration,
+         curve: curve,
+       );
+
+  const QuickjsUiRouteTransition.slide({
+    Duration duration = const Duration(milliseconds: 260),
+    Duration? reverseDuration,
+    Curve curve = Curves.easeOutCubic,
+    Offset beginOffset = const Offset(1, 0),
+  }) : this(
+         kind: QuickjsUiRouteTransitionKind.slide,
+         duration: duration,
+         reverseDuration: reverseDuration,
+         curve: curve,
+         beginOffset: beginOffset,
+       );
+
+  const QuickjsUiRouteTransition.scale({
+    Duration duration = const Duration(milliseconds: 220),
+    Duration? reverseDuration,
+    Curve curve = Curves.easeOutCubic,
+    double beginScale = 0.92,
+  }) : this(
+         kind: QuickjsUiRouteTransitionKind.scale,
+         duration: duration,
+         reverseDuration: reverseDuration,
+         curve: curve,
+         beginScale: beginScale,
+       );
+
+  final QuickjsUiRouteTransitionKind kind;
+  final Duration duration;
+  final Duration? reverseDuration;
+  final Curve curve;
+  final Offset beginOffset;
+  final double beginScale;
+}
+
+final class QuickjsUiJsRouteRequest {
+  const QuickjsUiJsRouteRequest({
+    required this.route,
+    required this.path,
+    required this.resolvedPath,
+    required this.from,
+    required this.action,
+    required this.params,
+    required this.isRegistered,
+  });
+
+  final String route;
+  final String? path;
+  final String resolvedPath;
+  final String from;
+  final String action;
+  final Map<String, Object?> params;
+  final bool isRegistered;
+}
+
+final class QuickjsUiJsRoutePolicy {
+  const QuickjsUiJsRoutePolicy({
+    this.allowedRoutes = const <String>{},
+    this.allowedPaths = const <String>{},
+    this.onRequest,
+  });
+
+  final Set<String> allowedRoutes;
+  final Set<String> allowedPaths;
+  final QuickjsUiJsRouteGuard? onRequest;
+
+  Future<bool> allows(QuickjsUiJsRouteRequest request) async {
+    if (!_matchesStaticRules(request)) {
+      return false;
+    }
+    final guard = onRequest;
+    if (guard == null) {
+      return true;
+    }
+    return guard(request);
+  }
+
+  bool _matchesStaticRules(QuickjsUiJsRouteRequest request) {
+    if (allowedRoutes.isEmpty && allowedPaths.isEmpty) {
+      return true;
+    }
+    return allowedRoutes.contains(request.route) ||
+        allowedPaths.contains(request.resolvedPath) ||
+        (request.path != null && allowedPaths.contains(request.path));
+  }
+}
+
 final class QuickjsUiRouteRegistry {
   const QuickjsUiRouteRegistry({
     this.nativeRoutes = const <String, QuickjsUiNativeRouteBuilder>{},
     this.jsRoutes = const <String, QuickjsUiAssetRoute>{},
+    this.jsRoutePolicy = const QuickjsUiJsRoutePolicy(),
   });
 
   final Map<String, QuickjsUiNativeRouteBuilder> nativeRoutes;
   final Map<String, QuickjsUiAssetRoute> jsRoutes;
+  final QuickjsUiJsRoutePolicy jsRoutePolicy;
 
   bool contains(String route) {
     return nativeRoutes.containsKey(route) || jsRoutes.containsKey(route);
@@ -31,12 +156,14 @@ final class QuickjsUiAssetRoute {
     this.bundleRoot,
     this.title,
     this.mounts = const <QuickjsHostMount>[],
+    this.transition,
   });
 
   final String path;
   final String? bundleRoot;
   final String? title;
   final List<QuickjsHostMount> mounts;
+  final QuickjsUiRouteTransition? transition;
 }
 
 final class QuickjsUiNavigator {
@@ -49,17 +176,22 @@ final class QuickjsUiNavigator {
     String? title,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    QuickjsUiRouteTransition? transition,
+    QuickjsConsoleSink? onConsole,
     QuickjsUiRouteRegistry? routeRegistry,
   }) {
     return Navigator.of(context).push<Object?>(
-      MaterialPageRoute<Object?>(
+      _quickjsUiRoute<Object?>(
         settings: RouteSettings(name: title ?? path, arguments: initialProps),
+        transition: transition,
         builder: (context) => _QuickjsUiAssetRoutePage(
           title: title,
           path: path,
           bundleRoot: bundleRoot,
           initialProps: initialProps,
           mounts: mounts,
+          transition: transition,
+          onConsole: onConsole,
           routeRegistry: routeRegistry,
         ),
       ),
@@ -73,11 +205,13 @@ final class QuickjsUiNavigator {
   }) {
     final route = _routeName(intent);
     final params = _params(intent['params']);
+    final transition = _transitionFromIntent(intent['transition']);
     final nativeBuilder = registry.nativeRoutes[route];
     if (nativeBuilder != null) {
       return Navigator.of(context).push<Object?>(
-        MaterialPageRoute<Object?>(
+        _quickjsUiRoute<Object?>(
           settings: RouteSettings(name: route, arguments: params),
+          transition: transition,
           builder: (context) => nativeBuilder(context, params),
         ),
       );
@@ -91,6 +225,7 @@ final class QuickjsUiNavigator {
         title: jsRoute.title ?? route,
         initialProps: params,
         mounts: jsRoute.mounts,
+        transition: transition ?? jsRoute.transition,
         routeRegistry: registry,
       );
     }
@@ -110,6 +245,8 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
     required this.mounts,
     this.bundleRoot,
     this.title,
+    this.transition,
+    this.onConsole,
     this.routeRegistry,
   });
 
@@ -118,6 +255,8 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
   final String? title;
   final Map<String, Object?> initialProps;
   final List<QuickjsHostMount> mounts;
+  final QuickjsUiRouteTransition? transition;
+  final QuickjsConsoleSink? onConsole;
   final QuickjsUiRouteRegistry? routeRegistry;
 
   @override
@@ -129,6 +268,7 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
             bundleRoot: bundleRoot,
             initialProps: initialProps,
             mounts: mounts,
+            onConsole: onConsole,
             loadingBuilder: (_) =>
                 const Center(child: CircularProgressIndicator()),
           )
@@ -138,9 +278,11 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
               bundleRoot: bundleRoot,
               title: title,
               mounts: mounts,
+              transition: transition,
             ),
             initialProps: initialProps,
             registry: registry,
+            onConsole: onConsole,
           );
     final routeTitle = title;
     if (routeTitle == null) {
@@ -158,11 +300,13 @@ class _QuickjsUiRouter extends StatefulWidget {
     required this.root,
     required this.initialProps,
     required this.registry,
+    this.onConsole,
   });
 
   final QuickjsUiAssetRoute root;
   final Map<String, Object?> initialProps;
   final QuickjsUiRouteRegistry registry;
+  final QuickjsConsoleSink? onConsole;
 
   @override
   State<_QuickjsUiRouter> createState() => _QuickjsUiRouterState();
@@ -175,7 +319,11 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
   void initState() {
     super.initState();
     _stack.add(
-      _QuickjsUiRouterEntry(route: widget.root, params: widget.initialProps),
+      _QuickjsUiRouterEntry(
+        route: widget.root,
+        params: widget.initialProps,
+        onConsole: widget.onConsole,
+      ),
     );
   }
 
@@ -194,6 +342,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
           _QuickjsUiRouterEntry(
             route: widget.root,
             params: widget.initialProps,
+            onConsole: widget.onConsole,
           ),
         );
     }
@@ -216,7 +365,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
         if (_stack.length <= 1) {
           return true;
         }
-        _popJsRoute(null);
+        await _popJsRoute(null, waitForRouteLeave: true);
         return false;
       },
       child: IndexedStack(
@@ -232,6 +381,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
               controller: entry.controller,
               loadingBuilder: (_) =>
                   const Center(child: CircularProgressIndicator()),
+              onFirstRender: () => _routeEnter(entry),
             ),
         ],
       ),
@@ -284,37 +434,75 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
   Future<Object?> _handleNavigationIntent(
     Map<String, Object?> intent, {
     bool replace = false,
-  }) {
+  }) async {
     final routeName = _routeName(intent);
     final params = _params(intent['params']);
+    final transition = _transitionFromIntent(intent['transition']);
     final nativeBuilder = widget.registry.nativeRoutes[routeName];
     if (nativeBuilder != null) {
-      final route = MaterialPageRoute<Object?>(
+      final route = _quickjsUiRoute<Object?>(
         settings: RouteSettings(name: routeName, arguments: params),
+        transition: transition,
         builder: (context) => nativeBuilder(context, params),
       );
       if (replace) {
-        scheduleMicrotask(() {
+        final routeLeave = _sendRouteLeave(
+          _stack.last,
+          to: routeName,
+          params: params,
+          action: 'replace',
+        );
+        scheduleMicrotask(() async {
+          await routeLeave;
           if (mounted) {
             unawaited(
               Navigator.of(context).pushReplacement<Object?, Object?>(route),
             );
           }
         });
-        return Future<Object?>.value(true);
+        return true;
       }
-      return Navigator.of(context).push<Object?>(route);
+      final current = _stack.last;
+      _scheduleRouteLeave(
+        current,
+        to: routeName,
+        params: params,
+        action: 'push',
+      );
+      return Navigator.of(context).push<Object?>(route).then((result) {
+        _scheduleRouteResultAndEnter(
+          current,
+          from: routeName,
+          result: result,
+          action: 'push',
+        );
+        return result;
+      });
     }
 
     final jsRoute = _jsRoute(intent, routeName);
     if (jsRoute != null) {
+      await _ensureJsRouteAllowed(
+        intent: intent,
+        route: jsRoute,
+        routeName: routeName,
+        params: params,
+        action: replace ? 'replace' : 'push',
+      );
       if (replace) {
-        scheduleMicrotask(() {
+        final routeLeave = _sendRouteLeave(
+          _stack.last,
+          to: _routeIdentity(jsRoute),
+          params: params,
+          action: 'replace',
+        );
+        scheduleMicrotask(() async {
+          await routeLeave;
           if (mounted) {
             _replaceJsRoute(jsRoute, params);
           }
         });
-        return Future<Object?>.value(true);
+        return true;
       }
       return _pushJsRoute(jsRoute, params);
     }
@@ -325,10 +513,17 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     QuickjsUiAssetRoute route,
     Map<String, Object?> params,
   ) {
+    _scheduleRouteLeave(
+      _stack.last,
+      to: _routeIdentity(route),
+      params: params,
+      action: 'push',
+    );
     final entry = _QuickjsUiRouterEntry(
       route: route,
       params: params,
       result: Completer<Object?>(),
+      onConsole: widget.onConsole,
     );
     setState(() {
       _stack.add(entry);
@@ -342,6 +537,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
       route: route,
       params: params,
       result: current.result,
+      onConsole: widget.onConsole,
     );
     setState(() {
       _stack.add(entry);
@@ -350,24 +546,161 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     return true;
   }
 
-  bool _popJsRoute(Object? result) {
+  Future<bool> _popJsRoute(
+    Object? result, {
+    bool waitForRouteLeave = false,
+  }) async {
     if (_stack.length <= 1) {
-      Navigator.of(context).pop(result);
+      final root = _stack.last;
+      final navigator = Navigator.of(context);
+      if (waitForRouteLeave) {
+        await _sendRouteLeave(
+          root,
+          to: 'native',
+          result: result,
+          action: 'pop',
+        );
+      } else {
+        _scheduleRouteLeave(root, to: 'native', result: result, action: 'pop');
+      }
+      navigator.pop(result);
       return true;
     }
-    final entry = _stack.removeLast();
+    final entry = _stack.last;
+    final previous = _stack[_stack.length - 2];
+    final from = _entryRouteIdentity(entry);
+    late final Future<void> routeLeave;
+    if (waitForRouteLeave) {
+      routeLeave = _sendRouteLeave(
+        entry,
+        to: _entryRouteIdentity(previous),
+        result: result,
+        action: 'pop',
+      );
+      await routeLeave;
+    } else {
+      routeLeave = _sendRouteLeave(
+        entry,
+        to: _entryRouteIdentity(previous),
+        result: result,
+        action: 'pop',
+      );
+    }
+    _stack.removeLast();
     entry.complete(result);
-    entry.dispose();
+    unawaited(routeLeave.whenComplete(entry.dispose));
     if (mounted) {
       setState(() {});
     }
+    _scheduleRouteResultAndEnter(
+      previous,
+      from: from,
+      result: result,
+      action: 'pop',
+    );
     return true;
   }
 
+  void _routeEnter(
+    _QuickjsUiRouterEntry entry, {
+    String? from,
+    Object? result,
+  }) {
+    if (!mounted || entry.controller.isDisposed) {
+      return;
+    }
+    final payload = <String, Object?>{
+      'route': _entryRouteIdentity(entry),
+      'params': entry.params,
+    };
+    if (from != null) {
+      payload['from'] = from;
+      payload['result'] = result;
+    }
+    unawaited(entry.controller.lifecycle('routeEnter', payload: payload));
+  }
+
+  Future<void> _sendRouteLeave(
+    _QuickjsUiRouterEntry entry, {
+    required String to,
+    Map<String, Object?>? params,
+    Object? result,
+    required String action,
+  }) {
+    if (!mounted || entry.controller.isDisposed) {
+      return Future<void>.value();
+    }
+    final payload = <String, Object?>{
+      'from': _entryRouteIdentity(entry),
+      'to': to,
+      'action': action,
+    };
+    if (params != null) {
+      payload['params'] = params;
+    }
+    if (action == 'pop') {
+      payload['result'] = result;
+    }
+    return entry.controller.lifecycle('routeLeave', payload: payload);
+  }
+
+  void _scheduleRouteLeave(
+    _QuickjsUiRouterEntry entry, {
+    required String to,
+    Map<String, Object?>? params,
+    Object? result,
+    required String action,
+  }) {
+    scheduleMicrotask(() {
+      unawaited(
+        _sendRouteLeave(
+          entry,
+          to: to,
+          params: params,
+          result: result,
+          action: action,
+        ),
+      );
+    });
+  }
+
+  void _scheduleRouteResultAndEnter(
+    _QuickjsUiRouterEntry entry, {
+    required String from,
+    Object? result,
+    required String action,
+  }) {
+    scheduleMicrotask(() async {
+      if (!mounted || entry.controller.isDisposed) {
+        return;
+      }
+      await entry.controller.lifecycle(
+        'routeResult',
+        payload: <String, Object?>{
+          'from': from,
+          'route': _entryRouteIdentity(entry),
+          'action': action,
+          'result': result,
+        },
+      );
+      _routeEnter(entry, from: from, result: result);
+    });
+  }
+
   QuickjsUiAssetRoute? _jsRoute(Map<String, Object?> intent, String routeName) {
+    final transition = _transitionFromIntent(intent['transition']);
     final registered = widget.registry.jsRoutes[routeName];
     if (registered != null) {
-      return registered;
+      if (transition == null) {
+        return registered;
+      }
+      return QuickjsUiAssetRoute(
+        path: registered.path,
+        bundleRoot: registered.bundleRoot,
+        title: registered.title,
+        mounts: registered.mounts,
+        transition: transition,
+      );
     }
     final path = intent['path'];
     if (path is String && path.isNotEmpty) {
@@ -379,9 +712,35 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
         bundleRoot: bundleRoot is String ? bundleRoot : currentRoute.bundleRoot,
         title: title is String ? title : null,
         mounts: currentRoute.mounts,
+        transition: transition,
       );
     }
     return null;
+  }
+
+  Future<void> _ensureJsRouteAllowed({
+    required Map<String, Object?> intent,
+    required QuickjsUiAssetRoute route,
+    required String routeName,
+    required Map<String, Object?> params,
+    required String action,
+  }) async {
+    final path = intent['path'];
+    final request = QuickjsUiJsRouteRequest(
+      route: routeName,
+      path: path is String ? path : null,
+      resolvedPath: route.path,
+      from: _entryRouteIdentity(_stack.last),
+      action: action,
+      params: params,
+      isRegistered: widget.registry.jsRoutes.containsKey(routeName),
+    );
+    final allowed = await widget.registry.jsRoutePolicy.allows(request);
+    if (!allowed) {
+      throw StateError(
+        'quickjs_ui JS route "$routeName" was rejected by host policy',
+      );
+    }
   }
 }
 
@@ -389,13 +748,14 @@ final class _QuickjsUiRouterEntry {
   _QuickjsUiRouterEntry({
     required this.route,
     required this.params,
+    QuickjsConsoleSink? onConsole,
     this.result,
-  });
+  }) : controller = QuickjsUiController(onConsole: onConsole);
 
   final QuickjsUiAssetRoute route;
   final Map<String, Object?> params;
   final Completer<Object?>? result;
-  final QuickjsUiController controller = QuickjsUiController();
+  final QuickjsUiController controller;
   final GlobalKey key = GlobalKey();
   List<QuickjsHostMount>? mounts;
 
@@ -447,6 +807,192 @@ Map<String, Object?> _navigationIntent(Object? target, Object? params) {
   );
 }
 
+PageRoute<T> _quickjsUiRoute<T>({
+  required RouteSettings settings,
+  required WidgetBuilder builder,
+  QuickjsUiRouteTransition? transition,
+}) {
+  if (transition == null ||
+      transition.kind == QuickjsUiRouteTransitionKind.material) {
+    return MaterialPageRoute<T>(settings: settings, builder: builder);
+  }
+  return PageRouteBuilder<T>(
+    settings: settings,
+    transitionDuration: transition.duration,
+    reverseTransitionDuration:
+        transition.reverseDuration ?? transition.duration,
+    pageBuilder: (context, _, _) => builder(context),
+    transitionsBuilder: (context, animation, _, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: transition.curve,
+        reverseCurve: transition.curve,
+      );
+      switch (transition.kind) {
+        case QuickjsUiRouteTransitionKind.material:
+          return child;
+        case QuickjsUiRouteTransitionKind.none:
+          return child;
+        case QuickjsUiRouteTransitionKind.fade:
+          return FadeTransition(opacity: curved, child: child);
+        case QuickjsUiRouteTransitionKind.slide:
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: transition.beginOffset,
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          );
+        case QuickjsUiRouteTransitionKind.scale:
+          return ScaleTransition(
+            scale: Tween<double>(
+              begin: transition.beginScale,
+              end: 1,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+      }
+    },
+  );
+}
+
+QuickjsUiRouteTransition? _transitionFromIntent(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is QuickjsUiRouteTransition) {
+    return value;
+  }
+  if (value is String) {
+    return _transitionFromMap(<String, Object?>{'type': value});
+  }
+  if (value is! Map) {
+    throw ArgumentError('quickjs_ui navigation transition must be an object');
+  }
+  return _transitionFromMap(
+    value.map((key, value) => MapEntry<String, Object?>('$key', value)),
+  );
+}
+
+QuickjsUiRouteTransition _transitionFromMap(Map<String, Object?> value) {
+  final type = value['type'] ?? value['kind'];
+  if (type is! String || type.isEmpty) {
+    throw ArgumentError('quickjs_ui navigation transition "type" is required');
+  }
+  final duration = _durationFromMs(value['durationMs'] ?? value['duration']);
+  final reverseDuration = _durationFromMs(value['reverseDurationMs']);
+  final curve = _curveFromName(value['curve']);
+  switch (type) {
+    case 'material':
+      return const QuickjsUiRouteTransition.material();
+    case 'none':
+      return const QuickjsUiRouteTransition.none();
+    case 'fade':
+      return QuickjsUiRouteTransition.fade(
+        duration: duration ?? const Duration(milliseconds: 220),
+        reverseDuration: reverseDuration,
+        curve: curve,
+      );
+    case 'slide':
+      return QuickjsUiRouteTransition.slide(
+        duration: duration ?? const Duration(milliseconds: 260),
+        reverseDuration: reverseDuration,
+        curve: curve,
+        beginOffset: _transitionBeginOffset(value),
+      );
+    case 'scale':
+      return QuickjsUiRouteTransition.scale(
+        duration: duration ?? const Duration(milliseconds: 220),
+        reverseDuration: reverseDuration,
+        curve: curve,
+        beginScale: _transitionBeginScale(value['beginScale']),
+      );
+  }
+  throw ArgumentError('Unsupported quickjs_ui transition type "$type"');
+}
+
+Duration? _durationFromMs(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is! num || value < 0) {
+    throw ArgumentError('quickjs_ui transition duration must be >= 0');
+  }
+  return Duration(milliseconds: value.round());
+}
+
+Curve _curveFromName(Object? value) {
+  if (value == null) {
+    return Curves.easeInOut;
+  }
+  if (value is! String) {
+    throw ArgumentError('quickjs_ui transition curve must be a string');
+  }
+  switch (value) {
+    case 'linear':
+      return Curves.linear;
+    case 'easeIn':
+      return Curves.easeIn;
+    case 'easeOut':
+      return Curves.easeOut;
+    case 'easeInOut':
+      return Curves.easeInOut;
+    case 'fastOutSlowIn':
+      return Curves.fastOutSlowIn;
+    case 'easeOutCubic':
+      return Curves.easeOutCubic;
+  }
+  throw ArgumentError('Unsupported quickjs_ui transition curve "$value"');
+}
+
+Offset _transitionBeginOffset(Map<String, Object?> value) {
+  final offset = value['beginOffset'];
+  if (offset is Map) {
+    final dx = offset['dx'];
+    final dy = offset['dy'];
+    if (dx is num && dy is num) {
+      return Offset(dx.toDouble(), dy.toDouble());
+    }
+    throw ArgumentError(
+      'quickjs_ui transition beginOffset must include numeric dx and dy',
+    );
+  }
+  final from = value['from'] ?? value['direction'];
+  if (from == null) {
+    return const Offset(1, 0);
+  }
+  if (from is! String) {
+    throw ArgumentError('quickjs_ui transition from must be a string');
+  }
+  switch (from) {
+    case 'right':
+    case 'rightToLeft':
+      return const Offset(1, 0);
+    case 'left':
+    case 'leftToRight':
+      return const Offset(-1, 0);
+    case 'top':
+    case 'up':
+    case 'topToBottom':
+      return const Offset(0, -1);
+    case 'bottom':
+    case 'down':
+    case 'bottomToTop':
+      return const Offset(0, 1);
+  }
+  throw ArgumentError('Unsupported quickjs_ui transition from "$from"');
+}
+
+double _transitionBeginScale(Object? value) {
+  if (value == null) {
+    return 0.92;
+  }
+  if (value is! num || value <= 0) {
+    throw ArgumentError('quickjs_ui transition beginScale must be > 0');
+  }
+  return value.toDouble();
+}
+
 String _resolveJsRoutePath(String path, {required String from}) {
   if (!path.startsWith('./') && !path.startsWith('../')) {
     return path;
@@ -462,4 +1008,12 @@ Map<String, Object?> _params(Object? value) {
     throw ArgumentError('quickjs_ui navigation params must be an object');
   }
   return value.map((key, value) => MapEntry<String, Object?>('$key', value));
+}
+
+String _entryRouteIdentity(_QuickjsUiRouterEntry entry) {
+  return _routeIdentity(entry.route);
+}
+
+String _routeIdentity(QuickjsUiAssetRoute route) {
+  return route.title ?? route.path;
 }

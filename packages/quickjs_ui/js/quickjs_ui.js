@@ -29,9 +29,10 @@ export function Page(page) {
         type === 'dispose' ? page.onDispose :
         undefined;
       if (typeof hook !== 'function') {
-        return state;
+        return null;
       }
-      return hook(state, event?.payload, props, event);
+      const result = hook(state, event?.payload, props, event);
+      return result === undefined ? null : result;
     }
   };
   if (!page.dispatch) {
