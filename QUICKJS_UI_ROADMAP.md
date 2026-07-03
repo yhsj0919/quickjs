@@ -543,26 +543,20 @@ Flutter 风格对象写法：
 - [x] JSUI router 内部 push / replace / pop 支持 animated transition，同时保留已 push 页面
   state/schema snapshot，并与 `onShow` / `onHide` 顺序对齐。
 - [x] 支持基础滚动和常用手势事件：`onScroll`、`onTap`、`onLongPress` 的受限事件模型。
-- [ ] 支持滚动控制和复杂手势：`scrollTo`、drag/swipe 的受限事件模型。
 - [x] 支持事件节流/合并策略，避免 scroll/text input/custom renderer 高频跨边界调用。
 - [x] 支持基础隐式动画：`Container` / `Padding` 的 duration 和 curve 受 schema 控制。
-- [ ] 支持列表 item enter/exit/reorder 过渡。
 - [x] 补齐表单控件：`Form/Checkbox/Switch/Radio/DropdownButton`，状态和校验仍由 JS 控制。
 - [x] 支持自定义组件 JS module 模板，组件函数返回 UI schema，并由 registry 映射到宿主 renderer。
 - [x] example：自定义 `card` / `appBar` 组件。
+- [x] 0.4.0 收尾：组件化、自定义 registry、表单控件、基础手势/隐式动画、路由过渡和 custom components
+  示例已同步；横切能力补齐提前到 0.4.1；`scrollTo`/drag/swipe 与列表 item 过渡顺延到 0.4.2；
+  开发体验与调试工具顺延到 0.4.3。
 
-### 0.4.1：开发体验与调试工具
-
-- [ ] `QuickjsUiDevOptions`：dev reload、error overlay、schema dump、diff/resource log。
-- [ ] `QuickjsUiInspector`：查看 page、props、state、schema、resource graph、host APIs。
-- [ ] 支持导出 page snapshot，包含 props、state、schema、manifest 和最近一次 action。
-- [ ] inspector 记录 lifecycle timeline，包含 route/app/widget 生命周期事件顺序。
-- [ ] example：开发调试面板。
-- [ ] 测试：snapshot 序列化、diff log、lifecycle timeline、error overlay 信息完整性。
-
-### 0.4.x：横切能力补齐
+### 0.4.1：横切能力补齐
 
 这些能力不是单个控件功能，会影响 schema、renderer、自定义组件、bundle 兼容和宿主集成边界。
+放在 0.4.0 之后、开发调试工具之前，先稳定协议、语义、主题 token、自定义 renderer 生命周期和
+兼容性基线，再建设 inspector / snapshot 等调试能力。
 详细设计记录在 `docs/quickjs_ui_cross_cutting.md`。设计时先参考 Flutter 原生模型（Semantics、Theme、
 Focus/Actions/Shortcuts、Form/FormField、ScrollController/ScrollNotification、ImplicitlyAnimatedWidget /
 AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，避免盲目套 Web/DOM 语义。
@@ -581,6 +575,26 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
   permission/checksum，以及何时接入 core stream。
 - [ ] Conformance Tests：schema fixtures、renderer smoke/golden、lifecycle sequence、navigation sequence、
   event backpressure、bundle compatibility。
+
+### 0.4.2：滚动控制与列表过渡
+
+从 0.4.0 顺延的交互与动画能力。
+
+- [ ] 支持滚动控制和复杂手势：`scrollTo`、drag/swipe 的受限事件模型。
+- [ ] 支持列表 item enter/exit/reorder 过渡。
+- [ ] example：滚动控制与列表过渡演示页。
+- [ ] 测试：scrollTo action bridge、drag/swipe 事件、列表 item 过渡与 stable key 行为。
+
+### 0.4.3：开发体验与调试工具
+
+依赖 0.4.1 的 schema/生命周期/兼容性基线，再补开发期观测与复现能力。
+
+- [ ] `QuickjsUiDevOptions`：dev reload、error overlay、schema dump、diff/resource log。
+- [ ] `QuickjsUiInspector`：查看 page、props、state、schema、resource graph、host APIs。
+- [ ] 支持导出 page snapshot，包含 props、state、schema、manifest 和最近一次 action。
+- [ ] inspector 记录 lifecycle timeline，包含 route/app/widget 生命周期事件顺序。
+- [ ] example：开发调试面板。
+- [ ] 测试：snapshot 序列化、diff log、lifecycle timeline、error overlay 信息完整性。
 
 ### 0.5：页面包发布格式
 
