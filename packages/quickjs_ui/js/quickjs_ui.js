@@ -185,6 +185,10 @@ export function Switch(props) {
   return node('Switch', props);
 }
 
+export function Slider(props) {
+  return node('Slider', props);
+}
+
 export function Radio(props) {
   return node('Radio', props);
 }
@@ -213,6 +217,7 @@ export const ui = {
   Form,
   Checkbox,
   Switch,
+  Slider,
   Radio,
   DropdownButton
 };

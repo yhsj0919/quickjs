@@ -11,6 +11,7 @@ import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_navigation_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_native_video_player_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
@@ -135,6 +136,31 @@ void main() {
     expect(find.text('Size: medium'), findsOneWidget);
     expect(find.text('Medium'), findsOneWidget);
     expect(find.text('Reset'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui native video player page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiNativeVideoPlayerPage()),
+    );
+
+    expect(find.text('QuickJS UI Native VideoPlayer'), findsOneWidget);
+    await _pumpUntilFound(
+      tester,
+      find.textContaining('Native VideoPlayer demo'),
+    );
+    expect(
+      find.textContaining('QuickJS UI native video player error'),
+      findsNothing,
+    );
+    expect(find.text('0.4 native renderer injection'), findsOneWidget);
+    await _scrollUntilFound(tester, find.textContaining('自动播放：开'));
+    expect(find.textContaining('自动播放：开'), findsOneWidget);
+    expect(find.textContaining('循环：开'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('播放'));
+    expect(find.text('播放'), findsOneWidget);
+    expect(find.text('从头播放'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {

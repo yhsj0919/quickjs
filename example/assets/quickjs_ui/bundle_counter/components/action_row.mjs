@@ -5,7 +5,7 @@ export function actionRow({ onIncrement, onReset }) {
     mainAxisAlignment: 'center',
     children: [
       ElevatedButton({
-        child: Text('Add'),
+        child: Text('添加'),
         onPressed: onIncrement
       }),
       ElevatedButton({

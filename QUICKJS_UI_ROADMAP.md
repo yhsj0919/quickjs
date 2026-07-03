@@ -20,6 +20,11 @@
   不再依赖单独提醒。
 - [ ] 所有 UI 功能默认基于 `quickjs` core 已有能力完成；如果实现明显繁琐、绕路或无法可靠完成，可以提出
   修改 `quickjs` core 的申请，再评估是否扩展 core。
+- [ ] **功能修复允许重构，不要一直在错误的路径上打补丁。** 当 bug 暴露生命周期或边界归属错误时，优先修正
+  架构（例如 renderer 事件经 `QuickjsUiEventIngress` 帧后进入 `dispatch()`），不要在
+  `QuickjsUiView`、controller、自定义 renderer 和示例页上分别叠加 `addPostFrameCallback`、
+  延迟 `setState` 或重复 `notifyListeners` 兜底。结构修复落地后应删除旧 workaround，并把新契约写入
+  `docs/quickjs_ui_cross_cutting.md`。
 
 ### 核心边界
 
@@ -142,6 +147,9 @@ Flutter 风格控件名称。
 - [x] `QuickjsUiProps`：集中解析 Flutter 风格属性，例如 color、EdgeInsets、BorderRadius、BoxFit、
   Alignment、FontWeight、opacity，替换 renderer 中分散的私有解析函数。
 - [x] `QuickjsUiRenderContext`：renderer 构建子节点、派发事件、读取 theme/resource 时统一走 context。
+- [x] `QuickjsUiEventIngress`：renderer / 自定义组件事件先入队，帧结束后 flush 到
+  `QuickjsUiController.dispatch()`，避免 build 期间同步 `setState`；设计说明见
+  `docs/quickjs_ui_cross_cutting.md`。
 - [x] `QuickjsUiNetworkLoader`：网络 `.mjs` 页面加载支持 ETag、304、错误状态和可替换 HTTP client。
 - [ ] 自定义组件 JS module 模板可参考外部 demo，但生成的组件仍返回 Page/UI schema，不直接操作 Widget。
 
@@ -234,7 +242,10 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 - [x] 支持受控输入组件：`TextField` 的 value 由 JS 控制或显式同步。
 - [ ] 支持 `TextField` 的 selection、composition 状态同步。
 - [ ] 支持弹窗/浮层交互：dialog、bottom sheet、menu、snackbar/toast 通过 host API 或 overlay schema 显式打开。
-- [ ] 高频事件需要节流/合并策略，例如 scroll、drag、text composing，避免每帧跨 JS/Flutter 边界。
+- [x] 支持事件节流/合并策略（renderer 侧 `QuickjsUiEventDispatcher`），避免 scroll/text input/custom
+  renderer 高频跨边界调用。
+- [x] renderer 事件经 `QuickjsUiEventIngress` 帧后投递，避免在 view/controller/自定义 renderer 上分别打
+  帧时序补丁。
 - [ ] 支持 disabled/loading/pressed/focused/error 等基础交互状态，状态来源仍由 JS schema 描述。
 - [ ] 支持语义化和无障碍字段：`semanticsLabel`、`tooltip`、`enabled`、`role`，由 Flutter renderer 映射到原生能力。
 

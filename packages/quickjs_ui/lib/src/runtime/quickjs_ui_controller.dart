@@ -120,7 +120,6 @@ final class QuickjsUiController extends ChangeNotifier {
   Future<void> dispatch(Map<String, Object?> event) async {
     _ensureActive();
     _error = null;
-    notifyListeners();
     try {
       await _session.dispatch(event);
       if (_disposed) {
@@ -148,7 +147,6 @@ final class QuickjsUiController extends ChangeNotifier {
   Future<void> refresh() async {
     _ensureActive();
     _error = null;
-    notifyListeners();
     try {
       await _session.refresh();
       if (_disposed) {

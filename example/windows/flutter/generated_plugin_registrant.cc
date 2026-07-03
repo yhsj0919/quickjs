@@ -6,9 +6,12 @@
 
 #include "generated_plugin_registrant.h"
 
+#include <fvp/fvp_plugin_c_api.h>
 #include <quickjs/quickjs_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
+  FvpPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FvpPluginCApi"));
   QuickjsPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("QuickjsPluginCApi"));
 }

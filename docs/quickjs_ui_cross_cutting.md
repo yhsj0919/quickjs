@@ -10,6 +10,39 @@ For each cross-cutting module, start from Flutter's native model and expose only
 the serializable subset that fits quickjs_ui. Do not copy Web/DOM concepts when
 Flutter already has a stronger primitive.
 
+### Fix and Refactor Policy
+
+> **功能修复允许重构，不要一直在错误的路径上打补丁。**
+
+When a bug reveals a lifecycle or ownership mismatch, fix the architecture first.
+Do not stack frame-timing workarounds across `QuickjsUiView`, `QuickjsUiController`,
+custom renderers, and page code unless the workaround is itself the documented
+contract.
+
+Use this decision checklist:
+
+1. Name the real invariant being violated. Example: renderer callbacks must not
+   synchronously rebuild the page while Flutter is still building widgets.
+2. If the failure spans more than one layer, move the fix to the layer that owns
+   the boundary instead of adding local `addPostFrameCallback` / deferred
+   `setState` / extra `notifyListeners` calls.
+3. Delete superseded patches after the structural fix lands. A correct design
+   should make per-widget frame hacks unnecessary.
+4. Document the new contract in this file and in `docs/quickjs_ui_components.md`
+   so future custom renderers follow the same path.
+
+Anti-patterns that were removed in favor of the renderer event ingress:
+
+- `QuickjsUiView` deferring every controller notification with chained post-frame
+  rebuild flags.
+- `QuickjsUiController.dispatch()` notifying listeners before the page session
+  finishes, then notifying again after completion.
+- Custom renderers such as `VideoPlayer` deferring `onReady` / progress listeners
+  with their own post-frame callbacks.
+
+Preferred outcome: one documented pipeline, predictable tests, and example pages
+that only express product behavior rather than Flutter frame timing.
+
 Reference points in Flutter:
 
 - Accessibility: `Semantics`, `SemanticsProperties`, `Tooltip`.
@@ -62,6 +95,78 @@ Planned scope:
 
 Boundary: JS schema may reference tokens such as `$colors.primary` or
 `$text.titleMedium`; it should not depend on Flutter `ThemeData` object shape.
+
+## Renderer → Page Event Pipeline
+
+Goal: all renderer-originated UI events must cross the JS boundary without
+violating Flutter build/layout invariants.
+
+### Problem
+
+Built-in widgets and custom renderers call `QuickjsUiRenderContext.dispatch()` or
+`dispatchEvent()` from gesture handlers, scroll notifications, media callbacks,
+and sometimes while a renderer rebuild is still in progress. A direct
+`QuickjsUiController.dispatch()` from those call sites can:
+
+1. Run JS `dispatch()` during Flutter `build`.
+2. Call `notifyListeners()` and synchronously rebuild `QuickjsUiView`.
+3. Trigger `setState() called during build` or silently drop the final refresh
+   when notifications are merged.
+
+Patching each call site or each custom renderer with post-frame deferral does not
+scale and hides the real boundary violation.
+
+### Architecture
+
+`QuickjsUiView` owns a `QuickjsUiEventIngress`. The renderer and every custom
+component still call `onEvent` through `QuickjsUiRenderContext`; the view wires
+that to `ingress.submit()` instead of `controller.dispatch()`:
+
+```text
+Widget build / gesture / media callback
+  -> QuickjsUiRenderContext.dispatch / dispatchEvent
+  -> QuickjsUiEventDispatcher (optional coalesce / throttle / debounce)
+  -> QuickjsUiEventIngress.submit (queue)
+  -> post-frame flush
+  -> QuickjsUiController.dispatch
+  -> QuickjsUiSession.dispatch
+  -> notifyListeners
+  -> QuickjsUiView setState
+```
+
+Responsibilities:
+
+| Layer | Responsibility |
+| --- | --- |
+| `QuickjsUiEventDispatcher` | Renderer-side backpressure for high-frequency events before they reach the page session. |
+| `QuickjsUiEventIngress` | Frame-safe delivery into the controller; preserves event order per flush. |
+| `QuickjsUiController` | Session serialization, error surface, and a single `notifyListeners()` after dispatch completes. |
+| `QuickjsUiView` | Plain `setState` on controller changes; no frame-timing rebuild chain. |
+| Custom renderers | Emit serializable events only; no post-frame dispatch workarounds. |
+
+Implementation reference:
+
+- `packages/quickjs_ui/lib/src/renderer/quickjs_ui_event_ingress.dart`
+- `packages/quickjs_ui/lib/src/view/quickjs_ui_view.dart`
+
+### Imperative control from JS state
+
+When JS page state must command native side effects such as `seek`, `restart`, or
+`replace source`, use explicit serializable props plus a monotonic token instead
+of hidden renderer state.
+
+Example from the native video player demo:
+
+- `seekPositionMs` carries the target position.
+- `seekToken` increments when the page wants the host renderer to apply that seek.
+- `restartToken` uses the same pattern for "play from start".
+
+This keeps media control declarative in schema, testable in page state, and
+separate from the event ingress that handles renderer → page callbacks.
+
+Boundary: ingress is owned by `QuickjsUiView` / navigator-hosted views. Code that
+constructs `QuickjsUiRenderer` directly for isolated widget tests bypasses ingress
+by design.
 
 ## Focus / Keyboard / IME
 
@@ -123,6 +228,12 @@ Planned scope:
   callbacks.
 - Recommended policies for progress, buffering, position, and sensor-like
   events.
+- Custom renderers must not defer `context.dispatch()` with local post-frame
+  callbacks; frame safety is handled by `QuickjsUiEventIngress` in
+  `QuickjsUiView`.
+- Imperative native actions from page state should use explicit props plus token
+  counters (`seekToken`, `restartToken`, etc.) rather than hidden controller
+  handles.
 
 Boundary: custom renderers may own Flutter/Dart resources, but JS only observes
 serializable state and events. Streams are used only for real data streams, not

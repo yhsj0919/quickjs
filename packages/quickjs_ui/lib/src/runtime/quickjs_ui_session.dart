@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:quickjs/quickjs.dart';
 
+import '../diagnostics/quickjs_ui_diag.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
@@ -316,11 +317,52 @@ final class QuickjsUiSession {
     List<Object?> args,
   ) async {
     _activeCalls += 1;
+    final startedAt = DateTime.now();
+    if (name == 'dispatch' || name == 'render') {
+      final detail = name == 'dispatch' ? _dispatchDetail(args) : 'build';
+      QuickjsUiDiag.count('session.$name', detail: detail);
+    }
     try {
       return await client.call(name, args);
+    } catch (error, stackTrace) {
+      if (name == 'dispatch' || name == 'render') {
+        QuickjsUiDiag.log(
+          'session.$name',
+          'FAILED after ${DateTime.now().difference(startedAt).inMilliseconds}ms '
+              'detail=${name == 'dispatch' ? _dispatchDetail(args) : 'build'} '
+              'error=$error',
+        );
+        QuickjsUiDiag.log('session.$name', '$stackTrace');
+      }
+      rethrow;
     } finally {
       _activeCalls -= 1;
     }
+  }
+
+  String _dispatchDetail(List<Object?> args) {
+    if (args.length < 2) {
+      return 'unknown';
+    }
+    final event = args[1];
+    if (event is! Map) {
+      return 'non-object-event';
+    }
+    final method = event['method'] ?? event['action'];
+    final type = event['type'];
+    final positionMs = event['positionMs'];
+    final isPlaying = event['isPlaying'];
+    final buffer = StringBuffer('method=$method');
+    if (type != null) {
+      buffer.write(' type=$type');
+    }
+    if (positionMs != null) {
+      buffer.write(' positionMs=$positionMs');
+    }
+    if (isPlaying != null) {
+      buffer.write(' isPlaying=$isPlaying');
+    }
+    return buffer.toString();
   }
 
   void _ensureActive() {
