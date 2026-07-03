@@ -253,6 +253,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   late QuickjsUiRenderer _renderer;
   QuickjsUiNetworkLoader? _networkLoader;
   bool _reportedFirstRender = false;
+  bool _reportedShow = false;
+  _QuickjsUiAppLifecycleSignal? _lastAppLifecycleSignal;
 
   @override
   void initState() {
@@ -281,11 +283,13 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
+      _renderer.dispose();
       _renderer = QuickjsUiRenderer(
         registry: widget.registry,
         onEvent: _controller.dispatch,
       );
     } else if (oldWidget.registry != widget.registry) {
+      _renderer.dispose();
       _renderer = QuickjsUiRenderer(
         registry: widget.registry,
         onEvent: _controller.dispatch,
@@ -312,6 +316,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         _networkLoader = null;
       }
       _reportedFirstRender = false;
+      _reportedShow = false;
       _load();
     }
   }
@@ -319,6 +324,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _renderer.dispose();
     _controller.removeListener(_handleControllerChanged);
     if (_ownsController) {
       _controller.dispose();
@@ -334,12 +340,27 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
     switch (state) {
       case AppLifecycleState.resumed:
-        unawaited(_controller.lifecycle('resume'));
+        _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal.resumed);
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
-        unawaited(_controller.lifecycle('pause'));
+        _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal.paused);
       case AppLifecycleState.detached:
+        _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal.detached);
+    }
+  }
+
+  void _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal signal) {
+    if (_lastAppLifecycleSignal == signal) {
+      return;
+    }
+    _lastAppLifecycleSignal = signal;
+    switch (signal) {
+      case _QuickjsUiAppLifecycleSignal.resumed:
+        unawaited(_controller.lifecycle('resume'));
+      case _QuickjsUiAppLifecycleSignal.paused:
+        unawaited(_controller.lifecycle('pause'));
+      case _QuickjsUiAppLifecycleSignal.detached:
         unawaited(_controller.lifecycle('dispose', render: false));
     }
   }
@@ -412,8 +433,20 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!mounted) {
         return;
       }
+      await _showAfterFirstRender();
+      if (!mounted) {
+        return;
+      }
       widget.onFirstRender?.call();
     });
+  }
+
+  Future<void> _showAfterFirstRender() async {
+    if (_reportedShow || _controller.plugin == null || _controller.isDisposed) {
+      return;
+    }
+    _reportedShow = true;
+    await _controller.routeLifecycle('show');
   }
 
   Future<void> _load() async {
@@ -486,6 +519,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
 }
 
 enum _QuickjsUiViewSource { plugin, asset, file, network }
+
+enum _QuickjsUiAppLifecycleSignal { resumed, paused, detached }
 
 bool _stringIterableSetEquals(Iterable<String> left, Iterable<String> right) {
   final leftSet = left.toSet();

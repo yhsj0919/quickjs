@@ -59,6 +59,27 @@ function method(name, payload) {
   return { method: name, payload };
 }
 
+export function action(name, payload) {
+  return method(name, payload);
+}
+
+export const event = action;
+
+export function Component(render) {
+  if (typeof render !== 'function') {
+    throw new TypeError('quickjs_ui Component render must be a function');
+  }
+  return function component(props = {}, actions = {}) {
+    const node = render(props ?? {}, actions ?? {});
+    if (node == null || typeof node !== 'object' || typeof node.type !== 'string') {
+      throw new TypeError('quickjs_ui Component must return a UI node object');
+    }
+    return node;
+  };
+}
+
+export const defineComponent = Component;
+
 function pageMethods(page) {
   const reserved = new Set([
     'name',
@@ -152,7 +173,31 @@ export function SizedBox(props) {
   return node('SizedBox', props);
 }
 
+export function Form(props) {
+  return node('Form', props);
+}
+
+export function Checkbox(props) {
+  return node('Checkbox', props);
+}
+
+export function Switch(props) {
+  return node('Switch', props);
+}
+
+export function Radio(props) {
+  return node('Radio', props);
+}
+
+export function DropdownButton(props) {
+  return node('DropdownButton', props);
+}
+
 export const ui = {
+  Component,
+  defineComponent,
+  action,
+  event,
   Text,
   ElevatedButton,
   Row,
@@ -164,5 +209,10 @@ export const ui = {
   Stack,
   Padding,
   Center,
-  SizedBox
+  SizedBox,
+  Form,
+  Checkbox,
+  Switch,
+  Radio,
+  DropdownButton
 };

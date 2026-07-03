@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -10,14 +12,17 @@ typedef QuickjsUiEventHandler = void Function(Map<String, Object?> event);
 typedef QuickjsUiNodeBuilder = Widget Function(QuickjsUiNode node);
 
 final class QuickjsUiRenderContext {
-  const QuickjsUiRenderContext({
+  QuickjsUiRenderContext({
     required QuickjsUiNodeBuilder buildNode,
     required this.onEvent,
+    QuickjsUiEventDispatcher? eventDispatcher,
     this.buildContext,
-  }) : _buildNode = buildNode;
+  }) : _buildNode = buildNode,
+       _eventDispatcher = eventDispatcher;
 
   final QuickjsUiNodeBuilder _buildNode;
   final QuickjsUiEventHandler onEvent;
+  final QuickjsUiEventDispatcher? _eventDispatcher;
   final BuildContext? buildContext;
 
   Color? color(Object? value) {
@@ -58,6 +63,114 @@ final class QuickjsUiRenderContext {
     onEvent(event);
   }
 
+  void dispatchEvent(
+    Map<String, Object?> event, {
+    Map<String, Object?>? payload,
+    String? defaultCoalesceKey,
+  }) {
+    final dispatcher = _eventDispatcher;
+    if (dispatcher != null) {
+      dispatcher.dispatch(
+        event,
+        payload: payload,
+        defaultCoalesceKey: defaultCoalesceKey,
+      );
+      return;
+    }
+    final merged = payload == null
+        ? event
+        : <String, Object?>{...event, ...payload};
+    onEvent(merged);
+  }
+}
+
+final class QuickjsUiEventDispatcher {
+  QuickjsUiEventDispatcher(this.onEvent, {this.maxPendingEvents = 64})
+    : assert(maxPendingEvents > 0, 'maxPendingEvents must be > 0');
+
+  final QuickjsUiEventHandler onEvent;
+  final int maxPendingEvents;
+  final Map<String, _PendingUiEvent> _pendingEvents =
+      <String, _PendingUiEvent>{};
+  final Map<String, DateTime> _lastDispatchAt = <String, DateTime>{};
+
+  void dispatch(
+    Map<String, Object?> event, {
+    Map<String, Object?>? payload,
+    String? defaultCoalesceKey,
+  }) {
+    final merged = payload == null
+        ? event
+        : <String, Object?>{...event, ...payload};
+    final policy = _QuickjsUiEventPolicy.from(merged, defaultCoalesceKey);
+    final key = policy.coalesceKey;
+    if (key == null || (!policy.hasTiming && payload == null)) {
+      onEvent(merged);
+      return;
+    }
+    final now = DateTime.now();
+    final dropMs = policy.dropMs;
+    if (dropMs != null) {
+      final last = _lastDispatchAt[key];
+      if (last != null && now.difference(last).inMilliseconds < dropMs) {
+        return;
+      }
+      _lastDispatchAt[key] = now;
+      onEvent(merged);
+      return;
+    }
+    final throttleMs = policy.throttleMs;
+    if (throttleMs != null) {
+      final last = _lastDispatchAt[key];
+      if (last != null && now.difference(last).inMilliseconds < throttleMs) {
+        _schedulePending(key, merged, policy.remaining(last, now));
+        return;
+      }
+      _lastDispatchAt[key] = now;
+      onEvent(merged);
+      return;
+    }
+    final debounceMs = policy.debounceMs;
+    if (debounceMs != null) {
+      _schedulePending(key, merged, Duration(milliseconds: debounceMs));
+      return;
+    }
+    onEvent(merged);
+  }
+
+  void dispose() {
+    for (final pending in _pendingEvents.values) {
+      pending.timer.cancel();
+    }
+    _pendingEvents.clear();
+    _lastDispatchAt.clear();
+  }
+
+  void _schedulePending(
+    String key,
+    Map<String, Object?> event,
+    Duration delay,
+  ) {
+    _pendingEvents.remove(key)?.timer.cancel();
+    if (_pendingEvents.length >= maxPendingEvents) {
+      final oldestKey = _pendingEvents.keys.first;
+      _pendingEvents.remove(oldestKey)?.timer.cancel();
+    }
+    _pendingEvents[key] = _PendingUiEvent(
+      event: event,
+      timer: Timer(delay, () {
+        final pending = _pendingEvents.remove(key);
+        if (pending == null) {
+          return;
+        }
+        _lastDispatchAt[key] = DateTime.now();
+        onEvent(pending.event);
+      }),
+    );
+  }
+}
+
+extension on QuickjsUiRenderContext {
   Color? _themeColor(Object? value) {
     final context = buildContext;
     if (context == null || value is! String || !value.startsWith(r'$')) {
@@ -113,6 +226,69 @@ final class QuickjsUiRenderContext {
       _ => null,
     };
   }
+}
+
+final class _QuickjsUiEventPolicy {
+  const _QuickjsUiEventPolicy({
+    required this.throttleMs,
+    required this.debounceMs,
+    required this.dropMs,
+    required this.coalesceKey,
+  });
+
+  factory _QuickjsUiEventPolicy.from(
+    Map<String, Object?> event,
+    String? defaultCoalesceKey,
+  ) {
+    final policy = QuickjsUiProps.map(event['policy'], name: 'event policy');
+    return _QuickjsUiEventPolicy(
+      throttleMs: _durationMs(event['throttleMs'] ?? policy['throttleMs']),
+      debounceMs: _durationMs(event['debounceMs'] ?? policy['debounceMs']),
+      dropMs: _durationMs(event['dropMs'] ?? policy['dropMs']),
+      coalesceKey:
+          QuickjsUiProps.string(
+            event['coalesceKey'] ?? policy['coalesceKey'],
+          ) ??
+          defaultCoalesceKey,
+    );
+  }
+
+  final int? throttleMs;
+  final int? debounceMs;
+  final int? dropMs;
+  final String? coalesceKey;
+
+  bool get hasTiming =>
+      throttleMs != null || debounceMs != null || dropMs != null;
+
+  Duration remaining(DateTime last, DateTime now) {
+    final elapsed = now.difference(last).inMilliseconds;
+    final waitMs = (throttleMs ?? 0) - elapsed;
+    return Duration(milliseconds: waitMs <= 0 ? 0 : waitMs);
+  }
+
+  static int? _durationMs(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    final number = QuickjsUiProps.intValue(
+      value,
+      name: 'event policy duration',
+    );
+    if (number == null || number < 0) {
+      throw const FormatException(
+        'quickjs_ui event policy duration must be >= 0',
+      );
+    }
+    return number;
+  }
+}
+
+final class _PendingUiEvent {
+  const _PendingUiEvent({required this.event, required this.timer});
+
+  final Map<String, Object?> event;
+  final Timer timer;
 }
 
 String _normalizeToken(String value) {

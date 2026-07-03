@@ -192,7 +192,7 @@ final class QuickjsUiNavigator {
           initialProps: initialProps,
           mounts: mounts,
           transition: transition,
-          registry: registry,
+          rendererRegistry: registry,
           onConsole: onConsole,
           routeRegistry: routeRegistry,
         ),
@@ -259,7 +259,7 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
     this.bundleRoot,
     this.title,
     this.transition,
-    this.registry,
+    this.rendererRegistry,
     this.onConsole,
     this.routeRegistry,
   });
@@ -270,20 +270,20 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
   final Map<String, Object?> initialProps;
   final List<QuickjsHostMount> mounts;
   final QuickjsUiRouteTransition? transition;
-  final QuickjsUiComponentRegistry? registry;
+  final QuickjsUiComponentRegistry? rendererRegistry;
   final QuickjsConsoleSink? onConsole;
   final QuickjsUiRouteRegistry? routeRegistry;
 
   @override
   Widget build(BuildContext context) {
-    final routeRegistry = this.routeRegistry;
-    final content = routeRegistry == null
+    final routeRegistryValue = routeRegistry;
+    final content = routeRegistryValue == null
         ? QuickjsUiView.asset(
             path: path,
             bundleRoot: bundleRoot,
             initialProps: initialProps,
             mounts: mounts,
-            registry: registry,
+            registry: rendererRegistry,
             onConsole: onConsole,
             loadingBuilder: (_) =>
                 const Center(child: CircularProgressIndicator()),
@@ -297,8 +297,8 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
               transition: transition,
             ),
             initialProps: initialProps,
-            registry: routeRegistry,
-            rendererRegistry: this.registry,
+            registry: routeRegistryValue,
+            rendererRegistry: rendererRegistry,
             onConsole: onConsole,
           );
     final routeTitle = title;
@@ -331,12 +331,16 @@ class _QuickjsUiRouter extends StatefulWidget {
   State<_QuickjsUiRouter> createState() => _QuickjsUiRouterState();
 }
 
-class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
+class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
+    with SingleTickerProviderStateMixin {
   late final _QuickjsUiRouteStack _routes;
+  late final AnimationController _transitionController;
+  _QuickjsUiRouterTransition? _activeTransition;
 
   @override
   void initState() {
     super.initState();
+    _transitionController = AnimationController(vsync: this);
     _routes = _QuickjsUiRouteStack(
       root: widget.root,
       initialProps: widget.initialProps,
@@ -350,6 +354,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     if (oldWidget.root.path != widget.root.path ||
         oldWidget.root.bundleRoot != widget.root.bundleRoot ||
         oldWidget.initialProps != widget.initialProps) {
+      _clearTransition(disposeOverlay: true);
       _routes.reset(
         root: widget.root,
         initialProps: widget.initialProps,
@@ -360,6 +365,8 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
 
   @override
   void dispose() {
+    _clearTransition(disposeOverlay: true);
+    _transitionController.dispose();
     _routes.dispose();
     super.dispose();
   }
@@ -376,25 +383,62 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
         await _popJsRoute(null, waitForRouteLeave: true);
         return false;
       },
-      child: IndexedStack(
-        index: _routes.length - 1,
+      child: Stack(
+        fit: StackFit.expand,
         children: <Widget>[
           for (final entry in _routes.entries)
-            QuickjsUiView.asset(
-              key: entry.key,
-              path: entry.route.path,
-              bundleRoot: entry.route.bundleRoot,
-              initialProps: entry.params,
-              mounts: _mountsFor(entry),
-              controller: entry.controller,
-              registry: widget.rendererRegistry,
-              loadingBuilder: (_) =>
-                  const Center(child: CircularProgressIndicator()),
-              onFirstRender: () => _routeEnter(entry),
-            ),
+            _buildRouteEntry(entry, visible: _isRouteEntryVisible(entry)),
+          if (_activeTransition?.overlayEntry case final overlay?)
+            _buildRouteEntry(overlay, visible: true, overlay: true),
         ],
       ),
     );
+  }
+
+  bool _isRouteEntryVisible(_QuickjsUiRouterEntry entry) {
+    return identical(entry, _routes.top) ||
+        _activeTransition?.backgroundEntryId == entry.id;
+  }
+
+  Widget _buildRouteEntry(
+    _QuickjsUiRouterEntry entry, {
+    required bool visible,
+    bool overlay = false,
+  }) {
+    Widget child = Offstage(
+      offstage: !visible,
+      child: TickerMode(
+        enabled: visible,
+        child: QuickjsUiView.asset(
+          key: entry.key,
+          path: entry.route.path,
+          bundleRoot: entry.route.bundleRoot,
+          initialProps: entry.params,
+          mounts: _mountsFor(entry),
+          controller: entry.controller,
+          registry: widget.rendererRegistry,
+          loadingBuilder: (_) =>
+              const Center(child: CircularProgressIndicator()),
+          onFirstRender: () => _routeEnter(entry),
+        ),
+      ),
+    );
+    final transition = _activeTransition;
+    if (transition != null && transition.entryId == entry.id) {
+      child = AnimatedBuilder(
+        animation: _transitionController,
+        child: child,
+        builder: (context, child) {
+          return _buildJsRouteTransition(
+            transition: transition.transition,
+            animation: _transitionController,
+            reverse: transition.reverse,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+      );
+    }
+    return Positioned.fill(child: child);
   }
 
   List<QuickjsHostMount> _mountsFor(_QuickjsUiRouterEntry entry) {
@@ -493,7 +537,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
         );
         if (replace) {
           unawaited(
-            _sendRouteLeave(
+            _sendRouteLeaveAndHide(
               source,
               to: routeName,
               params: params,
@@ -506,7 +550,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
           return true;
         }
         unawaited(
-          _sendRouteLeave(
+          _sendRouteLeaveAndHide(
             source,
             to: routeName,
             params: params,
@@ -515,7 +559,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
         );
         final result = await Navigator.of(context).push<Object?>(route);
         source.navigationLocked = false;
-        _scheduleRouteResultAndEnter(
+        _scheduleRouteResultShowAndEnter(
           source,
           from: routeName,
           result: result,
@@ -535,19 +579,16 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
           action: replace ? 'replace' : 'push',
         );
         if (replace) {
-          unawaited(
-            _sendRouteLeave(
-              source,
-              to: _routeIdentity(jsRoute),
-              params: params,
-              action: 'replace',
-            ),
+          _replaceJsRoute(
+            source: source,
+            route: jsRoute,
+            params: params,
+            to: _routeIdentity(jsRoute),
           );
-          _replaceJsRoute(jsRoute, params);
           return true;
         }
         unawaited(
-          _sendRouteLeave(
+          _sendRouteLeaveAndHide(
             source,
             to: _routeIdentity(jsRoute),
             params: params,
@@ -574,17 +615,42 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
       params: params,
       onConsole: widget.onConsole,
     );
+    _startTransition(
+      entry: _routes.top,
+      transition: route.transition,
+      reverse: false,
+      backgroundEntryId: _routes.length > 1 ? _routes.previous.id : null,
+    );
     setState(() {
       // The route stack is already mutated by _routes.push().
     });
     return result;
   }
 
-  bool _replaceJsRoute(QuickjsUiAssetRoute route, Map<String, Object?> params) {
-    _routes.replace(route: route, params: params, onConsole: widget.onConsole);
+  bool _replaceJsRoute({
+    required _QuickjsUiRouterEntry source,
+    required QuickjsUiAssetRoute route,
+    required Map<String, Object?> params,
+    required String to,
+  }) {
+    final replaced = _routes.replace(
+      route: route,
+      params: params,
+      onConsole: widget.onConsole,
+    );
+    _startTransition(
+      entry: _routes.top,
+      transition: route.transition,
+      reverse: false,
+      overlayEntry: replaced,
+      disposeOverlay: true,
+    );
     setState(() {
       // The route stack is already mutated by _routes.replace().
     });
+    unawaited(
+      _sendRouteLeaveAndHide(source, to: to, params: params, action: 'replace'),
+    );
     return true;
   }
 
@@ -595,7 +661,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     if (_routes.length <= 1) {
       final root = _routes.top;
       final navigator = Navigator.of(context);
-      final routeLeave = _sendRouteLeave(
+      final routeLeave = _sendRouteLeaveAndHide(
         root,
         to: 'native',
         result: result,
@@ -618,7 +684,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     final entry = _routes.top;
     final previous = _routes.previous;
     final from = _entryRouteIdentity(entry);
-    final routeLeave = _sendRouteLeave(
+    final routeLeave = _sendRouteLeaveAndHide(
       entry,
       to: _entryRouteIdentity(previous),
       result: result,
@@ -660,11 +726,17 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     _routes.removeTop();
     previous.navigationLocked = false;
     entry.complete(result);
-    entry.dispose();
+    _startTransition(
+      entry: entry,
+      transition: entry.route.transition,
+      reverse: true,
+      overlayEntry: entry,
+      disposeOverlay: true,
+    );
     if (mounted) {
       setState(() {});
     }
-    _scheduleRouteResultAndEnter(
+    _scheduleRouteResultShowAndEnter(
       previous,
       from: from,
       result: result,
@@ -715,7 +787,50 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
     return entry.controller.routeLifecycle('routeLeave', payload: payload);
   }
 
-  void _scheduleRouteResultAndEnter(
+  Future<void> _sendRouteLeaveAndHide(
+    _QuickjsUiRouterEntry entry, {
+    required String to,
+    Map<String, Object?>? params,
+    Object? result,
+    required String action,
+  }) async {
+    await _sendRouteLeave(
+      entry,
+      to: to,
+      params: params,
+      result: result,
+      action: action,
+    );
+    await _sendRouteHide(entry);
+  }
+
+  Future<void> _sendRouteHide(_QuickjsUiRouterEntry entry) {
+    if (!mounted || entry.controller.isDisposed) {
+      return Future<void>.value();
+    }
+    return entry.controller.routeLifecycle(
+      'hide',
+      payload: <String, Object?>{'route': _entryRouteIdentity(entry)},
+    );
+  }
+
+  Future<void> _sendRouteShow(
+    _QuickjsUiRouterEntry entry, {
+    String? from,
+    Object? result,
+  }) {
+    if (!mounted || entry.controller.isDisposed) {
+      return Future<void>.value();
+    }
+    final payload = <String, Object?>{'route': _entryRouteIdentity(entry)};
+    if (from != null) {
+      payload['from'] = from;
+      payload['result'] = result;
+    }
+    return entry.controller.routeLifecycle('show', payload: payload);
+  }
+
+  void _scheduleRouteResultShowAndEnter(
     _QuickjsUiRouterEntry entry, {
     required String from,
     Object? result,
@@ -734,8 +849,61 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
           'result': result,
         },
       );
+      await _sendRouteShow(entry, from: from, result: result);
       _routeEnter(entry, from: from, result: result);
     }());
+  }
+
+  void _startTransition({
+    required _QuickjsUiRouterEntry entry,
+    required QuickjsUiRouteTransition? transition,
+    required bool reverse,
+    _QuickjsUiRouterEntry? overlayEntry,
+    int? backgroundEntryId,
+    bool disposeOverlay = false,
+  }) {
+    _clearTransition(disposeOverlay: true);
+    final effective = transition ?? const QuickjsUiRouteTransition.none();
+    if (effective.kind == QuickjsUiRouteTransitionKind.material ||
+        effective.kind == QuickjsUiRouteTransitionKind.none ||
+        effective.duration == Duration.zero) {
+      if (disposeOverlay) {
+        overlayEntry?.dispose();
+      }
+      return;
+    }
+    _activeTransition = _QuickjsUiRouterTransition(
+      entryId: entry.id,
+      transition: effective,
+      reverse: reverse,
+      overlayEntry: overlayEntry,
+      backgroundEntryId: backgroundEntryId,
+      disposeOverlay: disposeOverlay,
+    );
+    _transitionController
+      ..duration = effective.duration
+      ..reverseDuration = effective.reverseDuration ?? effective.duration
+      ..value = 0;
+    unawaited(
+      _transitionController.forward().whenComplete(() {
+        if (!mounted) {
+          _clearTransition(disposeOverlay: true);
+          return;
+        }
+        setState(() {
+          _clearTransition(disposeOverlay: true);
+        });
+      }),
+    );
+  }
+
+  void _clearTransition({required bool disposeOverlay}) {
+    _transitionController.stop();
+    final transition = _activeTransition;
+    _activeTransition = null;
+    if (disposeOverlay && transition?.disposeOverlay == true) {
+      transition?.overlayEntry?.dispose();
+    }
   }
 
   QuickjsUiAssetRoute? _jsRoute(
@@ -818,6 +986,24 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter> {
   }
 }
 
+final class _QuickjsUiRouterTransition {
+  const _QuickjsUiRouterTransition({
+    required this.entryId,
+    required this.transition,
+    required this.reverse,
+    this.overlayEntry,
+    this.backgroundEntryId,
+    this.disposeOverlay = false,
+  });
+
+  final int entryId;
+  final QuickjsUiRouteTransition transition;
+  final bool reverse;
+  final _QuickjsUiRouterEntry? overlayEntry;
+  final int? backgroundEntryId;
+  final bool disposeOverlay;
+}
+
 final class _QuickjsUiRouteStack {
   _QuickjsUiRouteStack({
     required QuickjsUiAssetRoute root,
@@ -870,7 +1056,7 @@ final class _QuickjsUiRouteStack {
     return result.future;
   }
 
-  void replace({
+  _QuickjsUiRouterEntry replace({
     required QuickjsUiAssetRoute route,
     required Map<String, Object?> params,
     QuickjsConsoleSink? onConsole,
@@ -880,7 +1066,7 @@ final class _QuickjsUiRouteStack {
     _entries.add(
       _QuickjsUiRouterEntry(route: route, params: params, onConsole: onConsole),
     );
-    current.dispose();
+    return current;
   }
 
   _QuickjsUiRouterEntry removeTop() {
@@ -1011,6 +1197,42 @@ PageRoute<T> _quickjsUiRoute<T>({
       }
     },
   );
+}
+
+Widget _buildJsRouteTransition({
+  required QuickjsUiRouteTransition transition,
+  required Animation<double> animation,
+  required bool reverse,
+  required Widget child,
+}) {
+  final curved = CurvedAnimation(
+    parent: reverse ? ReverseAnimation(animation) : animation,
+    curve: transition.curve,
+    reverseCurve: transition.curve,
+  );
+  switch (transition.kind) {
+    case QuickjsUiRouteTransitionKind.material:
+    case QuickjsUiRouteTransitionKind.none:
+      return child;
+    case QuickjsUiRouteTransitionKind.fade:
+      return FadeTransition(opacity: curved, child: child);
+    case QuickjsUiRouteTransitionKind.slide:
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: transition.beginOffset,
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
+      );
+    case QuickjsUiRouteTransitionKind.scale:
+      return ScaleTransition(
+        scale: Tween<double>(
+          begin: transition.beginScale,
+          end: 1,
+        ).animate(curved),
+        child: FadeTransition(opacity: curved, child: child),
+      );
+  }
 }
 
 QuickjsUiRouteTransition? _transitionFromIntent(Object? value) {

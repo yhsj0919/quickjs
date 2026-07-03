@@ -141,23 +141,23 @@ final class QuickjsUiSession {
     });
   }
 
-  Future<void> lifecycle(
+  Future<bool> lifecycle(
     String type, {
     Object? payload,
     bool render = true,
   }) async {
     return _enqueue(() async {
-      await _lifecycleImpl(type, payload: payload, render: render);
+      return _lifecycleImpl(type, payload: payload, render: render);
     });
   }
 
-  Future<void> routeLifecycle(
+  Future<bool> routeLifecycle(
     String type, {
     Object? payload,
     bool render = true,
   }) {
     return _enqueueRouteLifecycle(() async {
-      await _lifecycleImpl(type, payload: payload, render: render);
+      return _lifecycleImpl(type, payload: payload, render: render);
     });
   }
 
@@ -260,7 +260,7 @@ final class QuickjsUiSession {
     return result;
   }
 
-  Future<void> _lifecycleImpl(
+  Future<bool> _lifecycleImpl(
     String type, {
     Object? payload,
     bool render = true,
@@ -268,11 +268,11 @@ final class QuickjsUiSession {
     _ensureActive();
     final plugin = _plugin;
     if (plugin == null || !plugin.manifest.exports.contains('lifecycle')) {
-      return;
+      return false;
     }
     if (type == 'dispose') {
       if (_disposeLifecycleSent) {
-        return;
+        return false;
       }
       _disposeLifecycleSent = true;
     }
@@ -286,7 +286,7 @@ final class QuickjsUiSession {
       _props,
     ]);
     if (_disposed) {
-      return;
+      return false;
     }
     final didUpdateState = nextState != null;
     if (didUpdateState) {
@@ -295,6 +295,7 @@ final class QuickjsUiSession {
     if (render && didUpdateState) {
       await _refreshImpl();
     }
+    return didUpdateState;
   }
 
   QuickjsPluginClient _requireClient() {

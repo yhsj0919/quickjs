@@ -25,6 +25,11 @@ final class QuickjsUiComponentRegistry {
       'Padding': _buildPadding,
       'Center': _buildCenter,
       'SizedBox': _buildSizedBox,
+      'Form': _buildForm,
+      'Checkbox': _buildCheckbox,
+      'Switch': _buildSwitch,
+      'Radio': _buildRadio,
+      'DropdownButton': _buildDropdownButton,
     });
   }
 
@@ -103,22 +108,51 @@ Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
 Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final decoration = context.boxDecoration(node.props);
   final opacity = QuickjsUiProps.opacity(node.props['opacity']);
-  final child = Container(
-    width: QuickjsUiProps.doubleValue(node.props['width']),
-    height: QuickjsUiProps.doubleValue(node.props['height']),
-    padding: QuickjsUiProps.edgeInsets(node.props['padding']),
-    margin: QuickjsUiProps.edgeInsets(node.props['margin']),
-    alignment: QuickjsUiProps.alignment(node.props['alignment']),
-    decoration: decoration,
-    color: decoration == null
-        ? context.color(node.props['color'] ?? node.props['backgroundColor'])
-        : null,
-    child: context.child(node),
-  );
-  if (opacity == 1) {
-    return child;
+  final animationDuration = _animationDuration(node);
+  final curve = QuickjsUiProps.curve(node.props['animationCurve']);
+  final width = QuickjsUiProps.doubleValue(node.props['width']);
+  final height = QuickjsUiProps.doubleValue(node.props['height']);
+  final padding = QuickjsUiProps.edgeInsets(node.props['padding']);
+  final margin = QuickjsUiProps.edgeInsets(node.props['margin']);
+  final alignment = QuickjsUiProps.alignment(node.props['alignment']);
+  final color = decoration == null
+      ? context.color(node.props['color'] ?? node.props['backgroundColor'])
+      : null;
+  final nodeChild = context.child(node);
+  Widget child = animationDuration == null
+      ? Container(
+          width: width,
+          height: height,
+          padding: padding,
+          margin: margin,
+          alignment: alignment,
+          decoration: decoration,
+          color: color,
+          child: nodeChild,
+        )
+      : AnimatedContainer(
+          duration: animationDuration,
+          curve: curve,
+          width: width,
+          height: height,
+          padding: padding,
+          margin: margin,
+          alignment: alignment,
+          decoration: decoration,
+          color: color,
+          child: nodeChild,
+        );
+  if (opacity != 1) {
+    child = animationDuration == null
+        ? Opacity(opacity: opacity, child: child)
+        : AnimatedOpacity(
+            opacity: opacity,
+            duration: animationDuration,
+            curve: curve,
+            child: child,
+          );
   }
-  return Opacity(opacity: opacity, child: child);
+  return _withGestures(context, node, child);
 }
 
 Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
@@ -132,28 +166,59 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final fit = QuickjsUiProps.boxFit(node.props['fit']);
   final uri = Uri.tryParse(source);
   if (uri != null && uri.hasScheme && uri.scheme.startsWith('http')) {
-    return Image.network(
-      source,
-      width: width,
-      height: height,
-      fit: fit,
-      errorBuilder: (_, _, _) {
-        return SizedBox(width: width, height: height);
-      },
+    return _withGestures(
+      context,
+      node,
+      Image.network(
+        source,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (_, _, _) {
+          return SizedBox(width: width, height: height);
+        },
+      ),
     );
   }
-  return Image.asset(source, width: width, height: height, fit: fit);
+  return _withGestures(
+    context,
+    node,
+    Image.asset(source, width: width, height: height, fit: fit),
+  );
 }
 
 Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final axis = QuickjsUiProps.axis(node.props['scrollDirection']);
-  return ListView(
+  final onScroll = QuickjsUiProps.event(node.props['onScroll']);
+  final listView = ListView(
     scrollDirection: axis,
     shrinkWrap:
         QuickjsUiProps.boolValue(node.props['shrinkWrap']) ??
         (node.props['shrinkWrap'] == null),
     padding: QuickjsUiProps.edgeInsets(node.props['padding']),
     children: _childrenWithGap(context, node, axis),
+  );
+  final withGestures = _withGestures(context, node, listView);
+  if (onScroll == null) {
+    return withGestures;
+  }
+  return NotificationListener<ScrollNotification>(
+    onNotification: (notification) {
+      final metrics = notification.metrics;
+      context.dispatchEvent(
+        onScroll,
+        defaultCoalesceKey: _eventKey(node, 'onScroll'),
+        payload: <String, Object?>{
+          'pixels': metrics.pixels,
+          'minScrollExtent': metrics.minScrollExtent,
+          'maxScrollExtent': metrics.maxScrollExtent,
+          'viewportDimension': metrics.viewportDimension,
+          'axis': metrics.axis.name,
+        },
+      );
+      return false;
+    },
+    child: withGestures,
   );
 }
 
@@ -178,6 +243,13 @@ List<Widget> _childrenWithGap(
 
 double _gap(QuickjsUiNode node) {
   return QuickjsUiProps.doubleValue(node.props['gap'], name: 'gap') ?? 0;
+}
+
+Duration? _animationDuration(QuickjsUiNode node) {
+  return QuickjsUiProps.duration(
+    node.props['animationDurationMs'] ?? node.props['durationMs'],
+    name: 'animation duration',
+  );
 }
 
 Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
@@ -206,8 +278,11 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
     ),
     onChanged: onChanged == null
         ? null
-        : (value) =>
-              context.dispatch(<String, Object?>{...onChanged, 'value': value}),
+        : (value) => context.dispatchEvent(
+            onChanged,
+            defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            payload: <String, Object?>{'value': value},
+          ),
     onSubmitted: onSubmitted == null
         ? null
         : (value) => context.dispatch(<String, Object?>{
@@ -236,27 +311,186 @@ Widget _buildStack(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildPadding(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  return Padding(
-    padding:
-        QuickjsUiProps.edgeInsets(node.props['padding']) ?? EdgeInsets.zero,
-    child: context.child(node) ?? const SizedBox.shrink(),
+  final padding =
+      QuickjsUiProps.edgeInsets(node.props['padding']) ?? EdgeInsets.zero;
+  final animationDuration = _animationDuration(node);
+  final child = context.child(node) ?? const SizedBox.shrink();
+  return _withGestures(
+    context,
+    node,
+    animationDuration == null
+        ? Padding(padding: padding, child: child)
+        : AnimatedPadding(
+            padding: padding,
+            duration: animationDuration,
+            curve: QuickjsUiProps.curve(node.props['animationCurve']),
+            child: child,
+          ),
   );
 }
 
 Widget _buildCenter(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  return Center(
-    widthFactor: QuickjsUiProps.doubleValue(node.props['widthFactor']),
-    heightFactor: QuickjsUiProps.doubleValue(node.props['heightFactor']),
-    child: context.child(node),
+  return _withGestures(
+    context,
+    node,
+    Center(
+      widthFactor: QuickjsUiProps.doubleValue(node.props['widthFactor']),
+      heightFactor: QuickjsUiProps.doubleValue(node.props['heightFactor']),
+      child: context.child(node),
+    ),
   );
 }
 
 Widget _buildSizedBox(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  return SizedBox(
-    width: QuickjsUiProps.doubleValue(node.props['width']),
-    height: QuickjsUiProps.doubleValue(node.props['height']),
-    child: context.child(node),
+  return _withGestures(
+    context,
+    node,
+    SizedBox(
+      width: QuickjsUiProps.doubleValue(node.props['width']),
+      height: QuickjsUiProps.doubleValue(node.props['height']),
+      child: context.child(node),
+    ),
   );
+}
+
+Widget _buildForm(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  return Form(child: context.child(node) ?? const SizedBox.shrink());
+}
+
+Widget _buildCheckbox(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final onChanged = QuickjsUiProps.event(node.props['onChanged']);
+  return Checkbox(
+    value: QuickjsUiProps.boolValue(node.props['value']) ?? false,
+    tristate: QuickjsUiProps.boolValue(node.props['tristate']) ?? false,
+    onChanged: onChanged == null
+        ? null
+        : (value) => context.dispatchEvent(
+            onChanged,
+            defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            payload: <String, Object?>{'value': value},
+          ),
+  );
+}
+
+Widget _buildSwitch(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final onChanged = QuickjsUiProps.event(node.props['onChanged']);
+  return Switch(
+    value: QuickjsUiProps.boolValue(node.props['value']) ?? false,
+    onChanged: onChanged == null
+        ? null
+        : (value) => context.dispatchEvent(
+            onChanged,
+            defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            payload: <String, Object?>{'value': value},
+          ),
+  );
+}
+
+Widget _buildRadio(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final onChanged = QuickjsUiProps.event(node.props['onChanged']);
+  final value = node.props['value'];
+  // Keep compatibility with the package's older Flutter lower bound.
+  // ignore: deprecated_member_use
+  return Radio<Object?>(
+    value: value,
+    // ignore: deprecated_member_use
+    groupValue: node.props['groupValue'],
+    // ignore: deprecated_member_use
+    onChanged: onChanged == null
+        ? null
+        : (value) => context.dispatchEvent(
+            onChanged,
+            defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            payload: <String, Object?>{'value': value},
+          ),
+  );
+}
+
+Widget _buildDropdownButton(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  final onChanged = QuickjsUiProps.event(node.props['onChanged']);
+  final items = _dropdownItems(node.props['items']);
+  final value = node.props['value'];
+  final hint = QuickjsUiProps.string(node.props['hint']);
+  return DropdownButton<Object?>(
+    value: items.any((item) => item.value == value) ? value : null,
+    isExpanded: QuickjsUiProps.boolValue(node.props['isExpanded']) ?? false,
+    hint: hint == null ? null : Text(hint),
+    items: items,
+    onChanged: onChanged == null
+        ? null
+        : (value) => context.dispatchEvent(
+            onChanged,
+            defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            payload: <String, Object?>{'value': value},
+          ),
+  );
+}
+
+List<DropdownMenuItem<Object?>> _dropdownItems(Object? value) {
+  if (value == null) {
+    return const <DropdownMenuItem<Object?>>[];
+  }
+  if (value is! List) {
+    throw const FormatException(
+      'quickjs_ui DropdownButton items must be a list',
+    );
+  }
+  return <DropdownMenuItem<Object?>>[
+    for (final item in value) _dropdownItem(item),
+  ];
+}
+
+DropdownMenuItem<Object?> _dropdownItem(Object? value) {
+  if (value is Map) {
+    final props = value.map(
+      (key, value) => MapEntry<String, Object?>('$key', value),
+    );
+    final itemValue = props['value'];
+    return DropdownMenuItem<Object?>(
+      value: itemValue,
+      child: Text(QuickjsUiProps.string(props['label']) ?? '$itemValue'),
+    );
+  }
+  return DropdownMenuItem<Object?>(value: value, child: Text('$value'));
+}
+
+Widget _withGestures(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+  Widget child,
+) {
+  final onTap = QuickjsUiProps.event(node.props['onTap']);
+  final onLongPress = QuickjsUiProps.event(node.props['onLongPress']);
+  if (onTap == null && onLongPress == null) {
+    return child;
+  }
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap == null
+        ? null
+        : () => context.dispatchEvent(
+            onTap,
+            defaultCoalesceKey: _eventKey(node, 'onTap'),
+          ),
+    onLongPress: onLongPress == null
+        ? null
+        : () => context.dispatchEvent(
+            onLongPress,
+            defaultCoalesceKey: _eventKey(node, 'onLongPress'),
+          ),
+    child: child,
+  );
+}
+
+String _eventKey(QuickjsUiNode node, String prop) {
+  final key = node.props['key'];
+  if (key is String && key.isNotEmpty) {
+    return '${node.type}:$key:$prop';
+  }
+  return '${node.type}:${identityHashCode(node)}:$prop';
 }
 
 final class _QuickjsUiTextField extends StatefulWidget {

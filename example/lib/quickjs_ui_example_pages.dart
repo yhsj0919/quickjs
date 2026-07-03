@@ -2,6 +2,7 @@ import 'example_page_spec.dart';
 import 'pages/quickjs_ui_bundle_counter_page.dart';
 import 'pages/quickjs_ui_counter_page.dart';
 import 'pages/quickjs_ui_controls_page.dart';
+import 'pages/quickjs_ui_custom_components_page.dart';
 import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_host_capabilities_page.dart';
@@ -73,5 +74,11 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     title: 'QuickJS UI 页面互通',
     description: '测试原生 Flutter 页面、JSUI 页面、原生设置页之间的参数和结果回传。',
     builder: (_) => const QuickjsUiNavigationPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI Custom Components',
+    description:
+        'Covers JS Component(), custom Dart renderer registry, form controls, event descriptors, and implicit animation props.',
+    builder: (_) => const QuickjsUiCustomComponentsPage(),
   ),
 ];

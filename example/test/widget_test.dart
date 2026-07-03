@@ -6,6 +6,7 @@ import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_bundle_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_custom_components_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
@@ -115,6 +116,25 @@ void main() {
     expect(find.text('ThemeData tokens from JS'), findsOneWidget);
     await _scrollUntilFound(tester, find.text('Third-party image resource'));
     expect(find.text('Third-party image resource'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui custom components page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiCustomComponentsPage()),
+    );
+
+    expect(find.text('QuickJS UI Custom Components'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('Size: medium'));
+    expect(
+      find.textContaining('QuickJS UI custom components error'),
+      findsNothing,
+    );
+    expect(find.text('0.4 custom renderer registry'), findsOneWidget);
+    expect(find.text('Size: medium'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('Reset'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {
