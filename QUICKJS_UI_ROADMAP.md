@@ -537,17 +537,19 @@ Flutter 风格对象写法：
 
 - [x] Dart 侧自定义 renderer registry：允许宿主注册自定义 `type` 到 Flutter Widget builder，并贯通 `QuickjsUiView` /
   `QuickjsUiNavigator`。
-- [ ] JS 侧轻量组件约定：组件仍返回 UI schema，不直接返回 Widget。
-- [ ] 支持 props 下发和事件上抛的受限协议。
-- [ ] 支持完整页面可见性生命周期：`onShow`、`onHide`、`onMount`、`onDispose`。
-- [ ] JSUI router 内部 push / replace / pop 支持 animated transition，同时保留已 push 页面
+- [x] JS 侧轻量组件约定：组件仍返回 UI schema，不直接返回 Widget。
+- [x] 支持 props 下发和事件上抛的受限协议。
+- [x] 支持完整页面可见性生命周期：`onShow`、`onHide`、`onMount`、`onDispose`。
+- [x] JSUI router 内部 push / replace / pop 支持 animated transition，同时保留已 push 页面
   state/schema snapshot，并与 `onShow` / `onHide` 顺序对齐。
-- [ ] 支持滚动控制和常用手势：`onScroll`、`scrollTo`、longPress、drag/swipe 的受限事件模型。
-- [ ] 支持事件节流/合并策略，避免 scroll/drag/text composing 高频跨边界调用。
-- [ ] 支持基础隐式动画和列表 item enter/exit/reorder 过渡。
-- [ ] 补齐表单控件：`Form/Checkbox/Switch/Radio/DropdownButton`，状态和校验仍由 JS 控制。
-- [ ] 支持自定义组件 JS module 模板，组件函数返回 UI schema，并由 registry 映射到宿主 renderer。
-- [ ] example：自定义 `card` / `appBar` 组件。
+- [x] 支持基础滚动和常用手势事件：`onScroll`、`onTap`、`onLongPress` 的受限事件模型。
+- [ ] 支持滚动控制和复杂手势：`scrollTo`、drag/swipe 的受限事件模型。
+- [x] 支持事件节流/合并策略，避免 scroll/text input/custom renderer 高频跨边界调用。
+- [x] 支持基础隐式动画：`Container` / `Padding` 的 duration 和 curve 受 schema 控制。
+- [ ] 支持列表 item enter/exit/reorder 过渡。
+- [x] 补齐表单控件：`Form/Checkbox/Switch/Radio/DropdownButton`，状态和校验仍由 JS 控制。
+- [x] 支持自定义组件 JS module 模板，组件函数返回 UI schema，并由 registry 映射到宿主 renderer。
+- [x] example：自定义 `card` / `appBar` 组件。
 
 ### 0.4.1：开发体验与调试工具
 
@@ -557,6 +559,28 @@ Flutter 风格对象写法：
 - [ ] inspector 记录 lifecycle timeline，包含 route/app/widget 生命周期事件顺序。
 - [ ] example：开发调试面板。
 - [ ] 测试：snapshot 序列化、diff log、lifecycle timeline、error overlay 信息完整性。
+
+### 0.4.x：横切能力补齐
+
+这些能力不是单个控件功能，会影响 schema、renderer、自定义组件、bundle 兼容和宿主集成边界。
+详细设计记录在 `docs/quickjs_ui_cross_cutting.md`。设计时先参考 Flutter 原生模型（Semantics、Theme、
+Focus/Actions/Shortcuts、Form/FormField、ScrollController/ScrollNotification、ImplicitlyAnimatedWidget /
+AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，避免盲目套 Web/DOM 语义。
+
+- [ ] Accessibility / Semantics：`semanticLabel`、`tooltip`、`role`、focus order、screen reader 文本、
+  图片/按钮/输入控件语义补齐。
+- [ ] Theme / Design Tokens：颜色、文字、spacing、radius、elevation、dark mode、品牌主题注入；
+  JS schema 引用 token，不直接绑定 Flutter Theme 细节。
+- [ ] Focus / Keyboard / IME：focus/blur 统一事件、next/previous field、keyboard action、autofocus、
+  submit、text composing 高频事件策略。
+- [ ] Schema Versioning / Compatibility：schema version、helper/runtime protocol version、deprecated props、
+  unknown prop 策略、minimum quickjs_ui version。
+- [ ] Custom Renderer Lifecycle：自定义 renderer 的 controller 创建/释放、pause/resume、show/hide、dispose、
+  资源归属和高频事件策略。
+- [ ] Resource / Media Model：asset/file/network resource resolver、image cache、video/audio/custom media resource、
+  permission/checksum，以及何时接入 core stream。
+- [ ] Conformance Tests：schema fixtures、renderer smoke/golden、lifecycle sequence、navigation sequence、
+  event backpressure、bundle compatibility。
 
 ### 0.5：页面包发布格式
 

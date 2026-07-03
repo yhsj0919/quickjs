@@ -12,6 +12,8 @@ final class QuickjsUiRenderer {
 
   final QuickjsUiEventHandler onEvent;
   final QuickjsUiComponentRegistry registry;
+  late final QuickjsUiEventDispatcher _eventDispatcher =
+      QuickjsUiEventDispatcher(onEvent);
   final Map<String, _RenderedNode> _cache = <String, _RenderedNode>{};
 
   Widget build(QuickjsUiNode node, {BuildContext? buildContext}) {
@@ -20,6 +22,7 @@ final class QuickjsUiRenderer {
     context = QuickjsUiRenderContext(
       buildNode: (node) => _buildNode(context, node, nextCache, buildContext),
       onEvent: onEvent,
+      eventDispatcher: _eventDispatcher,
       buildContext: buildContext,
     );
     final widget = _buildNode(context, node, nextCache, buildContext);
@@ -51,6 +54,11 @@ final class QuickjsUiRenderer {
     );
     nextCache[key] = _RenderedNode(signature: signature, widget: widget);
     return widget;
+  }
+
+  void dispose() {
+    _eventDispatcher.dispose();
+    _cache.clear();
   }
 }
 

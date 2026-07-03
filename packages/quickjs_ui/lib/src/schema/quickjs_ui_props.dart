@@ -74,6 +74,29 @@ final class QuickjsUiProps {
     return (doubleValue(value, name: 'opacity') ?? 1).clamp(0, 1).toDouble();
   }
 
+  static Duration? duration(Object? value, {String name = 'duration'}) {
+    if (value == null) {
+      return null;
+    }
+    if (value is! num || value < 0) {
+      throw FormatException('quickjs_ui $name must be a non-negative number');
+    }
+    return Duration(milliseconds: value.round());
+  }
+
+  static Curve curve(Object? value) {
+    return switch (value) {
+      null => Curves.easeInOut,
+      'linear' => Curves.linear,
+      'easeIn' => Curves.easeIn,
+      'easeOut' => Curves.easeOut,
+      'easeInOut' => Curves.easeInOut,
+      'fastOutSlowIn' => Curves.fastOutSlowIn,
+      'easeOutCubic' => Curves.easeOutCubic,
+      _ => throw const FormatException('Unknown quickjs_ui animation curve'),
+    };
+  }
+
   static Color? color(Object? value, {QuickjsUiColorResolver? resolveColor}) {
     if (value == null) {
       return null;

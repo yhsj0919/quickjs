@@ -40,7 +40,7 @@ export default Page({
           style: { fontSize: 20, fontWeight: 'bold' }
         }),
         ElevatedButton({
-          child: Text('Increment'),
+          child: Text('Add'),
           onPressed: page.increment()
         })
       ]

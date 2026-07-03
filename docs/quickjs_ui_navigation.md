@@ -26,6 +26,12 @@ the page session's normal dispatch/render queue. This keeps `onRouteLeave`
 ordered with other route events even when the current JS handler is suspended at
 `await quickjsUiNavigation.push()`.
 
+Page visibility lifecycle follows the same route lifecycle queue for internal
+router transitions. A newly rendered page receives `onMount` and then `onShow`.
+When a page is covered or removed by JSUI navigation it receives `onRouteLeave`
+and then `onHide`; when a previous page becomes visible again it receives
+`onRouteResult`, `onShow`, and then `onRouteEnter`.
+
 Each `quickjsUiNavigation` object is bound to the page that received it. A page
 can only navigate while it is the current JSUI route entry, and only one
 navigation operation from that entry may be pending. Repeated calls from the
@@ -137,6 +143,12 @@ The JS page can catch the error and render an application-level message.
 Navigation intents may include a serializable `transition` object. Flutter maps
 it to a native route transition when the navigation crosses a Flutter route
 boundary.
+
+For JSUI-internal routes, the same transition object animates the top route
+entry without recreating earlier entries. Previous pushed pages keep their
+controller, state, and last rendered schema while they are hidden. On pop, the
+removed page remains as a temporary overlay until its reverse transition
+finishes, then its controller is disposed.
 
 ```js
 await quickjsUiNavigation.push({

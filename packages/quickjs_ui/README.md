@@ -73,10 +73,27 @@ Supported widgets:
 - `Padding`
 - `Center`
 - `SizedBox`
+- `Form`
+- `Checkbox`
+- `Switch`
+- `Radio`
+- `DropdownButton`
 
 `TextField` supports controlled `value`, `onChanged`, `onSubmitted`, `onFocus`,
 and `onBlur` event descriptors. Flutter dispatches the current string value
 with each event.
+
+0.4 examples:
+
+- `example/assets/quickjs_ui/custom_components_page.mjs` shows JS `Component()`
+  modules, controlled form controls, event descriptors, and basic implicit
+  animation props.
+- `example/lib/pages/quickjs_ui_custom_components_page.dart` shows a Dart
+  `QuickjsUiComponentRegistry` with custom `AppBar` and `Card` renderers.
+- `example/assets/quickjs_ui/counter_page.mjs` is the minimal single-file
+  `Page()` counter sample.
+- The root example app registers both runnable pages in
+  `example/lib/quickjs_ui_example_pages.dart`.
 
 `QuickjsUiView` exposes `loadingBuilder`, `errorBuilder`, and `emptyBuilder` for
 the page loading, failure, and no-rendered-node states. `placeholder` remains as

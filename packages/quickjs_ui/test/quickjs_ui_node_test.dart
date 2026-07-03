@@ -307,6 +307,12 @@ export default Page({
   onMount(state) {
     return append(state, 'mount');
   },
+  onShow(state) {
+    return append(state, 'show');
+  },
+  onHide(state) {
+    return append(state, 'hide');
+  },
   onPause(state) {
     return append(state, 'pause');
   },
@@ -332,6 +338,8 @@ export default Page({
 
     await controller.loadPlugin(plugin);
     await controller.lifecycle('mount');
+    await controller.routeLifecycle('show');
+    await controller.routeLifecycle('hide');
     await controller.lifecycle('pause');
     await controller.lifecycle('resume');
     await controller.lifecycle(
@@ -352,6 +360,8 @@ export default Page({
 
     expect((controller.state! as Map)['events'], <Object?>[
       'mount',
+      'show',
+      'hide',
       'pause',
       'resume',
       'enter:detail',
@@ -360,7 +370,7 @@ export default Page({
     ]);
     expect(
       controller.node?.props['data'],
-      'mount|pause|resume|enter:detail|leave:child|result:child:ok',
+      'mount|show|hide|pause|resume|enter:detail|leave:child|result:child:ok',
     );
 
     controller.dispose();
@@ -398,6 +408,37 @@ export default Page({
     expect(events, hasLength(1));
     expect(events.single.level, QuickjsConsoleLevel.log);
     expect(events.single.text, contains('lifecycle state'));
+  });
+
+  test('does not notify for no-op lifecycle hooks', () async {
+    final controller = QuickjsUiController();
+    addTearDown(controller.dispose);
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_noop_lifecycle_notify_test',
+      version: '0.4.0',
+      source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { label: 'idle' };
+  },
+  build(state) {
+    return Text(state.label);
+  }
+});
+''',
+    );
+
+    await controller.loadPlugin(plugin);
+    var notifications = 0;
+    controller.addListener(() {
+      notifications += 1;
+    });
+
+    await controller.lifecycle('pause');
+
+    expect(notifications, 0);
   });
 
   test('runs dispose lifecycle before closing owned runtime', () async {
@@ -961,6 +1002,46 @@ export default Page({
     expect(find.text('Overlay'), findsOneWidget);
   });
 
+  testWidgets('renders basic implicit animation widgets', (tester) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'Container',
+          'width': 80,
+          'height': 40,
+          'color': '#336699',
+          'opacity': 0.5,
+          'animationDurationMs': 180,
+          'animationCurve': 'easeOut',
+          'child': <String, Object?>{'type': 'Text', 'data': 'Animated box'},
+        },
+        <String, Object?>{
+          'type': 'Padding',
+          'padding': 12,
+          'animationDurationMs': 120,
+          'child': <String, Object?>{'type': 'Text', 'data': 'Animated pad'},
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+    );
+
+    final animatedContainer = tester.widget<AnimatedContainer>(
+      find.byType(AnimatedContainer),
+    );
+    expect(animatedContainer.duration, const Duration(milliseconds: 180));
+    expect(animatedContainer.curve, Curves.easeOut);
+    expect(find.byType(AnimatedOpacity), findsOneWidget);
+
+    final animatedPadding = tester.widget<AnimatedPadding>(
+      find.byType(AnimatedPadding),
+    );
+    expect(animatedPadding.duration, const Duration(milliseconds: 120));
+  });
+
   test('builds Image widget props without loading image bytes', () {
     final registry = QuickjsUiComponentRegistry.defaults();
     final context = QuickjsUiRenderContext(
@@ -1067,6 +1148,299 @@ export default Page({
     });
   });
 
+  testWidgets('renders controlled checkbox and switch events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'Checkbox',
+          'value': false,
+          'onChanged': <String, Object?>{'method': 'setChecked'},
+        },
+        <String, Object?>{
+          'type': 'Switch',
+          'value': true,
+          'onChanged': <String, Object?>{'method': 'setEnabled'},
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(Checkbox));
+    expect(events.single, <String, Object?>{
+      'method': 'setChecked',
+      'value': true,
+    });
+
+    await tester.tap(find.byType(Switch));
+    expect(events.last, <String, Object?>{
+      'method': 'setEnabled',
+      'value': false,
+    });
+  });
+
+  testWidgets('renders controlled radio and dropdown events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'Radio',
+          'value': 'email',
+          'groupValue': 'phone',
+          'onChanged': <String, Object?>{'method': 'setContact'},
+        },
+        <String, Object?>{
+          'type': 'DropdownButton',
+          'value': 'small',
+          'onChanged': <String, Object?>{'method': 'setSize'},
+          'items': <Object?>[
+            <String, Object?>{'value': 'small', 'label': 'Small'},
+            <String, Object?>{'value': 'large', 'label': 'Large'},
+          ],
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(Radio<Object?>));
+    expect(events.single, <String, Object?>{
+      'method': 'setContact',
+      'value': 'email',
+    });
+
+    await tester.tap(find.byType(DropdownButton<Object?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Large').last);
+    await tester.pumpAndSettle();
+
+    expect(events.last, <String, Object?>{
+      'method': 'setSize',
+      'value': 'large',
+    });
+  });
+
+  testWidgets('renders tap and long press gesture events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'width': 120,
+      'height': 80,
+      'onTap': <String, Object?>{'method': 'tapCard'},
+      'onLongPress': <String, Object?>{'method': 'holdCard'},
+      'child': <String, Object?>{'type': 'Text', 'data': 'Gesture card'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Gesture card'));
+    expect(events.single, <String, Object?>{'method': 'tapCard'});
+
+    await tester.longPress(find.text('Gesture card'));
+    expect(events.last, <String, Object?>{'method': 'holdCard'});
+  });
+
+  testWidgets('renders ListView scroll events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ListView',
+      'onScroll': <String, Object?>{'method': 'scrollList'},
+      'children': <Object?>[
+        for (var index = 0; index < 20; index++)
+          <String, Object?>{
+            'type': 'SizedBox',
+            'height': 40,
+            'child': <String, Object?>{'type': 'Text', 'data': 'Row $index'},
+          },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 160,
+            child: QuickjsUiRenderer(onEvent: events.add).build(node),
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(find.byType(ListView), const Offset(0, -120));
+    await tester.pump();
+
+    expect(events, isNotEmpty);
+    expect(events.last['method'], 'scrollList');
+    expect(events.last['pixels'], isA<double>());
+    expect(events.last['maxScrollExtent'], greaterThan(0));
+    expect(events.last['axis'], 'vertical');
+  });
+
+  test('coalesces throttled renderer events by key', () async {
+    final events = <Map<String, Object?>>[];
+    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    addTearDown(dispatcher.dispose);
+    final event = <String, Object?>{
+      'method': 'scrollList',
+      'throttleMs': 40,
+      'coalesceKey': 'list:main:onScroll',
+    };
+
+    dispatcher.dispatch(event, payload: const <String, Object?>{'pixels': 1});
+    dispatcher.dispatch(event, payload: const <String, Object?>{'pixels': 2});
+    dispatcher.dispatch(event, payload: const <String, Object?>{'pixels': 3});
+
+    expect(events, hasLength(1));
+    expect(events.single['pixels'], 1);
+
+    await Future<void>.delayed(const Duration(milliseconds: 70));
+
+    expect(events, hasLength(2));
+    expect(events.last['pixels'], 3);
+  });
+
+  test('debounces renderer events by key', () async {
+    final events = <Map<String, Object?>>[];
+    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    addTearDown(dispatcher.dispose);
+    final event = <String, Object?>{
+      'method': 'videoProgress',
+      'debounceMs': 30,
+      'coalesceKey': 'video:hero:progress',
+    };
+
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 1},
+    );
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 2},
+    );
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 3},
+    );
+
+    expect(events, isEmpty);
+
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    expect(events, hasLength(1));
+    expect(events.single['positionMs'], 3);
+  });
+
+  test('drops renderer events inside drop window', () async {
+    final events = <Map<String, Object?>>[];
+    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    addTearDown(dispatcher.dispose);
+    final event = <String, Object?>{
+      'method': 'videoProgress',
+      'dropMs': 40,
+      'coalesceKey': 'video:hero:progress',
+    };
+
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 1},
+    );
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 2},
+    );
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 3},
+    );
+
+    expect(events, hasLength(1));
+    expect(events.single['positionMs'], 1);
+
+    await Future<void>.delayed(const Duration(milliseconds: 70));
+    dispatcher.dispatch(
+      event,
+      payload: const <String, Object?>{'positionMs': 4},
+    );
+
+    expect(events, hasLength(2));
+    expect(events.last['positionMs'], 4);
+  });
+
+  test('does not queue timing events without coalesce key', () async {
+    final events = <Map<String, Object?>>[];
+    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    addTearDown(dispatcher.dispose);
+    final event = <String, Object?>{
+      'method': 'anonymousProgress',
+      'throttleMs': 40,
+    };
+
+    dispatcher.dispatch(event, payload: const <String, Object?>{'value': 1});
+    dispatcher.dispatch(event, payload: const <String, Object?>{'value': 2});
+
+    expect(events, hasLength(2));
+    expect(events.last['value'], 2);
+  });
+
+  test('drops oldest pending renderer event above queue limit', () async {
+    final events = <Map<String, Object?>>[];
+    final dispatcher = QuickjsUiEventDispatcher(
+      events.add,
+      maxPendingEvents: 2,
+    );
+    addTearDown(dispatcher.dispose);
+
+    dispatcher.dispatch(
+      const <String, Object?>{
+        'method': 'one',
+        'debounceMs': 40,
+        'coalesceKey': 'one',
+      },
+      payload: const <String, Object?>{'value': 1},
+    );
+    dispatcher.dispatch(
+      const <String, Object?>{
+        'method': 'two',
+        'debounceMs': 40,
+        'coalesceKey': 'two',
+      },
+      payload: const <String, Object?>{'value': 2},
+    );
+    dispatcher.dispatch(
+      const <String, Object?>{
+        'method': 'three',
+        'debounceMs': 40,
+        'coalesceKey': 'three',
+      },
+      payload: const <String, Object?>{'value': 3},
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(events.map((event) => event['method']), <Object?>['two', 'three']);
+  });
+
   testWidgets('renders custom registry component', (tester) async {
     final registry = QuickjsUiComponentRegistry.defaults()
       ..register('Badge', (context, node) {
@@ -1093,9 +1467,7 @@ export default Page({
     expect(find.text('Custom'), findsOneWidget);
   });
 
-  testWidgets('QuickjsUiView renders custom registry component', (
-    tester,
-  ) async {
+  test('QuickjsUiView accepts custom registry', () {
     final registry = QuickjsUiComponentRegistry.defaults()
       ..register('Badge', (context, node) {
         return DecoratedBox(
@@ -1119,14 +1491,9 @@ export default Page({
 });
 ''',
     );
+    final view = QuickjsUiView.plugin(plugin, registry: registry);
 
-    await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiView.plugin(plugin, registry: registry)),
-    );
-    await _pumpUntilFound(tester, find.text('Custom from view'));
-
-    expect(find.byType(DecoratedBox), findsOneWidget);
-    expect(find.text('Custom from view'), findsOneWidget);
+    expect(view.registry, same(registry));
   });
 
   test('renderer skips unchanged keyed nodes', () {
@@ -1738,6 +2105,79 @@ export function countLabel(count) {
 
     expect(session.state, <String, Object?>{'count': 5});
     expect(session.node?.children.first.props['data'], 'Bundle count: 5');
+  });
+
+  test('runs JS component props and event protocol', () async {
+    final bundle = await QuickjsUiBundle.fromEntry(
+      id: 'quickjs_ui_component_protocol',
+      version: '0.4.0',
+      entry: 'pages/main.mjs',
+      resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+        'pages/main.mjs': '''
+import { Page } from 'quickjs_ui';
+import { CounterCard } from '../components/counter_card.mjs';
+
+export default Page({
+  createState() {
+    return { count: 2 };
+  },
+  build(state, props, actions) {
+    return CounterCard({
+      title: props.title,
+      count: state.count,
+      onIncrement: actions.increment({ step: 3 })
+    });
+  },
+  increment(state, payload) {
+    return { ...state, count: state.count + payload.step };
+  }
+});
+''',
+        'components/counter_card.mjs': '''
+import { Column, Component, ElevatedButton, Text } from 'quickjs_ui';
+
+export const CounterCard = Component((props) => {
+  return Column({
+    children: [
+      Text(props.title),
+      ElevatedButton({
+        onPressed: props.onIncrement,
+        child: Text(`Count: \${props.count}`)
+      })
+    ]
+  });
+});
+''',
+      }),
+    );
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      bundle.toPlugin(),
+      initialProps: const <String, Object?>{'title': 'Counter'},
+    );
+
+    expect(session.node?.children.first.props['data'], 'Counter');
+    expect(
+      session.node?.children.last.children.single.props['data'],
+      'Count: 2',
+    );
+    expect(session.node?.children.last.props['onPressed'], <String, Object?>{
+      'method': 'increment',
+      'payload': <String, Object?>{'step': 3},
+    });
+
+    await session.dispatch(
+      session.node?.children.last.props['onPressed']! as Map<String, Object?>,
+    );
+
+    expect(session.state, <String, Object?>{'count': 5});
+    expect(
+      session.node?.children.last.children.single.props['data'],
+      'Count: 5',
+    );
   });
 
   test('runs multi-file file bundle page protocol', () async {

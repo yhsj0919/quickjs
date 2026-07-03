@@ -172,11 +172,17 @@ final class QuickjsUiController extends ChangeNotifier {
     _ensureActive();
     _error = null;
     try {
-      await _session.lifecycle(type, payload: payload, render: render);
+      final changed = await _session.lifecycle(
+        type,
+        payload: payload,
+        render: render,
+      );
       if (_disposed) {
         return;
       }
-      notifyListeners();
+      if (changed) {
+        notifyListeners();
+      }
     } catch (error) {
       if (_disposed) {
         return;
@@ -194,11 +200,17 @@ final class QuickjsUiController extends ChangeNotifier {
     _ensureActive();
     _error = null;
     try {
-      await _session.routeLifecycle(type, payload: payload, render: render);
+      final changed = await _session.routeLifecycle(
+        type,
+        payload: payload,
+        render: render,
+      );
       if (_disposed) {
         return;
       }
-      notifyListeners();
+      if (changed) {
+        notifyListeners();
+      }
     } catch (error) {
       if (_disposed) {
         return;
