@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
+import 'package:quickjs_ui/src/renderer/quickjs_ui_event_ingress.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 100 && finder.evaluate().isEmpty; attempt++) {
@@ -1441,6 +1442,49 @@ export default Page({
     expect(events.map((event) => event['method']), <Object?>['two', 'three']);
   });
 
+  testWidgets('event ingress defers events submitted during build', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final ingress = QuickjsUiEventIngress((event) async {
+      events.add(event);
+    });
+    addTearDown(ingress.dispose);
+    var deferredDuringBuild = false;
+
+    await tester.pumpWidget(
+      _QuickjsUiIngressProbe(
+        ingress: ingress,
+        action: 'during-build',
+        onSubmitted: () {
+          deferredDuringBuild = events.isEmpty;
+        },
+      ),
+    );
+
+    expect(deferredDuringBuild, isTrue);
+    expect(events, hasLength(1));
+    expect(events.single['action'], 'during-build');
+  });
+
+  testWidgets('event ingress preserves event order across frames', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final ingress = QuickjsUiEventIngress((event) async {
+      events.add(event);
+    });
+    addTearDown(ingress.dispose);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    ingress.submit(<String, Object?>{'action': 'first'});
+    ingress.submit(<String, Object?>{'action': 'second'});
+    await tester.pump();
+    await tester.pump();
+
+    expect(events.map((event) => event['action']), <Object?>['first', 'second']);
+  });
+
   testWidgets('renders custom registry component', (tester) async {
     final registry = QuickjsUiComponentRegistry.defaults()
       ..register('Badge', (context, node) {
@@ -2391,6 +2435,119 @@ export function title() {
     expect(controller.state, <String, Object?>{'count': 7});
     expect(controller.node?.children.first.props['data'], 'Count: 7');
   });
+
+  test('video scrub survives many paused progress updates', () async {
+    final bundle = await QuickjsUiBundle.fromEntry(
+      id: 'video_scrub_repro',
+      version: '0.1.0',
+      entry: 'pages/video.mjs',
+      resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+        'pages/video.mjs': '''
+import { Page, Slider } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return {
+      ready: true,
+      playing: false,
+      scrubbing: false,
+      wasPlayingBeforeScrub: false,
+      positionMs: 0,
+      scrubPositionMs: 0,
+      durationMs: 60000,
+      seekToken: 0,
+      seekPositionMs: 0,
+      status: 'ready'
+    };
+  },
+  build(state, _props, page) {
+    const sliderValue = state.scrubbing ? state.scrubPositionMs : state.positionMs;
+    const sliderMax = Math.max(state.durationMs, 1);
+    return Slider({
+      min: 0,
+      max: sliderMax,
+      value: Math.min(sliderValue, sliderMax),
+      onChanged: page.scrub(),
+      onChangeEnd: page.seek()
+    });
+  },
+  onProgress(state, _payload, _props, event) {
+    if (state.scrubbing) {
+      return { ...state, durationMs: event.durationMs ?? state.durationMs };
+    }
+    return {
+      ...state,
+      positionMs: event.positionMs ?? state.positionMs,
+      durationMs: event.durationMs ?? state.durationMs
+    };
+  },
+  scrub(state, _payload, _props, event) {
+    const value = Math.max(0, event.value ?? state.positionMs);
+    if (!state.scrubbing) {
+      return {
+        ...state,
+        scrubbing: true,
+        wasPlayingBeforeScrub: state.playing,
+        playing: false,
+        scrubPositionMs: value,
+        status: 'scrubbing'
+      };
+    }
+    return { ...state, scrubPositionMs: value };
+  },
+  seek(state, _payload, _props, event) {
+    const value = Math.max(0, event.value ?? state.scrubPositionMs);
+    const playing = state.wasPlayingBeforeScrub;
+    return {
+      ...state,
+      scrubbing: false,
+      wasPlayingBeforeScrub: false,
+      seekToken: state.seekToken + 1,
+      seekPositionMs: value,
+      positionMs: value,
+      scrubPositionMs: value,
+      playing,
+      status: playing ? 'playing' : 'seeked'
+    };
+  }
+});
+''',
+      }),
+    );
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(bundle.toPlugin());
+
+    for (var i = 0; i < 5000; i++) {
+      await session.dispatch(<String, Object?>{
+        'method': 'onProgress',
+        'positionMs': i * 10,
+        'durationMs': 60000,
+        'isPlaying': false,
+      });
+    }
+
+    await session.dispatch(<String, Object?>{
+      'method': 'scrub',
+      'value': 12000.0,
+    });
+    expect(session.state, isA<Map>());
+    final state = session.state! as Map<String, Object?>;
+    expect(state['scrubbing'], isTrue);
+    expect(state['scrubPositionMs'], 12000.0);
+
+    await session.dispatch(<String, Object?>{
+      'method': 'seek',
+      'value': 12000.0,
+    });
+    expect(session.state, isA<Map>());
+    final seeked = session.state! as Map<String, Object?>;
+    expect(seeked['scrubbing'], isFalse);
+    expect(seeked['positionMs'], 12000.0);
+    expect(seeked['seekToken'], 1);
+  });
 }
 
 QuickjsPlugin _unknownComponentPlugin() {
@@ -2440,4 +2597,23 @@ export default Page({
 });
 ''',
   );
+}
+
+class _QuickjsUiIngressProbe extends StatelessWidget {
+  const _QuickjsUiIngressProbe({
+    required this.ingress,
+    required this.action,
+    required this.onSubmitted,
+  });
+
+  final QuickjsUiEventIngress ingress;
+  final String action;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    ingress.submit(<String, Object?>{'action': action});
+    onSubmitted();
+    return const SizedBox.shrink();
+  }
 }

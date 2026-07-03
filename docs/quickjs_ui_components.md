@@ -154,5 +154,20 @@ always provide a stable key.
 Use plain `context.dispatch()` only for low-frequency events such as `onEnded`,
 `onError`, `onPlay`, or `onPause`.
 
+## Renderer event ingress
+
+`QuickjsUiView` does not wire renderer callbacks directly to
+`QuickjsUiController.dispatch()`. All renderer and custom-component events go
+through `QuickjsUiEventIngress`, which queues them and flushes after the
+current frame. This keeps page state updates from synchronously rebuilding the
+view during Flutter `build`.
+
+Custom renderers should call `context.dispatch()` / `context.dispatchEvent()`
+normally. Do not add `addPostFrameCallback` around those calls in host code.
+
+See `docs/quickjs_ui_cross_cutting.md` for the full pipeline, fix/refactor
+policy, and the `seekToken` / `restartToken` imperative-control pattern used by
+the native video player example.
+
 Use the same registry with `QuickjsUiView` or `QuickjsUiNavigator` so nested
 JSUI routes render custom component types consistently.

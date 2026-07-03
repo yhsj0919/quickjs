@@ -28,6 +28,7 @@ final class QuickjsUiComponentRegistry {
       'Form': _buildForm,
       'Checkbox': _buildCheckbox,
       'Switch': _buildSwitch,
+      'Slider': _buildSlider,
       'Radio': _buildRadio,
       'DropdownButton': _buildDropdownButton,
     });
@@ -383,6 +384,37 @@ Widget _buildSwitch(QuickjsUiRenderContext context, QuickjsUiNode node) {
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
             payload: <String, Object?>{'value': value},
           ),
+  );
+}
+
+Widget _buildSlider(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final onChanged = QuickjsUiProps.event(node.props['onChanged']);
+  final onChangeEnd = QuickjsUiProps.event(node.props['onChangeEnd']);
+  final min = QuickjsUiProps.doubleValue(node.props['min']) ?? 0;
+  final max = QuickjsUiProps.doubleValue(node.props['max']) ?? 1;
+  final value = (QuickjsUiProps.doubleValue(node.props['value']) ?? min).clamp(
+    min,
+    max,
+  );
+  return Slider(
+    min: min,
+    max: max,
+    value: value,
+    divisions: QuickjsUiProps.intValue(node.props['divisions']),
+    label: QuickjsUiProps.string(node.props['label']),
+    onChanged: onChanged == null
+        ? null
+        : (next) => context.dispatchEvent(
+            onChanged,
+            defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            payload: <String, Object?>{'value': next},
+          ),
+    onChangeEnd: onChangeEnd == null
+        ? null
+        : (next) => context.dispatch(<String, Object?>{
+            ...onChangeEnd,
+            'value': next,
+          }),
   );
 }
 

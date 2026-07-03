@@ -28,6 +28,9 @@ dependencies:
   quickjs_ui:
     path: ../packages/quickjs_ui
 
+  video_player: ^2.10.0
+  fvp: ^0.37.3
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.9
@@ -62,6 +65,7 @@ flutter:
     - assets/quickjs_ui/counter_page.mjs
     - assets/quickjs_ui/controls_page.mjs
     - assets/quickjs_ui/custom_components_page.mjs
+    - assets/quickjs_ui/native_video_player_page.mjs
     - assets/quickjs_ui/diff_page.mjs
     - assets/quickjs_ui/host_capabilities_page.mjs
     - assets/quickjs_ui/navigation_child_page.mjs

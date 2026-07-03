@@ -7,6 +7,7 @@ import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_host_capabilities_page.dart';
 import 'pages/quickjs_ui_navigation_page.dart';
+import 'pages/quickjs_ui_native_video_player_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui_profile_form_page.dart';
@@ -80,5 +81,11 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     description:
         'Covers JS Component(), custom Dart renderer registry, form controls, event descriptors, and implicit animation props.',
     builder: (_) => const QuickjsUiCustomComponentsPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI Native VideoPlayer',
+    description:
+        '演示 JS Component() 返回自定义 type，由 Dart registry 注入 video_player，并通过事件回传进度与状态。',
+    builder: (_) => const QuickjsUiNativeVideoPlayerPage(),
   ),
 ];

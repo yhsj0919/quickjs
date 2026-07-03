@@ -5,6 +5,7 @@ import 'package:quickjs/quickjs.dart';
 
 import '../host/quickjs_ui_permission_policy.dart';
 import '../renderer/quickjs_ui_component_registry.dart';
+import '../renderer/quickjs_ui_event_ingress.dart';
 import '../renderer/quickjs_ui_renderer.dart';
 import '../resource/quickjs_ui_bundle.dart';
 import '../resource/quickjs_ui_network_loader.dart';
@@ -251,6 +252,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   late QuickjsUiController _controller;
   late bool _ownsController;
   late QuickjsUiRenderer _renderer;
+  late QuickjsUiEventIngress _eventIngress;
   QuickjsUiNetworkLoader? _networkLoader;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
@@ -264,11 +266,16 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
     _ownsController = widget.controller == null;
     _controller.addListener(_handleControllerChanged);
-    _renderer = QuickjsUiRenderer(
-      registry: widget.registry,
-      onEvent: _controller.dispatch,
-    );
+    _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
+    _renderer = _createRenderer();
     _load();
+  }
+
+  QuickjsUiRenderer _createRenderer() {
+    return QuickjsUiRenderer(
+      registry: widget.registry,
+      onEvent: _eventIngress.submit,
+    );
   }
 
   @override
@@ -283,17 +290,13 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
+      _eventIngress.dispose();
+      _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
       _renderer.dispose();
-      _renderer = QuickjsUiRenderer(
-        registry: widget.registry,
-        onEvent: _controller.dispatch,
-      );
+      _renderer = _createRenderer();
     } else if (oldWidget.registry != widget.registry) {
       _renderer.dispose();
-      _renderer = QuickjsUiRenderer(
-        registry: widget.registry,
-        onEvent: _controller.dispatch,
-      );
+      _renderer = _createRenderer();
     }
     if (oldWidget.plugin != widget.plugin ||
         oldWidget._path != widget._path ||
@@ -325,6 +328,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _renderer.dispose();
+    _eventIngress.dispose();
     _controller.removeListener(_handleControllerChanged);
     if (_ownsController) {
       _controller.dispose();
