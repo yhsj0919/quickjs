@@ -71,20 +71,19 @@ export default Page({
   },
 
   editDraft(state, payload, props, event) {
-    return { ...state, draft: event.value ?? '' };
+    return { draft: event.value ?? '' };
   },
 
   addTodo(state, payload, props, event) {
     const title = String(event.value ?? state.draft ?? '').trim();
     if (!title) {
-      return { ...state, status: 'Type a task before adding' };
+      return { status: 'Type a task before adding' };
     }
     const todos = [
       ...state.todos,
       { id: String(Date.now()), title, done: false },
     ];
     return {
-      ...state,
       draft: '',
       todos,
       status: `${todos.filter((todo) => !todo.done).length} active tasks`,
@@ -99,7 +98,6 @@ export default Page({
       return { ...todo, done: !todo.done };
     });
     return {
-      ...state,
       todos,
       status: `${todos.filter((todo) => !todo.done).length} active tasks`,
     };

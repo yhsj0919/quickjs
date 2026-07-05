@@ -2,40 +2,61 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../diagnostics/quickjs_ui_diag.dart';
+import 'quickjs_ui_render_context.dart';
 
 typedef QuickjsUiEventSink = Future<void> Function(Map<String, Object?> event);
 
 /// Queues renderer UI events and flushes them after the current frame so
 /// controller updates never synchronously rebuild [QuickjsUiView] during build.
+///
+/// Events keep the order in which Flutter observed them. Samples are keyed by
+/// [QuickjsUiEventEnvelope.coalesceKey] and only the latest value in the same
+/// command-delimited slot is sent to JavaScript in a frame.
 final class QuickjsUiEventIngress {
-  QuickjsUiEventIngress(this._sink);
+  QuickjsUiEventIngress(this._onEvent);
 
-  final QuickjsUiEventSink _sink;
-  final List<Map<String, Object?>> _pending = <Map<String, Object?>>[];
+  final QuickjsUiEventSink _onEvent;
+  final List<_PendingIngressEvent> _pending = <_PendingIngressEvent>[];
+  final Map<String, _PendingIngressEvent> _pendingSampleSlots =
+      <String, _PendingIngressEvent>{};
   bool _flushScheduled = false;
   bool _flushing = false;
   bool _disposed = false;
 
   void submit(Map<String, Object?> event) {
+    submitEnvelope(QuickjsUiEventEnvelope.command(event));
+  }
+
+  void submitEnvelope(QuickjsUiEventEnvelope envelope) {
     if (_disposed) {
       return;
     }
-    _pending.add(Map<String, Object?>.from(event));
-    if (_pending.length >= 16) {
-      QuickjsUiDiag.log(
-        'ingress',
-        'submit queue=${_pending.length} '
-        'flushing=$_flushing scheduled=$_flushScheduled '
-        'method=${event['method'] ?? event['action']}',
-      );
+    if (envelope.kind == QuickjsUiEventKind.sample &&
+        envelope.coalesceKey != null) {
+      final key = envelope.coalesceKey!;
+      final pending = _pendingSampleSlots[key];
+      if (pending != null) {
+        pending.envelope = envelope;
+        _scheduleFlush();
+        return;
+      }
+      final item = _PendingIngressEvent.sample(envelope: envelope);
+      _pending.add(item);
+      _pendingSampleSlots[key] = item;
+      _scheduleFlush();
+      return;
     }
+
+    final item = _PendingIngressEvent.command(envelope: envelope.asCommand());
+    _pending.add(item);
+    _pendingSampleSlots.clear();
     _scheduleFlush();
   }
 
   void dispose() {
     _disposed = true;
     _pending.clear();
+    _pendingSampleSlots.clear();
     _flushScheduled = false;
   }
 
@@ -57,29 +78,29 @@ final class QuickjsUiEventIngress {
       return;
     }
     _flushing = true;
-    final batchSize = _pending.length;
-    QuickjsUiDiag.count('ingress.flush', detail: 'batch=$batchSize');
-    if (batchSize >= 8) {
-      QuickjsUiDiag.log('ingress', 'flush start batch=$batchSize');
-    }
-    var processed = 0;
+    final batch = List<_PendingIngressEvent>.of(_pending);
+    _pending.clear();
+    _pendingSampleSlots.clear();
     try {
-      while (!_disposed && _pending.isNotEmpty) {
-        final event = _pending.removeAt(0);
-        processed += 1;
-        await _sink(event);
+      for (final item in batch) {
+        if (_disposed) {
+          break;
+        }
+        await _onEvent(item.envelope.event);
       }
     } finally {
       _flushing = false;
-      if (batchSize >= 8 || (_pending.isNotEmpty && processed > 1)) {
-        QuickjsUiDiag.log(
-          'ingress',
-          'flush done processed=$processed remaining=${_pending.length}',
-        );
-      }
       if (!_disposed && _pending.isNotEmpty) {
         _scheduleFlush();
       }
     }
   }
+}
+
+final class _PendingIngressEvent {
+  _PendingIngressEvent.command({required this.envelope});
+
+  _PendingIngressEvent.sample({required this.envelope});
+
+  QuickjsUiEventEnvelope envelope;
 }

@@ -9,18 +9,65 @@ import '../schema/quickjs_ui_props.dart';
 // ignore_for_file: prefer_initializing_formals
 
 typedef QuickjsUiEventHandler = void Function(Map<String, Object?> event);
+typedef QuickjsUiEventEnvelopeHandler =
+    void Function(QuickjsUiEventEnvelope event);
 typedef QuickjsUiNodeBuilder = Widget Function(QuickjsUiNode node);
+
+enum QuickjsUiEventKind { command, sample }
+
+final class QuickjsUiEventEnvelope {
+  QuickjsUiEventEnvelope({
+    required Map<String, Object?> event,
+    required this.kind,
+    this.coalesceKey,
+  }) : event = Map<String, Object?>.unmodifiable(event);
+
+  factory QuickjsUiEventEnvelope.command(Map<String, Object?> event) {
+    return QuickjsUiEventEnvelope(
+      event: event,
+      kind: QuickjsUiEventKind.command,
+    );
+  }
+
+  factory QuickjsUiEventEnvelope.sample(
+    Map<String, Object?> event, {
+    required String coalesceKey,
+  }) {
+    return QuickjsUiEventEnvelope(
+      event: event,
+      kind: QuickjsUiEventKind.sample,
+      coalesceKey: coalesceKey,
+    );
+  }
+
+  final Map<String, Object?> event;
+  final QuickjsUiEventKind kind;
+  final String? coalesceKey;
+
+  QuickjsUiEventEnvelope asCommand() {
+    if (kind == QuickjsUiEventKind.command) {
+      return this;
+    }
+    return QuickjsUiEventEnvelope.command(event);
+  }
+}
 
 final class QuickjsUiRenderContext {
   QuickjsUiRenderContext({
     required QuickjsUiNodeBuilder buildNode,
-    required this.onEvent,
+    required QuickjsUiEventEnvelopeHandler onUiEvent,
+    QuickjsUiEventHandler? onEvent,
     QuickjsUiEventDispatcher? eventDispatcher,
     this.buildContext,
   }) : _buildNode = buildNode,
+       _onUiEvent = onUiEvent,
+       onEvent =
+           onEvent ??
+           ((event) => onUiEvent(QuickjsUiEventEnvelope.command(event))),
        _eventDispatcher = eventDispatcher;
 
   final QuickjsUiNodeBuilder _buildNode;
+  final QuickjsUiEventEnvelopeHandler _onUiEvent;
   final QuickjsUiEventHandler onEvent;
   final QuickjsUiEventDispatcher? _eventDispatcher;
   final BuildContext? buildContext;
@@ -60,27 +107,31 @@ final class QuickjsUiRenderContext {
   }
 
   void dispatch(Map<String, Object?> event) {
-    onEvent(event);
+    _onUiEvent(QuickjsUiEventEnvelope.command(event));
   }
 
   void dispatchEvent(
     Map<String, Object?> event, {
     Map<String, Object?>? payload,
     String? defaultCoalesceKey,
+    QuickjsUiEventKind kind = QuickjsUiEventKind.command,
   }) {
     final dispatcher = _eventDispatcher;
+    final merged = payload == null
+        ? event
+        : <String, Object?>{...event, ...payload};
     if (dispatcher != null) {
       dispatcher.dispatch(
         event,
         payload: payload,
         defaultCoalesceKey: defaultCoalesceKey,
+        kind: kind,
       );
       return;
     }
-    final merged = payload == null
-        ? event
-        : <String, Object?>{...event, ...payload};
-    onEvent(merged);
+    _onUiEvent(
+      _eventEnvelope(merged, kind: kind, coalesceKey: defaultCoalesceKey),
+    );
   }
 }
 
@@ -88,7 +139,7 @@ final class QuickjsUiEventDispatcher {
   QuickjsUiEventDispatcher(this.onEvent, {this.maxPendingEvents = 64})
     : assert(maxPendingEvents > 0, 'maxPendingEvents must be > 0');
 
-  final QuickjsUiEventHandler onEvent;
+  final QuickjsUiEventEnvelopeHandler onEvent;
   final int maxPendingEvents;
   final Map<String, _PendingUiEvent> _pendingEvents =
       <String, _PendingUiEvent>{};
@@ -98,14 +149,16 @@ final class QuickjsUiEventDispatcher {
     Map<String, Object?> event, {
     Map<String, Object?>? payload,
     String? defaultCoalesceKey,
+    QuickjsUiEventKind kind = QuickjsUiEventKind.command,
   }) {
     final merged = payload == null
         ? event
         : <String, Object?>{...event, ...payload};
     final policy = _QuickjsUiEventPolicy.from(merged, defaultCoalesceKey);
     final key = policy.coalesceKey;
+    final envelope = _eventEnvelope(merged, kind: kind, coalesceKey: key);
     if (key == null || (!policy.hasTiming && payload == null)) {
-      onEvent(merged);
+      onEvent(envelope);
       return;
     }
     final now = DateTime.now();
@@ -116,26 +169,26 @@ final class QuickjsUiEventDispatcher {
         return;
       }
       _lastDispatchAt[key] = now;
-      onEvent(merged);
+      onEvent(envelope);
       return;
     }
     final throttleMs = policy.throttleMs;
     if (throttleMs != null) {
       final last = _lastDispatchAt[key];
       if (last != null && now.difference(last).inMilliseconds < throttleMs) {
-        _schedulePending(key, merged, policy.remaining(last, now));
+        _schedulePending(key, envelope, policy.remaining(last, now));
         return;
       }
       _lastDispatchAt[key] = now;
-      onEvent(merged);
+      onEvent(envelope);
       return;
     }
     final debounceMs = policy.debounceMs;
     if (debounceMs != null) {
-      _schedulePending(key, merged, Duration(milliseconds: debounceMs));
+      _schedulePending(key, envelope, Duration(milliseconds: debounceMs));
       return;
     }
-    onEvent(merged);
+    onEvent(envelope);
   }
 
   void dispose() {
@@ -148,7 +201,7 @@ final class QuickjsUiEventDispatcher {
 
   void _schedulePending(
     String key,
-    Map<String, Object?> event,
+    QuickjsUiEventEnvelope event,
     Duration delay,
   ) {
     _pendingEvents.remove(key)?.timer.cancel();
@@ -287,8 +340,47 @@ final class _QuickjsUiEventPolicy {
 final class _PendingUiEvent {
   const _PendingUiEvent({required this.event, required this.timer});
 
-  final Map<String, Object?> event;
+  final QuickjsUiEventEnvelope event;
   final Timer timer;
+}
+
+QuickjsUiEventEnvelope _eventEnvelope(
+  Map<String, Object?> event, {
+  required QuickjsUiEventKind kind,
+  String? coalesceKey,
+}) {
+  final key = _coalesceKey(event) ?? coalesceKey;
+  final payload = _eventPayload(event);
+  if (kind == QuickjsUiEventKind.sample && key != null) {
+    return QuickjsUiEventEnvelope.sample(payload, coalesceKey: key);
+  }
+  return QuickjsUiEventEnvelope.command(payload);
+}
+
+String? _coalesceKey(Map<String, Object?> event) {
+  final value = event['coalesceKey'];
+  if (value is String && value.isNotEmpty) {
+    return value;
+  }
+  final policy = event['policy'];
+  if (policy is Map) {
+    final policyKey = policy['coalesceKey'];
+    if (policyKey is String && policyKey.isNotEmpty) {
+      return policyKey;
+    }
+  }
+  return null;
+}
+
+Map<String, Object?> _eventPayload(Map<String, Object?> event) {
+  final copy = Map<String, Object?>.from(event);
+  copy
+    ..remove('policy')
+    ..remove('throttleMs')
+    ..remove('debounceMs')
+    ..remove('dropMs')
+    ..remove('coalesceKey');
+  return copy;
 }
 
 String _normalizeToken(String value) {

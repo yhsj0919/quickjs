@@ -47,8 +47,8 @@ export default Page({
     });
   },
 
-  /** @param {CounterState} state @returns {CounterState} */
+  /** @param {CounterState} state @returns {Partial<CounterState>} */
   increment(state) {
-    return { ...state, count: state.count + 1 };
+    return { count: state.count + 1 };
   }
 });

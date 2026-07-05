@@ -397,6 +397,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  quickjs_ui_video_player:
+    dependency: "direct main"
+    description:
+      path: "../packages/quickjs_ui_video_player"
+      relative: true
+    source: path
+    version: "0.1.0"
   record_use:
     dependency: transitive
     description:

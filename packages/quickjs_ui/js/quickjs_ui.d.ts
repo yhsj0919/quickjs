@@ -37,6 +37,13 @@ export type QuickjsUiReservedPageKeys =
   | 'render'
   | 'init'
   | 'dispatch'
+  | 'capabilities'
+  | 'mount'
+  | 'handleEvent'
+  | 'commit'
+  | 'setState'
+  | 'lifecycle'
+  | 'snapshot'
   | 'dispose'
   | 'onInit'
   | 'onMount'
@@ -55,7 +62,7 @@ export type QuickjsUiPageMethod<State, Props> = (
   payload?: JsonValue,
   props?: Props,
   event?: QuickjsUiEvent
-) => State | Promise<State>;
+) => Partial<State> | undefined | null | Promise<Partial<State> | undefined | null>;
 
 export type QuickjsUiLifecycleType =
   | 'mount'
@@ -78,7 +85,11 @@ export type QuickjsUiLifecycleHook<State, Props> = (
   payload?: JsonValue,
   props?: Props,
   event?: QuickjsUiLifecycleEvent
-) => State | Promise<State>;
+) =>
+  | Partial<State>
+  | undefined
+  | null
+  | Promise<Partial<State> | undefined | null>;
 
 export type QuickjsUiPageActions<Page> = {
   [Key in keyof Page as Key extends QuickjsUiReservedPageKeys
@@ -97,7 +108,7 @@ export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> 
   build?: (
     state: State,
     props: Props,
-    page: QuickjsUiMethodActions
+    actions: QuickjsUiMethodActions
   ) => QuickjsUiNode;
   onMount?: QuickjsUiLifecycleHook<State, Props>;
   onShow?: QuickjsUiLifecycleHook<State, Props>;
@@ -111,6 +122,33 @@ export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> 
   [key: string]: unknown;
 };
 
+export type QuickjsUiPageProtocol<
+  State = JsonValue,
+  Props = Record<string, JsonValue>
+> = {
+  name?: string;
+  metadata?: Record<string, JsonValue>;
+  capabilities: () => {
+    protocol: 'quickjs_ui.runtime.v1';
+    lifecycle: QuickjsUiLifecycleType[];
+  };
+  mount: (props: Props) => Promise<{ version: number; state: State }>;
+  handleEvent: (
+    event: QuickjsUiEvent
+  ) =>
+    | { changed: boolean; version: number }
+    | Promise<{ changed: boolean; version: number }>;
+  commit: () =>
+    | { changed: false; version: number }
+    | { changed: true; version: number; node: QuickjsUiNode };
+  setState: (patch: Partial<State>) => { changed: boolean; version: number };
+  lifecycle: (
+    event: QuickjsUiLifecycleEvent
+  ) => Promise<{ changed: boolean; version: number }>;
+  snapshot: () => { version: number; state: State };
+  dispose: () => boolean;
+};
+
 export declare function Page<
   State,
   Props = Record<string, JsonValue>,
@@ -120,10 +158,21 @@ export declare function Page<
     build?: (
       state: State,
       props: Props,
-      page: QuickjsUiPageActions<Definition>
+      actions: QuickjsUiPageActions<Definition>
     ) => QuickjsUiNode;
   }
-): Definition;
+): QuickjsUiPageProtocol<State, Props>;
+
+export declare function setState<State extends Record<string, JsonValue>>(
+  state: State,
+  patch: Partial<State>
+): State;
+
+export declare function eventField(
+  event: QuickjsUiEvent | undefined,
+  name: string,
+  fallback?: JsonValue
+): JsonValue | undefined;
 
 export type MainAxisAlignment =
   | 'start'
@@ -361,6 +410,52 @@ export type SizedBoxProps = {
   height?: number;
 };
 
+export type FormProps = {
+  child?: QuickjsUiNode;
+  autovalidateMode?: string;
+  [key: string]: JsonValue | QuickjsUiNode | undefined;
+};
+
+export type CheckboxProps = {
+  value?: boolean;
+  tristate?: boolean;
+  onChanged?: QuickjsUiEvent;
+  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+};
+
+export type SwitchProps = {
+  value?: boolean;
+  onChanged?: QuickjsUiEvent;
+  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+};
+
+export type SliderProps = {
+  value?: number;
+  min?: number;
+  max?: number;
+  divisions?: number;
+  label?: string;
+  onChanged?: QuickjsUiEvent;
+  onChangeStart?: QuickjsUiEvent;
+  onChangeEnd?: QuickjsUiEvent;
+  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+};
+
+export type RadioProps = {
+  value?: JsonValue;
+  groupValue?: JsonValue;
+  onChanged?: QuickjsUiEvent;
+  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+};
+
+export type DropdownButtonProps = {
+  value?: JsonValue;
+  items?: JsonValue[];
+  onChanged?: QuickjsUiEvent;
+  hint?: QuickjsUiNode;
+  [key: string]: JsonValue | QuickjsUiEvent | QuickjsUiNode | undefined;
+};
+
 export declare function Text(
   data: string,
   props?: Omit<TextProps, 'data'>
@@ -377,6 +472,14 @@ export declare function Stack(props: StackProps): QuickjsUiNode;
 export declare function Padding(props: PaddingProps): QuickjsUiNode;
 export declare function Center(props: CenterProps): QuickjsUiNode;
 export declare function SizedBox(props: SizedBoxProps): QuickjsUiNode;
+export declare function Form(props: FormProps): QuickjsUiNode;
+export declare function Checkbox(props: CheckboxProps): QuickjsUiNode;
+export declare function Switch(props: SwitchProps): QuickjsUiNode;
+export declare function Slider(props: SliderProps): QuickjsUiNode;
+export declare function Radio(props: RadioProps): QuickjsUiNode;
+export declare function DropdownButton(
+  props: DropdownButtonProps
+): QuickjsUiNode;
 
 export declare const ui: {
   Text(data: string, props?: Omit<TextProps, 'data'>): QuickjsUiNode;
@@ -392,6 +495,12 @@ export declare const ui: {
   Padding(props: PaddingProps): QuickjsUiNode;
   Center(props: CenterProps): QuickjsUiNode;
   SizedBox(props: SizedBoxProps): QuickjsUiNode;
+  Form(props: FormProps): QuickjsUiNode;
+  Checkbox(props: CheckboxProps): QuickjsUiNode;
+  Switch(props: SwitchProps): QuickjsUiNode;
+  Slider(props: SliderProps): QuickjsUiNode;
+  Radio(props: RadioProps): QuickjsUiNode;
+  DropdownButton(props: DropdownButtonProps): QuickjsUiNode;
 };
 
 export type QuickjsUiHostApi = {

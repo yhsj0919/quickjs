@@ -22,7 +22,7 @@ loads a page entry from Flutter assets and wraps the default page export into th
 current plugin call model automatically:
 
 ```js
-import { Column, ElevatedButton, Page, Text } from 'quickjs_ui';
+import { Column, ElevatedButton, Page, Text, setState } from 'quickjs_ui';
 
 export default Page({
   name: 'CounterPage',
@@ -31,24 +31,35 @@ export default Page({
     return { count: props.initialCount ?? 0 };
   },
 
-  build(state, props, page) {
+  build(state, props, actions) {
     return Column({
       mainAxisAlignment: 'center',
       children: [
         Text(`Count: ${state.count}`),
         ElevatedButton({
           child: Text('Add'),
-          onPressed: page.increment()
+          onPressed: actions.increment()
         })
       ]
     });
   },
 
   increment(state) {
-    return { ...state, count: state.count + 1 };
+    return { count: state.count + 1 };
   }
 });
 ```
+
+`build()` receives `actions` as its third argument. Use `actions.foo()` in the
+UI tree and implement `foo(state, payload, props, event)` as page methods.
+
+Page methods follow the same contract as Flutter `setState`: return a **state
+patch** (partial object) or `undefined` to skip a refresh. The runtime merges the
+patch, re-renders `build()`, and notifies Flutter listeners—matching
+`QuickjsUiController.setState()` on the Dart side.
+
+Use `setState(state, patch)` only when a helper needs an explicit merged snapshot
+inside the handler; ordinary page methods should return patches directly.
 
 `quickjs_ui` injects these controls as an ES module for page code. The runtime
 input remains serializable object data after helper expansion.
@@ -110,3 +121,6 @@ for editor hints and CI checks against plain object UI schema.
 `lib/src/runtime/quickjs_ui_helpers.g.dart` is generated from
 `packages/quickjs_ui/js/quickjs_ui.js`. After editing the JS helper, run
 `dart run tool/generate_quickjs_ui_helpers.dart` from `packages/quickjs_ui`.
+
+运行栈、路由、事件入口、生命周期，以及本次栈溢出问题的复盘见
+[`docs/architecture.md`](docs/architecture.md)。

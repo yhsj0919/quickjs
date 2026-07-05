@@ -5,6 +5,8 @@ import 'dart:collection';
 /// The schema is intentionally small and JSON-compatible. Higher-level DSLs can
 /// compile into this shape later, but this remains the runtime rendering input.
 final class QuickjsUiNode {
+  static const int maxDepth = 128;
+
   QuickjsUiNode({
     required this.type,
     Map<String, Object?> props = const <String, Object?>{},
@@ -13,6 +15,16 @@ final class QuickjsUiNode {
        children = List<QuickjsUiNode>.unmodifiable(children);
 
   factory QuickjsUiNode.fromMap(Map<String, Object?> value) {
+    return QuickjsUiNode._fromMap(value, depth: 0);
+  }
+
+  factory QuickjsUiNode._fromMap(
+    Map<String, Object?> value, {
+    required int depth,
+  }) {
+    if (depth > maxDepth) {
+      throw const FormatException('quickjs_ui node tree is too deep');
+    }
     final type = value['type'];
     if (type is! String || type.isEmpty) {
       throw const FormatException('quickjs_ui node type must be a string');
@@ -31,6 +43,7 @@ final class QuickjsUiNode {
       children: _parseNodeChildren(
         rawChild: rawChild,
         rawChildren: rawChildren,
+        depth: depth,
       ),
     );
   }
@@ -50,15 +63,19 @@ final class QuickjsUiNode {
     };
   }
 
-  static List<QuickjsUiNode> _parseChildren(Object? value) {
+  static List<QuickjsUiNode> _parseChildren(
+    Object? value, {
+    required int depth,
+  }) {
     if (value is! List) {
       throw const FormatException('quickjs_ui node children must be a list');
     }
     return <QuickjsUiNode>[
       for (final child in value)
         if (child is Map)
-          QuickjsUiNode.fromMap(
+          QuickjsUiNode._fromMap(
             child.map((key, value) => MapEntry<String, Object?>('$key', value)),
+            depth: depth + 1,
           )
         else
           throw const FormatException(
@@ -70,6 +87,7 @@ final class QuickjsUiNode {
   static List<QuickjsUiNode> _parseNodeChildren({
     required Object? rawChild,
     required Object? rawChildren,
+    required int depth,
   }) {
     if (rawChild != null && rawChildren != null) {
       throw const FormatException(
@@ -77,18 +95,19 @@ final class QuickjsUiNode {
       );
     }
     if (rawChild != null) {
-      return <QuickjsUiNode>[_parseChild(rawChild)];
+      return <QuickjsUiNode>[_parseChild(rawChild, depth: depth)];
     }
     if (rawChildren != null) {
-      return _parseChildren(rawChildren);
+      return _parseChildren(rawChildren, depth: depth);
     }
     return const <QuickjsUiNode>[];
   }
 
-  static QuickjsUiNode _parseChild(Object? value) {
+  static QuickjsUiNode _parseChild(Object? value, {required int depth}) {
     if (value is Map) {
-      return QuickjsUiNode.fromMap(
+      return QuickjsUiNode._fromMap(
         value.map((key, value) => MapEntry<String, Object?>('$key', value)),
+        depth: depth + 1,
       );
     }
     throw const FormatException('quickjs_ui child node must be an object');

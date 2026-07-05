@@ -209,6 +209,7 @@ Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
       context.dispatchEvent(
         onScroll,
         defaultCoalesceKey: _eventKey(node, 'onScroll'),
+        kind: QuickjsUiEventKind.sample,
         payload: <String, Object?>{
           'pixels': metrics.pixels,
           'minScrollExtent': metrics.minScrollExtent,
@@ -282,6 +283,7 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
         : (value) => context.dispatchEvent(
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            kind: QuickjsUiEventKind.sample,
             payload: <String, Object?>{'value': value},
           ),
     onSubmitted: onSubmitted == null
@@ -368,6 +370,7 @@ Widget _buildCheckbox(QuickjsUiRenderContext context, QuickjsUiNode node) {
         : (value) => context.dispatchEvent(
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            kind: QuickjsUiEventKind.sample,
             payload: <String, Object?>{'value': value},
           ),
   );
@@ -382,6 +385,7 @@ Widget _buildSwitch(QuickjsUiRenderContext context, QuickjsUiNode node) {
         : (value) => context.dispatchEvent(
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            kind: QuickjsUiEventKind.sample,
             payload: <String, Object?>{'value': value},
           ),
   );
@@ -407,14 +411,16 @@ Widget _buildSlider(QuickjsUiRenderContext context, QuickjsUiNode node) {
         : (next) => context.dispatchEvent(
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            kind: QuickjsUiEventKind.sample,
             payload: <String, Object?>{'value': next},
           ),
     onChangeEnd: onChangeEnd == null
         ? null
-        : (next) => context.dispatch(<String, Object?>{
-            ...onChangeEnd,
-            'value': next,
-          }),
+        : (next) => context.dispatchEvent(
+            onChangeEnd,
+            defaultCoalesceKey: _eventKey(node, 'onChangeEnd'),
+            payload: <String, Object?>{'value': next},
+          ),
   );
 }
 
@@ -433,6 +439,7 @@ Widget _buildRadio(QuickjsUiRenderContext context, QuickjsUiNode node) {
         : (value) => context.dispatchEvent(
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            kind: QuickjsUiEventKind.sample,
             payload: <String, Object?>{'value': value},
           ),
   );
@@ -456,6 +463,7 @@ Widget _buildDropdownButton(
         : (value) => context.dispatchEvent(
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
+            kind: QuickjsUiEventKind.sample,
             payload: <String, Object?>{'value': value},
           ),
   );

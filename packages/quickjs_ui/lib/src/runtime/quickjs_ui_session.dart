@@ -1,13 +1,15 @@
 import 'dart:async';
+import 'dart:collection';
 
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:quickjs/quickjs.dart';
 
-import '../diagnostics/quickjs_ui_diag.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
+
+const int _quickjsUiStackLimitBytes = 1024 * 1024;
 
 final class QuickjsUiSession {
   // Keep the public constructor parameters named `engine` and `onConsole`.
@@ -20,6 +22,7 @@ final class QuickjsUiSession {
   QuickjsPlugin? _plugin;
   QuickjsPluginClient? _client;
   Map<String, Object?> _props = const <String, Object?>{};
+  Set<String> _lifecycleTypes = const <String>{};
   List<QuickjsHostMount> _mounts = const <QuickjsHostMount>[];
   Set<String> _grantedPermissions = const <String>{};
   QuickjsUiPermissionPolicy? _permissionPolicy;
@@ -29,8 +32,12 @@ final class QuickjsUiSession {
   bool _disposed = false;
   bool _disposeLifecycleSent = false;
   int _activeCalls = 0;
-  Future<void> _operationTail = Future<void>.value();
-  Future<void> _routeLifecycleTail = Future<void>.value();
+  final Queue<_QueuedSessionOperation<Object?>> _operationQueue =
+      Queue<_QueuedSessionOperation<Object?>>();
+  final Queue<_QueuedSessionOperation<Object?>> _routeLifecycleQueue =
+      Queue<_QueuedSessionOperation<Object?>>();
+  bool _drainingOperationQueue = false;
+  bool _drainingRouteLifecycleQueue = false;
 
   Quickjs? get engine => _engine;
   QuickjsPlugin? get plugin => _plugin;
@@ -61,6 +68,7 @@ final class QuickjsUiSession {
           await Quickjs.create(
             onConsole: _onConsole,
             options: QuickjsRuntimeOptions(
+              stackLimitBytes: _quickjsUiStackLimitBytes,
               mounts: <QuickjsHostMount>[quickjsUiHelperMount, ...mounts],
             ),
           );
@@ -95,13 +103,15 @@ final class QuickjsUiSession {
       if (_disposed) {
         return;
       }
-      final initialState = plugin.manifest.init == null
-          ? <String, Object?>{}
-          : await _client!.init(_props);
+      _lifecycleTypes = await _loadLifecycleTypes(_client!, plugin);
       if (_disposed) {
         return;
       }
-      _state = initialState;
+      final initialSnapshot = await _clientCall('mount', <Object?>[_props]);
+      if (_disposed) {
+        return;
+      }
+      _applySnapshot(initialSnapshot);
       await _refreshImpl();
     });
   }
@@ -109,36 +119,28 @@ final class QuickjsUiSession {
   Future<void> dispatch(Map<String, Object?> event) async {
     return _enqueue(() async {
       _ensureActive();
-      final nextState = await _clientCall('dispatch', <Object?>[
-        _state,
-        event,
-        _props,
-      ]);
+      final result = await _clientCall('handleEvent', <Object?>[event]);
       if (_disposed) {
         return;
       }
-      if (nextState != null) {
-        _state = nextState;
+      if (_resultChanged(result)) {
+        await _syncStateFromJs();
+        await _refreshImpl();
       }
-      await _refreshImpl();
     });
   }
 
   Future<void> setState(Map<String, Object?> patch) async {
     return _enqueue(() async {
       _ensureActive();
-      final current = _state;
-      if (current is Map) {
-        _state = <String, Object?>{
-          ...current.map(
-            (key, value) => MapEntry<String, Object?>('$key', value),
-          ),
-          ...patch,
-        };
-      } else {
-        _state = Map<String, Object?>.of(patch);
+      final result = await _clientCall('setState', <Object?>[patch]);
+      if (_disposed) {
+        return;
       }
-      await _refreshImpl();
+      if (_resultChanged(result)) {
+        await _syncStateFromJs();
+        await _refreshImpl();
+      }
     });
   }
 
@@ -168,13 +170,17 @@ final class QuickjsUiSession {
 
   Future<void> _refreshImpl() async {
     _ensureActive();
-    final rendered = await _clientCall('render', <Object?>[_state, _props]);
+    final result = await _clientCall('commit', const <Object?>[]);
     if (_disposed) {
       return;
     }
+    if (result is Map && result['changed'] == false) {
+      return;
+    }
+    final rendered = result is Map ? result['node'] : result;
     if (rendered is! Map) {
       throw const FormatException(
-        'quickjs_ui render() must return a UI node object',
+        'quickjs_ui commit() must return a UI node object',
       );
     }
     _node = QuickjsUiNode.fromMap(
@@ -219,15 +225,25 @@ final class QuickjsUiSession {
     _client = null;
     _engine = null;
     _plugin = null;
+    _lifecycleTypes = const <String>{};
     unawaited(
-      disposeLifecycle.then((_) async {
-        if (client != null && plugin?.manifest.dispose != null) {
-          await client.dispose().catchError((_) => null);
-        }
-        if (ownsEngine) {
-          await (engine?.dispose() ?? Future<void>.value());
-        }
-      }),
+      disposeLifecycle
+          .then((_) async {
+            if (client != null && plugin != null) {
+              await _clientCallWith(
+                client,
+                'dispose',
+                const <Object?>[],
+              ).catchError((_) => null);
+            }
+            if (client != null && plugin?.manifest.dispose != null) {
+              await client.dispose().catchError((_) => null);
+            }
+            if (ownsEngine) {
+              await (engine?.dispose() ?? Future<void>.value());
+            }
+          })
+          .catchError((_) => null),
     );
   }
 
@@ -238,27 +254,68 @@ final class QuickjsUiSession {
     if (_disposeLifecycleSent ||
         client == null ||
         plugin == null ||
-        !plugin.manifest.exports.contains('lifecycle')) {
+        !_supportsLifecycle(plugin, 'dispose')) {
       return;
     }
     _disposeLifecycleSent = true;
+    final event = const <String, Object?>{'type': 'dispose'};
     await _clientCallWith(client, 'lifecycle', <Object?>[
-      _state,
-      const <String, Object?>{'type': 'dispose'},
-      _props,
+      event,
     ]).catchError((_) => null);
   }
 
   Future<T> _enqueue<T>(Future<T> Function() action) {
-    final result = _operationTail.then((_) => action());
-    _operationTail = result.then((_) {}, onError: (_) {});
-    return result;
+    final operation = _QueuedSessionOperation<T>(action: action);
+    _operationQueue.add(operation);
+    if (!_drainingOperationQueue) {
+      unawaited(_drainOperationQueue());
+    }
+    return operation.future;
   }
 
   Future<T> _enqueueRouteLifecycle<T>(Future<T> Function() action) {
-    final result = _routeLifecycleTail.then((_) => action());
-    _routeLifecycleTail = result.then((_) {}, onError: (_) {});
-    return result;
+    final operation = _QueuedSessionOperation<T>(action: action);
+    _routeLifecycleQueue.add(operation);
+    if (!_drainingRouteLifecycleQueue) {
+      unawaited(_drainRouteLifecycleQueue());
+    }
+    return operation.future;
+  }
+
+  Future<void> _drainOperationQueue() async {
+    if (_drainingOperationQueue) {
+      return;
+    }
+    _drainingOperationQueue = true;
+    try {
+      while (_operationQueue.isNotEmpty) {
+        final operation = _operationQueue.removeFirst();
+        await operation.run();
+      }
+    } finally {
+      _drainingOperationQueue = false;
+      if (_operationQueue.isNotEmpty) {
+        unawaited(_drainOperationQueue());
+      }
+    }
+  }
+
+  Future<void> _drainRouteLifecycleQueue() async {
+    if (_drainingRouteLifecycleQueue) {
+      return;
+    }
+    _drainingRouteLifecycleQueue = true;
+    try {
+      while (_routeLifecycleQueue.isNotEmpty) {
+        final operation = _routeLifecycleQueue.removeFirst();
+        await operation.run();
+      }
+    } finally {
+      _drainingRouteLifecycleQueue = false;
+      if (_routeLifecycleQueue.isNotEmpty) {
+        unawaited(_drainRouteLifecycleQueue());
+      }
+    }
   }
 
   Future<bool> _lifecycleImpl(
@@ -268,7 +325,7 @@ final class QuickjsUiSession {
   }) async {
     _ensureActive();
     final plugin = _plugin;
-    if (plugin == null || !plugin.manifest.exports.contains('lifecycle')) {
+    if (plugin == null || !_supportsLifecycle(plugin, type)) {
       return false;
     }
     if (type == 'dispose') {
@@ -281,22 +338,23 @@ final class QuickjsUiSession {
     if (payload != null) {
       event['payload'] = payload;
     }
-    final nextState = await _clientCall('lifecycle', <Object?>[
-      _state,
-      event,
-      _props,
-    ]);
+    final result = await _clientCall('lifecycle', <Object?>[event]);
     if (_disposed) {
       return false;
     }
-    final didUpdateState = nextState != null;
+    final didUpdateState = _resultChanged(result);
     if (didUpdateState) {
-      _state = nextState;
+      await _syncStateFromJs();
     }
     if (render && didUpdateState) {
       await _refreshImpl();
     }
     return didUpdateState;
+  }
+
+  bool _supportsLifecycle(QuickjsPlugin plugin, String type) {
+    return plugin.manifest.exports.contains('lifecycle') &&
+        _lifecycleTypes.contains(type);
   }
 
   QuickjsPluginClient _requireClient() {
@@ -311,40 +369,112 @@ final class QuickjsUiSession {
     return _clientCallWith(_requireClient(), name, args);
   }
 
+  Future<Set<String>> _loadLifecycleTypes(
+    QuickjsPluginClient client,
+    QuickjsPlugin plugin,
+  ) async {
+    final exports = plugin.manifest.exports;
+    const requiredExports = <String>{
+      'mount',
+      'handleEvent',
+      'commit',
+      'setState',
+      'lifecycle',
+      'snapshot',
+      'capabilities',
+      'dispose',
+    };
+    final missing = requiredExports.where((name) => !exports.contains(name));
+    if (missing.isNotEmpty) {
+      throw StateError(
+        'quickjs_ui plugin does not implement runtime v1 exports: '
+        '${missing.join(', ')}',
+      );
+    }
+    final value = await _clientCallWith(
+      client,
+      'capabilities',
+      const <Object?>[],
+    );
+    if (value is! Map) {
+      return const <String>{};
+    }
+    final protocol = value['protocol'];
+    if (protocol != 'quickjs_ui.runtime.v1') {
+      throw StateError('quickjs_ui unsupported runtime protocol: $protocol');
+    }
+    final lifecycle = value['lifecycle'];
+    if (lifecycle is! List) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(lifecycle.whereType<String>());
+  }
+
+  Future<void> _syncStateFromJs() async {
+    _applySnapshot(await _clientCall('snapshot', const <Object?>[]));
+  }
+
+  void _applySnapshot(Object? snapshot) {
+    if (snapshot is Map) {
+      _state = snapshot['state'];
+      return;
+    }
+    _state = snapshot;
+  }
+
+  bool _resultChanged(Object? result) {
+    if (result is Map) {
+      return result['changed'] == true;
+    }
+    return result == true;
+  }
+
   Future<Object?> _clientCallWith(
     QuickjsPluginClient client,
     String name,
     List<Object?> args,
   ) async {
     _activeCalls += 1;
-    final startedAt = DateTime.now();
-    if (name == 'dispatch' || name == 'render') {
-      final detail = name == 'dispatch' ? _dispatchDetail(args) : 'build';
-      QuickjsUiDiag.count('session.$name', detail: detail);
-    }
+    final logicalName = _logicalCallName(name);
+    final detail = _callDetail(logicalName, args);
     try {
       return await client.call(name, args);
-    } catch (error, stackTrace) {
-      if (name == 'dispatch' || name == 'render') {
-        QuickjsUiDiag.log(
-          'session.$name',
-          'FAILED after ${DateTime.now().difference(startedAt).inMilliseconds}ms '
-              'detail=${name == 'dispatch' ? _dispatchDetail(args) : 'build'} '
-              'error=$error',
-        );
-        QuickjsUiDiag.log('session.$name', '$stackTrace');
-      }
-      rethrow;
+    } catch (error) {
+      throw QuickjsUiRuntimeException(
+        call: logicalName,
+        detail: detail,
+        cause: error,
+      );
     } finally {
       _activeCalls -= 1;
     }
   }
 
+  String _logicalCallName(String name) {
+    return switch (name) {
+      'handleEvent' => 'dispatch',
+      'commit' => 'render',
+      'snapshot' => 'state',
+      _ => name,
+    };
+  }
+
+  String _callDetail(String logicalName, List<Object?> args) {
+    return switch (logicalName) {
+      'dispatch' => _dispatchDetail(args),
+      'render' => 'build',
+      'lifecycle' => 'lifecycle',
+      'setState' => 'patch',
+      'state' => 'snapshot',
+      _ => logicalName,
+    };
+  }
+
   String _dispatchDetail(List<Object?> args) {
-    if (args.length < 2) {
+    if (args.isEmpty) {
       return 'unknown';
     }
-    final event = args[1];
+    final event = args.length == 1 ? args[0] : args[1];
     if (event is! Map) {
       return 'non-object-event';
     }
@@ -352,12 +482,26 @@ final class QuickjsUiSession {
     final type = event['type'];
     final positionMs = event['positionMs'];
     final isPlaying = event['isPlaying'];
+    final payload = event['payload'];
+    final playing =
+        event['playing'] ?? (payload is Map ? payload['playing'] : null);
+    final durationMs = event['durationMs'];
+    final value = event['value'] ?? (payload is Map ? payload['value'] : null);
     final buffer = StringBuffer('method=$method');
     if (type != null) {
       buffer.write(' type=$type');
     }
     if (positionMs != null) {
       buffer.write(' positionMs=$positionMs');
+    }
+    if (value != null) {
+      buffer.write(' value=$value');
+    }
+    if (durationMs != null) {
+      buffer.write(' durationMs=$durationMs');
+    }
+    if (playing != null) {
+      buffer.write(' playing=$playing');
     }
     if (isPlaying != null) {
       buffer.write(' isPlaying=$isPlaying');
@@ -369,6 +513,61 @@ final class QuickjsUiSession {
     if (_disposed) {
       throw StateError('QuickjsUiSession is disposed');
     }
+  }
+}
+
+final class _QueuedSessionOperation<T> {
+  _QueuedSessionOperation({required Future<T> Function() action})
+    : _action = action;
+
+  final Future<T> Function() _action;
+  final Completer<T> _completer = Completer<T>();
+
+  Future<T> get future => _completer.future;
+
+  Future<void> run() async {
+    if (_completer.isCompleted) {
+      return;
+    }
+    try {
+      _completer.complete(await _action());
+    } catch (error, stackTrace) {
+      _completer.completeError(error, stackTrace);
+    }
+  }
+}
+
+final class QuickjsUiRuntimeException implements Exception {
+  const QuickjsUiRuntimeException({
+    required this.call,
+    required this.detail,
+    required this.cause,
+  });
+
+  final String call;
+  final String detail;
+  final Object cause;
+
+  @override
+  String toString() {
+    final buffer = StringBuffer('quickjs_ui runtime call failed')
+      ..write(' call=$call')
+      ..write(' detail=$detail');
+    final cause = this.cause;
+    if (cause is JsException) {
+      buffer
+        ..write(' jsName=${cause.name ?? 'unknown'}')
+        ..write(' jsMessage=${cause.message}');
+      final stack = cause.stack;
+      if (stack != null && stack.isNotEmpty) {
+        buffer.write(' jsStack=$stack');
+      }
+    } else if (cause is QuickjsException) {
+      buffer.write(' quickjsMessage=${cause.message}');
+    } else {
+      buffer.write(' cause=$cause');
+    }
+    return buffer.toString();
   }
 }
 

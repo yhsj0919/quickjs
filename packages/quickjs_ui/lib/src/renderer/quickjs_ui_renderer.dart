@@ -5,27 +5,45 @@ import 'quickjs_ui_component_registry.dart';
 import 'quickjs_ui_render_context.dart';
 
 final class QuickjsUiRenderer {
+  static const int maxBuildDepth = 128;
+
   QuickjsUiRenderer({
     required this.onEvent,
+    this.onUiEvent,
     QuickjsUiComponentRegistry? registry,
   }) : registry = registry ?? QuickjsUiComponentRegistry.defaults();
 
   final QuickjsUiEventHandler onEvent;
+  final QuickjsUiEventEnvelopeHandler? onUiEvent;
   final QuickjsUiComponentRegistry registry;
   late final QuickjsUiEventDispatcher _eventDispatcher =
-      QuickjsUiEventDispatcher(onEvent);
+      QuickjsUiEventDispatcher(_dispatchEnvelope);
   final Map<String, _RenderedNode> _cache = <String, _RenderedNode>{};
 
   Widget build(QuickjsUiNode node, {BuildContext? buildContext}) {
     late final QuickjsUiRenderContext context;
     final nextCache = <String, _RenderedNode>{};
+    var buildDepth = 0;
+    Widget buildNode(QuickjsUiNode node) {
+      if (buildDepth > maxBuildDepth) {
+        throw const FormatException('quickjs_ui render tree is too deep');
+      }
+      buildDepth += 1;
+      try {
+        return _buildNode(context, node, nextCache, buildContext);
+      } finally {
+        buildDepth -= 1;
+      }
+    }
+
     context = QuickjsUiRenderContext(
-      buildNode: (node) => _buildNode(context, node, nextCache, buildContext),
+      buildNode: buildNode,
+      onUiEvent: _dispatchEnvelope,
       onEvent: onEvent,
       eventDispatcher: _eventDispatcher,
       buildContext: buildContext,
     );
-    final widget = _buildNode(context, node, nextCache, buildContext);
+    final widget = buildNode(node);
     _cache
       ..clear()
       ..addAll(nextCache);
@@ -59,6 +77,15 @@ final class QuickjsUiRenderer {
   void dispose() {
     _eventDispatcher.dispose();
     _cache.clear();
+  }
+
+  void _dispatchEnvelope(QuickjsUiEventEnvelope envelope) {
+    final handler = onUiEvent;
+    if (handler != null) {
+      handler(envelope);
+      return;
+    }
+    onEvent(envelope.event);
   }
 }
 

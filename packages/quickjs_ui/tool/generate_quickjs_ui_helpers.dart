@@ -9,6 +9,8 @@ void main() {
   );
 
   final source = sourceFile.readAsStringSync();
+  // Escape `$` so the embedded JS source cannot trigger Dart interpolation.
+  final encodedSource = jsonEncode(source).replaceAll(r'$', r'\$');
   final generated =
       '''
 // GENERATED CODE - DO NOT MODIFY BY HAND.
@@ -19,7 +21,7 @@ void main() {
 
 part of 'quickjs_ui_helpers.dart';
 
-const String quickjsUiHelperModuleSource = ${jsonEncode(source)};
+const String quickjsUiHelperModuleSource = $encodedSource;
 ''';
 
   outputFile.writeAsStringSync(generated);

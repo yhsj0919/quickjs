@@ -275,6 +275,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     return QuickjsUiRenderer(
       registry: widget.registry,
       onEvent: _eventIngress.submit,
+      onUiEvent: _eventIngress.submitEnvelope,
     );
   }
 
@@ -384,9 +385,16 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
 
     if (_controller.isLoading) {
-      return widget.loadingBuilder?.call(context) ??
-          widget.placeholder ??
-          const SizedBox.shrink();
+      final loadingBuilder = widget.loadingBuilder;
+      if (loadingBuilder != null) {
+        return loadingBuilder(context);
+      }
+      if (_controller.node == null) {
+        return widget.emptyBuilder?.call(context) ??
+            widget.placeholder ??
+            const SizedBox.shrink();
+      }
+      return widget.placeholder ?? const SizedBox.shrink();
     }
 
     final node = _controller.node;
@@ -456,6 +464,17 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   Future<void> _load() async {
     try {
       if (!mounted) {
+        return;
+      }
+      final plugin = widget.plugin;
+      if (plugin != null) {
+        await _controller.loadPlugin(
+          plugin,
+          initialProps: widget.initialProps,
+          mounts: widget.mounts,
+          grantedPermissions: widget.grantedPermissions,
+          permissionPolicy: widget.permissionPolicy,
+        );
         return;
       }
       await _controller.load(

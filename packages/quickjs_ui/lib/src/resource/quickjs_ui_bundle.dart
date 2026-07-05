@@ -163,8 +163,16 @@ final class QuickjsUiBundle {
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: const <String>['render', 'dispatch', 'lifecycle'],
-        init: 'init',
+        exports: const <String>[
+          'mount',
+          'handleEvent',
+          'commit',
+          'setState',
+          'lifecycle',
+          'snapshot',
+          'capabilities',
+          'dispose',
+        ],
         permissions: permissions,
       ),
       modules: <QuickjsPluginModule>[
