@@ -876,11 +876,18 @@ static int qjs_execute_pending_jobs(QuickjsRuntime *runtime) {
   if (!runtime || !runtime->rt) {
     return -1;
   }
+  JS_UpdateStackTop(runtime->rt);
   do {
     ctx = NULL;
     result = JS_ExecutePendingJob(runtime->rt, &ctx);
   } while (result > 0);
   return result;
+}
+
+static void qjs_update_stack_top(QuickjsRuntime *runtime) {
+  if (runtime && runtime->rt) {
+    JS_UpdateStackTop(runtime->rt);
+  }
 }
 
 static JSValue qjs_set_timer(JSContext *ctx, JSValueConst this_val, int argc,
@@ -1226,6 +1233,7 @@ static char *qjs_async_poll_result(QuickjsRuntime *runtime) {
   if (!runtime || !runtime->ctx || JS_IsUndefined(runtime->async_promise)) {
     return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS async eval is not running\"}");
   }
+  qjs_update_stack_top(runtime);
 
   if (qjs_execute_pending_jobs(runtime) < 0) {
     return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS pending job failed\"}");
@@ -1336,6 +1344,7 @@ void quickjs_runtime_set_stack_limit(QuickjsRuntime *runtime,
   if (!runtime || !runtime->rt || limit_bytes <= 0) {
     return;
   }
+  JS_UpdateStackTop(runtime->rt);
   JS_SetMaxStackSize(runtime->rt, (size_t)limit_bytes);
 }
 
@@ -1365,6 +1374,7 @@ char *quickjs_eval_timeout_named(QuickjsRuntime *runtime, const char *code,
   if (!runtime || !runtime->ctx || !code) {
     return qjs_strdup("invalid arguments");
   }
+  qjs_update_stack_top(runtime);
 
   if (timeout_ms > 0 || runtime->cancel_flag) {
     /* timeout 和 stop 都依赖 JS_SetInterruptHandler；无 timeout 时仍允许 cancel_flag 中断。 */
@@ -1402,6 +1412,7 @@ char *quickjs_eval_module(QuickjsRuntime *runtime, const char *source,
   if (!runtime || !runtime->ctx || !source || !name) {
     return qjs_strdup("invalid arguments");
   }
+  qjs_update_stack_top(runtime);
   if (!qjs_set_module_sources(runtime, modules)) {
     return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS module table allocation failed\"}");
   }
@@ -1443,6 +1454,7 @@ int quickjs_runtime_bind_callback(QuickjsRuntime *runtime, int64_t callback_id,
   if (!runtime || !runtime->ctx || !name || !callback) {
     return -1;
   }
+  qjs_update_stack_top(runtime);
 
   runtime->host_callback = callback;
   data = JS_NewInt64(runtime->ctx, callback_id);
@@ -1470,6 +1482,7 @@ char *quickjs_eval_async_start_named(QuickjsRuntime *runtime, const char *code,
   if (!runtime || !runtime->ctx || !code) {
     return qjs_strdup("invalid arguments");
   }
+  qjs_update_stack_top(runtime);
   if (!JS_IsUndefined(runtime->async_promise)) {
     return qjs_strdup("\x1eQuickJS_EXCEPTION{\"message\":\"QuickJS async eval is already running\"}");
   }
@@ -1503,6 +1516,7 @@ int quickjs_runtime_resolve_callback(QuickjsRuntime *runtime, int64_t request_id
   if (!runtime || !runtime->ctx) {
     return -1;
   }
+  qjs_update_stack_top(runtime);
 
   pending = qjs_take_pending_callback(runtime, request_id);
   if (!pending) {
@@ -1557,6 +1571,7 @@ int quickjs_runtime_resolve_stream_pull(QuickjsRuntime *runtime,
   if (!runtime || !runtime->ctx) {
     return -1;
   }
+  qjs_update_stack_top(runtime);
   pending = qjs_take_pending_callback(runtime, request_id);
   if (!pending) {
     return -1;
@@ -1595,6 +1610,7 @@ int quickjs_runtime_resolve_sink_action(QuickjsRuntime *runtime,
   if (!runtime || !runtime->ctx) {
     return -1;
   }
+  qjs_update_stack_top(runtime);
   pending = qjs_take_pending_callback(runtime, request_id);
   if (!pending) {
     return -1;
@@ -1629,6 +1645,7 @@ int quickjs_runtime_bind_sink(QuickjsRuntime *runtime, int64_t sink_id,
   if (!runtime || !runtime->ctx || !name) {
     return -1;
   }
+  qjs_update_stack_top(runtime);
   sink = JS_NewObject(runtime->ctx);
   data[0] = JS_NewInt64(runtime->ctx, sink_id);
 

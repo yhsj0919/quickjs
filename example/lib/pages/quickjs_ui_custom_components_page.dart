@@ -12,7 +12,7 @@ class QuickjsUiCustomComponentsPage extends StatelessWidget {
       appBar: AppBar(title: const Text('QuickJS UI Custom Components')),
       body: QuickjsUiView.asset(
         path: path,
-        registry: _customComponentsRegistry(),
+        registry: _customComponentsRegistry,
         initialProps: const <String, Object?>{
           'title': '0.4 custom renderer registry',
         },
@@ -26,54 +26,53 @@ class QuickjsUiCustomComponentsPage extends StatelessWidget {
   }
 }
 
-QuickjsUiComponentRegistry _customComponentsRegistry() {
-  return QuickjsUiComponentRegistry.defaults()
-    ..register('AppBar', (context, node) {
-      return Material(
-        color: Theme.of(context.buildContext!).colorScheme.primary,
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  '${node.props['title'] ?? ''}',
-                  style: Theme.of(context.buildContext!).textTheme.titleLarge
-                      ?.copyWith(
-                        color: Theme.of(
-                          context.buildContext!,
-                        ).colorScheme.onPrimary,
-                      ),
-                ),
-                if (node.props['subtitle'] case final String subtitle)
+final QuickjsUiComponentRegistry _customComponentsRegistry =
+    QuickjsUiComponentRegistry.defaults()
+      ..register('AppBar', (context, node) {
+        return Material(
+          color: Theme.of(context.buildContext!).colorScheme.primary,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
                   Text(
-                    subtitle,
-                    style: Theme.of(context.buildContext!).textTheme.bodySmall
+                    '${node.props['title'] ?? ''}',
+                    style: Theme.of(context.buildContext!).textTheme.titleLarge
                         ?.copyWith(
                           color: Theme.of(
                             context.buildContext!,
                           ).colorScheme.onPrimary,
                         ),
                   ),
-              ],
+                  if (node.props['subtitle'] case final String subtitle)
+                    Text(
+                      subtitle,
+                      style: Theme.of(context.buildContext!).textTheme.bodySmall
+                          ?.copyWith(
+                            color: Theme.of(
+                              context.buildContext!,
+                            ).colorScheme.onPrimary,
+                          ),
+                    ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    })
-    ..register('Card', (context, node) {
-      final tone = node.props['tone'];
-      final scheme = Theme.of(context.buildContext!).colorScheme;
-      final color = tone == 'primary'
-          ? scheme.primaryContainer
-          : scheme.surfaceContainerHighest;
-      return Card(
-        color: color,
-        margin: const EdgeInsets.all(12),
-        child: context.child(node) ?? const SizedBox.shrink(),
-      );
-    });
-}
+        );
+      })
+      ..register('Card', (context, node) {
+        final tone = node.props['tone'];
+        final scheme = Theme.of(context.buildContext!).colorScheme;
+        final color = tone == 'primary'
+            ? scheme.primaryContainer
+            : scheme.surfaceContainerHighest;
+        return Card(
+          color: color,
+          margin: const EdgeInsets.all(12),
+          child: context.child(node) ?? const SizedBox.shrink(),
+        );
+      });

@@ -37,8 +37,16 @@ final class QuickjsUiPagePlugin {
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: const <String>['render', 'dispatch', 'lifecycle'],
-        init: 'init',
+        exports: const <String>[
+          'mount',
+          'handleEvent',
+          'commit',
+          'setState',
+          'lifecycle',
+          'snapshot',
+          'capabilities',
+          'dispose',
+        ],
         permissions: permissions,
       ),
       modules: <QuickjsPluginModule>[
@@ -55,23 +63,54 @@ final class QuickjsUiPagePlugin {
     return '''
 import page from '$pageSpecifier';
 
-export function init(props) {
-  return page.init(props);
-}
-
-export function render(state, props) {
-  return page.render(state, props);
-}
-
-export function dispatch(state, event, props) {
-  return page.dispatch(state, event, props);
-}
-
-export function lifecycle(state, event, props) {
-  if (typeof page.lifecycle !== 'function') {
-    return state;
+function requireRuntimeMethod(name) {
+  if (typeof page?.[name] !== 'function') {
+    throw new Error(
+      'quickjs_ui page runtime protocol mismatch: ' + name + ' is missing'
+    );
   }
-  return page.lifecycle(state, event, props);
+}
+
+export function capabilities() {
+  requireRuntimeMethod('capabilities');
+  return page.capabilities();
+}
+
+export function mount(props) {
+  requireRuntimeMethod('mount');
+  return page.mount(props);
+}
+
+export function handleEvent(event) {
+  requireRuntimeMethod('handleEvent');
+  return page.handleEvent(event);
+}
+
+export function commit() {
+  requireRuntimeMethod('commit');
+  return page.commit();
+}
+
+export function setState(patch) {
+  requireRuntimeMethod('setState');
+  return page.setState(patch);
+}
+
+export function lifecycle(event) {
+  requireRuntimeMethod('lifecycle');
+  return page.lifecycle(event);
+}
+
+export function snapshot() {
+  requireRuntimeMethod('snapshot');
+  return page.snapshot();
+}
+
+export function dispose() {
+  if (typeof page?.dispose === 'function') {
+    return page.dispose();
+  }
+  return true;
 }
 ''';
   }

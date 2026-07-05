@@ -7,12 +7,12 @@ import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_host_capabilities_page.dart';
 import 'pages/quickjs_ui_navigation_page.dart';
-import 'pages/quickjs_ui_native_video_player_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui_profile_form_page.dart';
 import 'pages/quickjs_ui_schema_page.dart';
 import 'pages/quickjs_ui_todo_page.dart';
+import 'pages/quickjs_ui_video_player_plugin_page.dart';
 
 final List<ExamplePageSpec> quickjsUiExamplePages = [
   ExamplePageSpec(
@@ -83,9 +83,9 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     builder: (_) => const QuickjsUiCustomComponentsPage(),
   ),
   ExamplePageSpec(
-    title: 'QuickJS UI Native VideoPlayer',
+    title: 'QuickJS UI VideoPlayer Plugin',
     description:
-        '演示 JS Component() 返回自定义 type，由 Dart registry 注入 video_player，并通过事件回传进度与状态。',
-    builder: (_) => const QuickjsUiNativeVideoPlayerPage(),
+        'Third-party quickjs_ui plugin exposed as import { VideoPlayer } from quickjs_ui/video_player.',
+    builder: (_) => const QuickjsUiVideoPlayerPluginPage(),
   ),
 ];

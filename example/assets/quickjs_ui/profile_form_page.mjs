@@ -125,19 +125,18 @@ export default Page({
       [payload.field]: event.value ?? '',
     };
     return {
-      ...next,
+      [payload.field]: next[payload.field],
       errors: validate(next),
       status: `Editing ${payload.field}`,
     };
   },
 
   focusField(state, payload) {
-    return { ...state, status: `Focused ${payload.field}` };
+    return { status: `Focused ${payload.field}` };
   },
 
   blurField(state, payload) {
     return {
-      ...state,
       errors: validate(state),
       status: `Updated ${payload.field}`,
     };
@@ -147,13 +146,11 @@ export default Page({
     const errors = validate(state);
     if (Object.keys(errors).length > 0) {
       return {
-        ...state,
         errors,
         status: 'Fix validation errors before saving',
       };
     }
     return {
-      ...state,
       errors,
       status: `Saved profile for ${state.name}`,
     };

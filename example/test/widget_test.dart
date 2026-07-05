@@ -11,12 +11,12 @@ import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_navigation_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_native_video_player_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_video_player_plugin_page.dart';
 import 'package:quickjs_example/pages/zip_plugin_page.dart';
 import 'package:quickjs_example/quickjs_ui_example_pages.dart';
 
@@ -138,29 +138,58 @@ void main() {
     expect(find.text('Reset'), findsOneWidget);
   });
 
-  testWidgets('registers quickjs_ui native video player page', (
+  testWidgets('quickjs_ui custom components survive resize during dispatch', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiCustomComponentsPage()),
+    );
+    await _pumpUntilFound(tester, find.text('Size: medium'));
+
+    for (var index = 0; index < 20; index += 1) {
+      tester.view.physicalSize = Size(
+        index.isEven ? 640 : 960,
+        index.isEven ? 720 : 540,
+      );
+      await tester.pump();
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('QuickJS UI custom components error'),
+      findsNothing,
+    );
+    expect(find.text('Size: medium'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui video player plugin page', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiNativeVideoPlayerPage()),
+      const MaterialApp(home: QuickjsUiVideoPlayerPluginPage()),
     );
 
-    expect(find.text('QuickJS UI Native VideoPlayer'), findsOneWidget);
+    expect(find.text('QuickJS UI VideoPlayer Plugin'), findsOneWidget);
     await _pumpUntilFound(
       tester,
-      find.textContaining('Native VideoPlayer demo'),
+      find.textContaining('VideoPlayer plugin demo'),
     );
     expect(
-      find.textContaining('QuickJS UI native video player error'),
+      find.textContaining('QuickJS UI video player plugin error'),
       findsNothing,
     );
-    expect(find.text('0.4 native renderer injection'), findsOneWidget);
-    await _scrollUntilFound(tester, find.textContaining('自动播放：开'));
-    expect(find.textContaining('自动播放：开'), findsOneWidget);
-    expect(find.textContaining('循环：开'), findsOneWidget);
-    await _scrollUntilFound(tester, find.text('播放'));
-    expect(find.text('播放'), findsOneWidget);
-    expect(find.text('从头播放'), findsOneWidget);
+    expect(
+      find.textContaining('Imported from quickjs_ui/video_player'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {

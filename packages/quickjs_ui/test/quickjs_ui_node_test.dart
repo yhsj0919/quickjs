@@ -67,6 +67,27 @@ void main() {
     });
   });
 
+  test('rejects overly deep node trees before stack overflow', () {
+    Map<String, Object?> node = <String, Object?>{
+      'type': 'Text',
+      'data': 'leaf',
+    };
+    for (var index = 0; index <= QuickjsUiNode.maxDepth + 1; index++) {
+      node = <String, Object?>{'type': 'Padding', 'child': node};
+    }
+
+    expect(
+      () => QuickjsUiNode.fromMap(node),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'quickjs_ui node tree is too deep',
+        ),
+      ),
+    );
+  });
+
   test('parses shared Flutter-style props', () {
     expect(QuickjsUiProps.color('#336699'), const Color(0xff336699));
     expect(QuickjsUiProps.color('0x80336699'), const Color(0x80336699));
@@ -295,7 +316,7 @@ globalThis.quickjsUiTest = {
 import { Page, Text } from 'quickjs_ui';
 
 function append(state, value) {
-  return { ...state, events: [...state.events, value] };
+  return { events: [...state.events, value] };
 }
 
 export default Page({
@@ -331,7 +352,7 @@ export default Page({
   },
   async onDispose(state) {
     await quickjsUiTest.disposed();
-    return state;
+    return null;
   }
 });
 ''',
@@ -397,7 +418,7 @@ export default Page({
   },
   onMount(state) {
     console.log('lifecycle state', JSON.stringify(state));
-    return state;
+    return null;
   }
 });
 ''',
@@ -442,6 +463,41 @@ export default Page({
     expect(notifications, 0);
   });
 
+  test(
+    'skips JS lifecycle calls when page declares no lifecycle hooks',
+    () async {
+      final session = QuickjsUiSession();
+      addTearDown(session.dispose);
+
+      await session.loadPlugin(
+        QuickjsUiPagePlugin.singleFile(
+          id: 'quickjs_ui_no_lifecycle_hooks',
+          version: '0.4.0',
+          source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { lifecycleCalls: 0 };
+  },
+  build(state) {
+    return Text('calls: ' + state.lifecycleCalls);
+  },
+  lifecycle(state) {
+    return { lifecycleCalls: state.lifecycleCalls + 1 };
+  }
+});
+''',
+        ),
+      );
+
+      expect(session.state, <String, Object?>{'lifecycleCalls': 0});
+      expect(await session.lifecycle('mount'), isFalse);
+      expect(await session.routeLifecycle('show'), isFalse);
+      expect(session.state, <String, Object?>{'lifecycleCalls': 0});
+    },
+  );
+
   test('runs dispose lifecycle before closing owned runtime', () async {
     final disposed = Completer<QuickjsConsoleEvent>();
     final controller = QuickjsUiController(
@@ -466,7 +522,7 @@ export default Page({
   },
   onDispose(state) {
     console.log('dispose state', JSON.stringify(state));
-    return state;
+    return null;
   }
 });
 ''',
@@ -1047,6 +1103,7 @@ export default Page({
     final registry = QuickjsUiComponentRegistry.defaults();
     final context = QuickjsUiRenderContext(
       buildNode: (_) => const SizedBox.shrink(),
+      onUiEvent: (_) {},
       onEvent: (_) {},
     );
     final image =
@@ -1300,7 +1357,9 @@ export default Page({
 
   test('coalesces throttled renderer events by key', () async {
     final events = <Map<String, Object?>>[];
-    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    final dispatcher = QuickjsUiEventDispatcher((event) {
+      events.add(event.event);
+    });
     addTearDown(dispatcher.dispose);
     final event = <String, Object?>{
       'method': 'scrollList',
@@ -1323,7 +1382,9 @@ export default Page({
 
   test('debounces renderer events by key', () async {
     final events = <Map<String, Object?>>[];
-    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    final dispatcher = QuickjsUiEventDispatcher((event) {
+      events.add(event.event);
+    });
     addTearDown(dispatcher.dispose);
     final event = <String, Object?>{
       'method': 'videoProgress',
@@ -1354,7 +1415,9 @@ export default Page({
 
   test('drops renderer events inside drop window', () async {
     final events = <Map<String, Object?>>[];
-    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    final dispatcher = QuickjsUiEventDispatcher((event) {
+      events.add(event.event);
+    });
     addTearDown(dispatcher.dispose);
     final event = <String, Object?>{
       'method': 'videoProgress',
@@ -1390,7 +1453,9 @@ export default Page({
 
   test('does not queue timing events without coalesce key', () async {
     final events = <Map<String, Object?>>[];
-    final dispatcher = QuickjsUiEventDispatcher(events.add);
+    final dispatcher = QuickjsUiEventDispatcher((event) {
+      events.add(event.event);
+    });
     addTearDown(dispatcher.dispose);
     final event = <String, Object?>{
       'method': 'anonymousProgress',
@@ -1404,12 +1469,31 @@ export default Page({
     expect(events.last['value'], 2);
   });
 
+  test('attaches default coalesce key to payload events', () {
+    final events = <QuickjsUiEventEnvelope>[];
+    final dispatcher = QuickjsUiEventDispatcher((event) {
+      events.add(event);
+    });
+    addTearDown(dispatcher.dispose);
+
+    dispatcher.dispatch(
+      const <String, Object?>{'method': 'scrub'},
+      payload: const <String, Object?>{'value': 12},
+      defaultCoalesceKey: 'Slider:progress:onChanged',
+      kind: QuickjsUiEventKind.sample,
+    );
+
+    expect(events, hasLength(1));
+    expect(events.single.coalesceKey, 'Slider:progress:onChanged');
+    expect(events.single.event['coalesceKey'], isNull);
+    expect(events.single.event['value'], 12);
+  });
+
   test('drops oldest pending renderer event above queue limit', () async {
     final events = <Map<String, Object?>>[];
-    final dispatcher = QuickjsUiEventDispatcher(
-      events.add,
-      maxPendingEvents: 2,
-    );
+    final dispatcher = QuickjsUiEventDispatcher((event) {
+      events.add(event.event);
+    }, maxPendingEvents: 2);
     addTearDown(dispatcher.dispose);
 
     dispatcher.dispatch(
@@ -1482,7 +1566,134 @@ export default Page({
     await tester.pump();
     await tester.pump();
 
-    expect(events.map((event) => event['action']), <Object?>['first', 'second']);
+    expect(events.map((event) => event['action']), <Object?>[
+      'first',
+      'second',
+    ]);
+  });
+
+  testWidgets('event ingress coalesces pending events by key', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final ingress = QuickjsUiEventIngress((event) async {
+      events.add(event);
+    });
+    addTearDown(ingress.dispose);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'scrub',
+        'value': 1,
+      }, coalesceKey: 'Slider:main:onChanged'),
+    );
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'scrub',
+        'value': 2,
+      }, coalesceKey: 'Slider:main:onChanged'),
+    );
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'scrub',
+        'value': 3,
+      }, coalesceKey: 'Slider:main:onChanged'),
+    );
+    await tester.pump();
+
+    expect(events, hasLength(1));
+    expect(events.single['value'], 3);
+  });
+
+  testWidgets('event ingress preserves sample and command order', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final ingress = QuickjsUiEventIngress((event) async {
+      events.add(event);
+    });
+    addTearDown(ingress.dispose);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'scrub',
+        'value': 10,
+      }, coalesceKey: 'Slider:main:onChanged'),
+    );
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'onProgress',
+        'positionMs': 11,
+      }, coalesceKey: 'video:progress'),
+    );
+    ingress.submit(<String, Object?>{'method': 'togglePlay'});
+    await tester.pump();
+
+    expect(events.map((event) => event['method']), <Object?>[
+      'scrub',
+      'onProgress',
+      'togglePlay',
+    ]);
+  });
+
+  testWidgets('event ingress does not coalesce samples across commands', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final ingress = QuickjsUiEventIngress((event) async {
+      events.add(event);
+    });
+    addTearDown(ingress.dispose);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'scrub',
+        'value': 10,
+      }, coalesceKey: 'Slider:main:onChanged'),
+    );
+    ingress.submit(<String, Object?>{'method': 'seek'});
+    ingress.submitEnvelope(
+      QuickjsUiEventEnvelope.sample(<String, Object?>{
+        'method': 'scrub',
+        'value': 20,
+      }, coalesceKey: 'Slider:main:onChanged'),
+    );
+    await tester.pump();
+
+    expect(events.map((event) => event['method']), <Object?>[
+      'scrub',
+      'seek',
+      'scrub',
+    ]);
+    expect(events.map((event) => event['value']), <Object?>[10, null, 20]);
+  });
+
+  testWidgets('event ingress leaves reentrant submissions for next frame', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    late final QuickjsUiEventIngress ingress;
+    ingress = QuickjsUiEventIngress((event) async {
+      events.add(event);
+      if (event['action'] == 'first') {
+        ingress.submit(<String, Object?>{'action': 'second'});
+      }
+    });
+    addTearDown(ingress.dispose);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    ingress.submit(<String, Object?>{'action': 'first'});
+    await tester.pump();
+
+    expect(events.map((event) => event['action']), <Object?>['first']);
+
+    await tester.pump();
+
+    expect(events.map((event) => event['action']), <Object?>[
+      'first',
+      'second',
+    ]);
   });
 
   testWidgets('renders custom registry component', (tester) async {
@@ -1576,6 +1787,24 @@ export default Page({
     expect(builds, <String, int>{'stable': 1, 'changed': 2});
   });
 
+  test('renderer guards recursive custom registry components', () {
+    final registry = QuickjsUiComponentRegistry.defaults()
+      ..register('Loop', (context, node) => context.build(node));
+    final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
+    final node = QuickjsUiNode.fromMap(<String, Object?>{'type': 'Loop'});
+
+    expect(
+      () => renderer.build(node),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'quickjs_ui render tree is too deep',
+        ),
+      ),
+    );
+  });
+
   test('throws for unknown registry component', () {
     final node = QuickjsUiNode.fromMap(<String, Object?>{'type': 'Missing'});
     final renderer = QuickjsUiRenderer(onEvent: (_) {});
@@ -1605,8 +1834,10 @@ export default Page({
         ),
       ),
     );
-    await tester.pump();
-    await tester.pump();
+    await _pumpUntilFound(
+      tester,
+      find.textContaining('Unknown quickjs_ui node type'),
+    );
 
     expect(find.textContaining('Unknown quickjs_ui node type'), findsOneWidget);
   });
@@ -1701,7 +1932,7 @@ export default Page({
     return Text(state.event);
   },
   onMount(state) {
-    return { ...state, event: 'mount' };
+    return { event: 'mount' };
   }
 });
 ''',
@@ -1730,7 +1961,7 @@ export default Page({
     return Text(state.event);
   },
   onMount(state) {
-    return { ...state, event: 'mount' };
+    return { event: 'mount' };
   }
 });
 ''',
@@ -1743,6 +1974,78 @@ export default Page({
     await controller.lifecycle('mount');
 
     expect(controller.node?.props['data'], 'mount');
+  });
+
+  test('bundle plugins skip undeclared lifecycle hooks', () async {
+    final bundle = QuickjsUiBundle(
+      id: 'quickjs_ui_bundle_no_lifecycle_hooks_test',
+      version: '0.3.0',
+      entry: 'main.mjs',
+      modules: const <String, String>{
+        'main.mjs': '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { event: 'waiting' };
+  },
+  build(state) {
+    return Text(state.event);
+  }
+});
+''',
+      },
+    );
+    final session = QuickjsUiSession();
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(bundle.toPlugin());
+
+    expect(await session.lifecycle('mount'), isFalse);
+    expect(await session.routeLifecycle('show'), isFalse);
+    expect(session.state, <String, Object?>{'event': 'waiting'});
+  });
+
+  test('custom components setExpanded dispatch stays shallow', () async {
+    final bundle = await QuickjsUiBundle.fromEntry(
+      id: 'quickjs_ui_custom_components_repro',
+      version: '0.4.0',
+      entry: 'custom_components_page.mjs',
+      resolver: QuickjsUiResourceResolver.file(
+        basePath: '../../example/assets/quickjs_ui',
+      ),
+    );
+    final session = QuickjsUiSession();
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      bundle.toPlugin(),
+      initialProps: const <String, Object?>{'title': 'Custom components'},
+    );
+
+    for (var index = 0; index < 5000; index += 1) {
+      await session.dispatch(<String, Object?>{
+        'method': 'setExpanded',
+        'value': index.isEven,
+      });
+      if (index % 5 == 0) {
+        await session.dispatch(<String, Object?>{
+          'method': 'setEnabled',
+          'value': index.isOdd,
+        });
+      }
+      if (index % 7 == 0) {
+        await session.dispatch(<String, Object?>{
+          'method': 'setSize',
+          'value': index.isEven ? 'large' : 'small',
+        });
+      }
+      if (index % 97 == 0) {
+        await session.dispatch(<String, Object?>{'method': 'reset'});
+      }
+    }
+
+    expect((session.state! as Map)['expanded'], isFalse);
   });
 
   testWidgets('QuickjsUiView.asset creates a multi-file asset view', (
@@ -1827,7 +2130,7 @@ export default Page({
   },
   async increment(state) {
     await Promise.resolve();
-    return { ...state, count: state.count + 1 };
+    return { count: state.count + 1 };
   }
 });
 ''',
@@ -1894,7 +2197,7 @@ export default Page({
   },
   async increment(state) {
     await quickjsUiTestWait();
-    return { ...state, count: state.count + 1 };
+    return { count: state.count + 1 };
   }
 });
 ''',
@@ -1955,7 +2258,7 @@ export default Page({
       route: 'quickjs-ui.pending',
       params: { source: 'test' }
     });
-    return { ...state, status: 'returned' };
+    return { status: 'returned' };
   }
 });
 ''',
@@ -2173,7 +2476,7 @@ export default Page({
     });
   },
   increment(state, payload) {
-    return { ...state, count: state.count + payload.step };
+    return { count: state.count + payload.step };
   }
 });
 ''',
@@ -2223,6 +2526,42 @@ export const CounterCard = Component((props) => {
       'Count: 5',
     );
   });
+
+  test(
+    'guards recursive JS components before QuickJS stack overflow',
+    () async {
+      final engine = await Quickjs.create();
+      final session = QuickjsUiSession(engine: engine);
+      addTearDown(session.dispose);
+
+      await expectLater(
+        session.loadPlugin(
+          QuickjsUiPagePlugin.singleFile(
+            id: 'quickjs_ui_recursive_component',
+            version: '0.4.0',
+            source: '''
+import { Component, Page } from 'quickjs_ui';
+
+const Loop = Component(() => Loop());
+
+export default Page({
+  build() {
+    return Loop();
+  }
+});
+''',
+          ),
+        ),
+        throwsA(
+          isA<QuickjsUiRuntimeException>().having(
+            (error) => '$error',
+            'error',
+            contains('quickjs_ui component render recursion limit exceeded'),
+          ),
+        ),
+      );
+    },
+  );
 
   test('runs multi-file file bundle page protocol', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -2436,22 +2775,26 @@ export function title() {
     expect(controller.node?.children.first.props['data'], 'Count: 7');
   });
 
-  test('video scrub survives many paused progress updates', () async {
+  test('setState patch merge survives progress storms', () async {
     final bundle = await QuickjsUiBundle.fromEntry(
       id: 'video_scrub_repro',
       version: '0.1.0',
       entry: 'pages/video.mjs',
       resolver: QuickjsUiResourceResolver.memory(const <String, String>{
         'pages/video.mjs': '''
-import { Page, Slider } from 'quickjs_ui';
+import { Page, Slider, eventField } from 'quickjs_ui';
 
 export default Page({
   createState() {
     return {
       ready: true,
+      autoplay: true,
+      loop: true,
       playing: false,
       scrubbing: false,
       wasPlayingBeforeScrub: false,
+      scrubPlayIntentVersion: 0,
+      playIntentVersion: 0,
       positionMs: 0,
       scrubPositionMs: 0,
       durationMs: 60000,
@@ -2460,54 +2803,97 @@ export default Page({
       status: 'ready'
     };
   },
-  build(state, _props, page) {
+  build(state, _props, actions) {
     const sliderValue = state.scrubbing ? state.scrubPositionMs : state.positionMs;
     const sliderMax = Math.max(state.durationMs, 1);
     return Slider({
       min: 0,
       max: sliderMax,
       value: Math.min(sliderValue, sliderMax),
-      onChanged: page.scrub(),
-      onChangeEnd: page.seek()
+      onChanged: actions.scrub(),
+      onChangeEnd: actions.seek()
     });
   },
   onProgress(state, _payload, _props, event) {
     if (state.scrubbing) {
-      return { ...state, durationMs: event.durationMs ?? state.durationMs };
+      return {
+        durationMs: eventField(event, 'durationMs', state.durationMs)
+      };
     }
     return {
-      ...state,
-      positionMs: event.positionMs ?? state.positionMs,
-      durationMs: event.durationMs ?? state.durationMs
+      positionMs: eventField(event, 'positionMs', state.positionMs),
+      durationMs: eventField(event, 'durationMs', state.durationMs)
     };
   },
-  scrub(state, _payload, _props, event) {
-    const value = Math.max(0, event.value ?? state.positionMs);
+  onReady(state, _payload, _props, event) {
+    const playing =
+      state.playIntentVersion > 0 ? state.playing : state.autoplay ? true : state.playing;
+    return {
+      ready: true,
+      playing,
+      durationMs: eventField(event, 'durationMs', state.durationMs)
+    };
+  },
+  onEnded(state) {
+    if (state.loop && state.playing) {
+      return {
+        playing: true,
+        positionMs: 0
+      };
+    }
+    return {
+      playing: false
+    };
+  },
+  scrub(state, payload, _props, event) {
+    const value = Math.max(
+      0,
+      eventField(event, 'value', payload?.value ?? state.positionMs)
+    );
     if (!state.scrubbing) {
       return {
-        ...state,
         scrubbing: true,
         wasPlayingBeforeScrub: state.playing,
+        scrubPlayIntentVersion: state.playIntentVersion,
         playing: false,
         scrubPositionMs: value,
         status: 'scrubbing'
       };
     }
-    return { ...state, scrubPositionMs: value };
+    return { scrubPositionMs: value };
   },
-  seek(state, _payload, _props, event) {
-    const value = Math.max(0, event.value ?? state.scrubPositionMs);
-    const playing = state.wasPlayingBeforeScrub;
+  seek(state, payload, _props, event) {
+    const value = Math.max(
+      0,
+      eventField(event, 'value', payload?.value ?? state.scrubPositionMs)
+    );
+    const playing =
+      state.scrubPlayIntentVersion === state.playIntentVersion
+        ? state.wasPlayingBeforeScrub
+        : state.playing;
     return {
-      ...state,
       scrubbing: false,
       wasPlayingBeforeScrub: false,
+      scrubPlayIntentVersion: state.playIntentVersion,
       seekToken: state.seekToken + 1,
       seekPositionMs: value,
       positionMs: value,
       scrubPositionMs: value,
       playing,
       status: playing ? 'playing' : 'seeked'
+    };
+  },
+  setPlaying(state, payload, _props, event) {
+    const playing = eventField(event, 'playing', payload?.playing ?? !state.playing) === true;
+    return {
+      playing,
+      playIntentVersion: state.playIntentVersion + 1
+    };
+  },
+  togglePlay(state) {
+    return {
+      playing: !state.playing,
+      playIntentVersion: state.playIntentVersion + 1
     };
   }
 });
@@ -2547,6 +2933,81 @@ export default Page({
     expect(seeked['scrubbing'], isFalse);
     expect(seeked['positionMs'], 12000.0);
     expect(seeked['seekToken'], 1);
+
+    await session.dispatch(<String, Object?>{
+      'method': 'setPlaying',
+      'playing': true,
+    });
+    await session.dispatch(<String, Object?>{
+      'method': 'scrub',
+      'value': 20000.0,
+    });
+    await session.dispatch(<String, Object?>{
+      'method': 'setPlaying',
+      'playing': false,
+    });
+    await session.dispatch(<String, Object?>{
+      'method': 'seek',
+      'value': 20000.0,
+    });
+    final pausedAfterSeek = session.state! as Map<String, Object?>;
+    expect(pausedAfterSeek['playing'], isFalse);
+    expect(pausedAfterSeek['positionMs'], 20000.0);
+
+    await session.dispatch(<String, Object?>{
+      'method': 'onReady',
+      'durationMs': 60000,
+    });
+    final pausedAfterReady = session.state! as Map<String, Object?>;
+    expect(pausedAfterReady['playing'], isFalse);
+
+    await session.dispatch(<String, Object?>{'method': 'onEnded'});
+    final pausedAfterEnded = session.state! as Map<String, Object?>;
+    expect(pausedAfterEnded['playing'], isFalse);
+
+    await session.dispatch(<String, Object?>{'method': 'togglePlay'});
+    await session.dispatch(<String, Object?>{'method': 'togglePlay'});
+    final toggledTwice = session.state! as Map<String, Object?>;
+    expect(toggledTwice['playing'], isFalse);
+  });
+
+  test('dispatch normalizes payload fields for handlers', () async {
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'payload_normalization',
+        version: '0.1.0',
+        source: '''
+import { Page } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { value: 0 };
+  },
+  build(state, _props, actions) {
+    return { type: 'Text', data: String(state.value) };
+  },
+  setValue(state, payload, _props, event) {
+    return {
+      value: payload?.value ?? event?.value ?? state.value
+    };
+  }
+});
+''',
+      ),
+    );
+
+    await session.dispatch(<String, Object?>{
+      'method': 'setValue',
+      'payload': <String, Object?>{'value': 42},
+    });
+    expect(session.state, <String, Object?>{'value': 42});
+
+    await session.dispatch(<String, Object?>{'method': 'setValue', 'value': 7});
+    expect(session.state, <String, Object?>{'value': 7});
   });
 }
 
@@ -2592,7 +3053,7 @@ export default Page({
   },
   build,
   increment(state) {
-    return { ...state, count: state.count + 1 };
+    return { count: state.count + 1 };
   }
 });
 ''',

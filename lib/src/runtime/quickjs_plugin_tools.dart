@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+import '../diagnostics/quickjs_diag.dart';
 import '../diagnostics/quickjs_exception.dart';
 import 'quickjs.dart';
 import 'quickjs_plugin.dart';
@@ -11,28 +12,98 @@ import 'quickjs_plugin.dart';
 final class QuickjsPluginClient {
   const QuickjsPluginClient(this.engine, this.plugin);
 
+  static int _nextCallId = 0;
+  static DateTime? _lastCoreCallEndedAt;
+
   final Quickjs engine;
   final QuickjsPlugin plugin;
 
   String get pluginId => plugin.manifest.id;
 
-  Future<void> validate({Duration? timeout}) {
-    return engine.validatePlugin(plugin, timeout: timeout);
+  Future<void> validate({Duration? timeout}) async {
+    await _traceCoreCall<void>(
+      phase: 'validate',
+      method: '<validate>',
+      args: const <Object?>[],
+      timeout: timeout,
+      action: () => engine.validatePlugin(plugin, timeout: timeout),
+    );
   }
 
   Future<Object?> init([
     Map<String, Object?> context = const <String, Object?>{},
     Duration? timeout,
   ]) {
-    return engine.initPlugin(plugin, context: context, timeout: timeout);
+    return _traceCoreCall<Object?>(
+      phase: 'init',
+      method: plugin.manifest.init ?? '<init>',
+      args: <Object?>[context],
+      timeout: timeout,
+      action: () =>
+          engine.initPlugin(plugin, context: context, timeout: timeout),
+    );
   }
 
   Future<Object?> call(String method, List<Object?> args, {Duration? timeout}) {
-    return engine.callPlugin(plugin, method, args, timeout: timeout);
+    return _traceCoreCall<Object?>(
+      phase: 'call',
+      method: method,
+      args: args,
+      timeout: timeout,
+      action: () => engine.callPlugin(plugin, method, args, timeout: timeout),
+    );
   }
 
   Future<Object?> dispose({Duration? timeout}) {
-    return engine.disposePlugin(plugin, timeout: timeout);
+    return _traceCoreCall<Object?>(
+      phase: 'dispose',
+      method: plugin.manifest.dispose ?? '<dispose>',
+      args: const <Object?>[],
+      timeout: timeout,
+      action: () => engine.disposePlugin(plugin, timeout: timeout),
+    );
+  }
+
+  Future<T> _traceCoreCall<T>({
+    required String phase,
+    required String method,
+    required List<Object?> args,
+    required Duration? timeout,
+    required Future<T> Function() action,
+  }) async {
+    final id = ++_nextCallId;
+    final startedAt = DateTime.now();
+    final idleMs = _lastCoreCallEndedAt == null
+        ? null
+        : startedAt.difference(_lastCoreCallEndedAt!).inMilliseconds;
+    final detail =
+        'id=$id plugin=$pluginId phase=$phase method=$method '
+        'idleMs=$idleMs args=${_argsSummary(args)} '
+        'timeoutMs=${timeout?.inMilliseconds}';
+    QuickjsDiag.count('plugin.call', detail: detail);
+    QuickjsDiag.log('plugin.call', 'start $detail');
+    try {
+      final result = await action();
+      QuickjsDiag.log(
+        'plugin.call',
+        'done id=$id plugin=$pluginId phase=$phase method=$method '
+            'elapsedMs=${DateTime.now().difference(startedAt).inMilliseconds} '
+            'result=${_valueSummary(result)}',
+      );
+      _lastCoreCallEndedAt = DateTime.now();
+      return result;
+    } catch (error, stackTrace) {
+      QuickjsDiag.log(
+        'plugin.call',
+        'FAILED id=$id plugin=$pluginId phase=$phase method=$method '
+            'elapsedMs=${DateTime.now().difference(startedAt).inMilliseconds} '
+            'idleMs=$idleMs '
+            'error=${_errorSummary(error)}',
+      );
+      QuickjsDiag.log('plugin.call', '$stackTrace');
+      _lastCoreCallEndedAt = DateTime.now();
+      rethrow;
+    }
   }
 }
 
@@ -200,4 +271,43 @@ Map<String, Object?> _objectMap(Map<String, Object?> json, String key) {
   throw JsValueConversionException(
     'QuickJS plugin manifest field must be an object: $key',
   );
+}
+
+String _argsSummary(List<Object?> args) {
+  if (args.isEmpty) {
+    return '[]';
+  }
+  return '[${args.take(4).map(_valueSummary).join(',')}${args.length > 4 ? ',+${args.length - 4}' : ''}]';
+}
+
+String _valueSummary(Object? value) {
+  if (value == null) {
+    return 'null';
+  }
+  if (value is Map) {
+    final keys = value.keys.take(8).join(',');
+    final suffix = value.length > 8 ? ',+${value.length - 8}' : '';
+    return 'Map(len=${value.length} keys=$keys$suffix)';
+  }
+  if (value is List) {
+    return 'List(len=${value.length})';
+  }
+  if (value is String) {
+    final text = value.length <= 48 ? value : '${value.substring(0, 48)}...';
+    return 'String(len=${value.length} "$text")';
+  }
+  if (value is num || value is bool) {
+    return '$value';
+  }
+  return value.runtimeType.toString();
+}
+
+String _errorSummary(Object error) {
+  if (error is JsException) {
+    return 'JsException name=${error.name ?? 'unknown'} message=${error.message}';
+  }
+  if (error is QuickjsException) {
+    return '${error.runtimeType} message=${error.message}';
+  }
+  return '$error';
 }

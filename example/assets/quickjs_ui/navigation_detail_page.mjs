@@ -86,14 +86,12 @@ export default Page({
       }
     });
     return {
-      ...state,
       result: describe(result)
     };
   },
 
   increment(state) {
     return {
-      ...state,
       count: state.count + 1
     };
   },
@@ -110,12 +108,10 @@ export default Page({
         }
       });
       return {
-        ...state,
         result: describe(result)
       };
     } catch (error) {
       return {
-        ...state,
         result: `jsui child rejected: ${error?.message ?? String(error)}`
       };
     }
@@ -128,12 +124,10 @@ export default Page({
         params: { source: 'jsui-detail' }
       });
       return {
-        ...state,
         result: 'missing route unexpectedly opened'
       };
     } catch (error) {
       return {
-        ...state,
         result: `missing route rejected: ${error?.message ?? String(error)}`
       };
     }

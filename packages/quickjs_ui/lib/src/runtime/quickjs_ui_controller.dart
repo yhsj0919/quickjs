@@ -71,17 +71,33 @@ final class QuickjsUiController extends ChangeNotifier {
     _mounts = List<QuickjsHostMount>.unmodifiable(mounts);
     _grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
     _permissionPolicy = permissionPolicy;
-    final plugin = await loader();
-    if (_disposed) {
-      return;
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final plugin = await loader();
+      if (_disposed) {
+        return;
+      }
+      await _session.loadPlugin(
+        plugin,
+        initialProps: initialProps,
+        mounts: mounts,
+        grantedPermissions: grantedPermissions,
+        permissionPolicy: permissionPolicy,
+      );
+    } catch (error) {
+      if (_disposed) {
+        return;
+      }
+      _error = error;
+    } finally {
+      if (!_disposed) {
+        _loading = false;
+        notifyListeners();
+      }
     }
-    await _loadPlugin(
-      plugin,
-      initialProps: initialProps,
-      mounts: mounts,
-      grantedPermissions: grantedPermissions,
-      permissionPolicy: permissionPolicy,
-    );
   }
 
   Future<void> _loadPlugin(

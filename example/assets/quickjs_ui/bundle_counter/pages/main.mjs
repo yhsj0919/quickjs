@@ -37,14 +37,12 @@ export default Page({
 
   increment(state) {
     return {
-      ...state,
       count: state.count + 1
     };
   },
 
-  reset(state) {
+  reset() {
     return {
-      ...state,
       count: 0
     };
   }

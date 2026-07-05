@@ -39,7 +39,6 @@ function describe(value) {
 
 function appendCall(state, message) {
   return {
-    ...state,
     keys: hostKeys(),
     appKeys: appKeys(),
     calls: [message, ...state.calls].slice(0, 8)
@@ -285,7 +284,6 @@ export default Page({
 
 function appendLifecycle(state, event) {
   return {
-    ...state,
     lifecycleEvents: [...state.lifecycleEvents, event].slice(-8)
   };
 }

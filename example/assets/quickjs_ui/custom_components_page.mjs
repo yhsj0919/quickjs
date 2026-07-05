@@ -89,18 +89,18 @@ export default Page({
   },
 
   setEnabled(state, _payload, _props, event) {
-    return { ...state, enabled: event.value === true };
+    return { enabled: event.value === true };
   },
 
   setExpanded(state, _payload, _props, event) {
-    return { ...state, expanded: event.value === true };
+    return { expanded: event.value === true };
   },
 
   setSize(state, _payload, _props, event) {
-    return { ...state, selectedSize: event.value };
+    return { selectedSize: event.value };
   },
 
-  reset(state) {
-    return { ...state, enabled: true, selectedSize: 'medium', expanded: false };
+  reset() {
+    return { enabled: true, selectedSize: 'medium', expanded: false };
   }
 });

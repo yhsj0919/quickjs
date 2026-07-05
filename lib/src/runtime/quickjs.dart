@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../backend/quickjs_backend.dart';
 import '../backend/quickjs_backend_factory.dart';
+import '../diagnostics/quickjs_diag.dart';
 import '../diagnostics/quickjs_exception.dart';
 import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
@@ -13,6 +14,8 @@ import '../diagnostics/quickjs_source_map.dart';
 import 'quickjs_value.dart';
 
 part '../module/quickjs_text_encoding.dart';
+
+const String _moduleCallBreadcrumbName = '__quickjsLastModuleCall';
 
 typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
 typedef QuickjsConsoleSink = FutureOr<void> Function(QuickjsConsoleEvent event);
@@ -386,6 +389,8 @@ class Quickjs {
   int _nextObjectProxyId = 1;
   int _nextClassBindingId = 1;
   int _nextPluginCallId = 1;
+  int _nextEvalRequestId = 0;
+  DateTime? _lastEvalEndedAt;
   final Map<String, QuickjsSourceMap> _sourceMaps =
       <String, QuickjsSourceMap>{};
   final Map<int, String> _callbackDebugNames = <int, String>{};
@@ -793,6 +798,7 @@ return JSON.stringify({ type: 'null' });
     final moduleName = _canonicalModuleName(_validateModuleName(module));
     final encodedModule = jsonEncode(moduleName);
     final encodedMethod = jsonEncode(method);
+    final encodedBreadcrumbName = jsonEncode(_moduleCallBreadcrumbName);
     final encodedArgs = jsonEncode(<Object>[
       for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
     ]);
@@ -800,15 +806,43 @@ return JSON.stringify({ type: 'null' });
       moduleName,
       '''
 const method = $encodedMethod;
+function breadcrumb(phase) {
+  globalThis[$encodedBreadcrumbName] = {
+    module: $encodedModule,
+    method,
+    phase,
+    timestamp: Date.now()
+  };
+}
+breadcrumb('resolve export ' + $encodedModule + '#' + method);
 const fn = __quickjsModuleNamespace[method];
 if (typeof fn !== 'function') {
   throw new TypeError(
     'QuickJS module export is not a function: ' + $encodedModule + '#' + method
   );
 }
-const args = $encodedArgs.map((arg) => inflate(arg));
-const value = await fn(...args);
-return JSON.stringify(convert(value, new WeakSet()));
+let phase = 'inflate arguments';
+try {
+  breadcrumb(phase);
+  const args = $encodedArgs.map((arg) => inflate(arg));
+  phase = 'call ' + $encodedModule + '#' + method;
+  breadcrumb(phase);
+  const value = await fn(...args);
+  phase = 'convert result from ' + $encodedModule + '#' + method;
+  breadcrumb(phase);
+  const converted = convert(value, new WeakSet());
+  phase = 'stringify result from ' + $encodedModule + '#' + method;
+  breadcrumb(phase);
+  return JSON.stringify(converted);
+} catch (error) {
+  breadcrumb('failed during ' + phase);
+  if (error && error.message === 'Maximum call stack size exceeded') {
+    try {
+      error.message = 'QuickJS module call stack overflow during ' + phase;
+    } catch (_) {}
+  }
+  throw error;
+}
 ''',
       timeout: timeout,
       name: name ?? 'module:$moduleName:$method',
@@ -1286,7 +1320,15 @@ return JSON.stringify(convert(value, new WeakSet()));
     type: 'conversionError',
     message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
   });
-  const convert = (value, seen) => {
+  const budget = { nodes: 0, maxNodes: 10000, maxDepth: 128 };
+  const convert = (value, seen, depth = 0) => {
+    if (depth > budget.maxDepth) {
+      return unsupported('object graph is too deep');
+    }
+    budget.nodes += 1;
+    if (budget.nodes > budget.maxNodes) {
+      return unsupported('object graph is too large');
+    }
     if (value === undefined) {
       return { type: 'undefined' };
     }
@@ -1320,7 +1362,7 @@ return JSON.stringify(convert(value, new WeakSet()));
       if (Array.isArray(value)) {
         const items = [];
         for (const item of value) {
-          const converted = convert(item, seen);
+          const converted = convert(item, seen, depth + 1);
           if (converted.type === 'conversionError') {
             return converted;
           }
@@ -1332,7 +1374,7 @@ return JSON.stringify(convert(value, new WeakSet()));
       if (prototype === Object.prototype || prototype === null) {
         const entries = {};
         for (const key of Object.keys(value)) {
-          const converted = convert(value[key], seen);
+          const converted = convert(value[key], seen, depth + 1);
           if (converted.type === 'conversionError') {
             return converted;
           }
@@ -1438,8 +1480,10 @@ return JSON.stringify(convert(value, new WeakSet()));
     );
     final encodedNamespaceName = jsonEncode(namespaceName);
     final validName = _validateModuleName(name);
-    final payloadJson = await evalAsync(
-      '''
+    late final String payloadJson;
+    try {
+      payloadJson = await evalAsync(
+        '''
 const __quickjsModuleNamespace = globalThis[$encodedNamespaceName];
 const inflate = ${_dartValueInflateFunctionSource()};
 const convert = ${_jsValueConvertFunctionSource()};
@@ -1452,14 +1496,38 @@ $asyncBody
   delete globalThis[$encodedResultName];
 }
 ''',
-      timeout: timeout,
-      name: '$validName:result',
-    );
+        timeout: timeout,
+        name: '$validName:result',
+      );
+    } catch (error, stackTrace) {
+      QuickjsDiag.log(
+        'module.call',
+        'FAILED name=$validName module=$validModule error=$error',
+      );
+      final breadcrumb = await _readModuleCallBreadcrumb();
+      QuickjsDiag.log(
+        'module.call',
+        'breadcrumb name=$validName module=$validModule value=$breadcrumb',
+      );
+      Error.throwWithStackTrace(error, stackTrace);
+    }
     final payload = jsonDecode(payloadJson) as Map<String, Object?>;
     if (payload['type'] == 'conversionError') {
       throw JsValueConversionException(payload['message']! as String);
     }
     return _normalizeStructuredValue(payload);
+  }
+
+  Future<Object?> _readModuleCallBreadcrumb() async {
+    try {
+      return await debugEvaluateValue(
+        'globalThis[${jsonEncode(_moduleCallBreadcrumbName)}] ?? null',
+        timeout: const Duration(milliseconds: 250),
+        name: '<quickjs:module-call-breadcrumb>',
+      );
+    } catch (error) {
+      return 'unavailable: $error';
+    }
   }
 
   Future<String> _ensureModuleNamespaceGlobal(
@@ -1581,11 +1649,27 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       return Future<String>.error(terminalError);
     }
 
-    final request = _QueuedEval(code, timeout, name, async);
+    final request = _QueuedEval(
+      ++_nextEvalRequestId,
+      code,
+      timeout,
+      name,
+      async,
+    );
     _queue.add(request);
+    QuickjsDiag.log(
+      'eval.queue',
+      'enqueue id=${request.id} name=$name async=$async '
+          'timeoutMs=${timeout?.inMilliseconds} depth=${_queue.length}',
+    );
     // timeout 从入队开始计算，避免排队过久的任务进入 runtime 后才超时。
     request.startQueueTimer(() {
       if (_queue.remove(request)) {
+        QuickjsDiag.log(
+          'eval.queue.timeout',
+          'id=${request.id} name=${request.name} async=${request.async} '
+              'timeoutMs=${request.timeout?.inMilliseconds}',
+        );
         request.completeError(const JsTimeoutException());
       }
     });
@@ -1603,10 +1687,26 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     if (terminalError != null) {
       return Future<String>.error(terminalError);
     }
-    final request = _QueuedModuleEval(source, name, modules, timeout);
+    final request = _QueuedModuleEval(
+      ++_nextEvalRequestId,
+      source,
+      name,
+      modules,
+      timeout,
+    );
     _queue.add(request);
+    QuickjsDiag.log(
+      'eval.queue',
+      'enqueue id=${request.id} name=$name module=true '
+          'timeoutMs=${timeout?.inMilliseconds} depth=${_queue.length}',
+    );
     request.startQueueTimer(() {
       if (_queue.remove(request)) {
+        QuickjsDiag.log(
+          'eval.queue.timeout',
+          'id=${request.id} name=${request.name} module=true '
+              'timeoutMs=${request.timeout?.inMilliseconds}',
+        );
         request.completeError(const JsTimeoutException());
       }
     });
@@ -1627,7 +1727,21 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     request.cancelQueueTimer();
 
     final timeout = request.remainingTimeout;
+    final startedAt = DateTime.now();
+    final idleMs = _lastEvalEndedAt == null
+        ? null
+        : startedAt.difference(_lastEvalEndedAt!).inMilliseconds;
+    QuickjsDiag.log(
+      'eval.queue',
+      'start id=${request.id} name=${request.name} async=${request.async} '
+          'module=${request is _QueuedModuleEval} idleMs=$idleMs '
+          'remainingTimeoutMs=${timeout?.inMilliseconds} depth=${_queue.length}',
+    );
     if (timeout != null && timeout <= Duration.zero) {
+      QuickjsDiag.log(
+        'eval.queue.timeout',
+        'expired-before-run id=${request.id} name=${request.name}',
+      );
       request.completeError(const JsTimeoutException());
       _drainQueue();
       return;
@@ -1677,6 +1791,20 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       // 这里显式消费成功和失败，避免任务失败时产生未处理的异步错误。
       _running!.then<void>(
         (_) {
+          _lastEvalEndedAt = DateTime.now();
+          final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+          if (request.failed) {
+            QuickjsDiag.log(
+              'eval.queue',
+              'FAILED id=${request.id} name=${request.name} '
+                  'elapsedMs=$elapsedMs error=${request.error}',
+            );
+          } else {
+            QuickjsDiag.log(
+              'eval.queue',
+              'done id=${request.id} name=${request.name} elapsedMs=$elapsedMs',
+            );
+          }
           _running = null;
           _runningRequest = null;
           if (_state == QuickjsRuntimeState.running) {
@@ -1685,6 +1813,12 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
           _drainQueue();
         },
         onError: (Object _, StackTrace _) {
+          _lastEvalEndedAt = DateTime.now();
+          QuickjsDiag.log(
+            'eval.queue',
+            'FAILED id=${request.id} name=${request.name} '
+                'elapsedMs=${DateTime.now().difference(startedAt).inMilliseconds}',
+          );
           _running = null;
           _runningRequest = null;
           if (_state == QuickjsRuntimeState.running) {
@@ -2760,7 +2894,14 @@ for (const callbackName of $encodedCallbackNames) {
 
 String _dartValueInflateFunctionSource() {
   return '''
-(payload) => {
+(payload, depth = 0, budget = { nodes: 0, maxNodes: 10000, maxDepth: 128 }) => {
+  if (depth > budget.maxDepth) {
+    throw new RangeError('QuickJS Dart value graph is too deep');
+  }
+  budget.nodes += 1;
+  if (budget.nodes > budget.maxNodes) {
+    throw new RangeError('QuickJS Dart value graph is too large');
+  }
   switch (payload.type) {
     case 'null':
       return null;
@@ -2771,11 +2912,11 @@ String _dartValueInflateFunctionSource() {
     case 'bytes':
       return new Uint8Array(payload.value);
     case 'array':
-      return payload.value.map((item) => inflate(item));
+      return payload.value.map((item) => inflate(item, depth + 1, budget));
     case 'object': {
       const value = {};
       for (const key of Object.keys(payload.value)) {
-        value[key] = inflate(payload.value[key]);
+        value[key] = inflate(payload.value[key], depth + 1, budget);
       }
       return value;
     }
@@ -2790,11 +2931,18 @@ String _dartValueInflateFunctionSource() {
 
 String _jsValueConvertFunctionSource() {
   return '''
-(value, seen) => {
+(value, seen, depth = 0, budget = { nodes: 0, maxNodes: 10000, maxDepth: 128 }) => {
   const unsupported = (reason) => ({
     type: 'conversionError',
     message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
   });
+  if (depth > budget.maxDepth) {
+    return unsupported('object graph is too deep');
+  }
+  budget.nodes += 1;
+  if (budget.nodes > budget.maxNodes) {
+    return unsupported('object graph is too large');
+  }
   if (value === undefined) {
     return { type: 'undefined' };
   }
@@ -2828,7 +2976,7 @@ String _jsValueConvertFunctionSource() {
     if (Array.isArray(value)) {
       const items = [];
       for (const item of value) {
-        const converted = convert(item, seen);
+        const converted = convert(item, seen, depth + 1, budget);
         if (converted.type === 'conversionError') {
           return converted;
         }
@@ -2840,7 +2988,7 @@ String _jsValueConvertFunctionSource() {
     if (prototype === Object.prototype || prototype === null) {
       const entries = {};
       for (const key of Object.keys(value)) {
-        const converted = convert(value[key], seen);
+        const converted = convert(value[key], seen, depth + 1, budget);
         if (converted.type === 'conversionError') {
           return converted;
         }
@@ -3143,8 +3291,9 @@ Object _encodeWithCycleCheck(
 }
 
 final class _QueuedEval {
-  _QueuedEval(this.code, this.timeout, this.name, this.async);
+  _QueuedEval(this.id, this.code, this.timeout, this.name, this.async);
 
+  final int id;
   final String code;
   final Duration? timeout;
   final String name;
@@ -3152,8 +3301,10 @@ final class _QueuedEval {
   final Completer<String> _completer = Completer<String>();
   final Stopwatch _stopwatch = Stopwatch()..start();
   Timer? _queueTimer;
+  Object? error;
 
   Future<String> get future => _completer.future;
+  bool get failed => error != null;
 
   Duration? get remainingTimeout {
     final currentTimeout = timeout;
@@ -3185,6 +3336,7 @@ final class _QueuedEval {
     if (_completer.isCompleted) {
       return;
     }
+    this.error = error;
     // 队列任务可能在调用方注册 expectLater 之前被取消；先挂一个 ignore，
     // 避免 Dart 把这类预期内的取消当成未处理错误。
     _completer.future.ignore();
@@ -3193,8 +3345,13 @@ final class _QueuedEval {
 }
 
 final class _QueuedModuleEval extends _QueuedEval {
-  _QueuedModuleEval(String code, String name, this.modules, Duration? timeout)
-    : super(code, timeout, name, false);
+  _QueuedModuleEval(
+    int id,
+    String code,
+    String name,
+    this.modules,
+    Duration? timeout,
+  ) : super(id, code, timeout, name, false);
 
   final Map<String, String> modules;
 }

@@ -1,51 +1,392 @@
+const MAX_DISPATCH_DEPTH = 64;
+const MAX_RENDER_DEPTH = 64;
+const MAX_COMPONENT_RENDER_DEPTH = 64;
+let pageRenderDepth = 0;
+let componentRenderDepth = 0;
+
 export function Page(page) {
+  if (page == null || typeof page !== 'object') {
+    throw new TypeError('quickjs_ui Page definition must be an object');
+  }
+  if (typeof page.build !== 'function') {
+    throw new TypeError('quickjs_ui Page requires build(state, props, actions)');
+  }
+
   const methods = pageMethods(page);
   const actions = methodActions(methods);
-  const defined = {
-    ...page,
-    init(props) {
+  const lifecycleHooks = lifecycleHookTypes(page);
+  let state;
+  let props = {};
+  let mounted = false;
+  let dirty = true;
+  let version = 0;
+  let dispatchDepth = 0;
+  const eventQueue = [];
+  let drainingEvents = false;
+
+  return {
+    name: page.name,
+    metadata: page.metadata,
+    capabilities() {
+      return {
+        protocol: 'quickjs_ui.runtime.v1',
+        lifecycle: lifecycleHooks
+      };
+    },
+    async mount(nextProps) {
+      props = nextProps ?? {};
       if (typeof page.createState === 'function') {
-        return page.createState(props);
+        state = await page.createState(props);
+      } else if (typeof page.state === 'function') {
+        state = await page.state(props);
+      } else {
+        state = {};
       }
-      if (typeof page.state === 'function') {
-        return page.state(props);
+      assertPlainState(state);
+      mounted = true;
+      dirty = true;
+      version += 1;
+      return snapshot();
+    },
+    handleEvent(event) {
+      requireMounted(mounted);
+      const queued = {
+        event
+      };
+      eventQueue.push(queued);
+      if (drainingEvents) {
+        return commitResult(false);
       }
-      return {};
+      return drainEvents();
     },
-    render(state, props) {
-      return page.build(state, props, actions);
-    },
-    lifecycle(state, event, props) {
-      const type = event?.type;
-      const hook =
-        type === 'mount' ? page.onMount :
-        type === 'show' ? page.onShow :
-        type === 'hide' ? page.onHide :
-        type === 'pause' ? page.onPause :
-        type === 'resume' ? page.onResume :
-        type === 'routeEnter' ? page.onRouteEnter :
-        type === 'routeLeave' ? page.onRouteLeave :
-        type === 'routeResult' ? page.onRouteResult :
-        type === 'dispose' ? page.onDispose :
-        undefined;
+    async lifecycle(event) {
+      requireMounted(mounted);
+      const hook = getLifecycleHook(page, event?.type);
       if (typeof hook !== 'function') {
-        return null;
+        return commitResult(false);
       }
-      const result = hook(state, event?.payload, props, event);
-      return result === undefined ? null : result;
+      const normalized = normalizeDispatchEvent(event);
+      const patch = await hook(state, normalized.data, props, normalized.event);
+      const nextState = applyStatePatch(state, patch);
+      if (nextState == null) {
+        return commitResult(false);
+      }
+      state = nextState;
+      dirty = true;
+      version += 1;
+      return commitResult(true);
+    },
+    setState(patch) {
+      requireMounted(mounted);
+      const nextState = applyStatePatch(state, patch);
+      if (nextState == null) {
+        return commitResult(false);
+      }
+      state = nextState;
+      dirty = true;
+      version += 1;
+      return commitResult(true);
+    },
+    commit() {
+      requireMounted(mounted);
+      if (!dirty) {
+        return commitResult(false);
+      }
+      if (pageRenderDepth >= MAX_RENDER_DEPTH) {
+        throw new RangeError('quickjs_ui page render recursion limit exceeded');
+      }
+      pageRenderDepth += 1;
+      try {
+        assertPlainState(state);
+        const node = page.build(state, props, actions);
+        dirty = false;
+        return {
+          changed: true,
+          version,
+          node
+        };
+      } finally {
+        pageRenderDepth -= 1;
+      }
+    },
+    snapshot() {
+      requireMounted(mounted);
+      return snapshot();
+    },
+    dispose() {
+      mounted = false;
+      state = undefined;
+      props = {};
+      dirty = false;
+      return true;
     }
   };
-  if (!page.dispatch) {
-    defined.dispatch = function dispatch(state, event, props) {
-      const name = event?.method ?? event?.action;
-      const handler = methods?.[name];
-      if (typeof handler !== 'function') {
-        return state;
-      }
-      return handler(state, event?.payload, props, event);
+
+  function applyStateResult(patch) {
+    if (patch === state) {
+      throw new TypeError(
+        'quickjs_ui page handlers must return a state patch, not the current state'
+      );
+    }
+    const nextState = applyStatePatch(state, patch);
+    if (nextState == null) {
+      return commitResult(false);
+    }
+    state = nextState;
+    dirty = true;
+    version += 1;
+    return commitResult(true);
+  }
+
+  function commitResult(changed) {
+    return { changed: changed === true, version };
+  }
+
+  function snapshot() {
+    return {
+      version,
+      state
     };
   }
-  return defined;
+
+  async function drainEvents() {
+    drainingEvents = true;
+    let changed = false;
+    try {
+      while (eventQueue.length > 0) {
+        const queued = eventQueue.shift();
+        const patch = dispatchPageMethod(state, queued.event, props, methods, () => {
+          dispatchDepth += 1;
+        }, () => {
+          dispatchDepth -= 1;
+        }, () => dispatchDepth);
+        const didChange = applyQueuedPatch(await patch);
+        changed = didChange || changed;
+      }
+      return commitResult(changed);
+    } finally {
+      drainingEvents = false;
+    }
+  }
+
+  function applyQueuedPatch(patch) {
+    const before = version;
+    const result = applyStateResult(patch);
+    return result.changed === true && version != before;
+  }
+}
+
+export function setState(state, patch) {
+  const next = {};
+  if (state != null && typeof state === 'object' && !Array.isArray(state)) {
+    for (const key of Object.keys(state)) {
+      const value = state[key];
+      if (typeof value === 'function') {
+        throw new TypeError(
+          'quickjs_ui state.' + key + ' must not be a function'
+        );
+      }
+      next[key] = value;
+    }
+  }
+  if (patch != null && typeof patch === 'object' && !Array.isArray(patch)) {
+    for (const key of Object.keys(patch)) {
+      const value = patch[key];
+      if (typeof value === 'function') {
+        throw new TypeError(
+          'quickjs_ui state patch.' + key + ' must not be a function'
+        );
+      }
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function applyStatePatch(state, patch) {
+  if (patch === undefined || patch === null) {
+    return null;
+  }
+  assertPlainState(patch, 'state patch');
+  return setState(state, patch);
+}
+
+export function eventField(event, name, fallback) {
+  const normalized = normalizeDispatchEvent(event).event;
+  if (normalized == null) {
+    return fallback;
+  }
+  const value = normalized[name];
+  return value === undefined ? fallback : value;
+}
+
+function dispatchPageMethod(state, event, props, methods, enter, leave, depth) {
+  if (depth() >= MAX_DISPATCH_DEPTH) {
+    throw new RangeError('quickjs_ui dispatch recursion limit exceeded');
+  }
+  const normalized = normalizeDispatchEvent(event);
+  const name = normalized.method;
+  const handler = methods?.[name];
+  if (typeof handler !== 'function') {
+    return null;
+  }
+  enter();
+  try {
+    return settleDispatchPatch(
+      handler(state, normalized.data, props, normalized.event),
+      leave
+    );
+  } catch (error) {
+    leave();
+    throw error;
+  }
+}
+
+function settleDispatchPatch(patch, onDone) {
+  if (isThenable(patch)) {
+    return Promise.resolve(patch).then(
+      (resolved) => finishDispatchPatch(resolved, onDone),
+      (error) => {
+        onDone();
+        throw error;
+      }
+    );
+  }
+  return finishDispatchPatch(patch, onDone);
+}
+
+function finishDispatchPatch(patch, onDone) {
+  try {
+    assertPatchOrNoop(patch, 'state patch');
+    return patch;
+  } finally {
+    onDone();
+  }
+}
+
+function isThenable(value) {
+  return value != null && typeof value.then === 'function';
+}
+
+function requireMounted(mounted) {
+  if (!mounted) {
+    throw new Error('quickjs_ui page runtime is not mounted');
+  }
+}
+
+function assertPatchOrNoop(patch, label) {
+  if (patch === undefined || patch === null) {
+    return;
+  }
+  assertPlainState(patch, label);
+}
+
+function normalizeDispatchEvent(event) {
+  if (event == null || typeof event !== 'object' || Array.isArray(event)) {
+    return { method: undefined, data: {}, event: {} };
+  }
+  const {
+    method,
+    action,
+    payload,
+  } = event;
+  const data = {};
+  for (const key of Object.keys(event)) {
+    if (
+      key === 'method' ||
+      key === 'action' ||
+      key === 'payload' ||
+      key === 'policy' ||
+      key === 'throttleMs' ||
+      key === 'debounceMs' ||
+      key === 'dropMs' ||
+      key === 'coalesceKey' ||
+      key === 'source' ||
+      key === 'timestamp'
+    ) {
+      continue;
+    }
+    data[key] = event[key];
+  }
+  if (payload != null && typeof payload === 'object' && !Array.isArray(payload)) {
+    for (const key of Object.keys(payload)) {
+      data[key] = payload[key];
+    }
+  }
+  const resolvedMethod = method ?? action;
+  const resolvedEvent = {
+  };
+  if (resolvedMethod != null) {
+    resolvedEvent.method = resolvedMethod;
+  }
+  for (const key of Object.keys(data)) {
+    resolvedEvent[key] = data[key];
+  }
+  return {
+    method: resolvedMethod,
+    data,
+    event: resolvedEvent
+  };
+}
+
+function assertPlainState(state, label) {
+  const stateLabel = label == null ? 'state' : label;
+  if (state == null || typeof state !== 'object' || Array.isArray(state)) {
+    throw new TypeError('quickjs_ui ' + stateLabel + ' must be a plain object');
+  }
+  for (const key of Object.keys(state)) {
+    if (typeof state[key] === 'function') {
+      throw new TypeError(
+        'quickjs_ui ' + stateLabel + '.' + key + ' must not be a function'
+      );
+    }
+  }
+  return state;
+}
+
+function getLifecycleHook(page, type) {
+  switch (type) {
+    case 'mount':
+      return page.onMount;
+    case 'show':
+      return page.onShow;
+    case 'hide':
+      return page.onHide;
+    case 'pause':
+      return page.onPause;
+    case 'resume':
+      return page.onResume;
+    case 'routeEnter':
+      return page.onRouteEnter;
+    case 'routeLeave':
+      return page.onRouteLeave;
+    case 'routeResult':
+      return page.onRouteResult;
+    case 'dispose':
+      return page.onDispose;
+    default:
+      return undefined;
+  }
+}
+
+function lifecycleHookTypes(page) {
+  const hooks = [];
+  for (const [type, name] of [
+    ['mount', 'onMount'],
+    ['show', 'onShow'],
+    ['hide', 'onHide'],
+    ['pause', 'onPause'],
+    ['resume', 'onResume'],
+    ['routeEnter', 'onRouteEnter'],
+    ['routeLeave', 'onRouteLeave'],
+    ['routeResult', 'onRouteResult'],
+    ['dispose', 'onDispose']
+  ]) {
+    if (typeof page[name] === 'function') {
+      hooks.push(type);
+    }
+  }
+  return Object.freeze(hooks);
 }
 
 function node(type, props = {}) {
@@ -70,11 +411,25 @@ export function Component(render) {
     throw new TypeError('quickjs_ui Component render must be a function');
   }
   return function component(props = {}, actions = {}) {
-    const node = render(props ?? {}, actions ?? {});
-    if (node == null || typeof node !== 'object' || typeof node.type !== 'string') {
-      throw new TypeError('quickjs_ui Component must return a UI node object');
+    if (componentRenderDepth >= MAX_COMPONENT_RENDER_DEPTH) {
+      throw new RangeError(
+        'quickjs_ui component render recursion limit exceeded'
+      );
     }
-    return node;
+    componentRenderDepth += 1;
+    try {
+      const nodeValue = render(props ?? {}, actions ?? {});
+      if (
+        nodeValue == null ||
+        typeof nodeValue !== 'object' ||
+        typeof nodeValue.type !== 'string'
+      ) {
+        throw new TypeError('quickjs_ui Component must return a UI node object');
+      }
+      return nodeValue;
+    } finally {
+      componentRenderDepth -= 1;
+    }
   };
 }
 
@@ -91,6 +446,13 @@ function pageMethods(page) {
     'render',
     'init',
     'dispatch',
+    'capabilities',
+    'mount',
+    'handleEvent',
+    'commit',
+    'setState',
+    'lifecycle',
+    'snapshot',
     'dispose',
     'onInit',
     'onMount',
@@ -202,6 +564,8 @@ export const ui = {
   defineComponent,
   action,
   event,
+  setState,
+  eventField,
   Text,
   ElevatedButton,
   Row,

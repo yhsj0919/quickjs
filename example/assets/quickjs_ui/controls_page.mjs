@@ -153,18 +153,18 @@ export default Page({
     },
 
     changeName(state, payload, props, event) {
-        return {...state, name: event.value ?? '', status: 'changed'};
+        return {name: event.value ?? '', status: 'changed'};
     },
 
     submitName(state, payload, props, event) {
-        return {...state, name: event.value ?? state.name, status: 'submitted'};
+        return {name: event.value ?? state.name, status: 'submitted'};
     },
 
     focusName(state) {
-        return {...state, status: 'focused'};
+        return {status: 'focused'};
     },
 
     blurName(state) {
-        return {...state, status: 'blurred'};
+        return {status: 'blurred'};
     }
 });

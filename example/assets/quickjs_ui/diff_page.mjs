@@ -46,7 +46,6 @@ export default Page({
 
   bump(state) {
     return {
-      ...state,
       version: state.version + 1,
     };
   },

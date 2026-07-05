@@ -117,6 +117,100 @@ void main() {
     );
   });
 
+  test(
+    'evaluateValue rejects overly deep object graphs before JS stack overflow',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await expectLater(
+        engine.evaluateValue('''
+let value = { leaf: true };
+for (let i = 0; i < 256; i += 1) {
+  value = { child: value };
+}
+value;
+'''),
+        throwsA(
+          isA<JsValueConversionException>().having(
+            (error) => error.message,
+            'message',
+            contains('object graph is too deep'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'callPlugin rejects overly deep return values before JS stack overflow',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'deep_return',
+        version: '1.0.0',
+        exports: const <String>['render'],
+        source: '''
+export function render() {
+  let value = { type: 'Text', data: 'leaf' };
+  for (let i = 0; i < 256; i += 1) {
+    value = { type: 'Container', child: value };
+  }
+  return value;
+}
+''',
+      );
+      await engine.mount(plugin.asMount());
+
+      await expectLater(
+        engine.callPlugin(plugin, 'render', const <Object?>[]),
+        throwsA(
+          isA<JsValueConversionException>().having(
+            (error) => error.message,
+            'message',
+            contains('object graph is too deep'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'callPlugin rejects overly deep arguments before JS stack overflow',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final plugin = QuickjsPlugin.singleFile(
+        id: 'deep_args',
+        version: '1.0.0',
+        exports: const <String>['echo'],
+        source: '''
+export function echo(value) {
+  return value;
+}
+''',
+      );
+      await engine.mount(plugin.asMount());
+
+      Object? value = <String, Object?>{'leaf': true};
+      for (var index = 0; index < 256; index += 1) {
+        value = <String, Object?>{'child': value};
+      }
+
+      await expectLater(
+        engine.callPlugin(plugin, 'echo', <Object?>[value]),
+        throwsA(
+          isA<QuickjsException>().having(
+            (error) => error.message,
+            'message',
+            contains('QuickJS Dart value graph is too deep'),
+          ),
+        ),
+      );
+    },
+  );
+
   // Dart values can be injected as temporary JS globals for one evaluation.
   test('evaluateValue maps Dart globals to JavaScript values', () async {
     final engine = await Quickjs.create();

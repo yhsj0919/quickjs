@@ -1,36 +1,15 @@
 import {
   Column,
-  Component,
   ElevatedButton,
   ListView,
   Page,
   Slider,
   Text
 } from 'quickjs_ui';
+import { VideoPlayer } from 'quickjs_ui/video_player';
 
 const DEFAULT_SOURCE =
-  'https://ht-1368.oss-cn-qingdao.aliyuncs.com/media/202607/8733401de810_9月30日铭记历史-彩云.mp4';
-
-export const NativeVideoPlayer = Component((props) => ({
-  type: 'VideoPlayer',
-  key: props.playerKey ?? 'demo-player',
-  source: props.source,
-  playing: props.playing === true,
-  autoplay: props.autoplay === true,
-  loop: props.loop === true,
-  aspectRatio: props.aspectRatio ?? 16 / 9,
-  restartToken: props.restartToken ?? 0,
-  seekToken: props.seekToken ?? 0,
-  seekPositionMs: props.seekPositionMs ?? 0,
-  onReady: props.onReady,
-  onProgress: {
-    ...(props.onProgress ?? {}),
-    throttleMs: 50,
-    coalesceKey: `${props.playerKey ?? 'demo-player'}:progress`
-  },
-  onEnded: props.onEnded,
-  onError: props.onError
-}));
+  'https://ht-1368.oss-cn-qingdao.aliyuncs.com/media/202607/8733401de810_9%E6%9C%8830%E6%97%A5%E9%93%AD%E8%AE%B0%E5%8E%86%E5%8F%B2-%E5%BD%A9%E4%BA%91.mp4';
 
 function formatMs(value) {
   const totalMs = Math.max(0, value ?? 0);
@@ -42,7 +21,7 @@ function formatMs(value) {
 }
 
 export default Page({
-  name: 'NativeVideoPlayerPage',
+  name: 'VideoPlayerPluginStressPage',
 
   createState(props) {
     const autoplay = props.autoplay !== false;
@@ -73,16 +52,18 @@ export default Page({
       padding: 16,
       shrinkWrap: true,
       children: [
-        Text(props.title ?? 'Native VideoPlayer demo', {
+        Text(props.title ?? 'VideoPlayer plugin stress demo', {
           style: { fontSize: 20, fontWeight: 'bold' }
         }),
-        Text('JS Component() 返回 VideoPlayer schema；桌面端通过 fvp 注入 video_player 后端。'),
-        NativeVideoPlayer({
+        Text('Imported from quickjs_ui/video_player; progress updates use sample events.'),
+        VideoPlayer({
+          key: 'demo-player',
           playerKey: 'demo-player',
           source: props.source ?? DEFAULT_SOURCE,
           playing: state.playing,
-          autoplay: state.autoplay,
           loop: state.loop,
+          progressThrottleMs: 50,
+          progressCoalesceKey: 'demo-player:progress',
           restartToken: state.restartToken,
           seekToken: state.seekToken,
           seekPositionMs: state.seekPositionMs,
@@ -134,7 +115,6 @@ export default Page({
   onReady(state, _payload, _props, event) {
     const playing = state.autoplay ? true : state.playing;
     return {
-      ...state,
       ready: true,
       playing,
       durationMs: event.durationMs ?? state.durationMs,
@@ -149,12 +129,10 @@ export default Page({
   onProgress(state, _payload, _props, event) {
     if (state.scrubbing) {
       return {
-        ...state,
         durationMs: event.durationMs ?? state.durationMs
       };
     }
     return {
-      ...state,
       positionMs: event.positionMs ?? state.positionMs,
       durationMs: event.durationMs ?? state.durationMs
     };
@@ -163,7 +141,6 @@ export default Page({
   onEnded(state) {
     if (state.loop) {
       return {
-        ...state,
         playing: true,
         restartToken: state.restartToken + 1,
         endedCount: state.endedCount + 1,
@@ -172,7 +149,6 @@ export default Page({
       };
     }
     return {
-      ...state,
       playing: false,
       endedCount: state.endedCount + 1,
       status: '播放结束'
@@ -181,7 +157,6 @@ export default Page({
 
   onError(state, _payload, _props, event) {
     return {
-      ...state,
       playing: false,
       ready: false,
       status: `播放错误：${event.message ?? 'unknown'}`
@@ -192,7 +167,6 @@ export default Page({
     const value = Math.max(0, event.value ?? state.positionMs);
     if (!state.scrubbing) {
       return {
-        ...state,
         scrubbing: true,
         wasPlayingBeforeScrub: state.playing,
         playing: false,
@@ -201,7 +175,6 @@ export default Page({
       };
     }
     return {
-      ...state,
       scrubPositionMs: value
     };
   },
@@ -210,7 +183,6 @@ export default Page({
     const value = Math.max(0, event.value ?? state.scrubPositionMs);
     const playing = state.wasPlayingBeforeScrub;
     return {
-      ...state,
       scrubbing: false,
       wasPlayingBeforeScrub: false,
       seekToken: state.seekToken + 1,
@@ -224,10 +196,9 @@ export default Page({
 
   togglePlay(state) {
     if (!state.ready) {
-      return state;
+      return null;
     }
     return {
-      ...state,
       playing: !state.playing,
       status: state.playing ? '已暂停' : '播放中'
     };
@@ -235,7 +206,6 @@ export default Page({
 
   restart(state) {
     return {
-      ...state,
       playing: true,
       restartToken: state.restartToken + 1,
       positionMs: 0,

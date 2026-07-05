@@ -63,7 +63,6 @@ export default Page({
 
   increment(state) {
     return {
-      ...state,
       localCount: state.localCount + 1
     };
   },
@@ -78,7 +77,7 @@ export default Page({
         count: 30
       }
     });
-    return state;
+    return null;
   },
 
   onRouteEnter(state, payload) {
