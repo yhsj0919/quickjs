@@ -198,6 +198,46 @@
         }
       }
     },
+    "resource": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "anyOf": [
+            { "required": ["uri"] },
+            { "required": ["url"] },
+            { "required": ["src"] },
+            { "required": ["source"] },
+            { "required": ["path"] }
+          ],
+          "properties": {
+            "uri": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "minLength": 1 },
+            "src": { "type": "string", "minLength": 1 },
+            "source": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "kind": {
+              "type": "string",
+              "enum": ["asset", "file", "network", "http", "https", "data", "custom"]
+            },
+            "type": {
+              "type": "string",
+              "enum": ["asset", "file", "network", "http", "https", "data", "custom"]
+            },
+            "mimeType": { "type": "string" },
+            "mime": { "type": "string" },
+            "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+            "checksum": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+            "cacheKey": { "type": "string" },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
     "singleChild": {
       "type": "object",
       "properties": {
@@ -326,8 +366,8 @@
           ],
           "properties": {
             "type": { "const": "Image" },
-            "src": { "type": "string", "minLength": 1 },
-            "source": { "type": "string", "minLength": 1 },
+            "src": { "$ref": "#/$defs/resource" },
+            "source": { "$ref": "#/$defs/resource" },
             "width": { "type": "number" },
             "height": { "type": "number" },
             "fit": {

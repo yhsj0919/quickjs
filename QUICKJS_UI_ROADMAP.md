@@ -587,7 +587,7 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
   JS schema 引用 token，不直接绑定 Flutter Theme 细节。
 - [x] Focus / Keyboard / IME：focus/blur 统一事件、next/previous field、keyboard action、autofocus、
   submit、text composing 高频事件策略。
-- [ ] Resource / Media Model：asset/file/network resource resolver、image cache、video/audio/custom media resource、
+- [x] Resource / Media Model：asset/file/network resource resolver、image cache、video/audio/custom media resource、
   permission/checksum，以及何时接入 core stream。
 
 ### 0.4.2：滚动控制与列表过渡

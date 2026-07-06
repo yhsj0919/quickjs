@@ -46,7 +46,106 @@ final class _ProbeComponentController extends QuickjsUiComponentController {
 }
 
 void main() {
-  group('quickjs_ui conformance', () {
+  group('quickjs_ui 0.4.1 cross-cutting', () {
+    group('schema versioning / compatibility', () {
+      test('accepts current quickjs_ui compatibility metadata', () async {
+        final engine = await Quickjs.create();
+        final session = QuickjsUiSession(engine: engine);
+        addTearDown(session.dispose);
+
+        await session.loadPlugin(
+          QuickjsUiPagePlugin.singleFile(
+            id: 'quickjs_ui_compatibility_accept',
+            version: '0.4.1',
+            source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  schemaVersion: 1,
+  minimumQuickjsUiVersion: 1,
+  unknownProps: 'warn',
+  deprecatedProps: {
+    oldText: 'Use data instead.'
+  },
+  createState() {
+    return { label: 'compatible' };
+  },
+  build(state) {
+    return Text(state.label);
+  }
+});
+''',
+          ),
+        );
+
+        expect(session.node?.props['data'], 'compatible');
+      });
+
+      test('rejects unsupported quickjs_ui schema version', () async {
+        final engine = await Quickjs.create();
+        final session = QuickjsUiSession(engine: engine);
+        addTearDown(session.dispose);
+
+        await expectLater(
+          session.loadPlugin(
+            QuickjsUiPagePlugin.singleFile(
+              id: 'quickjs_ui_compatibility_schema_reject',
+              version: '0.4.1',
+              source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  schemaVersion: 2,
+  build() {
+    return Text('future schema');
+  }
+});
+''',
+            ),
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => '$error',
+              'message',
+              contains('unsupported schema version'),
+            ),
+          ),
+        );
+      });
+
+      test('rejects pages requiring newer quickjs_ui runtime', () async {
+        final engine = await Quickjs.create();
+        final session = QuickjsUiSession(engine: engine);
+        addTearDown(session.dispose);
+
+        await expectLater(
+          session.loadPlugin(
+            QuickjsUiPagePlugin.singleFile(
+              id: 'quickjs_ui_compatibility_runtime_reject',
+              version: '0.4.1',
+              source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  minimumQuickjsUiVersion: 2,
+  build() {
+    return Text('future runtime');
+  }
+});
+''',
+            ),
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => '$error',
+              'message',
+              contains('requires runtime version'),
+            ),
+          ),
+        );
+      });
+    });
+
     test('schema fixtures stay serializable and replayable', () {
       final fixture = <String, Object?>{
         'type': 'Column',
@@ -602,6 +701,119 @@ export default Page({
       expect(session.node?.props['data'], 'native-result');
     });
 
+    group('resource / media model', () {
+      test('resource references classify schemes and validate metadata', () {
+        final asset = QuickjsUiResourceReference.parse('assets/avatar.png');
+        expect(asset.kind, QuickjsUiResourceKind.asset);
+        expect(asset.location, 'assets/avatar.png');
+
+        final network = QuickjsUiResourceReference.parse(<String, Object?>{
+          'url': 'https://example.com/avatar.png',
+          'mimeType': 'image/png',
+          'sha256':
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'headers': <String, Object?>{'Authorization': 'Bearer token'},
+        });
+        expect(network.kind, QuickjsUiResourceKind.network);
+        expect(network.mimeType, 'image/png');
+        expect(
+          network.headers,
+          <String, String>{'Authorization': 'Bearer token'},
+        );
+        expect(network.isCacheable, isTrue);
+
+        expect(
+          () => QuickjsUiResourceReference.parse('ftp://example.com/file.png'),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => QuickjsUiResourceReference.parse(<String, Object?>{
+            'uri': 'https://example.com/file.png',
+            'sha256': 'not-a-checksum',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      });
+
+      test('Image accepts resource objects and data resources', () {
+        final registry = QuickjsUiComponentRegistry.defaults();
+        final context = QuickjsUiRenderContext(
+          buildNode: (_) => const SizedBox.shrink(),
+          onUiEvent: (_) {},
+          onEvent: (_) {},
+        );
+        final networkImage =
+            registry.build(
+                  context,
+                  QuickjsUiNode.fromMap(<String, Object?>{
+                    'type': 'Image',
+                    'src': <String, Object?>{
+                      'url': 'https://example.com/avatar.png',
+                      'headers': <String, Object?>{'X-Test': 'yes'},
+                    },
+                    'width': 32,
+                  }),
+                )
+                as Image;
+        expect(networkImage.image, isA<NetworkImage>());
+        expect((networkImage.image as NetworkImage).headers, <String, String>{
+          'X-Test': 'yes',
+        });
+
+        final dataImage =
+            registry.build(
+                  context,
+                  QuickjsUiNode.fromMap(<String, Object?>{
+                    'type': 'Image',
+                    'src': 'data:image/png;base64,AA==',
+                  }),
+                )
+                as Image;
+        expect(dataImage.image, isA<MemoryImage>());
+      });
+
+      test('bundle manifest resources stay metadata-only', () async {
+        final bundle = await QuickjsUiBundle.fromManifestSource(
+          '''
+{
+  "id": "quickjs_ui_conformance_resources",
+  "version": "0.4.1",
+  "entry": "pages/main.mjs",
+  "resources": {
+    "images/avatar.png": {
+      "mimeType": "image/png",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "cacheKey": "avatar-v1"
+    }
+  },
+  "modules": [
+    "pages/main.mjs"
+  ]
+}
+''',
+          resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+            'pages/main.mjs': '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  build() {
+    return Text('resource metadata ok');
+  }
+});
+''',
+          }),
+        );
+
+        expect(bundle.resources.keys, <String>['images/avatar.png']);
+        expect(bundle.resources['images/avatar.png']?.mimeType, 'image/png');
+        expect(bundle.resources['images/avatar.png']?.cacheKey, 'avatar-v1');
+        expect(
+          bundle.resources['images/avatar.png']?.sha256,
+          '0000000000000000000000000000000000000000000000000000000000000000',
+        );
+      });
+    });
+
     test('bundle compatibility loads a multi-module page', () async {
       final bundle = await QuickjsUiBundle.fromManifestSource(
         '''
@@ -609,6 +821,12 @@ export default Page({
   "id": "quickjs_ui_conformance_bundle",
   "version": "0.4.1",
   "entry": "pages/main.mjs",
+  "resources": {
+    "images/logo.png": {
+      "mimeType": "image/png",
+      "cacheKey": "logo-v1"
+    }
+  },
   "modules": [
     "pages/main.mjs",
     "components/title.mjs"
@@ -641,6 +859,7 @@ export function title(value) {
 
       await session.loadPlugin(bundle.toPlugin());
 
+      expect(bundle.resources['images/logo.png']?.cacheKey, 'logo-v1');
       expect(session.node?.props['data'], 'bundle ok');
     });
   });

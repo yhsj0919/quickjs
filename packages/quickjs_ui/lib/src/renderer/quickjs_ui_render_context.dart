@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../resource/quickjs_ui_resource.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import '../theme/quickjs_ui_design_tokens.dart';
@@ -125,6 +126,13 @@ final class QuickjsUiRenderContext {
       name: name,
       resolveNumber: _elevationToken,
     );
+  }
+
+  QuickjsUiResourceReference resource(
+    Object? value, {
+    String name = 'resource',
+  }) {
+    return QuickjsUiResourceReference.parse(value, name: name);
   }
 
   Widget build(QuickjsUiNode node) {

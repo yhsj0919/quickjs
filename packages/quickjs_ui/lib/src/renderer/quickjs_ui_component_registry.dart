@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
+import '../resource/quickjs_ui_resource.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_render_context.dart';
@@ -281,35 +286,68 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final source =
-      QuickjsUiProps.string(node.props['src'] ?? node.props['source']) ?? '';
-  if (source.isEmpty) {
-    throw const FormatException('quickjs_ui Image src must not be empty');
-  }
+  final resource = context.resource(
+    node.props['src'] ?? node.props['source'],
+    name: 'Image src',
+  );
   final width = QuickjsUiProps.doubleValue(node.props['width']);
   final height = QuickjsUiProps.doubleValue(node.props['height']);
   final fit = QuickjsUiProps.boxFit(node.props['fit']);
-  final uri = Uri.tryParse(source);
-  if (uri != null && uri.hasScheme && uri.scheme.startsWith('http')) {
-    return _withGestures(
-      context,
-      node,
-      Image.network(
-        source,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (_, _, _) {
-          return SizedBox(width: width, height: height);
-        },
-      ),
-    );
+  final image = switch (resource.kind) {
+    QuickjsUiResourceKind.asset => Image.asset(
+      resource.location,
+      width: width,
+      height: height,
+      fit: fit,
+    ),
+    QuickjsUiResourceKind.file => Image.file(
+      File(_filePath(resource.location)),
+      width: width,
+      height: height,
+      fit: fit,
+    ),
+    QuickjsUiResourceKind.network => Image.network(
+      resource.location,
+      headers: resource.headers.isEmpty ? null : resource.headers,
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (_, _, _) {
+        return SizedBox(width: width, height: height);
+      },
+    ),
+    QuickjsUiResourceKind.data => Image.memory(
+      _dataUriBytes(resource.location),
+      width: width,
+      height: height,
+      fit: fit,
+    ),
+    QuickjsUiResourceKind.custom => throw FormatException(
+      'quickjs_ui Image does not support custom resource: ${resource.location}',
+    ),
+  };
+  return _withGestures(context, node, image);
+}
+
+String _filePath(String location) {
+  final uri = Uri.tryParse(location);
+  if (uri != null && uri.scheme == 'file') {
+    return uri.toFilePath();
   }
-  return _withGestures(
-    context,
-    node,
-    Image.asset(source, width: width, height: height, fit: fit),
-  );
+  return location;
+}
+
+Uint8List _dataUriBytes(String location) {
+  final comma = location.indexOf(',');
+  if (!location.startsWith('data:') || comma == -1) {
+    throw const FormatException('quickjs_ui Image data resource is invalid');
+  }
+  final metadata = location.substring(5, comma);
+  final data = location.substring(comma + 1);
+  if (metadata.split(';').contains('base64')) {
+    return base64Decode(data);
+  }
+  return Uint8List.fromList(utf8.encode(Uri.decodeComponent(data)));
 }
 
 Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {

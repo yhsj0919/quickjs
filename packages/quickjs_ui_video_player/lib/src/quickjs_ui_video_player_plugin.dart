@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
@@ -80,6 +81,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   bool _initialized = false;
   bool _endedDispatched = false;
   String? _activeSource;
+  QuickjsUiResourceKind? _activeResourceKind;
   int _restartToken = 0;
   int _seekToken = 0;
   int _lastProgressDispatchMs = -1;
@@ -99,7 +101,11 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   @override
   void didUpdateWidget(covariant _QuickjsUiVideoPlayerHost oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final source = _sourceFromNode(widget.node);
+    final resource = _tryResourceFromNode(widget.node);
+    if (resource == null) {
+      return;
+    }
+    final source = resource.location;
     if (source != _activeSource) {
       _disposeController();
       _initializeController();
@@ -119,13 +125,14 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   }
 
   Future<void> _initializeController() async {
-    final source = _sourceFromNode(widget.node);
-    if (source == null || source.isEmpty) {
-      _dispatchError('VideoPlayer.source is required');
+    final resource = _tryResourceFromNode(widget.node);
+    if (resource == null) {
       return;
     }
+    final source = resource.location;
 
     _activeSource = source;
+    _activeResourceKind = resource.kind;
     _playbackSyncVersion += 1;
     _seekRequestVersion += 1;
     _endedDispatched = false;
@@ -133,9 +140,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     _lastProgressDurationMs = -1;
     _pausedAt = null;
 
-    final controller = native.VideoPlayerController.networkUrl(
-      Uri.parse(source),
-    );
+    final controller = _controllerForResource(resource);
     _controller = controller;
     try {
       await controller.initialize();
@@ -282,6 +287,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     int syncVersion,
   ) async {
     final source = _activeSource;
+    final kind = _activeResourceKind;
     if (source == null || source.isEmpty) {
       _applyingPlaying = false;
       return;
@@ -300,9 +306,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     }
     await oldController.dispose();
 
-    final controller = native.VideoPlayerController.networkUrl(
-      Uri.parse(source),
-    );
+    final controller = _controllerForSource(source, kind);
     _controller = controller;
     try {
       await controller.initialize();
@@ -449,6 +453,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     _controller = null;
     _initialized = false;
     _activeSource = null;
+    _activeResourceKind = null;
     _applyingPlaying = false;
     _pendingPlayingSync = false;
     _pausedAt = null;
@@ -460,11 +465,51 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     }
   }
 
-  String? _sourceFromNode(QuickjsUiNode node) {
-    return QuickjsUiProps.string(
-      node.props['source'],
+  QuickjsUiResourceReference? _tryResourceFromNode(QuickjsUiNode node) {
+    try {
+      return _resourceFromNode(node);
+    } catch (error) {
+      _dispatchError('$error');
+      return null;
+    }
+  }
+
+  QuickjsUiResourceReference _resourceFromNode(QuickjsUiNode node) {
+    final rawSource = node.props['source'];
+    if (rawSource == null) {
+      throw const FormatException('quickjs_ui VideoPlayer.source is required');
+    }
+    final resource = QuickjsUiResourceReference.parse(
+      rawSource,
       name: 'VideoPlayer.source',
     );
+    return switch (resource.kind) {
+      QuickjsUiResourceKind.network || QuickjsUiResourceKind.file => resource,
+      _ => throw FormatException(
+        'quickjs_ui VideoPlayer source must be a network or file resource: '
+        '${resource.kind.name}',
+      ),
+    };
+  }
+
+  native.VideoPlayerController _controllerForResource(
+    QuickjsUiResourceReference resource,
+  ) {
+    return _controllerForSource(resource.location, resource.kind);
+  }
+
+  native.VideoPlayerController _controllerForSource(
+    String source,
+    QuickjsUiResourceKind? kind,
+  ) {
+    if (kind == QuickjsUiResourceKind.file) {
+      final uri = Uri.tryParse(source);
+      final path = uri != null && uri.scheme == 'file'
+          ? uri.toFilePath()
+          : source;
+      return native.VideoPlayerController.file(File(path));
+    }
+    return native.VideoPlayerController.networkUrl(Uri.parse(source));
   }
 
   bool _loopFromNode(QuickjsUiNode node) {

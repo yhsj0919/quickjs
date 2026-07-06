@@ -260,6 +260,40 @@ Planned scope:
 Boundary: media resources are declared in schema or manifest. JS does not get
 direct file handles unless the host explicitly exposes a capability.
 
+### 0.4.1 contract
+
+Resource props may be either a legacy string or a serializable resource object:
+
+```js
+Image({
+  src: {
+    uri: 'https://example.com/avatar.png',
+    kind: 'network',
+    mimeType: 'image/png',
+    sha256: '...',
+    cacheKey: 'avatar-v1',
+    headers: { Authorization: 'Bearer ...' }
+  }
+});
+```
+
+The normalized Dart model is `QuickjsUiResourceReference`. It classifies
+resources as `asset`, `file`, `network`, `data`, or `custom`, validates allowed
+schemes, and carries cache/checksum metadata for host policy and diagnostics.
+Built-in `Image` resolves asset/file/network/data resources through this model.
+Custom media renderers, such as `VideoPlayer`, should parse their `source` with
+the same model and reject unsupported resource kinds with a structured `onError`
+event where available.
+
+Bundle manifests may include a `resources` table. This records resource metadata
+alongside modules but does not grant JS new host capabilities. File system,
+network, stream, or DRM access still requires explicit host policy/capability.
+
+Core stream transport is reserved for large or long-lived data streams such as
+response bodies, subtitles, timed metadata, or live host data sources. Ordinary
+widget events and media progress remain renderer events via
+`QuickjsUiEventIngress`.
+
 ## Conformance Tests
 
 Goal: quickjs_ui should have stable compatibility coverage beyond feature-level

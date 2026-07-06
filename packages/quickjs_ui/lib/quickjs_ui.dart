@@ -6,6 +6,7 @@ export 'src/renderer/quickjs_ui_render_context.dart';
 export 'src/renderer/quickjs_ui_renderer.dart';
 export 'src/resource/quickjs_ui_bundle.dart';
 export 'src/resource/quickjs_ui_network_loader.dart';
+export 'src/resource/quickjs_ui_resource.dart';
 export 'src/resource/quickjs_ui_resource_resolver.dart';
 export 'src/runtime/quickjs_ui_controller.dart';
 export 'src/runtime/quickjs_ui_helpers.dart';
