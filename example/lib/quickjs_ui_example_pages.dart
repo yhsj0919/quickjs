@@ -10,6 +10,7 @@ import 'pages/quickjs_ui_navigation_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui_profile_form_page.dart';
+import 'pages/quickjs_ui_scroll_transition_page.dart';
 import 'pages/quickjs_ui_schema_page.dart';
 import 'pages/quickjs_ui_todo_page.dart';
 import 'pages/quickjs_ui_video_player_plugin_page.dart';
@@ -77,15 +78,20 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     builder: (_) => const QuickjsUiNavigationPage(),
   ),
   ExamplePageSpec(
-    title: 'QuickJS UI Custom Components',
-    description:
-        'Covers JS Component(), custom Dart renderer registry, form controls, event descriptors, and implicit animation props.',
+    title: 'QuickJS UI 自定义组件',
+    description: '演示 JS Component()、Dart 自定义 renderer、表单控件、事件描述符和基础隐式动画。',
     builder: (_) => const QuickjsUiCustomComponentsPage(),
   ),
   ExamplePageSpec(
-    title: 'QuickJS UI VideoPlayer Plugin',
+    title: 'QuickJS UI VideoPlayer 插件',
     description:
-        'Third-party quickjs_ui plugin exposed as import { VideoPlayer } from quickjs_ui/video_player.',
+        '演示第三方 quickjs_ui 插件，通过 quickjs_ui/video_player 暴露 VideoPlayer 组件。',
     builder: (_) => const QuickjsUiVideoPlayerPluginPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 0.4.2 滚动与过渡',
+    description:
+        '演示 scrollTo key/offset、drag/swipe 事件、SingleChildScrollView 和 keyed 列表项过渡。',
+    builder: (_) => const QuickjsUiScrollTransitionPage(),
   ),
 ];

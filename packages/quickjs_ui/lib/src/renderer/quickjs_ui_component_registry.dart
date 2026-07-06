@@ -8,6 +8,7 @@ import '../resource/quickjs_ui_resource.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_render_context.dart';
+import 'quickjs_ui_scrollable.dart';
 
 typedef QuickjsUiComponentBuilder =
     Widget Function(QuickjsUiRenderContext context, QuickjsUiNode node);
@@ -56,6 +57,7 @@ final class QuickjsUiComponentRegistry {
       'Container': _buildContainer,
       'Image': _buildImage,
       'ListView': _buildListView,
+      'SingleChildScrollView': _buildSingleChildScrollView,
       'TextField': _buildTextField,
       'Stack': _buildStack,
       'Padding': _buildPadding,
@@ -352,36 +354,62 @@ Uint8List _dataUriBytes(String location) {
 
 Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final axis = QuickjsUiProps.axis(node.props['scrollDirection']);
-  final onScroll = QuickjsUiProps.event(node.props['onScroll']);
-  final listView = ListView(
-    scrollDirection: axis,
+  final rawChildren = context.children(node);
+  final rawKeys = quickjsUiChildKeys(node);
+  final gap = _gap(context, node);
+  final children = <Widget>[];
+  final childKeys = <String?>[];
+  for (var index = 0; index < rawChildren.length; index++) {
+    if (index > 0 && gap > 0) {
+      children.add(
+        axis == Axis.horizontal ? SizedBox(width: gap) : SizedBox(height: gap),
+      );
+      childKeys.add(null);
+    }
+    children.add(rawChildren[index]);
+    childKeys.add(rawKeys[index]);
+  }
+  final animateItems =
+      QuickjsUiProps.boolValue(node.props['animateItems']) ?? false;
+  if (animateItems && childKeys.any((key) => key == null || key.isEmpty)) {
+    throw const FormatException(
+      'quickjs_ui ListView animateItems requires stable string keys on children',
+    );
+  }
+  final listView = QuickjsUiScrollableList(
+    axis: axis,
     shrinkWrap:
         QuickjsUiProps.boolValue(node.props['shrinkWrap']) ??
         (node.props['shrinkWrap'] == null),
     padding: context.edgeInsets(node.props['padding']),
-    children: _childrenWithGap(context, node, axis),
+    childKeys: childKeys,
+    scroll: QuickjsUiScrollCommand.fromNode(node),
+    animateItems: animateItems,
+    itemDuration: quickjsUiItemTransitionDuration(node),
+    itemCurve: quickjsUiItemTransitionCurve(node),
+    children: children,
   );
   final withGestures = _withGestures(context, node, listView);
-  if (onScroll == null) {
-    return withGestures;
-  }
-  return NotificationListener<ScrollNotification>(
-    onNotification: (notification) {
-      final metrics = notification.metrics;
-      context.dispatchEvent(
-        onScroll,
-        defaultCoalesceKey: _eventKey(node, 'onScroll'),
-        kind: QuickjsUiEventKind.sample,
-        payload: <String, Object?>{
-          'pixels': metrics.pixels,
-          'minScrollExtent': metrics.minScrollExtent,
-          'maxScrollExtent': metrics.maxScrollExtent,
-          'viewportDimension': metrics.viewportDimension,
-          'axis': metrics.axis.name,
-        },
-      );
-      return false;
-    },
+  return quickjsUiWrapScrollNotifications(
+    context: context,
+    node: node,
+    child: withGestures,
+  );
+}
+
+Widget _buildSingleChildScrollView(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  final scrollView = QuickjsUiScrollableColumn(
+    padding: context.edgeInsets(node.props['padding']),
+    scroll: QuickjsUiScrollCommand.fromNode(node),
+    children: _childrenWithGap(context, node, Axis.vertical),
+  );
+  final withGestures = _withGestures(context, node, scrollView);
+  return quickjsUiWrapScrollNotifications(
+    context: context,
+    node: node,
     child: withGestures,
   );
 }
@@ -711,9 +739,20 @@ Widget _withGestures(
 ) {
   final onTap = QuickjsUiProps.event(node.props['onTap']);
   final onLongPress = QuickjsUiProps.event(node.props['onLongPress']);
-  if (onTap == null && onLongPress == null) {
+  final onDoubleTap = QuickjsUiProps.event(node.props['onDoubleTap']);
+  final onDragStart = QuickjsUiProps.event(node.props['onDragStart']);
+  final onDragUpdate = QuickjsUiProps.event(node.props['onDragUpdate']);
+  final onDragEnd = QuickjsUiProps.event(node.props['onDragEnd']);
+  final onSwipe = QuickjsUiProps.event(node.props['onSwipe']);
+  final hasPan =
+      onDragStart != null ||
+      onDragUpdate != null ||
+      onDragEnd != null ||
+      onSwipe != null;
+  if (onTap == null && onLongPress == null && onDoubleTap == null && !hasPan) {
     return child;
   }
+  Offset dragTotal = Offset.zero;
   return GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: onTap == null
@@ -728,8 +767,104 @@ Widget _withGestures(
             onLongPress,
             defaultCoalesceKey: _eventKey(node, 'onLongPress'),
           ),
+    onDoubleTap: onDoubleTap == null
+        ? null
+        : () => context.dispatchEvent(
+            onDoubleTap,
+            defaultCoalesceKey: _eventKey(node, 'onDoubleTap'),
+          ),
+    onPanStart: !hasPan
+        ? null
+        : (details) {
+            dragTotal = Offset.zero;
+            if (onDragStart != null) {
+              context.dispatchEvent(
+                onDragStart,
+                defaultCoalesceKey: _eventKey(node, 'onDragStart'),
+                payload: <String, Object?>{
+                  'x': details.localPosition.dx,
+                  'y': details.localPosition.dy,
+                  'globalX': details.globalPosition.dx,
+                  'globalY': details.globalPosition.dy,
+                },
+              );
+            }
+          },
+    onPanUpdate: !hasPan
+        ? null
+        : (details) {
+            dragTotal += details.delta;
+            if (onDragUpdate != null) {
+              context.dispatchEvent(
+                onDragUpdate,
+                defaultCoalesceKey: _eventKey(node, 'onDragUpdate'),
+                kind: QuickjsUiEventKind.sample,
+                payload: <String, Object?>{
+                  'deltaX': details.delta.dx,
+                  'deltaY': details.delta.dy,
+                  'totalDeltaX': dragTotal.dx,
+                  'totalDeltaY': dragTotal.dy,
+                  'x': details.localPosition.dx,
+                  'y': details.localPosition.dy,
+                  'globalX': details.globalPosition.dx,
+                  'globalY': details.globalPosition.dy,
+                },
+              );
+            }
+          },
+    onPanEnd: onDragEnd == null && onSwipe == null
+        ? null
+        : (details) {
+            if (onDragEnd != null) {
+              context.dispatchEvent(
+                onDragEnd,
+                defaultCoalesceKey: _eventKey(node, 'onDragEnd'),
+                payload: <String, Object?>{
+                  'velocityX': details.velocity.pixelsPerSecond.dx,
+                  'velocityY': details.velocity.pixelsPerSecond.dy,
+                  'totalDeltaX': dragTotal.dx,
+                  'totalDeltaY': dragTotal.dy,
+                },
+              );
+            }
+            if (onSwipe != null) {
+              final direction = _swipeDirection(
+                dragTotal,
+                details.velocity.pixelsPerSecond,
+              );
+              if (direction != null) {
+                context.dispatchEvent(
+                  onSwipe,
+                  defaultCoalesceKey: _eventKey(node, 'onSwipe'),
+                  payload: <String, Object?>{
+                    'direction': direction,
+                    'velocityX': details.velocity.pixelsPerSecond.dx,
+                    'velocityY': details.velocity.pixelsPerSecond.dy,
+                    'totalDeltaX': dragTotal.dx,
+                    'totalDeltaY': dragTotal.dy,
+                  },
+                );
+              }
+            }
+          },
     child: child,
   );
+}
+
+String? _swipeDirection(Offset delta, Offset velocity) {
+  const minDistance = 40.0;
+  const minVelocity = 300.0;
+  final primaryDelta = delta.dx.abs() >= delta.dy.abs() ? delta.dx : delta.dy;
+  final primaryVelocity = delta.dx.abs() >= delta.dy.abs()
+      ? velocity.dx
+      : velocity.dy;
+  if (primaryDelta.abs() < minDistance && primaryVelocity.abs() < minVelocity) {
+    return null;
+  }
+  if (delta.dx.abs() >= delta.dy.abs()) {
+    return primaryDelta >= 0 ? 'right' : 'left';
+  }
+  return primaryDelta >= 0 ? 'down' : 'up';
 }
 
 String _eventKey(QuickjsUiNode node, String prop) {

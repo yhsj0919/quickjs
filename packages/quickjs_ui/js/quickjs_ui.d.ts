@@ -423,6 +423,18 @@ export type AccessibilityRole =
   | 'textField'
   | 'header';
 
+export type Curve =
+  | 'linear'
+  | 'ease'
+  | 'easeIn'
+  | 'easeOut'
+  | 'easeInOut'
+  | 'fastOutSlowIn'
+  | 'bounceIn'
+  | 'bounceOut'
+  | 'elasticIn'
+  | 'elasticOut';
+
 export type AccessibilityProps = {
   semanticLabel?: string;
   semanticsLabel?: string;
@@ -431,6 +443,24 @@ export type AccessibilityProps = {
   role?: AccessibilityRole;
   enabled?: boolean;
   focusOrder?: number;
+  onTap?: QuickjsUiEvent;
+  onLongPress?: QuickjsUiEvent;
+  onDoubleTap?: QuickjsUiEvent;
+  onDragStart?: QuickjsUiEvent;
+  onDragUpdate?: QuickjsUiEvent;
+  onDragEnd?: QuickjsUiEvent;
+  onSwipe?: QuickjsUiEvent;
+};
+
+export type ScrollableProps = {
+  initialScrollOffset?: number;
+  scrollToOffset?: number;
+  scrollToKey?: string;
+  scrollToken?: number;
+  scrollToToken?: number;
+  scrollDurationMs?: number;
+  scrollCurve?: Curve;
+  onScroll?: QuickjsUiEvent;
 };
 
 export type TextProps = AccessibilityProps & {
@@ -475,10 +505,19 @@ export type ImageProps = AccessibilityProps & {
   fit?: BoxFit;
 };
 
-export type ListViewProps = AccessibilityProps & {
+export type ListViewProps = AccessibilityProps & ScrollableProps & {
   children?: QuickjsUiNode[];
   scrollDirection?: Axis;
   shrinkWrap?: boolean;
+  padding?: EdgeInsets;
+  gap?: SpaceValue;
+  animateItems?: boolean;
+  itemTransitionDurationMs?: number;
+  itemTransitionCurve?: Curve;
+};
+
+export type SingleChildScrollViewProps = AccessibilityProps & ScrollableProps & {
+  children?: QuickjsUiNode[];
   padding?: EdgeInsets;
   gap?: SpaceValue;
 };
@@ -587,6 +626,9 @@ export declare function Column(props: FlexProps): QuickjsUiNode;
 export declare function Container(props: ContainerProps): QuickjsUiNode;
 export declare function Image(props: ImageProps): QuickjsUiNode;
 export declare function ListView(props: ListViewProps): QuickjsUiNode;
+export declare function SingleChildScrollView(
+  props: SingleChildScrollViewProps
+): QuickjsUiNode;
 export declare function TextField(props: TextFieldProps): QuickjsUiNode;
 export declare function Stack(props: StackProps): QuickjsUiNode;
 export declare function Padding(props: PaddingProps): QuickjsUiNode;
@@ -610,6 +652,7 @@ export declare const ui: {
   Container(props: ContainerProps): QuickjsUiNode;
   Image(props: ImageProps): QuickjsUiNode;
   ListView(props: ListViewProps): QuickjsUiNode;
+  SingleChildScrollView(props: SingleChildScrollViewProps): QuickjsUiNode;
   TextField(props: TextFieldProps): QuickjsUiNode;
   Stack(props: StackProps): QuickjsUiNode;
   Padding(props: PaddingProps): QuickjsUiNode;

@@ -45,6 +45,7 @@
         { "$ref": "#/$defs/container" },
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/listView" },
+        { "$ref": "#/$defs/singleChildScrollView" },
         { "$ref": "#/$defs/textField" },
         { "$ref": "#/$defs/stack" },
         { "$ref": "#/$defs/padding" },
@@ -59,6 +60,13 @@
       "properties": {
         "type": { "type": "string" },
         "key": { "type": "string" },
+        "onTap": { "$ref": "#/$defs/event" },
+        "onLongPress": { "$ref": "#/$defs/event" },
+        "onDoubleTap": { "$ref": "#/$defs/event" },
+        "onDragStart": { "$ref": "#/$defs/event" },
+        "onDragUpdate": { "$ref": "#/$defs/event" },
+        "onDragEnd": { "$ref": "#/$defs/event" },
+        "onSwipe": { "$ref": "#/$defs/event" },
         "child": { "$ref": "#/$defs/node" },
         "children": {
           "type": "array",
@@ -159,6 +167,34 @@
             "width": { "type": "number" }
           }
         }
+      }
+    },
+    "curve": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "ease",
+        "easeIn",
+        "easeOut",
+        "easeInOut",
+        "fastOutSlowIn",
+        "bounceIn",
+        "bounceOut",
+        "elasticIn",
+        "elasticOut"
+      ]
+    },
+    "scrollable": {
+      "type": "object",
+      "properties": {
+        "initialScrollOffset": { "type": "number" },
+        "scrollToOffset": { "type": "number" },
+        "scrollToKey": { "type": "string" },
+        "scrollToken": { "type": "integer", "minimum": 0 },
+        "scrollToToken": { "type": "integer", "minimum": 0 },
+        "scrollDurationMs": { "type": "integer", "minimum": 0 },
+        "scrollCurve": { "$ref": "#/$defs/curve" },
+        "onScroll": { "$ref": "#/$defs/event" }
       }
     },
     "singleChild": {
@@ -303,13 +339,33 @@
       "allOf": [
         { "$ref": "#/$defs/baseNode" },
         { "$ref": "#/$defs/multiChild" },
+        { "$ref": "#/$defs/scrollable" },
         {
           "type": "object",
           "properties": {
             "type": { "const": "ListView" },
             "scrollDirection": { "type": "string", "enum": ["vertical", "horizontal"] },
             "shrinkWrap": { "type": "boolean" },
-            "padding": { "$ref": "#/$defs/edgeInsets" }
+            "padding": { "$ref": "#/$defs/edgeInsets" },
+            "gap": { "type": "number" },
+            "animateItems": { "type": "boolean" },
+            "itemTransitionDurationMs": { "type": "integer", "minimum": 0 },
+            "itemTransitionCurve": { "$ref": "#/$defs/curve" }
+          }
+        }
+      ]
+    },
+    "singleChildScrollView": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/multiChild" },
+        { "$ref": "#/$defs/scrollable" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "SingleChildScrollView" },
+            "padding": { "$ref": "#/$defs/edgeInsets" },
+            "gap": { "type": "number" }
           }
         }
       ]

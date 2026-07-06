@@ -79,6 +79,7 @@ Supported widgets:
 - `Container`
 - `Image`
 - `ListView`
+- `SingleChildScrollView`
 - `TextField`
 - `Stack`
 - `Padding`
@@ -99,6 +100,9 @@ with each event.
 - `example/assets/quickjs_ui/custom_components_page.mjs` shows JS `Component()`
   modules, controlled form controls, event descriptors, and basic implicit
   animation props.
+- `example/assets/quickjs_ui/scroll_transition_page.mjs` covers `scrollToKey`,
+  drag/swipe event descriptors, `SingleChildScrollView`, and keyed list item
+  transitions.
 - `example/lib/pages/quickjs_ui_custom_components_page.dart` shows a Dart
   `QuickjsUiComponentRegistry` with custom `AppBar` and `Card` renderers.
 - `example/assets/quickjs_ui/counter_page.mjs` is the minimal single-file

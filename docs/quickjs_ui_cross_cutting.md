@@ -294,6 +294,35 @@ response bodies, subtitles, timed metadata, or live host data sources. Ordinary
 widget events and media progress remain renderer events via
 `QuickjsUiEventIngress`.
 
+## Scroll, Gesture, And List Transition Model
+
+Goal: scroll and gesture controls should stay declarative and serializable while
+still mapping to Flutter's native `ScrollController`, `GestureDetector`, and
+`AnimatedList` primitives.
+
+### 0.4.2 contract
+
+Scrollable schema nodes support `initialScrollOffset`, `scrollToOffset`,
+`scrollToKey`, `scrollToken`, `scrollDurationMs`, `scrollCurve`, and `onScroll`.
+`scrollToken` is the imperative action boundary: JS updates state with a new
+token and target, Flutter applies the command after the next frame. JS never
+receives or stores a Flutter `ScrollController`.
+
+Gesture events are limited to structured descriptors: `onTap`, `onLongPress`,
+`onDoubleTap`, `onDragStart`, `onDragUpdate`, `onDragEnd`, and `onSwipe`.
+Drag updates are sample events and may be coalesced by the renderer event
+dispatcher. Swipe emits only direction, velocity, and total delta; it does not
+stream raw pointer objects.
+
+`ListView.animateItems` enables basic item enter/exit/reorder transitions. It
+requires stable string keys on direct children so Flutter can preserve item
+identity. Reorder is implemented as remove/insert around the changed keyed
+positions; JS still owns the list state and only returns the next schema.
+
+Boundary: scroll and gesture callbacks still enter JS through
+`QuickjsUiEventIngress`. Do not add per-widget post-frame dispatch workarounds or
+hidden native handles to page state.
+
 ## Conformance Tests
 
 Goal: quickjs_ui should have stable compatibility coverage beyond feature-level

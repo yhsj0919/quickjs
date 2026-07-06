@@ -529,6 +529,10 @@ export function ListView(props) {
   return node('ListView', props);
 }
 
+export function SingleChildScrollView(props) {
+  return node('SingleChildScrollView', props);
+}
+
 export function TextField(props) {
   return node('TextField', props);
 }
@@ -587,6 +591,7 @@ export const ui = {
   Container,
   Image,
   ListView,
+  SingleChildScrollView,
   TextField,
   Stack,
   Padding,
