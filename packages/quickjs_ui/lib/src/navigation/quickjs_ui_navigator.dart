@@ -488,7 +488,12 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
           debugName: 'quickjs_ui navigation pop',
           callback: (args, _) {
             _ensureNavigationSource(source, 'pop');
-            return _popJsRoute(args.isEmpty ? null : args[0]);
+            final result = args.isEmpty ? null : args[0];
+            if (_routes.length <= 1) {
+              unawaited(_popJsRoute(result));
+              return null;
+            }
+            return _popJsRoute(result);
           },
         ),
       ],
@@ -668,11 +673,15 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
         action: 'pop',
       );
       if (!waitForRouteLeave) {
+        scheduleMicrotask(() {
+          if (mounted) {
+            navigator.pop(result);
+          }
+        });
         unawaited(
-          routeLeave.whenComplete(() {
-            if (mounted) {
-              navigator.pop(result);
-            }
+          routeLeave.catchError((Object _) {
+            // The route is already leaving the native Navigator. Lifecycle
+            // errors must not repaint the departing JS page.
           }),
         );
         return true;
@@ -1062,9 +1071,13 @@ final class _QuickjsUiRouteStack {
     QuickjsConsoleSink? onConsole,
   }) {
     final current = _entries.removeLast();
-    current.complete(null);
     _entries.add(
-      _QuickjsUiRouterEntry(route: route, params: params, onConsole: onConsole),
+      _QuickjsUiRouterEntry(
+        route: route,
+        params: params,
+        result: current.result,
+        onConsole: onConsole,
+      ),
     );
     return current;
   }

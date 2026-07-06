@@ -13,5 +13,6 @@ export 'src/runtime/quickjs_ui_page_plugin.dart';
 export 'src/runtime/quickjs_ui_session.dart';
 export 'src/schema/quickjs_ui_node.dart';
 export 'src/schema/quickjs_ui_props.dart';
+export 'src/theme/quickjs_ui_design_tokens.dart';
 export 'src/view/quickjs_ui_error_overlay.dart';
 export 'src/view/quickjs_ui_view.dart';

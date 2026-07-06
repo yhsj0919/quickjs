@@ -529,7 +529,8 @@ Flutter 风格对象写法：
 - [x] 支持 `await quickjsUiNavigation.push()` 按 Flutter `Navigator.push` 语义等待 `pop(result)`，并通过 structured route result 回传。
 - [x] JSUI 页面支持通过显式按钮返回原生页并传 structured result；系统返回事件可被 JSUI 消费，
   当 JSUI 内部路由栈不为空时优先触发 JSUI `pop()`，否则再回退到原生返回。
-- [x] 支持 JSUI router `replace({ route, path, params })` 替换当前页；`replace()` 立即消费当前 pending result，不继承给 replacement。
+- [x] 支持 JSUI router `replace({ route, path, params })` 替换当前页；`replace()` 保留当前 pending result，
+  replacement 后续 `pop(result)` 仍回传给原始 `push()` 调用方。
 - [x] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场；JSUI 内部 router
   动画并入 0.4 可见性生命周期与动画能力处理。
 - [x] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`；路由生命周期使用独立队列，避免被当前 dispatch 的 `await push()` 压住。
@@ -566,26 +567,28 @@ Flutter 风格对象写法：
 ### 0.4.1：横切能力补齐
 
 这些能力不是单个控件功能，会影响 schema、renderer、自定义组件、bundle 兼容和宿主集成边界。
-放在 0.4.0 之后、开发调试工具之前，先稳定协议、语义、主题 token、自定义 renderer 生命周期和
-兼容性基线，再建设 inspector / snapshot 等调试能力。
+放在 0.4.0 之后、开发调试工具之前。先补协议版本、兼容策略和一致性测试，把事件、生命周期、
+导航和 renderer 的边界固定住；再补语义、主题 token、Focus/IME、自定义 renderer 生命周期和资源模型；
+最后再建设 inspector / snapshot 等调试能力。
 详细设计记录在 `docs/quickjs_ui_cross_cutting.md`。设计时先参考 Flutter 原生模型（Semantics、Theme、
 Focus/Actions/Shortcuts、Form/FormField、ScrollController/ScrollNotification、ImplicitlyAnimatedWidget /
 AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，避免盲目套 Web/DOM 语义。
 
-- [ ] Accessibility / Semantics：`semanticLabel`、`tooltip`、`role`、focus order、screen reader 文本、
-  图片/按钮/输入控件语义补齐。
-- [ ] Theme / Design Tokens：颜色、文字、spacing、radius、elevation、dark mode、品牌主题注入；
+- [x] Schema Versioning / Compatibility：schema version、helper/runtime protocol version、deprecated props、
+  unknown prop 策略、minimum quickjs_ui version；当前 v1 通过 `Page().capabilities()` 暴露元数据，并在
+  `QuickjsUiSession` 加载期拒绝不兼容 schema/runtime/helper。
+- [x] Conformance Tests：已补 schema fixture、renderer smoke、lifecycle sequence、navigation sequence、
+  event backpressure、bundle compatibility；golden 测试后续按视觉稳定性需要再补。
+- [x] Custom Renderer Lifecycle：自定义 renderer 支持 keyed controller 创建/更新/释放，以及 show/hide、
+  pause/resume、dispose；需要资源生命周期的自定义组件必须提供稳定 `key`。
+- [x] Accessibility / Semantics：支持 `semanticLabel` / `semanticsLabel`、`semanticHint`、`tooltip`、
+  `role`、`enabled`、`focusOrder`，由 renderer 统一映射到 Flutter `Semantics` / `Tooltip`。
+- [x] Theme / Design Tokens：颜色、文字、spacing、radius、elevation、dark mode、品牌主题注入；
   JS schema 引用 token，不直接绑定 Flutter Theme 细节。
-- [ ] Focus / Keyboard / IME：focus/blur 统一事件、next/previous field、keyboard action、autofocus、
+- [x] Focus / Keyboard / IME：focus/blur 统一事件、next/previous field、keyboard action、autofocus、
   submit、text composing 高频事件策略。
-- [ ] Schema Versioning / Compatibility：schema version、helper/runtime protocol version、deprecated props、
-  unknown prop 策略、minimum quickjs_ui version。
-- [ ] Custom Renderer Lifecycle：自定义 renderer 的 controller 创建/释放、pause/resume、show/hide、dispose、
-  资源归属和高频事件策略。
 - [ ] Resource / Media Model：asset/file/network resource resolver、image cache、video/audio/custom media resource、
   permission/checksum，以及何时接入 core stream。
-- [ ] Conformance Tests：schema fixtures、renderer smoke/golden、lifecycle sequence、navigation sequence、
-  event backpressure、bundle compatibility。
 
 ### 0.4.2：滚动控制与列表过渡
 

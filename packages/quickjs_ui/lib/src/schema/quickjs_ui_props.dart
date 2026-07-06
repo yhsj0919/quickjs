@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 typedef QuickjsUiColorResolver = Color? Function(Object? value);
 typedef QuickjsUiTextStyleResolver = TextStyle? Function(Object? value);
+typedef QuickjsUiNumberResolver = double? Function(Object? value);
 
 final class QuickjsUiProps {
   const QuickjsUiProps._();
@@ -48,6 +49,21 @@ final class QuickjsUiProps {
       return value.toDouble();
     }
     throw FormatException('quickjs_ui $name must be a number');
+  }
+
+  static double? number(
+    Object? value, {
+    String name = 'number property',
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
+    if (value == null) {
+      return null;
+    }
+    final resolved = resolveNumber?.call(value);
+    if (resolved != null) {
+      return resolved;
+    }
+    return doubleValue(value, name: name);
   }
 
   static int? intValue(Object? value, {String name = 'int property'}) {
@@ -130,62 +146,143 @@ final class QuickjsUiProps {
     );
   }
 
-  static EdgeInsetsGeometry? edgeInsets(Object? value) {
+  static EdgeInsetsGeometry? edgeInsets(
+    Object? value, {
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
     if (value == null) {
       return null;
     }
-    if (value is num) {
-      return EdgeInsets.all(value.toDouble());
+    if (value is num || value is String) {
+      final scalar = number(
+        value,
+        name: 'edge inset value',
+        resolveNumber: resolveNumber,
+      );
+      if (scalar != null) {
+        return EdgeInsets.all(scalar);
+      }
     }
     final props = map(value, name: 'edge inset property');
     final all =
-        doubleValue(props['all'], name: 'edge inset all') ??
-        doubleValue(props['value'], name: 'edge inset value');
+        number(
+          props['all'],
+          name: 'edge inset all',
+          resolveNumber: resolveNumber,
+        ) ??
+        number(
+          props['value'],
+          name: 'edge inset value',
+          resolveNumber: resolveNumber,
+        );
     if (all != null) {
       return EdgeInsets.all(all);
     }
-    final horizontal = doubleValue(
+    final horizontal = number(
       props['horizontal'],
       name: 'edge inset horizontal',
+      resolveNumber: resolveNumber,
     );
-    final vertical = doubleValue(
+    final vertical = number(
       props['vertical'],
       name: 'edge inset vertical',
+      resolveNumber: resolveNumber,
     );
     return EdgeInsets.fromLTRB(
-      doubleValue(props['left'], name: 'edge inset left') ?? horizontal ?? 0,
-      doubleValue(props['top'], name: 'edge inset top') ?? vertical ?? 0,
-      doubleValue(props['right'], name: 'edge inset right') ?? horizontal ?? 0,
-      doubleValue(props['bottom'], name: 'edge inset bottom') ?? vertical ?? 0,
+      number(
+            props['left'],
+            name: 'edge inset left',
+            resolveNumber: resolveNumber,
+          ) ??
+          horizontal ??
+          0,
+      number(
+            props['top'],
+            name: 'edge inset top',
+            resolveNumber: resolveNumber,
+          ) ??
+          vertical ??
+          0,
+      number(
+            props['right'],
+            name: 'edge inset right',
+            resolveNumber: resolveNumber,
+          ) ??
+          horizontal ??
+          0,
+      number(
+            props['bottom'],
+            name: 'edge inset bottom',
+            resolveNumber: resolveNumber,
+          ) ??
+          vertical ??
+          0,
     );
   }
 
-  static BorderRadiusGeometry? borderRadius(Object? value) {
+  static BorderRadiusGeometry? borderRadius(
+    Object? value, {
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
     if (value == null) {
       return null;
     }
-    if (value is num) {
-      return BorderRadius.circular(value.toDouble());
+    if (value is num || value is String) {
+      final scalar = number(
+        value,
+        name: 'border radius value',
+        resolveNumber: resolveNumber,
+      );
+      if (scalar != null) {
+        return BorderRadius.circular(scalar);
+      }
     }
     final props = map(value, name: 'border radius property');
     final all =
-        doubleValue(props['all'], name: 'border radius all') ??
-        doubleValue(props['radius'], name: 'border radius radius');
+        number(
+          props['all'],
+          name: 'border radius all',
+          resolveNumber: resolveNumber,
+        ) ??
+        number(
+          props['radius'],
+          name: 'border radius radius',
+          resolveNumber: resolveNumber,
+        );
     if (all != null) {
       return BorderRadius.circular(all);
     }
     return BorderRadius.only(
       topLeft: Radius.circular(
-        doubleValue(props['topLeft'], name: 'border radius topLeft') ?? 0,
+        number(
+              props['topLeft'],
+              name: 'border radius topLeft',
+              resolveNumber: resolveNumber,
+            ) ??
+            0,
       ),
       topRight: Radius.circular(
-        doubleValue(props['topRight'], name: 'border radius topRight') ?? 0,
+        number(
+              props['topRight'],
+              name: 'border radius topRight',
+              resolveNumber: resolveNumber,
+            ) ??
+            0,
       ),
       bottomLeft: Radius.circular(
-        doubleValue(props['bottomLeft'], name: 'border radius bottomLeft') ?? 0,
+        number(
+              props['bottomLeft'],
+              name: 'border radius bottomLeft',
+              resolveNumber: resolveNumber,
+            ) ??
+            0,
       ),
       bottomRight: Radius.circular(
-        doubleValue(props['bottomRight'], name: 'border radius bottomRight') ??
+        number(
+              props['bottomRight'],
+              name: 'border radius bottomRight',
+              resolveNumber: resolveNumber,
+            ) ??
             0,
       ),
     );
@@ -317,6 +414,7 @@ final class QuickjsUiProps {
     Object? value, {
     QuickjsUiColorResolver? resolveColor,
     QuickjsUiTextStyleResolver? resolveTextStyle,
+    QuickjsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) {
       return null;
@@ -328,10 +426,22 @@ final class QuickjsUiProps {
     final props = map(value, name: 'Text style');
     return TextStyle(
       color: color(props['color'], resolveColor: resolveColor),
-      fontSize: doubleValue(props['fontSize'], name: 'fontSize'),
+      fontSize: number(
+        props['fontSize'],
+        name: 'fontSize',
+        resolveNumber: resolveNumber,
+      ),
       fontWeight: fontWeight(props['fontWeight']),
-      letterSpacing: doubleValue(props['letterSpacing'], name: 'letterSpacing'),
-      height: doubleValue(props['height'], name: 'text style height'),
+      letterSpacing: number(
+        props['letterSpacing'],
+        name: 'letterSpacing',
+        resolveNumber: resolveNumber,
+      ),
+      height: number(
+        props['height'],
+        name: 'text style height',
+        resolveNumber: resolveNumber,
+      ),
     );
   }
 
@@ -372,6 +482,8 @@ final class QuickjsUiProps {
   static BoxDecoration? boxDecoration(
     Map<String, Object?> props, {
     QuickjsUiColorResolver? resolveColor,
+    QuickjsUiNumberResolver? resolveRadius,
+    QuickjsUiNumberResolver? resolveBorderWidth,
   }) {
     final decoration = map(props['decoration'], name: 'Container decoration');
     final merged = <String, Object?>{
@@ -385,8 +497,15 @@ final class QuickjsUiProps {
       if (props.containsKey('borderWidth')) 'borderWidth': props['borderWidth'],
     };
     final background = color(merged['color'], resolveColor: resolveColor);
-    final radius = borderRadius(merged['borderRadius']);
-    final border = _border(merged, resolveColor: resolveColor);
+    final radius = borderRadius(
+      merged['borderRadius'],
+      resolveNumber: resolveRadius,
+    );
+    final border = _border(
+      merged,
+      resolveColor: resolveColor,
+      resolveNumber: resolveBorderWidth,
+    );
     if (background == null && radius == null && border == null) {
       return null;
     }
@@ -400,6 +519,7 @@ final class QuickjsUiProps {
   static BoxBorder? _border(
     Map<String, Object?> props, {
     QuickjsUiColorResolver? resolveColor,
+    QuickjsUiNumberResolver? resolveNumber,
   }) {
     final border = props['border'] == null
         ? const <String, Object?>{}
@@ -411,7 +531,13 @@ final class QuickjsUiProps {
     }
     return Border.all(
       color: color(colorValue, resolveColor: resolveColor) ?? Colors.black,
-      width: doubleValue(widthValue, name: 'border width') ?? 1,
+      width:
+          number(
+            widthValue,
+            name: 'border width',
+            resolveNumber: resolveNumber,
+          ) ??
+          1,
     );
   }
 }

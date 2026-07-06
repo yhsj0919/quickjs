@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import '../theme/quickjs_ui_design_tokens.dart';
 
 // Keep the public constructor parameter named `buildNode`.
 // ignore_for_file: prefer_initializing_formals
@@ -81,11 +82,49 @@ final class QuickjsUiRenderContext {
       value,
       resolveColor: _themeColor,
       resolveTextStyle: _themeTextStyle,
+      resolveNumber: _fontToken,
     );
   }
 
   BoxDecoration? boxDecoration(Map<String, Object?> props) {
-    return QuickjsUiProps.boxDecoration(props, resolveColor: _themeColor);
+    return QuickjsUiProps.boxDecoration(
+      props,
+      resolveColor: _themeColor,
+      resolveRadius: _radiusToken,
+      resolveBorderWidth: _spacingToken,
+    );
+  }
+
+  EdgeInsetsGeometry? edgeInsets(Object? value) {
+    return QuickjsUiProps.edgeInsets(value, resolveNumber: _spacingToken);
+  }
+
+  BorderRadiusGeometry? borderRadius(Object? value) {
+    return QuickjsUiProps.borderRadius(value, resolveNumber: _radiusToken);
+  }
+
+  double? spacing(Object? value, {String name = 'spacing'}) {
+    return QuickjsUiProps.number(
+      value,
+      name: name,
+      resolveNumber: _spacingToken,
+    );
+  }
+
+  double? radius(Object? value, {String name = 'radius'}) {
+    return QuickjsUiProps.number(
+      value,
+      name: name,
+      resolveNumber: _radiusToken,
+    );
+  }
+
+  double? elevation(Object? value, {String name = 'elevation'}) {
+    return QuickjsUiProps.number(
+      value,
+      name: name,
+      resolveNumber: _elevationToken,
+    );
   }
 
   Widget build(QuickjsUiNode node) {
@@ -229,6 +268,11 @@ extension on QuickjsUiRenderContext {
     if (context == null || value is! String || !value.startsWith(r'$')) {
       return null;
     }
+    final extension = Theme.of(context).extension<QuickjsUiDesignTokens>();
+    final custom = extension?.color(value);
+    if (custom != null) {
+      return custom;
+    }
     final scheme = Theme.of(context).colorScheme;
     return switch (_normalizeToken(value)) {
       'primary' => scheme.primary,
@@ -259,6 +303,11 @@ extension on QuickjsUiRenderContext {
     if (context == null || value is! String || !value.startsWith(r'$')) {
       return null;
     }
+    final extension = Theme.of(context).extension<QuickjsUiDesignTokens>();
+    final custom = extension?.textStyle(value);
+    if (custom != null) {
+      return custom;
+    }
     final textTheme = Theme.of(context).textTheme;
     return switch (_normalizeToken(value)) {
       'displaylarge' => textTheme.displayLarge,
@@ -278,6 +327,34 @@ extension on QuickjsUiRenderContext {
       'labelsmall' => textTheme.labelSmall,
       _ => null,
     };
+  }
+
+  double? _spacingToken(Object? value) {
+    return _designNumber(value, QuickjsUiTokenCategory.spacing);
+  }
+
+  double? _radiusToken(Object? value) {
+    return _designNumber(value, QuickjsUiTokenCategory.radius);
+  }
+
+  double? _elevationToken(Object? value) {
+    return _designNumber(value, QuickjsUiTokenCategory.elevation);
+  }
+
+  double? _fontToken(Object? value) {
+    return _designNumber(value, QuickjsUiTokenCategory.spacing);
+  }
+
+  double? _designNumber(Object? value, QuickjsUiTokenCategory category) {
+    if (value is! String || !value.startsWith(r'$')) {
+      return null;
+    }
+    final context = buildContext;
+    final extension = context == null
+        ? null
+        : Theme.of(context).extension<QuickjsUiDesignTokens>();
+    return extension?.number(value, category) ??
+        QuickjsUiDesignTokens().number(value, category);
   }
 }
 
@@ -384,13 +461,13 @@ Map<String, Object?> _eventPayload(Map<String, Object?> event) {
 }
 
 String _normalizeToken(String value) {
-  var token = value.substring(1).toLowerCase();
+  var token = QuickjsUiDesignTokens.normalizeToken(value);
   for (final prefix in <String>[
-    'texttheme.',
-    'theme.',
-    'colors.',
-    'color.',
-    'text.',
+    'texttheme',
+    'theme',
+    'colors',
+    'color',
+    'text',
   ]) {
     if (token.startsWith(prefix)) {
       token = token.substring(prefix.length);
