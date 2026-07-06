@@ -40,6 +40,19 @@ subprojects {
     }
 }
 
+// integration_test pulls in androidx.test resources for release builds but does not
+// declare the AndroidX libraries that provide those resources (flutter/flutter#56591).
+subprojects {
+    afterEvaluate {
+        if (name == "integration_test") {
+            dependencies {
+                add("implementation", "androidx.core:core:1.13.1")
+                add("implementation", "androidx.appcompat:appcompat:1.7.0")
+            }
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
