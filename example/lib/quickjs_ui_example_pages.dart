@@ -8,6 +8,7 @@ import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_host_capabilities_page.dart';
 import 'pages/quickjs_ui_navigation_page.dart';
+import 'pages/quickjs_ui_network_capability_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui_package_demo_page.dart';
 import 'pages/quickjs_ui_permission_page.dart';
@@ -59,6 +60,12 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     title: 'QuickJS UI 网络计数器',
     description: '通过本地开发服务器按 network URL 加载 quickjs_ui 页面并渲染。',
     builder: (_) => const QuickjsUiNetworkCounterPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 网络能力',
+    description:
+        '注入 QuickjsFetchMount 与 Axios 1.6.2，在 JS 页面内用 axios 加载远程 JSON 并展示。',
+    builder: (_) => const QuickjsUiNetworkCapabilityPage(),
   ),
   ExamplePageSpec(
     title: 'QuickJS UI 局部刷新',

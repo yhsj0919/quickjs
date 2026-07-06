@@ -174,5 +174,9 @@ for editor hints and CI checks against plain object UI schema.
 `packages/quickjs_ui/js/quickjs_ui.js`. After editing the JS helper, run
 `dart run tool/generate_quickjs_ui_helpers.dart` from `packages/quickjs_ui`.
 
+中文使用指南（控件、第三方模块注入、宿主互操作）见
+[`docs/usage.md`](docs/usage.md)。编辑器代码提示配置见
+[`docs/usage.md` §10.1](docs/usage.md#101-配置编辑器代码提示)。
+
 运行栈、路由、事件入口、生命周期，以及本次栈溢出问题的复盘见
 [`docs/architecture.md`](docs/architecture.md)。
