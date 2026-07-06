@@ -5,6 +5,7 @@ import 'package:quickjs/quickjs.dart';
 
 import '../runtime/quickjs_ui_page_plugin.dart';
 import 'quickjs_ui_network_loader.dart';
+import 'quickjs_ui_resource.dart';
 import 'quickjs_ui_resource_resolver.dart';
 
 final class QuickjsUiBundle {
@@ -14,6 +15,7 @@ final class QuickjsUiBundle {
     required this.entry,
     required this.modules,
     this.permissions = const <String>[],
+    this.resources = const <String, QuickjsUiResourceReference>{},
   });
 
   final String id;
@@ -21,6 +23,7 @@ final class QuickjsUiBundle {
   final String entry;
   final Map<String, String> modules;
   final List<String> permissions;
+  final Map<String, QuickjsUiResourceReference> resources;
 
   static Future<QuickjsUiBundle> asset({
     required String path,
@@ -151,6 +154,7 @@ final class QuickjsUiBundle {
       version: version,
       entry: entry,
       modules: Map<String, String>.unmodifiable(modules),
+      resources: _manifestResources(manifest['resources']),
       permissions: _stringList(manifest['permissions'], 'permissions'),
     );
   }
@@ -237,6 +241,53 @@ Map<String, String> _moduleResources(Object? value) {
   throw const FormatException(
     'quickjs_ui bundle manifest "modules" must be an array or object',
   );
+}
+
+Map<String, QuickjsUiResourceReference> _manifestResources(Object? value) {
+  if (value == null) {
+    return const <String, QuickjsUiResourceReference>{};
+  }
+  if (value is List) {
+    return Map<String, QuickjsUiResourceReference>.unmodifiable(
+      <String, QuickjsUiResourceReference>{
+        for (final item in value)
+          _resourceKey(
+            QuickjsUiResourceReference.parse(item, name: 'resources[]'),
+          ): QuickjsUiResourceReference.parse(
+            item,
+            name: 'resources[]',
+          ),
+      },
+    );
+  }
+  if (value is Map) {
+    return Map<String, QuickjsUiResourceReference>.unmodifiable(
+      value.map((key, resourceValue) {
+        final resource = QuickjsUiResourceReference.parse(
+          resourceValue is Map
+              ? <String, Object?>{
+                  'uri': '$key',
+                  ...resourceValue.map(
+                    (key, value) => MapEntry<String, Object?>('$key', value),
+                  ),
+                }
+              : resourceValue,
+          name: 'resources.$key',
+        );
+        return MapEntry<String, QuickjsUiResourceReference>('$key', resource);
+      }),
+    );
+  }
+  throw const FormatException(
+    'quickjs_ui bundle manifest "resources" must be an array or object',
+  );
+}
+
+String _resourceKey(QuickjsUiResourceReference resource) {
+  if (resource.kind == QuickjsUiResourceKind.asset) {
+    return QuickjsUiResourceResolver.normalizePath(resource.location);
+  }
+  return resource.location;
 }
 
 Iterable<String> _staticImports(String source) sync* {

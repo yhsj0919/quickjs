@@ -358,6 +358,33 @@ export type SpaceValue = number | ThemeSpaceToken | string;
 export type RadiusValue = number | ThemeRadiusToken | string;
 export type ElevationValue = number | ThemeElevationToken | string;
 
+export type QuickjsUiResourceKind =
+  | 'asset'
+  | 'file'
+  | 'network'
+  | 'http'
+  | 'https'
+  | 'data'
+  | 'custom';
+
+export type QuickjsUiResourceReference =
+  | string
+  | {
+      uri?: string;
+      url?: string;
+      src?: string;
+      source?: string;
+      path?: string;
+      kind?: QuickjsUiResourceKind;
+      type?: QuickjsUiResourceKind;
+      mimeType?: string;
+      mime?: string;
+      sha256?: string;
+      checksum?: string;
+      cacheKey?: string;
+      headers?: Record<string, string>;
+    };
+
 export type TextStyle = {
   color?: ColorValue;
   fontSize?: SpaceValue;
@@ -441,7 +468,8 @@ export type ContainerProps = AccessibilityProps & {
 };
 
 export type ImageProps = AccessibilityProps & {
-  src: string;
+  src: QuickjsUiResourceReference;
+  source?: QuickjsUiResourceReference;
   width?: number;
   height?: number;
   fit?: BoxFit;

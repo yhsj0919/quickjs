@@ -120,6 +120,13 @@ void main() {
   "version": "0.2.0",
   "entry": "pages/counter.mjs",
   "permissions": ["toast", "app.customEcho"],
+  "resources": {
+    "images/avatar.png": {
+      "mimeType": "image/png",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "cacheKey": "avatar-v1"
+    }
+  },
   "modules": [
     "pages/counter.mjs",
     "components/label.mjs"
@@ -136,6 +143,13 @@ void main() {
     expect(bundle.version, '0.2.0');
     expect(bundle.entry, 'pages/counter.mjs');
     expect(bundle.permissions, <String>['toast', 'app.customEcho']);
+    expect(bundle.resources.keys, <String>['images/avatar.png']);
+    expect(bundle.resources['images/avatar.png']?.mimeType, 'image/png');
+    expect(bundle.resources['images/avatar.png']?.cacheKey, 'avatar-v1');
+    expect(
+      bundle.resources['images/avatar.png']?.sha256,
+      '0000000000000000000000000000000000000000000000000000000000000000',
+    );
     expect(bundle.toPlugin().manifest.permissions, <String>[
       'toast',
       'app.customEcho',
@@ -1135,6 +1149,73 @@ export default Page({
     expect(image.width, 32);
     expect(image.height, 24);
     expect(image.fit, BoxFit.cover);
+  });
+
+  test('resource references classify schemes and validate metadata', () {
+    final asset = QuickjsUiResourceReference.parse('assets/avatar.png');
+    expect(asset.kind, QuickjsUiResourceKind.asset);
+    expect(asset.location, 'assets/avatar.png');
+
+    final network = QuickjsUiResourceReference.parse(<String, Object?>{
+      'url': 'https://example.com/avatar.png',
+      'mimeType': 'image/png',
+      'sha256':
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'headers': <String, Object?>{'Authorization': 'Bearer token'},
+    });
+    expect(network.kind, QuickjsUiResourceKind.network);
+    expect(network.mimeType, 'image/png');
+    expect(network.headers, <String, String>{'Authorization': 'Bearer token'});
+    expect(network.isCacheable, isTrue);
+
+    expect(
+      () => QuickjsUiResourceReference.parse('ftp://example.com/file.png'),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      () => QuickjsUiResourceReference.parse(<String, Object?>{
+        'uri': 'https://example.com/file.png',
+        'sha256': 'not-a-checksum',
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('Image accepts resource objects and data resources', () {
+    final registry = QuickjsUiComponentRegistry.defaults();
+    final context = QuickjsUiRenderContext(
+      buildNode: (_) => const SizedBox.shrink(),
+      onUiEvent: (_) {},
+      onEvent: (_) {},
+    );
+    final networkImage =
+        registry.build(
+              context,
+              QuickjsUiNode.fromMap(<String, Object?>{
+                'type': 'Image',
+                'src': <String, Object?>{
+                  'url': 'https://example.com/avatar.png',
+                  'headers': <String, Object?>{'X-Test': 'yes'},
+                },
+                'width': 32,
+              }),
+            )
+            as Image;
+    expect(networkImage.image, isA<NetworkImage>());
+    expect((networkImage.image as NetworkImage).headers, <String, String>{
+      'X-Test': 'yes',
+    });
+
+    final dataImage =
+        registry.build(
+              context,
+              QuickjsUiNode.fromMap(<String, Object?>{
+                'type': 'Image',
+                'src': 'data:image/png;base64,AA==',
+              }),
+            )
+            as Image;
+    expect(dataImage.image, isA<MemoryImage>());
   });
 
   testWidgets('renders TextField events and controlled value', (tester) async {
