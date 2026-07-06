@@ -100,6 +100,35 @@ final class QuickjsPlugin {
     );
   }
 
+  /// Creates a single-file plugin from JavaScript source embedded in Dart at
+  /// build time.
+  ///
+  /// This is the synchronous counterpart of [singleFileAsset]. A build step can
+  /// read the asset and generate the [source] constant ahead of runtime.
+  factory QuickjsPlugin.singleFileCompiledAsset({
+    required String id,
+    required String version,
+    required String source,
+    required List<String> exports,
+    String? init,
+    String? dispose,
+    List<String> permissions = const <String>[],
+    Map<String, Object?> metadata = const <String, Object?>{},
+    String entryName = 'main',
+  }) {
+    return QuickjsPlugin.singleFile(
+      id: id,
+      version: version,
+      source: source,
+      exports: exports,
+      init: init,
+      dispose: dispose,
+      permissions: permissions,
+      metadata: metadata,
+      entryName: entryName,
+    );
+  }
+
   static Future<QuickjsPlugin> singleFileAsset({
     required String id,
     required String version,
@@ -142,6 +171,25 @@ final class QuickjsPlugin {
       );
     }
     return QuickjsPlugin(manifest: manifest, modules: loadedModules);
+  }
+
+  /// Creates a multi-module plugin from JavaScript sources embedded in Dart at
+  /// build time.
+  ///
+  /// The [modules] map uses module specifiers as keys and JavaScript source as
+  /// values. This is the synchronous counterpart of [asset], whose map values
+  /// are Flutter asset keys.
+  factory QuickjsPlugin.compiledAssets({
+    required QuickjsPluginManifest manifest,
+    required Map<String, String> modules,
+  }) {
+    return QuickjsPlugin(
+      manifest: manifest,
+      modules: <QuickjsPluginModule>[
+        for (final entry in modules.entries)
+          QuickjsPluginModule(specifier: entry.key, source: entry.value),
+      ],
+    );
   }
 
   final QuickjsPluginManifest manifest;

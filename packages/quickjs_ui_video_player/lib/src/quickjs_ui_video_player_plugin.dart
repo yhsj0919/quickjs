@@ -24,7 +24,8 @@ export function VideoPlayer(props = {}) {
     source: props.source,
     playing: props.playing === true,
     loop: props.loop === true,
-    aspectRatio: props.aspectRatio ?? 16 / 9,
+    fit: props.fit,
+    backgroundColor: props.backgroundColor,
     restartToken: props.restartToken ?? 0,
     seekToken: props.seekToken ?? 0,
     seekPositionMs: props.seekPositionMs ?? 0,
@@ -516,33 +517,82 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     return node.props['loop'] == true;
   }
 
-  double _aspectRatioFromNode(QuickjsUiNode node) {
-    final value = node.props['aspectRatio'];
-    if (value is num && value > 0) {
-      return value.toDouble();
-    }
-    return 16 / 9;
+  BoxFit _fitFromNode(QuickjsUiNode node) {
+    return QuickjsUiProps.boxFit(node.props['fit']) ?? BoxFit.contain;
+  }
+
+  Color _backgroundColorFromNode(QuickjsUiNode node) {
+    return QuickjsUiProps.color(
+          node.props['backgroundColor'] ?? node.props['color'],
+        ) ??
+        const Color(0xFF111827);
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+    final backgroundColor = _backgroundColorFromNode(widget.node);
     if (!_initialized ||
         controller == null ||
         !controller.value.isInitialized) {
-      return AspectRatio(
-        aspectRatio: _aspectRatioFromNode(widget.node),
-        child: const ColoredBox(
-          color: Color(0xFF111827),
-          child: Center(child: CircularProgressIndicator()),
-        ),
+      return _QuickjsUiVideoPlayerSurface(
+        backgroundColor: backgroundColor,
+        child: const Center(child: CircularProgressIndicator()),
       );
     }
-    return AspectRatio(
-      aspectRatio: controller.value.aspectRatio == 0
-          ? _aspectRatioFromNode(widget.node)
-          : controller.value.aspectRatio,
+    return _QuickjsUiVideoPlayerSurface(
+      backgroundColor: backgroundColor,
+      fit: _fitFromNode(widget.node),
+      videoSize: controller.value.size,
       child: native.VideoPlayer(controller),
+    );
+  }
+}
+
+class _QuickjsUiVideoPlayerSurface extends StatelessWidget {
+  const _QuickjsUiVideoPlayerSurface({
+    required this.backgroundColor,
+    required this.child,
+    this.fit = BoxFit.contain,
+    this.videoSize,
+  });
+
+  final Color backgroundColor;
+  final Widget child;
+  final BoxFit fit;
+  final Size? videoSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded =
+            constraints.hasBoundedWidth && constraints.hasBoundedHeight;
+        final surface = ColoredBox(color: backgroundColor, child: child);
+        if (!bounded) {
+          return surface;
+        }
+        final size = videoSize;
+        if (size == null || size.width <= 0 || size.height <= 0) {
+          return SizedBox.expand(child: surface);
+        }
+        return ClipRect(
+          child: ColoredBox(
+            color: backgroundColor,
+            child: SizedBox.expand(
+              child: FittedBox(
+                fit: fit,
+                clipBehavior: Clip.hardEdge,
+                child: SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

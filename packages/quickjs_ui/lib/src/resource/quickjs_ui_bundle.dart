@@ -52,6 +52,40 @@ final class QuickjsUiBundle {
     );
   }
 
+  /// Creates a bundle from module sources embedded in Dart at build time.
+  ///
+  /// This is the synchronous counterpart for build-generated bundles. The
+  /// [modules] map uses normalized bundle-relative module paths as keys and
+  /// JavaScript source as values.
+  static QuickjsUiBundle compiled({
+    required String id,
+    required String version,
+    required String entry,
+    required Map<String, String> modules,
+    List<String> permissions = const <String>[],
+    Map<String, QuickjsUiResourceReference> resources =
+        const <String, QuickjsUiResourceReference>{},
+  }) {
+    final normalizedEntry = QuickjsUiResourceResolver.normalizePath(entry);
+    final normalizedModules = <String, String>{
+      for (final module in modules.entries)
+        QuickjsUiResourceResolver.normalizePath(module.key): module.value,
+    };
+    if (!normalizedModules.containsKey(normalizedEntry)) {
+      throw FormatException(
+        'quickjs_ui compiled bundle entry is missing: $normalizedEntry',
+      );
+    }
+    return QuickjsUiBundle(
+      id: id,
+      version: version,
+      entry: normalizedEntry,
+      modules: Map<String, String>.unmodifiable(normalizedModules),
+      permissions: permissions,
+      resources: resources,
+    );
+  }
+
   static Future<QuickjsUiBundle> file({
     required String path,
     String? id,
@@ -245,6 +279,48 @@ final class QuickjsUiBundle {
       version: manifest.version,
       entry: manifest.entry,
       modules: Map<String, String>.unmodifiable(modules),
+      resources: manifest.resources,
+      permissions: manifest.permissions,
+    );
+  }
+
+  /// Creates a package bundle from a manifest and module sources embedded in
+  /// Dart at build time.
+  ///
+  /// [modules] may be keyed by manifest module path or by its `source` load
+  /// path. All manifest modules must be present.
+  static QuickjsUiBundle compiledPackage({
+    required String manifestSource,
+    required Map<String, String> modules,
+    bool validatePackageRoot = false,
+  }) {
+    final manifest = QuickjsUiManifest.parse(manifestSource);
+    if (validatePackageRoot) {
+      manifest.validatePackageRoot();
+    }
+    final normalizedSources = <String, String>{
+      for (final module in modules.entries)
+        QuickjsUiResourceResolver.normalizePath(module.key): module.value,
+    };
+    final loadedModules = <String, String>{};
+    for (final module in manifest.modules.entries) {
+      final source =
+          normalizedSources[module.key] ??
+          normalizedSources[module.value.loadPath];
+      if (source == null) {
+        throw FormatException(
+          'quickjs_ui compiled package missing module: ${module.key}',
+        );
+      }
+      module.value.verifySource(source);
+      loadedModules[module.key] = source;
+    }
+    manifest.validateImports(loadedModules);
+    return QuickjsUiBundle(
+      id: manifest.id,
+      version: manifest.version,
+      entry: manifest.entry,
+      modules: Map<String, String>.unmodifiable(loadedModules),
       resources: manifest.resources,
       permissions: manifest.permissions,
     );

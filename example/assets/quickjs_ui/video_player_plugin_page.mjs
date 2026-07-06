@@ -1,5 +1,6 @@
 import {
   Column,
+  Container,
   ElevatedButton,
   ListView,
   Page,
@@ -56,21 +57,27 @@ export default Page({
           style: { fontSize: 20, fontWeight: 'bold' }
         }),
         Text('Imported from quickjs_ui/video_player; progress updates use sample events.'),
-        VideoPlayer({
-          key: 'demo-player',
-          playerKey: 'demo-player',
-          source: props.source ?? DEFAULT_SOURCE,
-          playing: state.playing,
-          loop: state.loop,
-          progressThrottleMs: 50,
-          progressCoalesceKey: 'demo-player:progress',
-          restartToken: state.restartToken,
-          seekToken: state.seekToken,
-          seekPositionMs: state.seekPositionMs,
-          onReady: page.onReady(),
-          onProgress: page.onProgress(),
-          onEnded: page.onEnded(),
-          onError: page.onError()
+        Container({
+          height: props.playerHeight ?? 220,
+          color: '#000000',
+          child: VideoPlayer({
+            key: 'demo-player',
+            playerKey: 'demo-player',
+            source: props.source ?? DEFAULT_SOURCE,
+            playing: state.playing,
+            loop: state.loop,
+            fit: props.videoFit ?? 'cover',
+            backgroundColor: '#000000',
+            progressThrottleMs: 50,
+            progressCoalesceKey: 'demo-player:progress',
+            restartToken: state.restartToken,
+            seekToken: state.seekToken,
+            seekPositionMs: state.seekPositionMs,
+            onReady: page.onReady(),
+            onProgress: page.onProgress(),
+            onEnded: page.onEnded(),
+            onError: page.onError()
+          })
         }),
         ...(state.ready
           ? [

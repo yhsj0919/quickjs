@@ -113,6 +113,18 @@ final class QuickjsHostScript {
     this.globals = const <String>[],
   });
 
+  /// Creates a host script from JavaScript source embedded in Dart at build
+  /// time.
+  ///
+  /// Use this when a build step has already converted an asset into a Dart
+  /// constant. Unlike [asset], this constructor is synchronous and can be used
+  /// inside const host mounts.
+  const factory QuickjsHostScript.compiledAsset({
+    required String name,
+    required String source,
+    List<String> globals,
+  }) = QuickjsHostScript.js;
+
   factory QuickjsHostScript.providerGlobals({
     required String name,
     required Map<String, String> globals,

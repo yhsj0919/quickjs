@@ -131,6 +131,27 @@ final class QuickjsPluginBundle {
       bundle: resolvedBundle,
     );
   }
+
+  /// Creates a plugin package from a manifest JSON string and module sources
+  /// embedded in Dart at build time.
+  ///
+  /// This is the synchronous counterpart of [asset]. The [modules] map uses
+  /// module specifiers as keys and JavaScript source as values.
+  static QuickjsPlugin compiledAssets({
+    required String manifestJson,
+    required Map<String, String> modules,
+  }) {
+    final manifestValue = jsonDecode(manifestJson);
+    if (manifestValue is! Map<String, Object?>) {
+      throw const JsValueConversionException(
+        'QuickJS plugin manifest source must be a JSON object',
+      );
+    }
+    return QuickjsPlugin.compiledAssets(
+      manifest: _manifestFromJson(manifestValue),
+      modules: modules,
+    );
+  }
 }
 
 /// Registry for calling plugin exports as `pluginId.method` tools.
