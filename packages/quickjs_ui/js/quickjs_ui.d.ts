@@ -6,6 +6,10 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+export declare const quickjsUiRuntimeProtocol: 'quickjs_ui.runtime.v1';
+export declare const quickjsUiSchemaVersion: 1;
+export declare const quickjsUiHelperVersion: 1;
+
 export type QuickjsUiEvent = {
   action?: string;
   method?: string;
@@ -31,6 +35,11 @@ export type QuickjsUiReservedPageKeys =
   | 'name'
   | 'props'
   | 'metadata'
+  | 'schemaVersion'
+  | 'minimumQuickjsUiVersion'
+  | 'minQuickjsUiVersion'
+  | 'unknownProps'
+  | 'deprecatedProps'
   | 'createState'
   | 'state'
   | 'build'
@@ -103,6 +112,11 @@ export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> 
   name?: string;
   props?: Record<string, string>;
   metadata?: Record<string, JsonValue>;
+  schemaVersion?: number;
+  minimumQuickjsUiVersion?: number;
+  minQuickjsUiVersion?: number;
+  unknownProps?: 'ignore' | 'warn' | 'error';
+  deprecatedProps?: Record<string, string>;
   createState?: (props: Props) => State;
   state?: (props: Props) => State;
   build?: (
@@ -130,6 +144,11 @@ export type QuickjsUiPageProtocol<
   metadata?: Record<string, JsonValue>;
   capabilities: () => {
     protocol: 'quickjs_ui.runtime.v1';
+    schemaVersion: number;
+    helperVersion: number;
+    minimumQuickjsUiVersion: number;
+    unknownProps: 'ignore' | 'warn' | 'error';
+    deprecatedProps: Record<string, string>;
     lifecycle: QuickjsUiLifecycleType[];
   };
   mount: (props: Props) => Promise<{ version: number; state: State }>;
@@ -268,6 +287,8 @@ export type TextInputAction =
   | 'emergencyCall'
   | 'newline';
 
+export type SubmitFocusAction = 'none' | 'next' | 'previous' | 'unfocus';
+
 export type ThemeColorToken =
   | '$primary'
   | '$onPrimary'
@@ -305,46 +326,106 @@ export type ThemeTextStyleToken =
   | '$text.labelMedium'
   | '$text.labelSmall';
 
+export type ThemeSpaceToken =
+  | '$space.none'
+  | '$space.xxs'
+  | '$space.xs'
+  | '$space.sm'
+  | '$space.md'
+  | '$space.lg'
+  | '$space.xl'
+  | '$space.xxl';
+
+export type ThemeRadiusToken =
+  | '$radius.none'
+  | '$radius.xs'
+  | '$radius.sm'
+  | '$radius.md'
+  | '$radius.lg'
+  | '$radius.xl'
+  | '$radius.full';
+
+export type ThemeElevationToken =
+  | '$elevation.none'
+  | '$elevation.xs'
+  | '$elevation.sm'
+  | '$elevation.md'
+  | '$elevation.lg'
+  | '$elevation.xl';
+
 export type ColorValue = string | number | ThemeColorToken;
+export type SpaceValue = number | ThemeSpaceToken | string;
+export type RadiusValue = number | ThemeRadiusToken | string;
+export type ElevationValue = number | ThemeElevationToken | string;
 
 export type TextStyle = {
   color?: ColorValue;
-  fontSize?: number;
+  fontSize?: SpaceValue;
   fontWeight?: FontWeight;
+  letterSpacing?: SpaceValue;
+  height?: number;
 };
 
 export type EdgeInsets =
-  | number
+  | SpaceValue
   | {
-      all?: number;
-      left?: number;
-      top?: number;
-      right?: number;
-      bottom?: number;
-      horizontal?: number;
-      vertical?: number;
+      all?: SpaceValue;
+      value?: SpaceValue;
+      left?: SpaceValue;
+      top?: SpaceValue;
+      right?: SpaceValue;
+      bottom?: SpaceValue;
+      horizontal?: SpaceValue;
+      vertical?: SpaceValue;
     };
 
-export type TextProps = {
+export type BorderRadius =
+  | RadiusValue
+  | {
+      all?: RadiusValue;
+      radius?: RadiusValue;
+      topLeft?: RadiusValue;
+      topRight?: RadiusValue;
+      bottomLeft?: RadiusValue;
+      bottomRight?: RadiusValue;
+    };
+
+export type AccessibilityRole =
+  | 'button'
+  | 'image'
+  | 'textField'
+  | 'header';
+
+export type AccessibilityProps = {
+  semanticLabel?: string;
+  semanticsLabel?: string;
+  semanticHint?: string;
+  tooltip?: string;
+  role?: AccessibilityRole;
+  enabled?: boolean;
+  focusOrder?: number;
+};
+
+export type TextProps = AccessibilityProps & {
   data?: string;
   text?: string;
   textAlign?: TextAlign;
   style?: TextStyle | ThemeTextStyleToken;
 };
 
-export type ButtonProps = {
+export type ButtonProps = AccessibilityProps & {
   child: QuickjsUiNode;
   onPressed?: QuickjsUiEvent;
 };
 
-export type FlexProps = {
+export type FlexProps = AccessibilityProps & {
   mainAxisAlignment?: MainAxisAlignment;
   crossAxisAlignment?: CrossAxisAlignment;
-  gap?: number;
+  gap?: SpaceValue;
   children?: QuickjsUiNode[];
 };
 
-export type ContainerProps = {
+export type ContainerProps = AccessibilityProps & {
   child?: QuickjsUiNode;
   width?: number;
   height?: number;
@@ -353,58 +434,69 @@ export type ContainerProps = {
   alignment?: Alignment;
   color?: ColorValue;
   backgroundColor?: ColorValue;
+  borderRadius?: BorderRadius;
+  borderColor?: ColorValue;
+  borderWidth?: number;
+  elevation?: ElevationValue;
 };
 
-export type ImageProps = {
+export type ImageProps = AccessibilityProps & {
   src: string;
   width?: number;
   height?: number;
   fit?: BoxFit;
 };
 
-export type ListViewProps = {
+export type ListViewProps = AccessibilityProps & {
   children?: QuickjsUiNode[];
   scrollDirection?: Axis;
   shrinkWrap?: boolean;
   padding?: EdgeInsets;
-  gap?: number;
+  gap?: SpaceValue;
 };
 
-export type TextFieldProps = {
+export type TextFieldProps = AccessibilityProps & {
+  focusId?: string;
   value?: string;
   initialValue?: string;
   labelText?: string;
   hintText?: string;
   enabled?: boolean;
   autofocus?: boolean;
+  focusOnMount?: boolean;
+  requestFocus?: boolean;
+  clearFocus?: boolean;
   obscureText?: boolean;
   maxLines?: number;
   keyboardType?: TextInputType;
   textInputAction?: TextInputAction;
+  submitFocusAction?: SubmitFocusAction;
   onChanged?: QuickjsUiEvent;
   onSubmitted?: QuickjsUiEvent;
+  onEditingComplete?: QuickjsUiEvent;
   onFocus?: QuickjsUiEvent;
   onBlur?: QuickjsUiEvent;
+  onSelectionChanged?: QuickjsUiEvent;
 };
 
-export type StackProps = {
+export type StackProps = AccessibilityProps & {
   children?: QuickjsUiNode[];
   alignment?: Alignment;
   fit?: StackFit;
 };
 
-export type PaddingProps = {
+export type PaddingProps = AccessibilityProps & {
   padding?: EdgeInsets;
   child?: QuickjsUiNode;
 };
 
-export type CenterProps = {
+export type CenterProps = AccessibilityProps & {
   child?: QuickjsUiNode;
   widthFactor?: number;
   heightFactor?: number;
 };
 
-export type SizedBoxProps = {
+export type SizedBoxProps = AccessibilityProps & {
   child?: QuickjsUiNode;
   width?: number;
   height?: number;

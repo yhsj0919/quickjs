@@ -59,6 +59,16 @@
       "properties": {
         "type": { "type": "string" },
         "key": { "type": "string" },
+        "semanticLabel": { "type": "string" },
+        "semanticsLabel": { "type": "string" },
+        "semanticHint": { "type": "string" },
+        "tooltip": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": ["button", "image", "textField", "header"]
+        },
+        "enabled": { "type": "boolean" },
+        "focusOrder": { "type": "number" },
         "child": { "$ref": "#/$defs/node" },
         "children": {
           "type": "array",
@@ -71,37 +81,64 @@
     },
     "edgeInsets": {
       "oneOf": [
-        { "type": "number" },
+        { "$ref": "#/$defs/space" },
         {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "all": { "type": "number" },
-            "value": { "type": "number" },
-            "left": { "type": "number" },
-            "top": { "type": "number" },
-            "right": { "type": "number" },
-            "bottom": { "type": "number" },
-            "horizontal": { "type": "number" },
-            "vertical": { "type": "number" }
+            "all": { "$ref": "#/$defs/space" },
+            "value": { "$ref": "#/$defs/space" },
+            "left": { "$ref": "#/$defs/space" },
+            "top": { "$ref": "#/$defs/space" },
+            "right": { "$ref": "#/$defs/space" },
+            "bottom": { "$ref": "#/$defs/space" },
+            "horizontal": { "$ref": "#/$defs/space" },
+            "vertical": { "$ref": "#/$defs/space" }
           }
         }
       ]
     },
     "borderRadius": {
       "oneOf": [
-        { "type": "number" },
+        { "$ref": "#/$defs/radius" },
         {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "all": { "type": "number" },
-            "radius": { "type": "number" },
-            "topLeft": { "type": "number" },
-            "topRight": { "type": "number" },
-            "bottomLeft": { "type": "number" },
-            "bottomRight": { "type": "number" }
+            "all": { "$ref": "#/$defs/radius" },
+            "radius": { "$ref": "#/$defs/radius" },
+            "topLeft": { "$ref": "#/$defs/radius" },
+            "topRight": { "$ref": "#/$defs/radius" },
+            "bottomLeft": { "$ref": "#/$defs/radius" },
+            "bottomRight": { "$ref": "#/$defs/radius" }
           }
+        }
+      ]
+    },
+    "space": {
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "string",
+          "pattern": "^\\$(space\\.|spacing\\.)?[A-Za-z][A-Za-z0-9.]*$"
+        }
+      ]
+    },
+    "radius": {
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "string",
+          "pattern": "^\\$(radius\\.|radii\\.)?[A-Za-z][A-Za-z0-9.]*$"
+        }
+      ]
+    },
+    "elevation": {
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "string",
+          "pattern": "^\\$(elevation\\.|shadow\\.)?[A-Za-z][A-Za-z0-9.]*$"
         }
       ]
     },
@@ -129,7 +166,7 @@
           "additionalProperties": false,
           "properties": {
             "color": { "$ref": "#/$defs/color" },
-            "fontSize": { "type": "number" },
+            "fontSize": { "$ref": "#/$defs/space" },
             "fontWeight": {
               "oneOf": [
                 { "type": "number", "enum": [100, 200, 300, 400, 500, 600, 700, 800, 900] },
@@ -139,7 +176,7 @@
                 }
               ]
             },
-            "letterSpacing": { "type": "number" },
+            "letterSpacing": { "$ref": "#/$defs/space" },
             "height": { "type": "number" }
           }
         }
@@ -156,7 +193,7 @@
           "additionalProperties": false,
           "properties": {
             "color": { "$ref": "#/$defs/color" },
-            "width": { "type": "number" }
+            "width": { "$ref": "#/$defs/space" }
           }
         }
       }
@@ -221,7 +258,7 @@
               "type": "string",
               "enum": ["start", "end", "center", "stretch", "baseline"]
             },
-            "gap": { "type": "number", "minimum": 0 }
+            "gap": { "$ref": "#/$defs/space" }
           }
         }
       ]
@@ -272,7 +309,8 @@
             "decoration": { "$ref": "#/$defs/boxDecoration" },
             "borderRadius": { "$ref": "#/$defs/borderRadius" },
             "borderColor": { "$ref": "#/$defs/color" },
-            "borderWidth": { "type": "number" }
+            "borderWidth": { "$ref": "#/$defs/space" },
+            "elevation": { "$ref": "#/$defs/elevation" }
           }
         }
       ]
@@ -311,7 +349,7 @@
             "scrollDirection": { "type": "string", "enum": ["vertical", "horizontal"] },
             "shrinkWrap": { "type": "boolean" },
             "padding": { "$ref": "#/$defs/edgeInsets" },
-            "gap": { "type": "number", "minimum": 0 }
+            "gap": { "$ref": "#/$defs/space" }
           }
         }
       ]
@@ -323,12 +361,16 @@
           "type": "object",
           "properties": {
             "type": { "const": "TextField" },
+            "focusId": { "type": "string" },
             "value": { "type": "string" },
             "initialValue": { "type": "string" },
             "labelText": { "type": "string" },
             "hintText": { "type": "string" },
             "enabled": { "type": "boolean" },
             "autofocus": { "type": "boolean" },
+            "focusOnMount": { "type": "boolean" },
+            "requestFocus": { "type": "boolean" },
+            "clearFocus": { "type": "boolean" },
             "obscureText": { "type": "boolean" },
             "maxLines": { "type": "integer", "minimum": 1 },
             "keyboardType": {
@@ -339,10 +381,16 @@
               "type": "string",
               "enum": ["none", "unspecified", "done", "go", "search", "send", "next", "previous", "continueAction", "join", "route", "emergencyCall", "newline"]
             },
+            "submitFocusAction": {
+              "type": "string",
+              "enum": ["none", "next", "previous", "unfocus"]
+            },
             "onChanged": { "$ref": "#/$defs/event" },
             "onSubmitted": { "$ref": "#/$defs/event" },
+            "onEditingComplete": { "$ref": "#/$defs/event" },
             "onFocus": { "$ref": "#/$defs/event" },
-            "onBlur": { "$ref": "#/$defs/event" }
+            "onBlur": { "$ref": "#/$defs/event" },
+            "onSelectionChanged": { "$ref": "#/$defs/event" }
           }
         }
       ]

@@ -362,10 +362,13 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _lastAppLifecycleSignal = signal;
     switch (signal) {
       case _QuickjsUiAppLifecycleSignal.resumed:
+        _renderer.resume();
         unawaited(_controller.lifecycle('resume'));
       case _QuickjsUiAppLifecycleSignal.paused:
+        _renderer.pause();
         unawaited(_controller.lifecycle('pause'));
       case _QuickjsUiAppLifecycleSignal.detached:
+        _renderer.dispose();
         unawaited(_controller.lifecycle('dispose', render: false));
     }
   }
@@ -459,6 +462,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
     _reportedShow = true;
     await _controller.routeLifecycle('show');
+    _renderer.show();
   }
 
   Future<void> _load() async {

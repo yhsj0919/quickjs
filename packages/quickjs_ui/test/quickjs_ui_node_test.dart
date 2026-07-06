@@ -249,7 +249,19 @@ export default Page({
         (allOf.last! as Map<String, Object?>)['properties']!
             as Map<String, Object?>;
     expect(props.keys, containsAll(<String>['onChanged', 'onSubmitted']));
-    expect(props.keys, containsAll(<String>['onFocus', 'onBlur']));
+    expect(
+      props.keys,
+      containsAll(<String>[
+        'focusId',
+        'onFocus',
+        'onBlur',
+        'onSelectionChanged',
+        'onEditingComplete',
+        'requestFocus',
+        'clearFocus',
+        'submitFocusAction',
+      ]),
+    );
 
     final color = defs['color']! as Map<String, Object?>;
     final colorVariants = color['oneOf']! as List<Object?>;
@@ -1151,17 +1163,13 @@ export default Page({
     expect(find.text('Name'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'Ada');
-    expect(events.single, <String, Object?>{
-      'method': 'setName',
-      'value': 'Ada',
-    });
+    expect(events.single, containsPair('method', 'setName'));
+    expect(events.single, containsPair('value', 'Ada'));
 
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
-    expect(events.last, <String, Object?>{
-      'method': 'submitName',
-      'value': 'Ada',
-    });
+    expect(events.last, containsPair('method', 'submitName'));
+    expect(events.last, containsPair('value', 'Ada'));
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1193,17 +1201,13 @@ export default Page({
 
     await tester.tap(find.byType(TextField));
     await tester.pump();
-    expect(events.single, <String, Object?>{
-      'method': 'focusName',
-      'value': 'Ada',
-    });
+    expect(events.single, containsPair('method', 'focusName'));
+    expect(events.single, containsPair('value', 'Ada'));
 
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pump();
-    expect(events.last, <String, Object?>{
-      'method': 'blurName',
-      'value': 'Ada',
-    });
+    expect(events.last, containsPair('method', 'blurName'));
+    expect(events.last, containsPair('value', 'Ada'));
   });
 
   testWidgets('renders controlled checkbox and switch events', (tester) async {
@@ -2102,6 +2106,103 @@ export default Page({
 
     expect(session.state, <String, Object?>{'count': 9});
     expect(session.node?.children.first.props['data'], 'Count: 9');
+  });
+
+  test('accepts current quickjs_ui compatibility metadata', () async {
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_compatibility_accept',
+        version: '0.4.0',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  schemaVersion: 1,
+  minimumQuickjsUiVersion: 1,
+  unknownProps: 'warn',
+  deprecatedProps: {
+    oldText: 'Use data instead.'
+  },
+  createState() {
+    return { label: 'compatible' };
+  },
+  build(state) {
+    return Text(state.label);
+  }
+});
+''',
+      ),
+    );
+
+    expect(session.node?.props['data'], 'compatible');
+  });
+
+  test('rejects unsupported quickjs_ui schema version', () async {
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await expectLater(
+      session.loadPlugin(
+        QuickjsUiPagePlugin.singleFile(
+          id: 'quickjs_ui_compatibility_schema_reject',
+          version: '0.4.0',
+          source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  schemaVersion: 2,
+  build() {
+    return Text('future schema');
+  }
+});
+''',
+        ),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => '$error',
+          'message',
+          contains('unsupported schema version'),
+        ),
+      ),
+    );
+  });
+
+  test('rejects pages requiring newer quickjs_ui runtime', () async {
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await expectLater(
+      session.loadPlugin(
+        QuickjsUiPagePlugin.singleFile(
+          id: 'quickjs_ui_compatibility_runtime_reject',
+          version: '0.4.0',
+          source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  minimumQuickjsUiVersion: 2,
+  build() {
+    return Text('future runtime');
+  }
+});
+''',
+        ),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => '$error',
+          'message',
+          contains('requires runtime version'),
+        ),
+      ),
+    );
   });
 
   test('supports async init and dispatch state updates', () async {

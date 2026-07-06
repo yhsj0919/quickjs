@@ -1,6 +1,9 @@
 const MAX_DISPATCH_DEPTH = 64;
 const MAX_RENDER_DEPTH = 64;
 const MAX_COMPONENT_RENDER_DEPTH = 64;
+export const quickjsUiRuntimeProtocol = 'quickjs_ui.runtime.v1';
+export const quickjsUiSchemaVersion = 1;
+export const quickjsUiHelperVersion = 1;
 let pageRenderDepth = 0;
 let componentRenderDepth = 0;
 
@@ -29,7 +32,13 @@ export function Page(page) {
     metadata: page.metadata,
     capabilities() {
       return {
-        protocol: 'quickjs_ui.runtime.v1',
+        protocol: quickjsUiRuntimeProtocol,
+        schemaVersion: page.schemaVersion ?? quickjsUiSchemaVersion,
+        helperVersion: quickjsUiHelperVersion,
+        minimumQuickjsUiVersion:
+          page.minimumQuickjsUiVersion ?? page.minQuickjsUiVersion ?? 1,
+        unknownProps: page.unknownProps ?? 'ignore',
+        deprecatedProps: page.deprecatedProps ?? {},
         lifecycle: lifecycleHooks
       };
     },
@@ -440,6 +449,11 @@ function pageMethods(page) {
     'name',
     'props',
     'metadata',
+    'schemaVersion',
+    'minimumQuickjsUiVersion',
+    'minQuickjsUiVersion',
+    'unknownProps',
+    'deprecatedProps',
     'state',
     'createState',
     'build',

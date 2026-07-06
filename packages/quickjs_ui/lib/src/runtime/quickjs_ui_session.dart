@@ -10,6 +10,9 @@ import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
 
 const int _quickjsUiStackLimitBytes = 1024 * 1024;
+const int _minimumSupportedQuickjsUiSchemaVersion = 1;
+const int _maximumSupportedQuickjsUiSchemaVersion = quickjsUiSchemaVersion;
+const int _currentQuickjsUiRuntimeVersion = 1;
 
 final class QuickjsUiSession {
   // Keep the public constructor parameters named `engine` and `onConsole`.
@@ -400,14 +403,85 @@ final class QuickjsUiSession {
       return const <String>{};
     }
     final protocol = value['protocol'];
-    if (protocol != 'quickjs_ui.runtime.v1') {
+    if (protocol != quickjsUiRuntimeProtocol) {
       throw StateError('quickjs_ui unsupported runtime protocol: $protocol');
     }
+    _validateCompatibility(value);
     final lifecycle = value['lifecycle'];
     if (lifecycle is! List) {
       return const <String>{};
     }
     return Set<String>.unmodifiable(lifecycle.whereType<String>());
+  }
+
+  void _validateCompatibility(Map<Object?, Object?> capabilities) {
+    final schemaVersion = _intCapability(
+      capabilities,
+      'schemaVersion',
+      fallback: 1,
+    );
+    if (schemaVersion < _minimumSupportedQuickjsUiSchemaVersion ||
+        schemaVersion > _maximumSupportedQuickjsUiSchemaVersion) {
+      throw StateError(
+        'quickjs_ui unsupported schema version: $schemaVersion '
+        '(supported $_minimumSupportedQuickjsUiSchemaVersion'
+        '-$_maximumSupportedQuickjsUiSchemaVersion)',
+      );
+    }
+
+    final helperVersion = _intCapability(
+      capabilities,
+      'helperVersion',
+      fallback: 1,
+    );
+    if (helperVersion > quickjsUiHelperVersion) {
+      throw StateError(
+        'quickjs_ui helper version is newer than runtime: $helperVersion '
+        '(runtime $quickjsUiHelperVersion)',
+      );
+    }
+
+    final minimumRuntime = _intCapability(
+      capabilities,
+      'minimumQuickjsUiVersion',
+      fallback: 1,
+    );
+    if (minimumRuntime > _currentQuickjsUiRuntimeVersion) {
+      throw StateError(
+        'quickjs_ui page requires runtime version $minimumRuntime '
+        'but current runtime is $_currentQuickjsUiRuntimeVersion',
+      );
+    }
+
+    final unknownProps = capabilities['unknownProps'];
+    if (unknownProps != null &&
+        unknownProps != 'ignore' &&
+        unknownProps != 'warn' &&
+        unknownProps != 'error') {
+      throw StateError(
+        'quickjs_ui unsupported unknownProps strategy: $unknownProps',
+      );
+    }
+
+    final deprecatedProps = capabilities['deprecatedProps'];
+    if (deprecatedProps != null && deprecatedProps is! Map) {
+      throw StateError('quickjs_ui deprecatedProps must be an object');
+    }
+  }
+
+  int _intCapability(
+    Map<Object?, Object?> capabilities,
+    String name, {
+    required int fallback,
+  }) {
+    final value = capabilities[name];
+    if (value == null) {
+      return fallback;
+    }
+    if (value is num && value.isFinite) {
+      return value.toInt();
+    }
+    throw StateError('quickjs_ui capability "$name" must be a number');
   }
 
   Future<void> _syncStateFromJs() async {

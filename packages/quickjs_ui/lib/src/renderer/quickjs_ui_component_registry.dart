@@ -7,9 +7,40 @@ import 'quickjs_ui_render_context.dart';
 typedef QuickjsUiComponentBuilder =
     Widget Function(QuickjsUiRenderContext context, QuickjsUiNode node);
 
+typedef QuickjsUiComponentControllerFactory =
+    QuickjsUiComponentController Function(QuickjsUiNode node);
+
+typedef QuickjsUiLifecycleComponentBuilder<
+  T extends QuickjsUiComponentController
+> =
+    Widget Function(
+      QuickjsUiRenderContext context,
+      QuickjsUiNode node,
+      T controller,
+    );
+
+base class QuickjsUiComponentController {
+  void mount(QuickjsUiNode node) {}
+
+  void update(QuickjsUiNode previous, QuickjsUiNode next) {}
+
+  void show() {}
+
+  void hide() {}
+
+  void pause() {}
+
+  void resume() {}
+
+  void dispose() {}
+}
+
 final class QuickjsUiComponentRegistry {
   QuickjsUiComponentRegistry([Map<String, QuickjsUiComponentBuilder>? builders])
-    : _builders = <String, QuickjsUiComponentBuilder>{...?builders};
+    : _components = <String, _QuickjsUiComponentDefinition>{
+        for (final entry in builders?.entries ?? const Iterable.empty())
+          entry.key: _QuickjsUiComponentDefinition.builder(entry.value),
+      };
 
   factory QuickjsUiComponentRegistry.defaults() {
     return QuickjsUiComponentRegistry(<String, QuickjsUiComponentBuilder>{
@@ -34,28 +65,113 @@ final class QuickjsUiComponentRegistry {
     });
   }
 
-  final Map<String, QuickjsUiComponentBuilder> _builders;
+  final Map<String, _QuickjsUiComponentDefinition> _components;
 
-  Iterable<String> get types => _builders.keys;
+  Iterable<String> get types => _components.keys;
 
   bool contains(String type) {
-    return _builders.containsKey(type);
+    return _components.containsKey(type);
   }
 
   void register(String type, QuickjsUiComponentBuilder builder) {
-    _builders[type] = builder;
+    _components[type] = _QuickjsUiComponentDefinition.builder(builder);
+  }
+
+  void registerLifecycle<T extends QuickjsUiComponentController>(
+    String type, {
+    required T Function(QuickjsUiNode node) createController,
+    required QuickjsUiLifecycleComponentBuilder<T> build,
+  }) {
+    _components[type] = _QuickjsUiComponentDefinition.lifecycle(
+      createController: createController,
+      build: build,
+    );
   }
 
   void unregister(String type) {
-    _builders.remove(type);
+    _components.remove(type);
   }
 
-  Widget build(QuickjsUiRenderContext context, QuickjsUiNode node) {
-    final builder = _builders[node.type];
-    if (builder == null) {
+  bool hasLifecycle(String type) {
+    return _components[type]?.hasLifecycle == true;
+  }
+
+  QuickjsUiComponentController createController(QuickjsUiNode node) {
+    final component = _components[node.type];
+    if (component == null) {
       throw FormatException('Unknown quickjs_ui node type: ${node.type}');
     }
-    return builder(context, node);
+    final create = component.createController;
+    if (create == null) {
+      throw FormatException(
+        'quickjs_ui node type ${node.type} does not define a controller',
+      );
+    }
+    return create(node);
+  }
+
+  Widget build(
+    QuickjsUiRenderContext context,
+    QuickjsUiNode node, {
+    QuickjsUiComponentController? controller,
+  }) {
+    final component = _components[node.type];
+    if (component == null) {
+      throw FormatException('Unknown quickjs_ui node type: ${node.type}');
+    }
+    return component.build(context, node, controller);
+  }
+}
+
+final class _QuickjsUiComponentDefinition {
+  _QuickjsUiComponentDefinition.builder(QuickjsUiComponentBuilder builder)
+    : createController = null,
+      _build = ((context, node, _) => builder(context, node));
+
+  _QuickjsUiComponentDefinition._({
+    required this.createController,
+    required this._build,
+  });
+
+  static _QuickjsUiComponentDefinition
+  lifecycle<T extends QuickjsUiComponentController>({
+    required T Function(QuickjsUiNode node) createController,
+    required QuickjsUiLifecycleComponentBuilder<T> build,
+  }) {
+    return _QuickjsUiComponentDefinition._(
+      createController: createController,
+      build: (context, node, controller) {
+        if (controller is! T) {
+          throw StateError(
+            'quickjs_ui lifecycle controller type mismatch for ${node.type}',
+          );
+        }
+        return build(context, node, controller);
+      },
+    );
+  }
+
+  final QuickjsUiComponentControllerFactory? createController;
+  final Widget Function(
+    QuickjsUiRenderContext context,
+    QuickjsUiNode node,
+    QuickjsUiComponentController? controller,
+  )
+  _build;
+
+  bool get hasLifecycle => createController != null;
+
+  Widget build(
+    QuickjsUiRenderContext context,
+    QuickjsUiNode node,
+    QuickjsUiComponentController? controller,
+  ) {
+    if (hasLifecycle && controller == null) {
+      throw StateError(
+        'quickjs_ui lifecycle component ${node.type} has no controller',
+      );
+    }
+    return _build(context, node, controller);
   }
 }
 
@@ -88,7 +204,7 @@ Widget _buildRow(QuickjsUiRenderContext context, QuickjsUiNode node) {
     crossAxisAlignment: QuickjsUiProps.crossAxisAlignment(
       node.props['crossAxisAlignment'],
     ),
-    spacing: _gap(node),
+    spacing: _gap(context, node),
     children: context.children(node),
   );
 }
@@ -101,7 +217,7 @@ Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
     crossAxisAlignment: QuickjsUiProps.crossAxisAlignment(
       node.props['crossAxisAlignment'],
     ),
-    spacing: _gap(node),
+    spacing: _gap(context, node),
     children: context.children(node),
   );
 }
@@ -113,9 +229,10 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final curve = QuickjsUiProps.curve(node.props['animationCurve']);
   final width = QuickjsUiProps.doubleValue(node.props['width']);
   final height = QuickjsUiProps.doubleValue(node.props['height']);
-  final padding = QuickjsUiProps.edgeInsets(node.props['padding']);
-  final margin = QuickjsUiProps.edgeInsets(node.props['margin']);
+  final padding = context.edgeInsets(node.props['padding']);
+  final margin = context.edgeInsets(node.props['margin']);
   final alignment = QuickjsUiProps.alignment(node.props['alignment']);
+  final elevation = context.elevation(node.props['elevation']);
   final color = decoration == null
       ? context.color(node.props['color'] ?? node.props['backgroundColor'])
       : null;
@@ -152,6 +269,13 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
             curve: curve,
             child: child,
           );
+  }
+  if (elevation != null && elevation > 0) {
+    child = Material(
+      elevation: elevation,
+      color: Colors.transparent,
+      child: child,
+    );
   }
   return _withGestures(context, node, child);
 }
@@ -196,7 +320,7 @@ Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
     shrinkWrap:
         QuickjsUiProps.boolValue(node.props['shrinkWrap']) ??
         (node.props['shrinkWrap'] == null),
-    padding: QuickjsUiProps.edgeInsets(node.props['padding']),
+    padding: context.edgeInsets(node.props['padding']),
     children: _childrenWithGap(context, node, axis),
   );
   final withGestures = _withGestures(context, node, listView);
@@ -230,7 +354,7 @@ List<Widget> _childrenWithGap(
   Axis axis,
 ) {
   final children = context.children(node);
-  final gap = _gap(node);
+  final gap = _gap(context, node);
   if (children.length < 2 || gap <= 0) {
     return children;
   }
@@ -243,8 +367,8 @@ List<Widget> _childrenWithGap(
   ];
 }
 
-double _gap(QuickjsUiNode node) {
-  return QuickjsUiProps.doubleValue(node.props['gap'], name: 'gap') ?? 0;
+double _gap(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  return context.spacing(node.props['gap'], name: 'gap') ?? 0;
 }
 
 Duration? _animationDuration(QuickjsUiNode node) {
@@ -259,6 +383,13 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final onSubmitted = QuickjsUiProps.event(node.props['onSubmitted']);
   final onFocus = QuickjsUiProps.event(node.props['onFocus']);
   final onBlur = QuickjsUiProps.event(node.props['onBlur']);
+  final onEditingComplete = QuickjsUiProps.event(
+    node.props['onEditingComplete'],
+  );
+  final onSelectionChanged = QuickjsUiProps.event(
+    node.props['onSelectionChanged'],
+  );
+  final focusId = QuickjsUiProps.string(node.props['focusId']);
   return _QuickjsUiTextField(
     value:
         QuickjsUiProps.string(
@@ -266,12 +397,23 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
           name: 'TextField value',
         ) ??
         '',
+    focusId: focusId,
     enabled: QuickjsUiProps.boolValue(node.props['enabled']) ?? true,
-    autofocus: QuickjsUiProps.boolValue(node.props['autofocus']) ?? false,
+    autofocus:
+        QuickjsUiProps.boolValue(
+          node.props['autofocus'] ?? node.props['focusOnMount'],
+        ) ??
+        false,
+    requestFocus: QuickjsUiProps.boolValue(node.props['requestFocus']) ?? false,
+    clearFocus: QuickjsUiProps.boolValue(node.props['clearFocus']) ?? false,
     obscureText: QuickjsUiProps.boolValue(node.props['obscureText']) ?? false,
     maxLines: QuickjsUiProps.intValue(node.props['maxLines']),
     keyboardType: QuickjsUiProps.textInputType(node.props['keyboardType']),
     textInputAction: QuickjsUiProps.textInputAction(
+      node.props['textInputAction'],
+    ),
+    submitFocusAction: _submitFocusAction(
+      node.props['submitFocusAction'],
       node.props['textInputAction'],
     ),
     decoration: InputDecoration(
@@ -284,23 +426,51 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
             onChanged,
             defaultCoalesceKey: _eventKey(node, 'onChanged'),
             kind: QuickjsUiEventKind.sample,
-            payload: <String, Object?>{'value': value},
+            payload: value,
           ),
     onSubmitted: onSubmitted == null
         ? null
+        : (value) =>
+              context.dispatch(<String, Object?>{...onSubmitted, ...value}),
+    onEditingComplete: onEditingComplete == null
+        ? null
         : (value) => context.dispatch(<String, Object?>{
-            ...onSubmitted,
-            'value': value,
+            ...onEditingComplete,
+            ...value,
           }),
     onFocus: onFocus == null
         ? null
-        : (value) =>
-              context.dispatch(<String, Object?>{...onFocus, 'value': value}),
+        : (value) => context.dispatch(<String, Object?>{...onFocus, ...value}),
     onBlur: onBlur == null
         ? null
-        : (value) =>
-              context.dispatch(<String, Object?>{...onBlur, 'value': value}),
+        : (value) => context.dispatch(<String, Object?>{...onBlur, ...value}),
+    onSelectionChanged: onSelectionChanged == null
+        ? null
+        : (value) => context.dispatchEvent(
+            onSelectionChanged,
+            defaultCoalesceKey: _eventKey(node, 'onSelectionChanged'),
+            kind: QuickjsUiEventKind.sample,
+            payload: value,
+          ),
   );
+}
+
+_QuickjsUiSubmitFocusAction _submitFocusAction(
+  Object? value,
+  Object? textInputAction,
+) {
+  return switch (value) {
+    null => switch (textInputAction) {
+      'next' => _QuickjsUiSubmitFocusAction.next,
+      'previous' => _QuickjsUiSubmitFocusAction.previous,
+      _ => _QuickjsUiSubmitFocusAction.none,
+    },
+    'none' => _QuickjsUiSubmitFocusAction.none,
+    'next' => _QuickjsUiSubmitFocusAction.next,
+    'previous' => _QuickjsUiSubmitFocusAction.previous,
+    'unfocus' => _QuickjsUiSubmitFocusAction.unfocus,
+    _ => throw const FormatException('Unknown quickjs_ui submitFocusAction'),
+  };
 }
 
 Widget _buildStack(QuickjsUiRenderContext context, QuickjsUiNode node) {
@@ -314,8 +484,7 @@ Widget _buildStack(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildPadding(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final padding =
-      QuickjsUiProps.edgeInsets(node.props['padding']) ?? EdgeInsets.zero;
+  final padding = context.edgeInsets(node.props['padding']) ?? EdgeInsets.zero;
   final animationDuration = _animationDuration(node);
   final child = context.child(node) ?? const SizedBox.shrink();
   return _withGestures(
@@ -536,31 +705,43 @@ String _eventKey(QuickjsUiNode node, String prop) {
 final class _QuickjsUiTextField extends StatefulWidget {
   const _QuickjsUiTextField({
     required this.value,
+    required this.focusId,
     required this.enabled,
     required this.autofocus,
+    required this.requestFocus,
+    required this.clearFocus,
     required this.obscureText,
     required this.decoration,
+    required this.submitFocusAction,
     this.maxLines,
     this.keyboardType,
     this.textInputAction,
     this.onChanged,
     this.onSubmitted,
+    this.onEditingComplete,
     this.onFocus,
     this.onBlur,
+    this.onSelectionChanged,
   });
 
   final String value;
+  final String? focusId;
   final bool enabled;
   final bool autofocus;
+  final bool requestFocus;
+  final bool clearFocus;
   final bool obscureText;
   final int? maxLines;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final _QuickjsUiSubmitFocusAction submitFocusAction;
   final InputDecoration decoration;
-  final ValueChanged<String>? onChanged;
-  final ValueChanged<String>? onSubmitted;
-  final ValueChanged<String>? onFocus;
-  final ValueChanged<String>? onBlur;
+  final ValueChanged<Map<String, Object?>>? onChanged;
+  final ValueChanged<Map<String, Object?>>? onSubmitted;
+  final ValueChanged<Map<String, Object?>>? onEditingComplete;
+  final ValueChanged<Map<String, Object?>>? onFocus;
+  final ValueChanged<Map<String, Object?>>? onBlur;
+  final ValueChanged<Map<String, Object?>>? onSelectionChanged;
 
   @override
   State<_QuickjsUiTextField> createState() => _QuickjsUiTextFieldState();
@@ -569,22 +750,41 @@ final class _QuickjsUiTextField extends StatefulWidget {
 final class _QuickjsUiTextFieldState extends State<_QuickjsUiTextField> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  TextSelection? _lastSelection;
+  TextRange? _lastComposing;
+  bool _syncingController = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.value);
+    _lastSelection = _controller.selection;
+    _lastComposing = _controller.value.composing;
+    _controller.addListener(_handleControllerChange);
     _focusNode = FocusNode()..addListener(_handleFocusChange);
+    if (widget.requestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocus());
+    }
   }
 
   @override
   void didUpdateWidget(covariant _QuickjsUiTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _syncingController = true;
       _controller.value = TextEditingValue(
         text: widget.value,
         selection: TextSelection.collapsed(offset: widget.value.length),
       );
+      _syncingController = false;
+      _lastSelection = _controller.selection;
+      _lastComposing = _controller.value.composing;
+    }
+    if (!oldWidget.requestFocus && widget.requestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocus());
+    }
+    if (!oldWidget.clearFocus && widget.clearFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _clearFocus());
     }
   }
 
@@ -592,16 +792,74 @@ final class _QuickjsUiTextFieldState extends State<_QuickjsUiTextField> {
   void dispose() {
     _focusNode.removeListener(_handleFocusChange);
     _focusNode.dispose();
+    _controller.removeListener(_handleControllerChange);
     _controller.dispose();
     super.dispose();
   }
 
   void _handleFocusChange() {
     if (_focusNode.hasFocus) {
-      widget.onFocus?.call(_controller.text);
+      widget.onFocus?.call(_snapshot());
     } else {
-      widget.onBlur?.call(_controller.text);
+      widget.onBlur?.call(_snapshot());
     }
+  }
+
+  void _handleControllerChange() {
+    if (_syncingController) {
+      return;
+    }
+    final selection = _controller.selection;
+    final composing = _controller.value.composing;
+    if (selection == _lastSelection && composing == _lastComposing) {
+      return;
+    }
+    _lastSelection = selection;
+    _lastComposing = composing;
+    widget.onSelectionChanged?.call(_snapshot());
+  }
+
+  void _requestFocus() {
+    if (!mounted || !widget.enabled || _focusNode.hasFocus) {
+      return;
+    }
+    _focusNode.requestFocus();
+  }
+
+  void _clearFocus() {
+    if (!mounted || !_focusNode.hasFocus) {
+      return;
+    }
+    _focusNode.unfocus();
+  }
+
+  void _handleEditingComplete() {
+    widget.onEditingComplete?.call(_snapshot());
+    final scope = FocusScope.of(context);
+    switch (widget.submitFocusAction) {
+      case _QuickjsUiSubmitFocusAction.none:
+        break;
+      case _QuickjsUiSubmitFocusAction.next:
+        scope.nextFocus();
+      case _QuickjsUiSubmitFocusAction.previous:
+        scope.previousFocus();
+      case _QuickjsUiSubmitFocusAction.unfocus:
+        _focusNode.unfocus();
+    }
+  }
+
+  Map<String, Object?> _snapshot() {
+    final value = _controller.value;
+    return <String, Object?>{
+      'value': value.text,
+      if (widget.focusId != null) 'focusId': widget.focusId,
+      'selectionStart': value.selection.start,
+      'selectionEnd': value.selection.end,
+      'selectionBaseOffset': value.selection.baseOffset,
+      'selectionExtentOffset': value.selection.extentOffset,
+      'composingStart': value.composing.start,
+      'composingEnd': value.composing.end,
+    };
   }
 
   @override
@@ -616,8 +874,15 @@ final class _QuickjsUiTextFieldState extends State<_QuickjsUiTextField> {
       keyboardType: widget.keyboardType,
       textInputAction: widget.textInputAction,
       decoration: widget.decoration,
-      onChanged: widget.onChanged,
-      onSubmitted: widget.onSubmitted,
+      onChanged: widget.onChanged == null
+          ? null
+          : (_) => widget.onChanged?.call(_snapshot()),
+      onSubmitted: widget.onSubmitted == null
+          ? null
+          : (_) => widget.onSubmitted?.call(_snapshot()),
+      onEditingComplete: _handleEditingComplete,
     );
   }
 }
+
+enum _QuickjsUiSubmitFocusAction { none, next, previous, unfocus }
