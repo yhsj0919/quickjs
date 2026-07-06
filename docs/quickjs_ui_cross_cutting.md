@@ -285,9 +285,12 @@ Custom media renderers, such as `VideoPlayer`, should parse their `source` with
 the same model and reject unsupported resource kinds with a structured `onError`
 event where available.
 
-Bundle manifests may include a `resources` table. This records resource metadata
-alongside modules but does not grant JS new host capabilities. File system,
-network, stream, or DRM access still requires explicit host policy/capability.
+发布包 manifest 使用包根目录下的 `manifest.json`。发布包的运行入口固定为
+包根 `main.mjs`，manifest 只负责描述和校验，不作为运行入口。manifest 可以包含
+`modules`、`resources`、`routes`、`permissions`、`cache` 和 `metadata`。
+其中 `resources` 记录资源 metadata，和 JS module 清单分开；它不授予 JS 新的
+host capability。文件系统、网络、stream 或 DRM 访问仍然需要显式 host policy /
+capability。完整格式见 `docs/quickjs_ui_package_format.md`。
 
 Core stream transport is reserved for large or long-lived data streams such as
 response bodies, subtitles, timed metadata, or live host data sources. Ordinary
@@ -322,6 +325,58 @@ positions; JS still owns the list state and only returns the next schema.
 Boundary: scroll and gesture callbacks still enter JS through
 `QuickjsUiEventIngress`. Do not add per-widget post-frame dispatch workarounds or
 hidden native handles to page state.
+
+### 0.4.3 contract
+
+Development tooling is opt-in and lives in `quickjs_ui` diagnostics modules, not
+in `quickjs` core.
+
+`QuickjsUiDevOptions` controls:
+
+- `showErrorOverlay`: whether the built-in error overlay is shown when no custom
+  `errorBuilder` is provided.
+- `preserveStateOnReload`: whether `QuickjsUiController.reload()` reapplies the
+  current JS state after reloading resources.
+- `logSchema`, `logDiff`, `logResources`: diagnostic logging switches.
+
+`QuickjsUiInspector` records:
+
+- lifecycle timeline entries with `phase` (`widget`, `route`, `app`, `action`)
+- last dispatched action
+- last renderer diff stats (`rebuilt`, `reused`, `unkeyed`)
+- optional resource loader log lines
+
+`QuickjsUiController.exportPageSnapshot()` returns a JSON-compatible snapshot
+with props, state, schema, manifest, resources, host API names, last action,
+lifecycle timeline, and diff stats. This is for debugging and issue reproduction,
+not persistence across app restarts.
+
+`QuickjsUiInspectorPanel` is the reference Flutter UI for local development. It
+reads from the controller and inspector but does not change runtime behavior.
+
+Inspector listener notifications are deferred to the next frame, matching
+`QuickjsUiEventIngress`. Renderer diff/schema updates must not synchronously
+rebuild inspector panels while `QuickjsUiView` is building.
+
+Boundary: inspector data is structured values only. Do not expose Flutter
+widget handles, JS function handles, or engine internals through the snapshot.
+
+### 0.4.3.x network inspector contract
+
+`QuickjsUiNetworkJournal` is the single timeline for development network
+observability. It records:
+
+- bundle loader traffic from `QuickjsUiNetworkLoader` (`source=bundle`)
+- host API traffic from `quickjsUiHost.network(request)` when handlers are
+  wrapped with `instrumentHostNetworkLogging()` or
+  `QuickjsUiController.instrumentHostHandlers()`
+
+Each `QuickjsUiNetworkRecord` tracks method, URI, status, duration, body size,
+cache hit/store phase, and structured errors. Inspector notifications remain
+frame-deferred.
+
+Boundary: the journal is dev-only observability. It does not change fetch
+behavior, permission policy, or production network semantics.
 
 ## Conformance Tests
 

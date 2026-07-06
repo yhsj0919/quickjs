@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quickjs_ui/quickjs_ui.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
 import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
@@ -7,6 +8,7 @@ import 'package:quickjs_example/pages/quickjs_ui_bundle_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_custom_components_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_dev_panel_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
@@ -14,6 +16,7 @@ import 'package:quickjs_example/pages/quickjs_ui_navigation_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_network_inspector_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_scroll_transition_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
@@ -206,6 +209,35 @@ void main() {
     expect(find.text('滑动手势卡片'), findsOneWidget);
     expect(find.text('滚动到最后一项'), findsOneWidget);
     expect(find.text('反转动画列表'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui 0.4.3 dev panel page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: QuickjsUiDevPanelPage()));
+
+    expect(find.text('QuickJS UI 0.4.3 开发调试'), findsOneWidget);
+    expect(find.text('状态'), findsOneWidget);
+    expect(find.text('Schema'), findsOneWidget);
+    expect(find.text('生命周期'), findsOneWidget);
+    expect(find.text('网络'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('开发调试面板'));
+    expect(find.text('开发调试面板'), findsOneWidget);
+    expect(find.text('增加'), findsOneWidget);
+  });
+
+  testWidgets('registers quickjs_ui network inspector page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiNetworkInspectorPage()),
+    );
+
+    expect(find.text('QuickJS UI 网络调试'), findsOneWidget);
+    expect(find.text('状态'), findsOneWidget);
+    expect(find.text('Schema'), findsOneWidget);
+    expect(find.text('网络'), findsOneWidget);
+    expect(find.byType(QuickjsUiInspectorPanel), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {

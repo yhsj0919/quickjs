@@ -8,10 +8,15 @@ environment:
   flutter: '>=3.3.0'
 
 dependencies:
+  archive: ^4.0.9
+  crypto: ^3.0.7
   flutter:
     sdk: flutter
   quickjs:
     path: ../../
+
+executables:
+  manifest: manifest
 
 dev_dependencies:
   flutter_test:

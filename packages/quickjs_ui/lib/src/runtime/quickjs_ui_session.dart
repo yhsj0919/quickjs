@@ -5,6 +5,7 @@ import 'dart:collection';
 
 import 'package:quickjs/quickjs.dart';
 
+import '../diagnostics/quickjs_ui_inspector.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
@@ -16,12 +17,17 @@ const int _currentQuickjsUiRuntimeVersion = 1;
 
 final class QuickjsUiSession {
   // Keep the public constructor parameters named `engine` and `onConsole`.
-  QuickjsUiSession({Quickjs? engine, QuickjsConsoleSink? onConsole})
-    : _engine = engine,
-      _onConsole = onConsole;
+  QuickjsUiSession({
+    Quickjs? engine,
+    QuickjsConsoleSink? onConsole,
+    QuickjsUiInspector? inspector,
+  }) : _engine = engine,
+       _onConsole = onConsole,
+       inspector = inspector;
 
   Quickjs? _engine;
   final QuickjsConsoleSink? _onConsole;
+  QuickjsUiInspector? inspector;
   QuickjsPlugin? _plugin;
   QuickjsPluginClient? _client;
   Map<String, Object?> _props = const <String, Object?>{};
@@ -115,6 +121,7 @@ final class QuickjsUiSession {
         return;
       }
       _applySnapshot(initialSnapshot);
+      inspector?.recordLifecycle('widget', 'load');
       await _refreshImpl();
     });
   }
@@ -122,6 +129,7 @@ final class QuickjsUiSession {
   Future<void> dispatch(Map<String, Object?> event) async {
     return _enqueue(() async {
       _ensureActive();
+      inspector?.recordAction(event);
       final result = await _clientCall('handleEvent', <Object?>[event]);
       if (_disposed) {
         return;
@@ -163,7 +171,12 @@ final class QuickjsUiSession {
     bool render = true,
   }) {
     return _enqueueRouteLifecycle(() async {
-      return _lifecycleImpl(type, payload: payload, render: render);
+      return _lifecycleImpl(
+        type,
+        payload: payload,
+        render: render,
+        phase: 'route',
+      );
     });
   }
 
@@ -189,6 +202,7 @@ final class QuickjsUiSession {
     _node = QuickjsUiNode.fromMap(
       rendered.map((key, value) => MapEntry<String, Object?>('$key', value)),
     );
+    inspector?.recordSchema(_node!.toMap());
   }
 
   Future<void> reload() async {
@@ -325,10 +339,12 @@ final class QuickjsUiSession {
     String type, {
     Object? payload,
     bool render = true,
+    String phase = 'widget',
   }) async {
     _ensureActive();
     final plugin = _plugin;
     if (plugin == null || !_supportsLifecycle(plugin, type)) {
+      inspector?.recordLifecycle(phase, type, payload: payload);
       return false;
     }
     if (type == 'dispose') {
@@ -341,6 +357,7 @@ final class QuickjsUiSession {
     if (payload != null) {
       event['payload'] = payload;
     }
+    inspector?.recordLifecycle(phase, type, payload: payload);
     final result = await _clientCall('lifecycle', <Object?>[event]);
     if (_disposed) {
       return false;

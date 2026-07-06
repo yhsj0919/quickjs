@@ -1,7 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:quickjs/quickjs.dart';
 
+import '../diagnostics/quickjs_ui_dev_options.dart';
+import '../diagnostics/quickjs_ui_inspector.dart';
+import '../diagnostics/quickjs_ui_page_snapshot.dart';
+import '../diagnostics/quickjs_ui_network_journal.dart';
+import '../host/quickjs_ui_host_capabilities.dart';
 import '../host/quickjs_ui_permission_policy.dart';
+import '../resource/quickjs_ui_network_loader.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_session.dart';
 
@@ -13,10 +19,20 @@ typedef QuickjsUiPluginLoader = Future<QuickjsPlugin> Function();
 /// notifications, while [QuickjsUiSession] owns runtime, plugin, state and tree
 /// lifecycle.
 final class QuickjsUiController extends ChangeNotifier {
-  QuickjsUiController({Quickjs? engine, QuickjsConsoleSink? onConsole})
-    : _session = QuickjsUiSession(engine: engine, onConsole: onConsole);
+  QuickjsUiController({
+    Quickjs? engine,
+    QuickjsConsoleSink? onConsole,
+    QuickjsUiDevOptions? devOptions,
+    QuickjsUiInspector? inspector,
+  }) : devOptions = devOptions ?? QuickjsUiDevOptions.defaults,
+       inspector = inspector ?? QuickjsUiInspector(),
+       _session = QuickjsUiSession(engine: engine, onConsole: onConsole) {
+    _session.inspector = this.inspector;
+  }
 
   final QuickjsUiSession _session;
+  final QuickjsUiDevOptions devOptions;
+  final QuickjsUiInspector inspector;
   Object? _error;
   QuickjsUiPluginLoader? _loader;
   Map<String, Object?> _initialProps = const <String, Object?>{};
@@ -147,6 +163,7 @@ final class QuickjsUiController extends ChangeNotifier {
         return;
       }
       _error = error;
+      inspector.recordError(error);
       notifyListeners();
     }
   }
@@ -244,7 +261,48 @@ final class QuickjsUiController extends ChangeNotifier {
   void reportError(Object error) {
     _ensureActive();
     _error = error;
+    inspector.recordError(error);
     notifyListeners();
+  }
+
+  QuickjsUiPageSnapshot exportPageSnapshot() {
+    return inspector.buildSnapshot(
+      props: props,
+      state: state,
+      node: node,
+      plugin: plugin,
+      mounts: _session.mounts,
+      error: error,
+    );
+  }
+
+  Map<String, Object?> exportPageSnapshotMap() {
+    return exportPageSnapshot().toMap();
+  }
+
+  void recordAppLifecycle(String type, {Object? payload}) {
+    inspector.recordLifecycle('app', type, payload: payload);
+  }
+
+  void recordResourceLog(String message) {
+    if (devOptions.logResources) {
+      inspector.recordResource(message);
+    }
+  }
+
+  void recordNetworkLog(QuickjsUiNetworkLogEvent event) {
+    if (devOptions.logResources) {
+      inspector.recordNetworkEvent(event);
+    }
+  }
+
+  QuickjsUiHostApiHandlers instrumentHostHandlers(
+    QuickjsUiHostApiHandlers handlers,
+  ) {
+    if (!devOptions.logResources) {
+      return handlers;
+    }
+    return instrumentHostNetworkLogging(handlers, inspector.networkJournal);
   }
 
   Future<void> restart() async {
@@ -284,6 +342,7 @@ final class QuickjsUiController extends ChangeNotifier {
       await restart();
       return;
     }
+    final savedState = devOptions.preserveStateOnReload ? state : null;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -299,11 +358,22 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: _grantedPermissions,
         permissionPolicy: _permissionPolicy,
       );
+      if (_disposed) {
+        return;
+      }
+      if (savedState is Map) {
+        await setState(
+          Map<String, Object?>.from(
+            savedState.map((key, value) => MapEntry('$key', value)),
+          ),
+        );
+      }
     } catch (error) {
       if (_disposed) {
         return;
       }
       _error = error;
+      inspector.recordError(error);
     } finally {
       if (!_disposed) {
         _loading = false;

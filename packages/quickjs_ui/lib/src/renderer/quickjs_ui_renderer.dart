@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../diagnostics/quickjs_ui_diff_stats.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_registry.dart';
 import 'quickjs_ui_render_context.dart';
+
+typedef QuickjsUiDiffStatsListener = void Function(QuickjsUiDiffStats stats);
 
 final class QuickjsUiRenderer {
   static const int maxBuildDepth = 128;
@@ -12,11 +15,13 @@ final class QuickjsUiRenderer {
   QuickjsUiRenderer({
     required this.onEvent,
     this.onUiEvent,
+    this.onDiffStats,
     QuickjsUiComponentRegistry? registry,
   }) : registry = registry ?? QuickjsUiComponentRegistry.defaults();
 
   final QuickjsUiEventHandler onEvent;
   final QuickjsUiEventEnvelopeHandler? onUiEvent;
+  final QuickjsUiDiffStatsListener? onDiffStats;
   final QuickjsUiComponentRegistry registry;
   late final QuickjsUiEventDispatcher _eventDispatcher =
       QuickjsUiEventDispatcher(_dispatchEnvelope);
@@ -30,6 +35,11 @@ final class QuickjsUiRenderer {
     late final QuickjsUiRenderContext context;
     final nextCache = <String, _RenderedNode>{};
     final activeLifecycleKeys = <String>{};
+    var rebuilt = 0;
+    var reused = 0;
+    var unkeyed = 0;
+    final rebuiltKeys = <String>[];
+    final reusedKeys = <String>[];
     var buildDepth = 0;
     Widget buildNode(QuickjsUiNode node) {
       if (buildDepth > maxBuildDepth) {
@@ -43,6 +53,19 @@ final class QuickjsUiRenderer {
           nextCache,
           activeLifecycleKeys,
           buildContext,
+          onDiff: (key, didReuse) {
+            if (key == null) {
+              unkeyed += 1;
+              return;
+            }
+            if (didReuse) {
+              reused += 1;
+              reusedKeys.add(key);
+            } else {
+              rebuilt += 1;
+              rebuiltKeys.add(key);
+            }
+          },
         );
       } finally {
         buildDepth -= 1;
@@ -61,6 +84,15 @@ final class QuickjsUiRenderer {
       ..clear()
       ..addAll(nextCache);
     _disposeInactiveLifecycleComponents(activeLifecycleKeys);
+    onDiffStats?.call(
+      QuickjsUiDiffStats(
+        rebuilt: rebuilt,
+        reused: reused,
+        unkeyed: unkeyed,
+        rebuiltKeys: rebuiltKeys,
+        reusedKeys: reusedKeys,
+      ),
+    );
     return widget;
   }
 
@@ -69,11 +101,13 @@ final class QuickjsUiRenderer {
     QuickjsUiNode node,
     Map<String, _RenderedNode> nextCache,
     Set<String> activeLifecycleKeys,
-    BuildContext? buildContext,
-  ) {
+    BuildContext? buildContext, {
+    required void Function(String? key, bool didReuse) onDiff,
+  }) {
     final controller = _controllerFor(node, activeLifecycleKeys);
     final key = _nodeKey(node);
     if (key == null) {
+      onDiff(null, false);
       return _withAccessibility(
         node,
         registry.build(context, node, controller: controller),
@@ -83,8 +117,10 @@ final class QuickjsUiRenderer {
     final cached = _cache[key];
     if (cached != null && cached.signature == signature) {
       nextCache[key] = cached;
+      onDiff(key, true);
       return cached.widget;
     }
+    onDiff(key, false);
     final widget = KeyedSubtree(
       key: ValueKey<String>(key),
       child: _withAccessibility(

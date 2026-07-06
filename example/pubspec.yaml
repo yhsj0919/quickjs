@@ -79,12 +79,17 @@ flutter:
     - assets/quickjs_ui/permission_page.mjs
     - assets/quickjs_ui/profile_form_page.mjs
     - assets/quickjs_ui/scroll_transition_page.mjs
+    - assets/quickjs_ui/dev_panel_page.mjs
     - assets/quickjs_ui/todo_page.mjs
     - assets/quickjs_ui/quickjs_ui.schema.json
     - assets/quickjs_ui/schema_preview.json
     - assets/quickjs_ui/bundle_counter/pages/main.mjs
     - assets/quickjs_ui/bundle_counter/components/counter_card.mjs
     - assets/quickjs_ui/bundle_counter/components/action_row.mjs
+    - assets/quickjs_ui/package_demo/main.mjs
+    - assets/quickjs_ui/package_demo/manifest.json
+    - assets/quickjs_ui/package_demo/components/package_summary.mjs
+    - assets/quickjs_ui/package_demo.zip
     - assets/plugins/zip_demo.zip
     - web/icons/Icon-192.png
 

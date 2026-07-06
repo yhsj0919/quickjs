@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../runtime/quickjs_ui_page_plugin.dart';
+import 'quickjs_ui_manifest.dart';
+import 'quickjs_ui_network_cache_store.dart';
 import 'quickjs_ui_network_loader.dart';
 import 'quickjs_ui_resource.dart';
 import 'quickjs_ui_resource_resolver.dart';
@@ -24,6 +28,9 @@ final class QuickjsUiBundle {
   final Map<String, String> modules;
   final List<String> permissions;
   final Map<String, QuickjsUiResourceReference> resources;
+
+  static const String packageEntry = quickjsUiPackageEntry;
+  static const String packageManifest = quickjsUiPackageManifest;
 
   static Future<QuickjsUiBundle> asset({
     required String path,
@@ -75,6 +82,102 @@ final class QuickjsUiBundle {
     ).load(url: url, id: id, version: version, bundleRoot: bundleRoot);
   }
 
+  static Future<QuickjsUiBundle> assetPackage({
+    required String root,
+    AssetBundle? bundle,
+  }) async {
+    final resolver = QuickjsUiResourceResolver.asset(
+      bundle: bundle,
+      baseAssetKey: _packageAssetManifestKey(root),
+    );
+    final manifestSource = await resolver.loadString(packageManifest);
+    return fromManifestSource(
+      manifestSource,
+      resolver: resolver,
+      validatePackageRoot: true,
+    );
+  }
+
+  static Future<QuickjsUiBundle> filePackage({required String root}) async {
+    final resolver = QuickjsUiResourceResolver.file(basePath: root);
+    final manifestSource = await resolver.loadString(packageManifest);
+    return fromManifestSource(
+      manifestSource,
+      resolver: resolver,
+      validatePackageRoot: true,
+    );
+  }
+
+  static Future<QuickjsUiBundle> assetZipPackage({
+    required String assetKey,
+    AssetBundle? bundle,
+  }) async {
+    final data = await (bundle ?? rootBundle).load(assetKey);
+    return zipPackageBytes(data.buffer.asUint8List());
+  }
+
+  static Future<QuickjsUiBundle> fileZipPackage({required String path}) async {
+    return zipPackageBytes(await File(path).readAsBytes());
+  }
+
+  static Future<QuickjsUiBundle> zipPackageBytes(List<int> bytes) async {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final files = <String, Uint8List>{};
+    for (final file in archive.files) {
+      if (!file.isFile) {
+        continue;
+      }
+      final normalized = QuickjsUiResourceResolver.normalizePath(file.name);
+      files[normalized] = _archiveFileBytes(file);
+    }
+    final manifestBytes = files[packageManifest];
+    if (manifestBytes == null) {
+      throw const FormatException(
+        'quickjs_ui zip package missing manifest.json',
+      );
+    }
+    final manifest = QuickjsUiManifest.parse(utf8.decode(manifestBytes))
+      ..validatePackageRoot();
+    final modules = <String, String>{};
+    for (final module in manifest.modules.entries) {
+      final moduleBytes = files[module.value.loadPath];
+      if (moduleBytes == null) {
+        throw FormatException(
+          'quickjs_ui zip package missing module: ${module.value.loadPath}',
+        );
+      }
+      final moduleSource = utf8.decode(moduleBytes);
+      module.value.verifySource(moduleSource);
+      modules[module.key] = moduleSource;
+    }
+    manifest.validateImports(modules);
+    return QuickjsUiBundle(
+      id: manifest.id,
+      version: manifest.version,
+      entry: manifest.entry,
+      modules: Map<String, String>.unmodifiable(modules),
+      permissions: manifest.permissions,
+      resources: manifest.resources,
+    );
+  }
+
+  static Future<QuickjsUiBundle> networkPackage({
+    required Uri root,
+    QuickjsUiNetworkFetch? fetch,
+    QuickjsUiNetworkLogHandler? onLog,
+    QuickjsUiNetworkCacheStore? cacheStore,
+    QuickjsUiNetworkRefreshMode refreshMode =
+        QuickjsUiNetworkRefreshMode.conditional,
+    QuickjsUiNetworkCacheBuster? cacheBuster,
+  }) {
+    return QuickjsUiNetworkLoader(
+      fetch: fetch,
+      onLog: onLog,
+      cacheStore: cacheStore,
+      cacheBuster: cacheBuster,
+    ).loadPackageWithRefresh(root: root, refreshMode: refreshMode);
+  }
+
   static Future<QuickjsUiBundle> fromEntry({
     required String id,
     required String version,
@@ -90,8 +193,8 @@ final class QuickjsUiBundle {
       }
       final source = await resolver.loadString(normalized);
       modules[normalized] = source;
-      for (final importPath in _staticImports(source)) {
-        if (!_isRelativeImport(importPath)) {
+      for (final importPath in quickjsUiStaticImports(source)) {
+        if (!quickjsUiIsRelativeImport(importPath)) {
           continue;
         }
         await visit(
@@ -124,38 +227,26 @@ final class QuickjsUiBundle {
   static Future<QuickjsUiBundle> fromManifestSource(
     String source, {
     required QuickjsUiResourceResolver resolver,
+    bool validatePackageRoot = false,
   }) async {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map) {
-      throw const FormatException(
-        'quickjs_ui bundle manifest must be an object',
-      );
-    }
-    final manifest = decoded.map(
-      (key, value) => MapEntry<String, Object?>('$key', value),
-    );
-    final id = _string(manifest['id'], 'id');
-    final version = _string(manifest['version'], 'version');
-    final entry = QuickjsUiResourceResolver.normalizePath(
-      _string(manifest['entry'], 'entry'),
-    );
-    final moduleResources = _moduleResources(manifest['modules']);
-    if (!moduleResources.containsKey(entry)) {
-      throw FormatException(
-        'quickjs_ui bundle entry must be listed in modules: $entry',
-      );
+    final manifest = QuickjsUiManifest.parse(source);
+    if (validatePackageRoot) {
+      manifest.validatePackageRoot();
     }
     final modules = <String, String>{};
-    for (final module in moduleResources.entries) {
-      modules[module.key] = await resolver.loadString(module.value);
+    for (final module in manifest.modules.entries) {
+      final moduleSource = await resolver.loadString(module.value.loadPath);
+      module.value.verifySource(moduleSource);
+      modules[module.key] = moduleSource;
     }
+    manifest.validateImports(modules);
     return QuickjsUiBundle(
-      id: id,
-      version: version,
-      entry: entry,
+      id: manifest.id,
+      version: manifest.version,
+      entry: manifest.entry,
       modules: Map<String, String>.unmodifiable(modules),
-      resources: _manifestResources(manifest['resources']),
-      permissions: _stringList(manifest['permissions'], 'permissions'),
+      resources: manifest.resources,
+      permissions: manifest.permissions,
     );
   }
 
@@ -197,121 +288,6 @@ final class QuickjsUiBundle {
   }
 }
 
-List<String> _stringList(Object? value, String name) {
-  if (value == null) {
-    return const <String>[];
-  }
-  if (value is! List) {
-    throw FormatException(
-      'quickjs_ui bundle manifest "$name" must be an array',
-    );
-  }
-  return List<String>.unmodifiable(
-    value.map((item) => _string(item, '$name[]')),
-  );
-}
-
-String _string(Object? value, String name) {
-  if (value is String && value.isNotEmpty) {
-    return value;
-  }
-  throw FormatException('quickjs_ui bundle manifest "$name" must be a string');
-}
-
-Map<String, String> _moduleResources(Object? value) {
-  if (value is List) {
-    return Map<String, String>.unmodifiable(<String, String>{
-      for (final item in value)
-        QuickjsUiResourceResolver.normalizePath(_string(item, 'modules[]')):
-            QuickjsUiResourceResolver.normalizePath(_string(item, 'modules[]')),
-    });
-  }
-  if (value is Map) {
-    return Map<String, String>.unmodifiable(
-      value.map((key, value) {
-        return MapEntry<String, String>(
-          QuickjsUiResourceResolver.normalizePath('$key'),
-          QuickjsUiResourceResolver.normalizePath(
-            _string(value, 'modules.$key'),
-          ),
-        );
-      }),
-    );
-  }
-  throw const FormatException(
-    'quickjs_ui bundle manifest "modules" must be an array or object',
-  );
-}
-
-Map<String, QuickjsUiResourceReference> _manifestResources(Object? value) {
-  if (value == null) {
-    return const <String, QuickjsUiResourceReference>{};
-  }
-  if (value is List) {
-    return Map<String, QuickjsUiResourceReference>.unmodifiable(
-      <String, QuickjsUiResourceReference>{
-        for (final item in value)
-          _resourceKey(
-            QuickjsUiResourceReference.parse(item, name: 'resources[]'),
-          ): QuickjsUiResourceReference.parse(
-            item,
-            name: 'resources[]',
-          ),
-      },
-    );
-  }
-  if (value is Map) {
-    return Map<String, QuickjsUiResourceReference>.unmodifiable(
-      value.map((key, resourceValue) {
-        final resource = QuickjsUiResourceReference.parse(
-          resourceValue is Map
-              ? <String, Object?>{
-                  'uri': '$key',
-                  ...resourceValue.map(
-                    (key, value) => MapEntry<String, Object?>('$key', value),
-                  ),
-                }
-              : resourceValue,
-          name: 'resources.$key',
-        );
-        return MapEntry<String, QuickjsUiResourceReference>('$key', resource);
-      }),
-    );
-  }
-  throw const FormatException(
-    'quickjs_ui bundle manifest "resources" must be an array or object',
-  );
-}
-
-String _resourceKey(QuickjsUiResourceReference resource) {
-  if (resource.kind == QuickjsUiResourceKind.asset) {
-    return QuickjsUiResourceResolver.normalizePath(resource.location);
-  }
-  return resource.location;
-}
-
-Iterable<String> _staticImports(String source) sync* {
-  final patterns = <RegExp>[
-    RegExp(
-      r'''import\s+(?:[^'"]*?\s+from\s+)?["']([^"']+)["']''',
-      multiLine: true,
-    ),
-    RegExp(r'''export\s+[^'"]*?\s+from\s+["']([^"']+)["']''', multiLine: true),
-  ];
-  for (final pattern in patterns) {
-    for (final match in pattern.allMatches(source)) {
-      final specifier = match.group(1);
-      if (specifier != null && specifier.isNotEmpty) {
-        yield specifier;
-      }
-    }
-  }
-}
-
-bool _isRelativeImport(String specifier) {
-  return specifier.startsWith('./') || specifier.startsWith('../');
-}
-
 _ResolvedAssetPath _resolveAssetPath(String path, {String? bundleRoot}) {
   final normalizedPath = path.replaceAll('\\', '/');
   final root =
@@ -349,6 +325,18 @@ String _bundleIdFromAssetPath(String path) {
       .replaceAll(RegExp(r'_+'), '_')
       .replaceAll(RegExp(r'^_|_$'), '');
   return 'quickjs_ui_$sanitized';
+}
+
+String _packageAssetManifestKey(String root) {
+  final normalized = root.replaceAll('\\', '/');
+  final prefix = normalized.isEmpty || normalized.endsWith('/')
+      ? normalized
+      : '$normalized/';
+  return '$prefix${QuickjsUiBundle.packageManifest}';
+}
+
+Uint8List _archiveFileBytes(ArchiveFile file) {
+  return file.content;
 }
 
 final class _ResolvedAssetPath {
