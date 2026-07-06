@@ -249,6 +249,7 @@ export default Page({
         '#/\$defs/container',
         '#/\$defs/image',
         '#/\$defs/listView',
+        '#/\$defs/singleChildScrollView',
         '#/\$defs/textField',
         '#/\$defs/stack',
         '#/\$defs/padding',
@@ -1404,6 +1405,38 @@ export default Page({
     expect(events.last, <String, Object?>{'method': 'holdCard'});
   });
 
+  testWidgets('renders drag and swipe gesture events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'width': 160,
+      'height': 120,
+      'onDragStart': <String, Object?>{'method': 'dragStart'},
+      'onDragUpdate': <String, Object?>{'method': 'dragUpdate'},
+      'onDragEnd': <String, Object?>{'method': 'dragEnd'},
+      'onSwipe': <String, Object?>{'method': 'swipe'},
+      'child': <String, Object?>{'type': 'Text', 'data': 'Swipe card'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    await tester.fling(find.text('Swipe card'), const Offset(-100, 0), 800);
+    await tester.pump();
+
+    expect(
+      events.map((event) => event['method']),
+      containsAll(<Object?>['dragStart', 'dragUpdate', 'dragEnd', 'swipe']),
+    );
+    expect(events.last, containsPair('method', 'swipe'));
+    expect(events.last, containsPair('direction', 'left'));
+  });
+
   testWidgets('renders ListView scroll events', (tester) async {
     final events = <Map<String, Object?>>[];
     final node = QuickjsUiNode.fromMap(<String, Object?>{
@@ -1438,6 +1471,174 @@ export default Page({
     expect(events.last['pixels'], isA<double>());
     expect(events.last['maxScrollExtent'], greaterThan(0));
     expect(events.last['axis'], 'vertical');
+  });
+
+  testWidgets('ListView scrolls by offset and child key tokens', (
+    tester,
+  ) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+
+    QuickjsUiNode list({required int token, double? offset, String? key}) {
+      final props = <String, Object?>{
+        'type': 'ListView',
+        'scrollToken': token,
+        'scrollDurationMs': 1,
+        'children': <Object?>[
+          for (var index = 0; index < 30; index++)
+            <String, Object?>{
+              'type': 'SizedBox',
+              'key': 'row-$index',
+              'height': 40,
+              'child': <String, Object?>{'type': 'Text', 'data': 'Row $index'},
+            },
+        ],
+      };
+      if (offset != null) {
+        props['scrollToOffset'] = offset;
+      }
+      if (key != null) {
+        props['scrollToKey'] = key;
+      }
+      return QuickjsUiNode.fromMap(props);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(height: 160, child: renderer.build(list(token: 0))),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 160,
+            child: renderer.build(list(token: 1, offset: 240)),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ListView>(find.byType(ListView)).controller?.offset,
+      closeTo(240, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 160,
+            child: renderer.build(list(token: 2, key: 'row-20')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ListView>(find.byType(ListView)).controller?.offset,
+      greaterThan(240),
+    );
+  });
+
+  testWidgets('SingleChildScrollView emits scroll events', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'SingleChildScrollView',
+      'onScroll': <String, Object?>{'method': 'scrollPage'},
+      'children': <Object?>[
+        for (var index = 0; index < 20; index++)
+          <String, Object?>{
+            'type': 'SizedBox',
+            'height': 40,
+            'child': <String, Object?>{'type': 'Text', 'data': 'Block $index'},
+          },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 160,
+            child: QuickjsUiRenderer(onEvent: events.add).build(node),
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -120),
+    );
+    await tester.pump();
+
+    expect(events, isNotEmpty);
+    expect(events.last['method'], 'scrollPage');
+    expect(events.last['axis'], 'vertical');
+  });
+
+  testWidgets('ListView animates keyed item insert remove and reorder', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+
+    QuickjsUiNode list(List<String> ids) {
+      return QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'ListView',
+        'animateItems': true,
+        'itemTransitionDurationMs': 1,
+        'children': <Object?>[
+          for (final id in ids)
+            <String, Object?>{
+              'type': 'SizedBox',
+              'key': id,
+              'height': 32,
+              'child': <String, Object?>{'type': 'Text', 'data': 'Item $id'},
+            },
+        ],
+      });
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(height: 120, child: renderer.build(list(['a', 'b']))),
+        ),
+      ),
+    );
+    expect(find.text('Item a'), findsOneWidget);
+    expect(find.text('Item b'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(height: 120, child: renderer.build(list(['b', 'c']))),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Item a'), findsNothing);
+    expect(find.text('Item b'), findsOneWidget);
+    expect(find.text('Item c'), findsOneWidget);
+    expect(find.byType(AnimatedList), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(height: 120, child: renderer.build(list(['c', 'b']))),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Item b'), findsOneWidget);
+    expect(find.text('Item c'), findsOneWidget);
+    semantics.dispose();
   });
 
   test('coalesces throttled renderer events by key', () async {

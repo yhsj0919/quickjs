@@ -200,7 +200,7 @@ DOM/CSSOM/WebView。资源加载属于 `quickjs_ui` / 应用层能力，不进�
 - [x] JS 页面可读取 theme token 并在 schema 中引用，但默认不能直接修改全局 Flutter theme。
 - [ ] 支持暗色模式和宿主 theme 注入；theme 更新后触发受影响节点刷新。
 - [x] 布局控件已补充 `Stack`、`Padding`、`Center`、`SizedBox`。
-- [ ] 布局控件后续补充 `Positioned`、`Expanded`、`Flexible`、`SingleChildScrollView`。
+- [ ] 布局控件后续补充 `Positioned`、`Expanded`、`Flexible`。
 - [ ] 表单控件补充 `Form`、`Checkbox`、`Switch`、`Radio`、`DropdownButton`；表单状态和校验规则仍由 JS 控制。
 
 ### 异步数据与状态恢复
@@ -232,8 +232,8 @@ Flutter 侧 App、Route、Widget 和 resource lifecycle 需要同步到 JS 页�
 JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 
 - [ ] 统一事件 envelope：`{ action, payload, source, timestamp }`，source 可定位控件 key/path。
-- [ ] 支持常用手势：tap、longPress、doubleTap、drag、swipe；第一版优先 tap/longPress。
-- [ ] 支持滚动事件和滚动控制：`onScroll`、`initialScrollOffset`、`scrollTo(key|offset)`，滚动控制通过
+- [x] 支持常用手势：tap、longPress、doubleTap、drag、swipe；第一版优先 tap/longPress。
+- [x] 支持滚动事件和滚动控制：`onScroll`、`initialScrollOffset`、`scrollTo(key|offset)`，滚动控制通过
   controller/action bridge 显式触发。
 - [x] `TextField` 支持 `onFocus`、`onBlur` 事件，用于表单和键盘交互。
 - [ ] 支持 controller/action bridge 级别的 `focus(key)`、`blur(key)`。
@@ -256,7 +256,7 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 
 - [ ] 支持基础隐式动画 schema：opacity、scale、slide、size、color、padding、alignment 等属性变化。
 - [ ] 支持 transition 描述：`duration`、`curve`、`delay`、`from`、`to`、`onEnd` action。
-- [ ] 支持列表 item enter/exit/reorder 的基础过渡，依赖 stable key 判断节点身份。
+- [x] 支持列表 item enter/exit/reorder 的基础过渡，依赖 stable key 判断节点身份。
 - [ ] 支持页面转场配置：JSUI -> JSUI、原生 -> JSUI 可声明 transition intent，由 Flutter adapter 决定是否执行。
 - [ ] 支持交互状态动画：pressed、focused、loading、error 状态变化可映射为 Flutter 原生动画。
 - [ ] 支持动画开关和无障碍降级：宿主可关闭动画或启用 reduced motion。
@@ -342,7 +342,7 @@ Flutter 开发者学习成本：
 - [ ] `InkWell`
 
 滚动与列表：
-- [ ] `SingleChildScrollView`
+- [x] `SingleChildScrollView`
 - [x] `ListView`
 - [ ] `GridView`
 - [ ] `PageView`
@@ -594,10 +594,10 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 
 从 0.4.0 顺延的交互与动画能力。
 
-- [ ] 支持滚动控制和复杂手势：`scrollTo`、drag/swipe 的受限事件模型。
-- [ ] 支持列表 item enter/exit/reorder 过渡。
-- [ ] example：滚动控制与列表过渡演示页。
-- [ ] 测试：scrollTo action bridge、drag/swipe 事件、列表 item 过渡与 stable key 行为。
+- [x] 支持滚动控制和复杂手势：`scrollTo`、drag/swipe 的受限事件模型。
+- [x] 支持列表 item enter/exit/reorder 过渡。
+- [x] example：滚动控制与列表过渡演示页。
+- [x] 测试：scrollTo action bridge、drag/swipe 事件、列表 item 过渡与 stable key 行为。
 
 ### 0.4.3：开发体验与调试工具
 

@@ -14,6 +14,7 @@ import 'package:quickjs_example/pages/quickjs_ui_navigation_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui_scroll_transition_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui_video_player_plugin_page.dart';
@@ -192,6 +193,21 @@ void main() {
     );
   });
 
+  testWidgets('registers quickjs_ui 0.4.2 scroll transition page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiScrollTransitionPage()),
+    );
+
+    expect(find.text('QuickJS UI 0.4.2'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('QuickJS UI 0.4.2 滚动与列表过渡'));
+    expect(find.textContaining('QuickJS UI 0.4.2 error'), findsNothing);
+    expect(find.text('滑动手势卡片'), findsOneWidget);
+    expect(find.text('滚动到最后一项'), findsOneWidget);
+    expect(find.text('反转动画列表'), findsOneWidget);
+  });
+
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiTodoPage()));
 
@@ -263,7 +279,7 @@ void main() {
 
     expect(find.text('QuickJS UI JSON Schema'), findsOneWidget);
     await _pumpUntilFound(tester, find.textContaining('quickjs_ui UI schema'));
-    expect(find.textContaining('12 node variants'), findsOneWidget);
+    expect(find.textContaining('13 node variants'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Pure JSON UI schema'));
     expect(find.text('Pure JSON UI schema'), findsOneWidget);
   });
