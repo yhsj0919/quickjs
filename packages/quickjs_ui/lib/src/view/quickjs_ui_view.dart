@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:quickjs/quickjs.dart';
 
+import '../diagnostics/quickjs_ui_dev_options.dart';
+import '../diagnostics/quickjs_ui_diag.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../renderer/quickjs_ui_component_registry.dart';
 import '../renderer/quickjs_ui_event_ingress.dart';
@@ -272,12 +274,16 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 
   QuickjsUiRenderer _createRenderer() {
+    final devOptions = _controller.devOptions;
     return QuickjsUiRenderer(
       registry: widget.registry,
       onEvent: _eventIngress.submit,
       onUiEvent: _eventIngress.submitEnvelope,
+      onDiffStats: devOptions.logDiff ? _controller.inspector.recordDiff : null,
     );
   }
+
+  QuickjsUiDevOptions get _devOptions => _controller.devOptions;
 
   @override
   void didUpdateWidget(covariant QuickjsUiView oldWidget) {
@@ -362,12 +368,15 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _lastAppLifecycleSignal = signal;
     switch (signal) {
       case _QuickjsUiAppLifecycleSignal.resumed:
+        _controller.recordAppLifecycle('resume');
         _renderer.resume();
         unawaited(_controller.lifecycle('resume'));
       case _QuickjsUiAppLifecycleSignal.paused:
+        _controller.recordAppLifecycle('pause');
         _renderer.pause();
         unawaited(_controller.lifecycle('pause'));
       case _QuickjsUiAppLifecycleSignal.detached:
+        _controller.recordAppLifecycle('detach');
         _renderer.dispose();
         unawaited(_controller.lifecycle('dispose', render: false));
     }
@@ -380,6 +389,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       final builder = widget.errorBuilder;
       if (builder != null) {
         return builder(context, error);
+      }
+      if (!_devOptions.showErrorOverlay) {
+        return widget.placeholder ?? const SizedBox.shrink();
       }
       return QuickjsUiErrorOverlay(
         error: error,
@@ -409,6 +421,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
 
     try {
       final rendered = _renderer.build(node, buildContext: context);
+      if (_devOptions.logSchema) {
+        QuickjsUiDiag.log('schema', node.toMap().toString());
+      }
       _reportFirstRender();
       return rendered;
     } catch (error) {
@@ -420,6 +435,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     final builder = widget.errorBuilder;
     if (builder != null) {
       return builder(context, error);
+    }
+    if (!_devOptions.showErrorOverlay) {
+      return widget.placeholder ?? const SizedBox.shrink();
     }
     return QuickjsUiErrorOverlay(
       error: error,
@@ -521,7 +539,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   Future<QuickjsPlugin> _loadNetworkPlugin(Uri url) async {
     final loader = _networkLoader ??= QuickjsUiNetworkLoader(
       fetch: widget.networkFetch,
-      onLog: widget.onNetworkLog,
+      onLog: _handleNetworkLog,
     );
     final bundle = await loader.load(
       url: url,
@@ -536,6 +554,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       bundleRoot: widget.bundleRoot,
     );
     return bundle.toPlugin();
+  }
+
+  void _handleNetworkLog(QuickjsUiNetworkLogEvent event) {
+    widget.onNetworkLog?.call(event);
+    _controller.recordNetworkLog(event);
   }
 
   void _handleControllerChanged() {

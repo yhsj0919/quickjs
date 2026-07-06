@@ -3,13 +3,16 @@ import 'pages/quickjs_ui_bundle_counter_page.dart';
 import 'pages/quickjs_ui_counter_page.dart';
 import 'pages/quickjs_ui_controls_page.dart';
 import 'pages/quickjs_ui_custom_components_page.dart';
+import 'pages/quickjs_ui_dev_panel_page.dart';
 import 'pages/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui_host_capabilities_page.dart';
 import 'pages/quickjs_ui_navigation_page.dart';
 import 'pages/quickjs_ui_network_counter_page.dart';
+import 'pages/quickjs_ui_package_demo_page.dart';
 import 'pages/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui_profile_form_page.dart';
+import 'pages/quickjs_ui_network_inspector_page.dart';
 import 'pages/quickjs_ui_scroll_transition_page.dart';
 import 'pages/quickjs_ui_schema_page.dart';
 import 'pages/quickjs_ui_todo_page.dart';
@@ -93,5 +96,20 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
     description:
         '演示 scrollTo key/offset、drag/swipe 事件、SingleChildScrollView 和 keyed 列表项过渡。',
     builder: (_) => const QuickjsUiScrollTransitionPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 0.4.3 开发调试',
+    description: '演示 Inspector 面板、页面快照导出、diff/resource 日志和保留 state 的热重载。',
+    builder: (_) => const QuickjsUiDevPanelPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 网络调试',
+    description: '演示 bundle 网络加载请求列表、缓存命中、耗时和 Inspector 网络面板。',
+    builder: (_) => const QuickjsUiNetworkInspectorPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 0.5 发布包',
+    description: '演示固定包根 main.mjs + manifest.json 的 asset 发布包加载和校验。',
+    builder: (_) => const QuickjsUiPackageDemoPage(),
   ),
 ];

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "quickjs_ui.example.package_demo",
+  "name": "QuickJS UI Package Demo",
+  "version": "1.0.0",
+  "entry": "main.mjs",
+  "modules": {
+    "main.mjs": {
+      "sha256": "c4496f6430944d5f35ba6202892171d346d55d6b23110f56183465c8638b3ae6"
+    },
+    "components/package_summary.mjs": {
+      "sha256": "dc9ccadb6e85488e3c198dd8a7f3edf3f4ed36aeadd2109339c56c162fb2820f"
+    }
+  },
+  "resources": {
+    "assets/logo.png": {
+      "kind": "asset",
+      "mimeType": "image/png",
+      "cacheKey": "package-demo-logo-v1"
+    }
+  },
+  "permissions": [],
+  "cache": {
+    "mode": "versioned"
+  },
+  "metadata": {
+    "description": "Minimal asset package demo for quickjs_ui 0.5"
+  }
+}

@@ -155,13 +155,13 @@ Flutter 风格控件名称。
 
 ### 开发模式与调试
 
-- [ ] 提供 `QuickjsUiDevOptions`：控制 dev reload、error overlay、schema dump、diff log、resource log。
-- [ ] 支持页面热重载：JS 页面、bundle manifest、schema 或资源变化后可 reload 当前页面。
-- [ ] 热重载默认保留 route params / initial props；是否保留 JS state 由 dev option 控制。
-- [ ] error overlay 展示 JS stack、schema path、resource key、route name、当前 action 和 structured error。
-- [ ] 提供 `QuickjsUiInspector`：查看 page name、props、state、当前 UI schema、resource graph、mounted host APIs。
-- [ ] 支持导出当前 page snapshot：props、state、schema、resource manifest 和最近一次 action，方便复现问题。
-- [ ] 支持 rebuild / diff 诊断日志：记录哪些节点刷新、哪些节点因 key/type/props 未变化被跳过。
+- [x] 提供 `QuickjsUiDevOptions`：控制 reload、error overlay、schema dump、diff log、resource/network log。
+- [x] 支持页面热重载：重新加载 loader/plugin，并保留 route params / initial props。
+- [x] 热重载是否保留 JS state 由 `preserveStateOnReload` 控制。
+- [x] error overlay 展示运行时错误；更细的 schema path/resource key/action 关联继续通过 inspector snapshot 补足。
+- [x] 提供 `QuickjsUiInspector`：查看 page name、props、state、当前 UI schema、resource graph、mounted host APIs。
+- [x] 支持导出当前 page snapshot：props、state、schema、resource manifest 和最近一次 action，方便复现问题。
+- [x] 支持 rebuild / diff 诊断日志：记录刷新、复用、无 key 节点和 key 列表。
 
 ### 资源与多文件页面
 
@@ -187,12 +187,13 @@ DOM/CSSOM/WebView。资源加载属于 `quickjs_ui` / 应用层能力，不进�
 
 ### 页面包 Manifest 与缓存
 
-- [ ] 定义 `quickjs_ui_manifest.json`：描述 entry、resources、routes、permissions、version、checksum。
-- [ ] manifest 支持声明页面入口、资源表、相对路径映射、资源 MIME/type、资源 hash 和可选 preload。
-- [ ] 支持 bundle 版本号和资源 checksum 校验，便于 zip/plugin/远程包更新和回滚。
-- [ ] 支持资源缓存策略：asset/plugin 资源按 version/hash 缓存，远程资源按 ETag/max-age/version key 缓存。
-- [ ] 开发模式默认禁用强缓存或提供 cache busting；生产模式按 manifest version 和 checksum 命中缓存。
-- [ ] network bundle 刷新支持 force refresh、conditional refresh、stale-while-revalidate 三种策略。
+- [x] 定义发布包根目录格式：固定包含 `main.mjs` 和 `manifest.json`。
+- [x] `manifest.json` 描述 entry、modules、resources、routes、permissions、version、checksum。
+- [x] manifest 支持声明页面入口、模块表、资源表、相对路径映射、资源 MIME/type、资源 hash 和可选 preload。
+- [x] 支持 bundle 版本号和资源 checksum 校验，便于 zip/plugin/远程包更新和回滚。
+- [x] 支持资源缓存策略：asset/plugin 资源按 version/hash 缓存，远程资源按 ETag/max-age/version key 缓存。
+- [x] 开发模式默认禁用强缓存或提供 cache busting；生产模式按 manifest version 和 checksum 命中缓存。
+- [x] network bundle 刷新支持 force refresh、conditional refresh、stale-while-revalidate 三种策略。
 
 ### 主题与布局能力
 
@@ -351,12 +352,12 @@ Flutter 开发者学习成本：
 表单与输入：
 - [x] `TextField`
 - [ ] `TextFormField`
-- [ ] `Checkbox`
-- [ ] `Switch`
-- [ ] `Radio`
-- [ ] `Slider`
-- [ ] `DropdownButton`
-- [ ] `Form`
+- [x] `Checkbox`
+- [x] `Switch`
+- [x] `Radio`
+- [x] `Slider`
+- [x] `DropdownButton`
+- [x] `Form`
 
 导航与页面结构：
 - [ ] `Scaffold`
@@ -603,25 +604,50 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 
 依赖 0.4.1 的 schema/生命周期/兼容性基线，再补开发期观测与复现能力。
 
-- [ ] `QuickjsUiDevOptions`：dev reload、error overlay、schema dump、diff/resource log。
-- [ ] `QuickjsUiInspector`：查看 page、props、state、schema、resource graph、host APIs。
-- [ ] 支持导出 page snapshot，包含 props、state、schema、manifest 和最近一次 action。
-- [ ] inspector 记录 lifecycle timeline，包含 route/app/widget 生命周期事件顺序。
-- [ ] example：开发调试面板。
-- [ ] 测试：snapshot 序列化、diff log、lifecycle timeline、error overlay 信息完整性。
+- [x] `QuickjsUiDevOptions`：dev reload、error overlay、schema dump、diff/resource log。
+- [x] `QuickjsUiInspector`：查看 page、props、state、schema、resource graph、host APIs。
+- [x] 支持导出 page snapshot，包含 props、state、schema、manifest 和最近一次 action。
+- [x] inspector 记录 lifecycle timeline，包含 route/app/widget 生命周期事件顺序。
+- [x] example：开发调试面板。
+- [x] 测试：snapshot 序列化、diff log、lifecycle timeline、error overlay 信息完整性。
+
+### 0.4.3.x：网络 Inspector
+
+- [x] `QuickjsUiNetworkRecord` / `QuickjsUiNetworkJournal`：统一记录 bundle 加载与 host `network()` 请求。
+- [x] `QuickjsUiNetworkLoader` 日志补充 `id`、耗时、`bodyBytes`、错误信息。
+- [x] `QuickjsUiInspectorPanel` 新增「网络」Tab，展示请求方法、URL、状态码、耗时与缓存命中。
+- [x] `QuickjsUiController.instrumentHostHandlers()`：自动记录 JS 宿主网络 API 调用。
+- [x] example：网络调试页（需本地 dev server）。
+- [x] 测试：journal 合并、host 请求记录、snapshot 导出。
 
 ### 0.5：页面包发布格式
 
-- [ ] 定义 `quickjs_ui_manifest.json`。
-- [ ] 支持 entry/resources/routes/permissions/version/checksum。
-- [ ] 支持 asset/plugin zip/远程 bundle 的统一加载和缓存策略。
-- [ ] `QuickjsUiNetworkLoader`：补充持久缓存策略和 checksum 校验（从 0.2 延期）。
-- [ ] 支持开发模式 cache busting 和生产模式 version/checksum 缓存。
-- [ ] 支持远程 bundle force refresh、conditional refresh、stale-while-revalidate。
-- [ ] example：zip UI bundle 页面。
-- [ ] 测试：manifest parse、checksum mismatch、cache hit/miss、remote refresh strategy、permission declaration。
+- [x] 定义包根固定格式：`main.mjs` 是运行入口，`manifest.json` 是发布描述。
+- [x] 支持 entry/modules/resources/routes/permissions/version/checksum。
+- [x] 支持 asset/file/network 发布包的统一加载入口，zip 包按同一根目录格式接入。
+- [x] 提供 `dart run quickjs_ui:manifest` 工具，扫描 `.mjs` 并生成/检查 module sha256。
+- [x] `QuickjsUiNetworkLoader`：发布包模块 checksum 校验与 ETag 条件请求。
+- [x] 支持开发模式 force refresh cache busting。
+- [x] 支持远程 bundle force refresh、conditional refresh、stale-while-revalidate。
+- [x] 补充持久缓存策略：内存/file cache store，生产应用可自定义淘汰和迁移策略。
+- [x] example：asset / zip / network 发布包页面（`main.mjs` + `manifest.json`）。
+- [x] 测试：manifest parse、checksum mismatch、cache hit/miss、remote refresh strategy、permission declaration。
 
-### 0.6：页面包保护评估（可放弃）
+### 0.6：基础控件补齐与真实 Demo
+
+0.5 固定页面包发布/加载边界后，先补齐常用基础控件，再用真实 demo 找事件、布局、生命周期和资源问题。
+这一阶段优先做实际业务页面会用到的控件，不追求一次覆盖 Flutter 全量 Widget。
+
+- [ ] 布局与定位：`Positioned`、`Align`、`Expanded`、`Flexible`、`Spacer`、`Wrap`、`AspectRatio`、`ConstrainedBox`、`SafeArea`。
+- [ ] 展示与内容：`Icon`、`Divider`、`Card`、`ClipRRect`、`DecoratedBox`；`RichText/TextSpan` 视 demo 需要决定。
+- [ ] 按钮与点击：`TextButton`、`OutlinedButton`、`IconButton`、`InkWell`；`FloatingActionButton` 视 Scaffold/AppBar 阶段决定。
+- [ ] 滚动与列表：`GridView`、`PageView`、`RefreshIndicator`。
+- [ ] 页面结构：`Scaffold`、`AppBar`、`BottomNavigationBar`、`TabBar/TabBarView`、`Drawer`。
+- [ ] 反馈与状态：`CircularProgressIndicator`、`LinearProgressIndicator`、`SnackBar`、`AlertDialog`、`BottomSheet`。
+- [ ] 动画补齐：`AnimatedAlign`、`AnimatedSwitcher`；已有 `Container/Padding` 隐式动画继续收敛 schema。
+- [ ] Demo 驱动验证：至少做表单页、列表/详情页、导航页、网络资源页、设置页或 dashboard 中的 2-3 个，边开发边补缺口。
+
+### 0.7：页面包保护评估（可放弃）
 
 在 manifest、checksum、缓存和权限模型稳定后，再重新评估页面包加密/混淆是否值得做。该能力只作为发布保护候选项：
 如果实现成本、调试成本、密钥管理风险或实际收益不匹配，可以明确不做。
@@ -633,7 +659,17 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 - [ ] `quickjs_ui_dev_server.dart` 保持默认明文开发；如需要，只增加 `prod-preview`/`encrypted` 模式模拟生产包。
 - [ ] 测试候选：obfuscated bundle load、encrypted resource decode、checksum mismatch、missing key、wrong key、dev 明文模式。
 
-### 0.6+：可选 DSL
+### 0.8：逻辑断点与高级调试（暂缓）
+
+依赖 0.4.3 的 Inspector / snapshot 基线，也依赖 `quickjs` core 提供真正的 pause/step/debug protocol。
+在 core 协议稳定前，不做“只像调试器的日志面板”，避免后续推倒重做。
+
+- [ ] `dispatch` / `lifecycle` / `host call` 逻辑断点：开发模式遇到指定 action 或 lifecycle 时暂停并展示 snapshot。
+- [ ] Inspector 断点列表面板与单步执行下一次 dispatch。
+- [ ] 向 `quickjs` core 申请：`debugPause` / `debugStep` / 自动 source map 挂载。
+- [ ] 评估 CDP/DAP 或 VS Code 调试适配，不阻塞 0.5/0.6。
+
+### 0.9+：可选 DSL
 
 等 `init/render/dispatch + UiNode schema` 稳定后，再考虑 `.ux` 或 template 语法。DSL 必须编译成
 第一版协议，不成为底层运行模型。

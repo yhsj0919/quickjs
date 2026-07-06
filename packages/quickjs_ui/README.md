@@ -70,6 +70,48 @@ same for local filesystem entries. For manual plugin construction, use
 `QuickjsUiPagePlugin.singleFile(...)`, `QuickjsUiPagePlugin.asset(path: ...)`, or
 `QuickjsUiBundle.asset(path: ...)`.
 
+0.5 发布包格式采用固定包根结构：`main.mjs` 是运行入口，`manifest.json` 是发布描述。
+发布包用于生产分发、远程下发、缓存、checksum 校验和权限声明；开发期多文件加载仍可直接
+从任意 `.mjs` 入口递归解析静态相对 `import`。格式说明见
+[`docs/quickjs_ui_package_format.md`](../../docs/quickjs_ui_package_format.md)。
+
+发布包加载入口：
+
+```dart
+final assetBundle = await QuickjsUiBundle.assetPackage(
+  root: 'assets/quickjs_ui/profile/',
+);
+
+final fileBundle = await QuickjsUiBundle.filePackage(
+  root: 'E:/quickjs_ui/profile',
+);
+
+final networkBundle = await QuickjsUiBundle.networkPackage(
+  root: Uri.parse('https://example.com/quickjs-ui/profile/'),
+  refreshMode: QuickjsUiNetworkRefreshMode.conditional,
+  cacheStore: QuickjsUiFileNetworkCacheStore(
+    directory: Directory('quickjs_ui_cache'),
+  ),
+);
+
+final zipBundle = await QuickjsUiBundle.assetZipPackage(
+  assetKey: 'assets/quickjs_ui/profile.zip',
+);
+```
+
+这三个入口都会读取包根 `manifest.json`，校验 `entry == "main.mjs"`、
+`modules` 声明、静态相对 import 和声明的 `sha256`。
+远程发布包支持三种刷新语义：`conditional` 默认使用 ETag 条件请求，
+`force` 跳过条件请求并可通过 `cacheBuster` 追加开发期查询参数，
+`staleWhileRevalidate` 命中内存缓存时先返回旧内容并在后台刷新。
+
+`manifest.json` 可以用工具生成或更新，避免手写 module hash：
+
+```bash
+dart run quickjs_ui:manifest --root assets/quickjs_ui/profile --id com.example.profile --version 1.0.0
+dart run quickjs_ui:manifest --root assets/quickjs_ui/profile --check
+```
+
 Supported widgets:
 
 - `Text`
@@ -103,6 +145,12 @@ with each event.
 - `example/assets/quickjs_ui/scroll_transition_page.mjs` covers `scrollToKey`,
   drag/swipe event descriptors, `SingleChildScrollView`, and keyed list item
   transitions.
+- `example/assets/quickjs_ui/dev_panel_page.mjs` and
+  `example/lib/pages/quickjs_ui_dev_panel_page.dart` demonstrate
+  `QuickjsUiInspectorPanel`, page snapshot export, diff/resource logging, and
+  state-preserving reload.
+- `example/lib/pages/quickjs_ui_network_inspector_page.dart` demonstrates the
+  network journal tab for bundle loading, cache hits, and request timing.
 - `example/lib/pages/quickjs_ui_custom_components_page.dart` shows a Dart
   `QuickjsUiComponentRegistry` with custom `AppBar` and `Card` renderers.
 - `example/assets/quickjs_ui/counter_page.mjs` is the minimal single-file
