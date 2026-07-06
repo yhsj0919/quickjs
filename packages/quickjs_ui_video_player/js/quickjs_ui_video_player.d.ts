@@ -1,4 +1,4 @@
-import type { JsonValue, QuickjsUiEvent, QuickjsUiNode } from 'quickjs_ui';
+import type { BoxFit, JsonValue, QuickjsUiEvent, QuickjsUiNode } from 'quickjs_ui';
 
 declare module 'quickjs_ui/video_player' {
   export type VideoPlayerEvent = QuickjsUiEvent;
@@ -9,7 +9,8 @@ declare module 'quickjs_ui/video_player' {
     source: string;
     playing?: boolean;
     loop?: boolean;
-    aspectRatio?: number;
+    fit?: BoxFit;
+    backgroundColor?: string | number;
     restartToken?: number;
     seekToken?: number;
     seekPositionMs?: number;

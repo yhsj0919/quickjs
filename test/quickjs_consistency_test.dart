@@ -688,6 +688,51 @@ export function hello(name) {
       );
     });
 
+    test('creates plugins from compiled asset sources', () async {
+      final singleFile = QuickjsPlugin.singleFileCompiledAsset(
+        id: 'compiledAsset1',
+        version: '1.0.0',
+        source: 'export function hello(name) { return "hello " + name; }',
+        exports: const <String>['hello'],
+      );
+      final package = QuickjsPlugin.compiledAssets(
+        manifest: const QuickjsPluginManifest(
+          id: 'compiledAsset2',
+          version: '1.0.0',
+          entry: 'compiledAsset2/main',
+          exports: <String>['hello'],
+        ),
+        modules: const <String, String>{
+          'compiledAsset2/main': '''
+import { suffix } from './helper';
+export function hello(name) {
+  return 'hello ' + name + suffix;
+}
+''',
+          'compiledAsset2/helper': "export const suffix = ' from compiled';",
+        },
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[singleFile.asMount(), package.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[
+          'single',
+        ], pluginId: 'compiledAsset1'),
+        'hello single',
+      );
+      expect(
+        await engine.invokePlugin('hello', const <Object?>[
+          'package',
+        ], pluginId: 'compiledAsset2'),
+        'hello package from compiled',
+      );
+    });
+
     test('creates plugins from zip package bytes', () async {
       final archive = Archive()
         ..addFile(
@@ -924,6 +969,39 @@ export function hello(name) {
       );
     });
 
+    test('creates plugin bundles from compiled manifest sources', () async {
+      final plugin = QuickjsPluginBundle.compiledAssets(
+        manifestJson: jsonEncode(<String, Object?>{
+          'id': 'compiledBundleApi',
+          'version': '1.0.0',
+          'entry': 'compiledBundleApi/main',
+          'exports': <String>['hello'],
+        }),
+        modules: const <String, String>{
+          'compiledBundleApi/main': '''
+import { suffix } from './helper';
+export function hello(name) {
+  return 'hello ' + name + suffix;
+}
+''',
+          'compiledBundleApi/helper':
+              "export const suffix = ' from compiled bundle';",
+        },
+      );
+      final engine = await Quickjs.create(
+        options: QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[plugin.asMount()],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      await engine.validatePlugin(plugin);
+      expect(
+        await engine.invokePlugin('hello', const <Object?>['plugin']),
+        'hello plugin from compiled bundle',
+      );
+    });
+
     test('calls registered plugins as tool names', () async {
       QuickjsPlugin plugin(String id, String label) {
         return QuickjsPlugin.singleFile(
@@ -1153,6 +1231,28 @@ export function readStorage() {
       addTearDown(engine.dispose);
 
       expect(await engine.eval('assetBootstrapValue'), '42');
+    });
+
+    test('creates host scripts from compiled asset sources', () async {
+      final engine = await Quickjs.create(
+        options: const QuickjsRuntimeOptions(
+          mounts: <QuickjsHostMount>[
+            QuickjsHostMount(
+              name: 'compiled-assets',
+              environmentPatches: <QuickjsHostScript>[
+                QuickjsHostScript.compiledAsset(
+                  name: 'asset:compiled-bootstrap.js',
+                  source: 'globalThis.compiledAssetBootstrapValue = 42;',
+                  globals: <String>['compiledAssetBootstrapValue'],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(await engine.eval('compiledAssetBootstrapValue'), '42');
     });
 
     test('creates host global wrappers for Dart providers', () async {

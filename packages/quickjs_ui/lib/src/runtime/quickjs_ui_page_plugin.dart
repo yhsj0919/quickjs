@@ -23,6 +23,25 @@ final class QuickjsUiPagePlugin {
     );
   }
 
+  /// Builds a page plugin from page source embedded in Dart at build time.
+  ///
+  /// This is the synchronous counterpart of [asset].
+  static QuickjsPlugin compiledAsset({
+    required String id,
+    required String source,
+    String version = '0.1.0',
+    String entryName = 'page',
+    List<String> permissions = const <String>[],
+  }) {
+    return singleFile(
+      id: id,
+      version: version,
+      source: source,
+      entryName: entryName,
+      permissions: permissions,
+    );
+  }
+
   static QuickjsPlugin singleFile({
     required String id,
     required String version,

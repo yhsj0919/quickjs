@@ -141,6 +141,61 @@ void main() {
       expect(bundle.permissions, <String>['quickjs_ui.host.navigation']);
     });
 
+    test('loads compiled package sources', () {
+      const mainSource =
+          "import { value } from './feature.mjs';\nexport { value };";
+      const featureSource = 'export const value = 42;';
+      final manifest =
+          '''
+{
+  "schemaVersion": 1,
+  "id": "quickjs_ui.test.compiled",
+  "version": "1.0.0",
+  "entry": "main.mjs",
+  "modules": {
+    "main.mjs": {
+      "sha256": "${quickjsUiSha256Hex(mainSource)}"
+    },
+    "feature.mjs": {
+      "sha256": "${quickjsUiSha256Hex(featureSource)}"
+    }
+  },
+  "permissions": [
+    "quickjs_ui.host.navigation"
+  ]
+}
+''';
+
+      final bundle = QuickjsUiBundle.compiledPackage(
+        manifestSource: manifest,
+        modules: const <String, String>{
+          'main.mjs': mainSource,
+          'feature.mjs': featureSource,
+        },
+        validatePackageRoot: true,
+      );
+
+      expect(bundle.id, 'quickjs_ui.test.compiled');
+      expect(
+        bundle.modules.keys,
+        containsAll(<String>['main.mjs', 'feature.mjs']),
+      );
+      expect(bundle.permissions, <String>['quickjs_ui.host.navigation']);
+    });
+
+    test('creates compiled page plugins', () {
+      final plugin = QuickjsUiPagePlugin.compiledAsset(
+        id: 'quickjs_ui_test_compiled_page',
+        source: 'export default { mount() { return { type: "text" }; } };',
+      );
+
+      expect(plugin.manifest.id, 'quickjs_ui_test_compiled_page');
+      expect(plugin.modules.map((module) => module.specifier), <String>[
+        'quickjs_ui_test_compiled_page/page',
+        'quickjs_ui_test_compiled_page/main',
+      ]);
+    });
+
     test('bundle permissions are passed to plugin manifest', () {
       final bundle = QuickjsUiBundle(
         id: 'quickjs_ui.test.permissions',

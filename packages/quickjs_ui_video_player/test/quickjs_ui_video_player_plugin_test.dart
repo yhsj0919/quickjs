@@ -25,7 +25,8 @@ export default Page({
       source: props.source,
       playing: true,
       loop: true,
-      aspectRatio: 1.5,
+      fit: 'cover',
+      backgroundColor: '#000000',
       onReady: actions.ready(),
       onProgress: actions.progress()
     });
@@ -50,13 +51,52 @@ export default Page({
     expect(node?.props['source'], 'https://example.com/video.mp4');
     expect(node?.props['playing'], isTrue);
     expect(node?.props['loop'], isTrue);
-    expect(node?.props['aspectRatio'], 1.5);
+    expect(node?.props.containsKey('aspectRatio'), isFalse);
+    expect(node?.props['fit'], 'cover');
+    expect(node?.props['backgroundColor'], '#000000');
     expect(node?.props['onReady'], isA<Map<String, Object?>>());
     expect(node?.props['onProgress'], isA<Map<String, Object?>>());
     expect(
       (node?.props['onProgress'] as Map<String, Object?>?)?['throttleMs'],
       250,
     );
+  });
+
+  test('VideoPlayer callbacks are optional', () async {
+    final session = QuickjsUiSession();
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_video_player_optional_callbacks_test',
+        version: '0.1.0',
+        source: '''
+import { Page } from 'quickjs_ui';
+import { VideoPlayer } from 'quickjs_ui/video_player';
+
+export default Page({
+  build(_state, props) {
+    return VideoPlayer({ source: props.source });
+  }
+});
+''',
+      ),
+      initialProps: const <String, Object?>{
+        'source': 'https://example.com/video.mp4',
+      },
+      mounts: const <QuickjsHostMount>[QuickjsUiVideoPlayerPlugin.mount],
+    );
+
+    final props = session.node?.props ?? const <String, Object?>{};
+    expect(session.node?.type, 'VideoPlayer');
+    expect(props['source'], 'https://example.com/video.mp4');
+    expect(props['playing'], isFalse);
+    expect(props['loop'], isFalse);
+    expect(props.containsKey('aspectRatio'), isFalse);
+    expect(props['onReady'], isNull);
+    expect(props['onProgress'], isNull);
+    expect(props['onEnded'], isNull);
+    expect(props['onError'], isNull);
   });
 
   test('video plugin page survives progress storms with togglePlay', () async {
