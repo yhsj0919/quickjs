@@ -201,7 +201,7 @@ DOM/CSSOM/WebView。资源加载属于 `quickjs_ui` / 应用层能力，不进�
 - [x] JS 页面可读取 theme token 并在 schema 中引用，但默认不能直接修改全局 Flutter theme。
 - [ ] 支持暗色模式和宿主 theme 注入；theme 更新后触发受影响节点刷新。
 - [x] 布局控件已补充 `Stack`、`Padding`、`Center`、`SizedBox`。
-- [ ] 布局控件后续补充 `Positioned`、`Expanded`、`Flexible`。
+- [x] 布局控件后续补充 `Positioned`、`Expanded`、`Flexible`。
 - [ ] 表单控件补充 `Form`、`Checkbox`、`Switch`、`Radio`、`DropdownButton`；表单状态和校验规则仍由 JS 控制。
 
 ### 异步数据与状态恢复
@@ -638,14 +638,14 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 0.5 固定页面包发布/加载边界后，先补齐常用基础控件，再用真实 demo 找事件、布局、生命周期和资源问题。
 这一阶段优先做实际业务页面会用到的控件，不追求一次覆盖 Flutter 全量 Widget。
 
-- [ ] 布局与定位：`Positioned`、`Align`、`Expanded`、`Flexible`、`Spacer`、`Wrap`、`AspectRatio`、`ConstrainedBox`、`SafeArea`。
-- [ ] 展示与内容：`Icon`、`Divider`、`Card`、`ClipRRect`、`DecoratedBox`；`RichText/TextSpan` 视 demo 需要决定。
-- [ ] 按钮与点击：`TextButton`、`OutlinedButton`、`IconButton`、`InkWell`；`FloatingActionButton` 视 Scaffold/AppBar 阶段决定。
-- [ ] 滚动与列表：`GridView`、`PageView`、`RefreshIndicator`。
-- [ ] 页面结构：`Scaffold`、`AppBar`、`BottomNavigationBar`、`TabBar/TabBarView`、`Drawer`。
-- [ ] 反馈与状态：`CircularProgressIndicator`、`LinearProgressIndicator`、`SnackBar`、`AlertDialog`、`BottomSheet`。
-- [ ] 动画补齐：`AnimatedAlign`、`AnimatedSwitcher`；已有 `Container/Padding` 隐式动画继续收敛 schema。
-- [ ] Demo 驱动验证：至少做表单页、列表/详情页、导航页、网络资源页、设置页或 dashboard 中的 2-3 个，边开发边补缺口。
+- [x] 布局与定位：`Positioned`、`Align`、`Expanded`、`Flexible`、`Spacer`、`Wrap`、`AspectRatio`、`ConstrainedBox`、`SafeArea`。
+- [x] 展示与内容：`Icon`、`Divider`、`Card`、`ClipRRect`、`DecoratedBox`、`RichText/TextSpan`。
+- [x] 按钮与点击：`TextButton`、`OutlinedButton`、`IconButton`、`InkWell`、`FloatingActionButton`。
+- [x] 滚动与列表：`GridView`、`PageView`、`RefreshIndicator`。
+- [x] 页面结构：`Scaffold`、`AppBar`、`BottomNavigationBar`、`TabBar/TabBarView`、`Drawer`。
+- [x] 反馈与状态：`CircularProgressIndicator`、`LinearProgressIndicator`、`SnackBar`、`AlertDialog`、`BottomSheet`。
+- [x] 动画补齐：`AnimatedAlign`、`AnimatedSwitcher`；已有 `Container/Padding` 隐式动画继续收敛 schema。
+- [x] Demo 驱动验证：已有表单页、导航页、网络资源页、控件页和视频插件页覆盖真实页面场景。
 
 ### 0.7：页面包保护评估（可放弃）
 

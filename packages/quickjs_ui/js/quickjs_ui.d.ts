@@ -232,6 +232,12 @@ export type Axis = 'vertical' | 'horizontal';
 
 export type StackFit = 'loose' | 'expand' | 'passthrough';
 
+export type ClipBehavior =
+  | 'none'
+  | 'hardEdge'
+  | 'antiAlias'
+  | 'antiAliasWithSaveLayer';
+
 export type TextAlign =
   | 'left'
   | 'right'
@@ -471,7 +477,16 @@ export type TextProps = AccessibilityProps & {
 };
 
 export type ButtonProps = AccessibilityProps & {
-  child: QuickjsUiNode;
+  child?: QuickjsUiNode;
+  label?: string;
+  onPressed?: QuickjsUiEvent;
+};
+
+export type IconButtonProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  icon?: string;
+  iconSize?: number;
+  color?: ColorValue;
   onPressed?: QuickjsUiEvent;
 };
 
@@ -480,6 +495,60 @@ export type FlexProps = AccessibilityProps & {
   crossAxisAlignment?: CrossAxisAlignment;
   gap?: SpaceValue;
   children?: QuickjsUiNode[];
+};
+
+export type PositionedProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+  width?: number;
+  height?: number;
+};
+
+export type FlexChildProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  flex?: number;
+  fit?: 'tight' | 'loose';
+};
+
+export type WrapProps = AccessibilityProps & {
+  children?: QuickjsUiNode[];
+  direction?: Axis;
+  alignment?:
+    | 'start'
+    | 'end'
+    | 'center'
+    | 'spaceBetween'
+    | 'spaceAround'
+    | 'spaceEvenly';
+  runAlignment?: WrapProps['alignment'];
+  crossAxisAlignment?: 'start' | 'end' | 'center';
+  spacing?: SpaceValue;
+  runSpacing?: SpaceValue;
+};
+
+export type AspectRatioProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  aspectRatio: number;
+};
+
+export type ConstrainedBoxProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+};
+
+export type SafeAreaProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  left?: boolean;
+  top?: boolean;
+  right?: boolean;
+  bottom?: boolean;
+  minimum?: EdgeInsets;
 };
 
 export type ContainerProps = AccessibilityProps & {
@@ -514,6 +583,29 @@ export type ListViewProps = AccessibilityProps & ScrollableProps & {
   animateItems?: boolean;
   itemTransitionDurationMs?: number;
   itemTransitionCurve?: Curve;
+};
+
+export type GridViewProps = AccessibilityProps & ScrollableProps & {
+  children?: QuickjsUiNode[];
+  scrollDirection?: Axis;
+  shrinkWrap?: boolean;
+  padding?: EdgeInsets;
+  crossAxisCount?: number;
+  childAspectRatio?: number;
+  crossAxisSpacing?: SpaceValue;
+  mainAxisSpacing?: SpaceValue;
+};
+
+export type PageViewProps = AccessibilityProps & ScrollableProps & {
+  children?: QuickjsUiNode[];
+  scrollDirection?: Axis;
+  pageSnapping?: boolean;
+  onPageChanged?: QuickjsUiEvent;
+};
+
+export type RefreshIndicatorProps = AccessibilityProps & {
+  child: QuickjsUiNode;
+  onRefresh?: QuickjsUiEvent;
 };
 
 export type SingleChildScrollViewProps = AccessibilityProps & ScrollableProps & {
@@ -557,10 +649,21 @@ export type PaddingProps = AccessibilityProps & {
   child?: QuickjsUiNode;
 };
 
+export type MarginProps = AccessibilityProps & {
+  margin?: EdgeInsets;
+  padding?: EdgeInsets;
+  value?: EdgeInsets;
+  child?: QuickjsUiNode;
+};
+
 export type CenterProps = AccessibilityProps & {
   child?: QuickjsUiNode;
   widthFactor?: number;
   heightFactor?: number;
+};
+
+export type AlignProps = CenterProps & {
+  alignment?: Alignment;
 };
 
 export type SizedBoxProps = AccessibilityProps & {
@@ -615,12 +718,174 @@ export type DropdownButtonProps = {
   [key: string]: JsonValue | QuickjsUiEvent | QuickjsUiNode | undefined;
 };
 
+export type IconProps = AccessibilityProps & {
+  icon?: string;
+  name?: string;
+  size?: number;
+  color?: ColorValue;
+};
+
+export type DividerProps = AccessibilityProps & {
+  height?: number;
+  thickness?: number;
+  indent?: number;
+  endIndent?: number;
+  color?: ColorValue;
+};
+
+export type CardProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  color?: ColorValue;
+  elevation?: ElevationValue;
+  margin?: EdgeInsets;
+  clipBehavior?: ClipBehavior;
+};
+
+export type DecoratedBoxProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  position?: 'background' | 'foreground';
+  color?: ColorValue;
+  backgroundColor?: ColorValue;
+  decoration?: JsonValue;
+  borderRadius?: BorderRadius;
+  borderColor?: ColorValue;
+  borderWidth?: number;
+};
+
+export type ClipRRectProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  borderRadius?: BorderRadius;
+  clipBehavior?: ClipBehavior;
+};
+
+export type TextSpanValue =
+  | string
+  | { text?: string; style?: TextStyle | ThemeTextStyleToken; children?: TextSpanValue[] };
+
+export type RichTextProps = AccessibilityProps & {
+  text?: string | TextSpanValue[];
+  spans?: TextSpanValue[];
+  textAlign?: TextAlign;
+  style?: TextStyle | ThemeTextStyleToken;
+};
+
+export type ScaffoldProps = AccessibilityProps & {
+  body?: QuickjsUiNode;
+  child?: QuickjsUiNode;
+  appBar?: QuickjsUiNode;
+  drawer?: QuickjsUiNode;
+  bottomNavigationBar?: QuickjsUiNode;
+  floatingActionButton?: QuickjsUiNode;
+  backgroundColor?: ColorValue;
+  tabLength?: number;
+  initialTabIndex?: number;
+};
+
+export type AppBarProps = AccessibilityProps & {
+  title?: QuickjsUiNode;
+  titleText?: string;
+  leading?: QuickjsUiNode;
+  actions?: QuickjsUiNode[];
+  bottom?: QuickjsUiNode;
+  backgroundColor?: ColorValue;
+  foregroundColor?: ColorValue;
+  centerTitle?: boolean;
+  elevation?: ElevationValue;
+};
+
+export type BottomNavigationBarItemProps = {
+  label: string;
+  icon?: QuickjsUiNode;
+  iconName?: string;
+  activeIcon?: QuickjsUiNode;
+  tooltip?: string;
+};
+
+export type BottomNavigationBarProps = AccessibilityProps & {
+  currentIndex?: number;
+  typeMode?: 'fixed' | 'shifting';
+  items: BottomNavigationBarItemProps[];
+  onTap?: QuickjsUiEvent;
+};
+
+export type TabValue =
+  | string
+  | { text?: string; label?: string; icon?: QuickjsUiNode; child?: QuickjsUiNode };
+
+export type TabBarProps = AccessibilityProps & {
+  tabs: TabValue[];
+  isScrollable?: boolean;
+  onTap?: QuickjsUiEvent;
+};
+
+export type TabBarViewProps = AccessibilityProps & {
+  children?: QuickjsUiNode[];
+};
+
+export type DrawerProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+};
+
+export type ProgressIndicatorProps = AccessibilityProps & {
+  value?: number;
+  color?: ColorValue;
+  backgroundColor?: ColorValue;
+  strokeWidth?: number;
+  minHeight?: number;
+};
+
+export type SnackBarProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  content?: string;
+  text?: string;
+  visible?: boolean;
+  durationMs?: number;
+  backgroundColor?: ColorValue;
+};
+
+export type AlertDialogProps = AccessibilityProps & {
+  visible?: boolean;
+  title?: QuickjsUiNode;
+  titleText?: string;
+  content?: QuickjsUiNode;
+  contentText?: string;
+  actions?: QuickjsUiNode[];
+  backgroundColor?: ColorValue;
+};
+
+export type BottomSheetProps = AccessibilityProps & {
+  visible?: boolean;
+  child?: QuickjsUiNode;
+  onClosing?: QuickjsUiEvent;
+  backgroundColor?: ColorValue;
+};
+
+export type AnimatedAlignProps = AlignProps & {
+  durationMs?: number;
+  animationDurationMs?: number;
+  animationCurve?: Curve;
+};
+
+export type AnimatedSwitcherProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  durationMs?: number;
+  animationDurationMs?: number;
+  reverseDurationMs?: number;
+  switchInCurve?: Curve;
+  switchOutCurve?: Curve;
+};
+
 export declare function Text(
   data: string,
   props?: Omit<TextProps, 'data'>
 ): QuickjsUiNode;
 export declare function Text(props: TextProps): QuickjsUiNode;
 export declare function ElevatedButton(props: ButtonProps): QuickjsUiNode;
+export declare function TextButton(props: ButtonProps): QuickjsUiNode;
+export declare function OutlinedButton(props: ButtonProps): QuickjsUiNode;
+export declare function IconButton(props: IconButtonProps): QuickjsUiNode;
+export declare function InkWell(props: AccessibilityProps & { child?: QuickjsUiNode }): QuickjsUiNode;
+export declare function FloatingActionButton(props: IconButtonProps): QuickjsUiNode;
 export declare function Row(props: FlexProps): QuickjsUiNode;
 export declare function Column(props: FlexProps): QuickjsUiNode;
 export declare function Container(props: ContainerProps): QuickjsUiNode;
@@ -629,11 +894,28 @@ export declare function ListView(props: ListViewProps): QuickjsUiNode;
 export declare function SingleChildScrollView(
   props: SingleChildScrollViewProps
 ): QuickjsUiNode;
+export declare function GridView(props: GridViewProps): QuickjsUiNode;
+export declare function PageView(props: PageViewProps): QuickjsUiNode;
+export declare function RefreshIndicator(
+  props: RefreshIndicatorProps
+): QuickjsUiNode;
 export declare function TextField(props: TextFieldProps): QuickjsUiNode;
 export declare function Stack(props: StackProps): QuickjsUiNode;
+export declare function Positioned(props: PositionedProps): QuickjsUiNode;
 export declare function Padding(props: PaddingProps): QuickjsUiNode;
+export declare function Margin(props: MarginProps): QuickjsUiNode;
+export declare function Align(props: AlignProps): QuickjsUiNode;
 export declare function Center(props: CenterProps): QuickjsUiNode;
 export declare function SizedBox(props: SizedBoxProps): QuickjsUiNode;
+export declare function Expanded(props: FlexChildProps): QuickjsUiNode;
+export declare function Flexible(props: FlexChildProps): QuickjsUiNode;
+export declare function Spacer(props?: { flex?: number }): QuickjsUiNode;
+export declare function Wrap(props: WrapProps): QuickjsUiNode;
+export declare function AspectRatio(props: AspectRatioProps): QuickjsUiNode;
+export declare function ConstrainedBox(
+  props: ConstrainedBoxProps
+): QuickjsUiNode;
+export declare function SafeArea(props: SafeAreaProps): QuickjsUiNode;
 export declare function Form(props: FormProps): QuickjsUiNode;
 export declare function Checkbox(props: CheckboxProps): QuickjsUiNode;
 export declare function Switch(props: SwitchProps): QuickjsUiNode;
@@ -642,28 +924,92 @@ export declare function Radio(props: RadioProps): QuickjsUiNode;
 export declare function DropdownButton(
   props: DropdownButtonProps
 ): QuickjsUiNode;
+export declare function Icon(props: IconProps): QuickjsUiNode;
+export declare function Divider(props?: DividerProps): QuickjsUiNode;
+export declare function Card(props: CardProps): QuickjsUiNode;
+export declare function ClipRRect(props: ClipRRectProps): QuickjsUiNode;
+export declare function DecoratedBox(props: DecoratedBoxProps): QuickjsUiNode;
+export declare function RichText(props: RichTextProps): QuickjsUiNode;
+export declare function Scaffold(props: ScaffoldProps): QuickjsUiNode;
+export declare function AppBar(props: AppBarProps): QuickjsUiNode;
+export declare function BottomNavigationBar(
+  props: BottomNavigationBarProps
+): QuickjsUiNode;
+export declare function TabBar(props: TabBarProps): QuickjsUiNode;
+export declare function TabBarView(props: TabBarViewProps): QuickjsUiNode;
+export declare function Drawer(props: DrawerProps): QuickjsUiNode;
+export declare function CircularProgressIndicator(
+  props?: ProgressIndicatorProps
+): QuickjsUiNode;
+export declare function LinearProgressIndicator(
+  props?: ProgressIndicatorProps
+): QuickjsUiNode;
+export declare function SnackBar(props: SnackBarProps): QuickjsUiNode;
+export declare function AlertDialog(props: AlertDialogProps): QuickjsUiNode;
+export declare function BottomSheet(props: BottomSheetProps): QuickjsUiNode;
+export declare function AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
+export declare function AnimatedSwitcher(
+  props: AnimatedSwitcherProps
+): QuickjsUiNode;
 
 export declare const ui: {
   Text(data: string, props?: Omit<TextProps, 'data'>): QuickjsUiNode;
   Text(props: TextProps): QuickjsUiNode;
   ElevatedButton(props: ButtonProps): QuickjsUiNode;
+  TextButton(props: ButtonProps): QuickjsUiNode;
+  OutlinedButton(props: ButtonProps): QuickjsUiNode;
+  IconButton(props: IconButtonProps): QuickjsUiNode;
+  InkWell(props: AccessibilityProps & { child?: QuickjsUiNode }): QuickjsUiNode;
+  FloatingActionButton(props: IconButtonProps): QuickjsUiNode;
   Row(props: FlexProps): QuickjsUiNode;
   Column(props: FlexProps): QuickjsUiNode;
   Container(props: ContainerProps): QuickjsUiNode;
   Image(props: ImageProps): QuickjsUiNode;
   ListView(props: ListViewProps): QuickjsUiNode;
   SingleChildScrollView(props: SingleChildScrollViewProps): QuickjsUiNode;
+  GridView(props: GridViewProps): QuickjsUiNode;
+  PageView(props: PageViewProps): QuickjsUiNode;
+  RefreshIndicator(props: RefreshIndicatorProps): QuickjsUiNode;
   TextField(props: TextFieldProps): QuickjsUiNode;
   Stack(props: StackProps): QuickjsUiNode;
+  Positioned(props: PositionedProps): QuickjsUiNode;
   Padding(props: PaddingProps): QuickjsUiNode;
+  Margin(props: MarginProps): QuickjsUiNode;
+  Align(props: AlignProps): QuickjsUiNode;
   Center(props: CenterProps): QuickjsUiNode;
   SizedBox(props: SizedBoxProps): QuickjsUiNode;
+  Expanded(props: FlexChildProps): QuickjsUiNode;
+  Flexible(props: FlexChildProps): QuickjsUiNode;
+  Spacer(props?: { flex?: number }): QuickjsUiNode;
+  Wrap(props: WrapProps): QuickjsUiNode;
+  AspectRatio(props: AspectRatioProps): QuickjsUiNode;
+  ConstrainedBox(props: ConstrainedBoxProps): QuickjsUiNode;
+  SafeArea(props: SafeAreaProps): QuickjsUiNode;
   Form(props: FormProps): QuickjsUiNode;
   Checkbox(props: CheckboxProps): QuickjsUiNode;
   Switch(props: SwitchProps): QuickjsUiNode;
   Slider(props: SliderProps): QuickjsUiNode;
   Radio(props: RadioProps): QuickjsUiNode;
   DropdownButton(props: DropdownButtonProps): QuickjsUiNode;
+  Icon(props: IconProps): QuickjsUiNode;
+  Divider(props?: DividerProps): QuickjsUiNode;
+  Card(props: CardProps): QuickjsUiNode;
+  ClipRRect(props: ClipRRectProps): QuickjsUiNode;
+  DecoratedBox(props: DecoratedBoxProps): QuickjsUiNode;
+  RichText(props: RichTextProps): QuickjsUiNode;
+  Scaffold(props: ScaffoldProps): QuickjsUiNode;
+  AppBar(props: AppBarProps): QuickjsUiNode;
+  BottomNavigationBar(props: BottomNavigationBarProps): QuickjsUiNode;
+  TabBar(props: TabBarProps): QuickjsUiNode;
+  TabBarView(props: TabBarViewProps): QuickjsUiNode;
+  Drawer(props: DrawerProps): QuickjsUiNode;
+  CircularProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
+  LinearProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
+  SnackBar(props: SnackBarProps): QuickjsUiNode;
+  AlertDialog(props: AlertDialogProps): QuickjsUiNode;
+  BottomSheet(props: BottomSheetProps): QuickjsUiNode;
+  AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
+  AnimatedSwitcher(props: AnimatedSwitcherProps): QuickjsUiNode;
 };
 
 export type QuickjsUiHostApi = {
