@@ -509,6 +509,26 @@ export function ElevatedButton(props) {
   return node('ElevatedButton', props);
 }
 
+export function TextButton(props) {
+  return node('TextButton', props);
+}
+
+export function OutlinedButton(props) {
+  return node('OutlinedButton', props);
+}
+
+export function IconButton(props) {
+  return node('IconButton', props);
+}
+
+export function InkWell(props) {
+  return node('InkWell', props);
+}
+
+export function FloatingActionButton(props) {
+  return node('FloatingActionButton', props);
+}
+
 export function Row(props) {
   return node('Row', props);
 }
@@ -533,6 +553,18 @@ export function SingleChildScrollView(props) {
   return node('SingleChildScrollView', props);
 }
 
+export function GridView(props) {
+  return node('GridView', props);
+}
+
+export function PageView(props) {
+  return node('PageView', props);
+}
+
+export function RefreshIndicator(props) {
+  return node('RefreshIndicator', props);
+}
+
 export function TextField(props) {
   return node('TextField', props);
 }
@@ -541,8 +573,20 @@ export function Stack(props) {
   return node('Stack', props);
 }
 
+export function Positioned(props) {
+  return node('Positioned', props);
+}
+
 export function Padding(props) {
   return node('Padding', props);
+}
+
+export function Margin(props) {
+  return node('Margin', props);
+}
+
+export function Align(props) {
+  return node('Align', props);
 }
 
 export function Center(props) {
@@ -551,6 +595,34 @@ export function Center(props) {
 
 export function SizedBox(props) {
   return node('SizedBox', props);
+}
+
+export function Expanded(props) {
+  return node('Expanded', props);
+}
+
+export function Flexible(props) {
+  return node('Flexible', props);
+}
+
+export function Spacer(props) {
+  return node('Spacer', props);
+}
+
+export function Wrap(props) {
+  return node('Wrap', props);
+}
+
+export function AspectRatio(props) {
+  return node('AspectRatio', props);
+}
+
+export function ConstrainedBox(props) {
+  return node('ConstrainedBox', props);
+}
+
+export function SafeArea(props) {
+  return node('SafeArea', props);
 }
 
 export function Form(props) {
@@ -577,6 +649,82 @@ export function DropdownButton(props) {
   return node('DropdownButton', props);
 }
 
+export function Icon(props) {
+  return node('Icon', props);
+}
+
+export function Divider(props) {
+  return node('Divider', props);
+}
+
+export function Card(props) {
+  return node('Card', props);
+}
+
+export function ClipRRect(props) {
+  return node('ClipRRect', props);
+}
+
+export function DecoratedBox(props) {
+  return node('DecoratedBox', props);
+}
+
+export function RichText(props) {
+  return node('RichText', props);
+}
+
+export function Scaffold(props) {
+  return node('Scaffold', props);
+}
+
+export function AppBar(props) {
+  return node('AppBar', props);
+}
+
+export function BottomNavigationBar(props) {
+  return node('BottomNavigationBar', props);
+}
+
+export function TabBar(props) {
+  return node('TabBar', props);
+}
+
+export function TabBarView(props) {
+  return node('TabBarView', props);
+}
+
+export function Drawer(props) {
+  return node('Drawer', props);
+}
+
+export function CircularProgressIndicator(props) {
+  return node('CircularProgressIndicator', props);
+}
+
+export function LinearProgressIndicator(props) {
+  return node('LinearProgressIndicator', props);
+}
+
+export function SnackBar(props) {
+  return node('SnackBar', props);
+}
+
+export function AlertDialog(props) {
+  return node('AlertDialog', props);
+}
+
+export function BottomSheet(props) {
+  return node('BottomSheet', props);
+}
+
+export function AnimatedAlign(props) {
+  return node('AnimatedAlign', props);
+}
+
+export function AnimatedSwitcher(props) {
+  return node('AnimatedSwitcher', props);
+}
+
 export const ui = {
   Component,
   defineComponent,
@@ -586,21 +734,58 @@ export const ui = {
   eventField,
   Text,
   ElevatedButton,
+  TextButton,
+  OutlinedButton,
+  IconButton,
+  InkWell,
+  FloatingActionButton,
   Row,
   Column,
   Container,
   Image,
   ListView,
   SingleChildScrollView,
+  GridView,
+  PageView,
+  RefreshIndicator,
   TextField,
   Stack,
+  Positioned,
   Padding,
+  Margin,
+  Align,
   Center,
   SizedBox,
+  Expanded,
+  Flexible,
+  Spacer,
+  Wrap,
+  AspectRatio,
+  ConstrainedBox,
+  SafeArea,
   Form,
   Checkbox,
   Switch,
   Slider,
   Radio,
-  DropdownButton
+  DropdownButton,
+  Icon,
+  Divider,
+  Card,
+  ClipRRect,
+  DecoratedBox,
+  RichText,
+  Scaffold,
+  AppBar,
+  BottomNavigationBar,
+  TabBar,
+  TabBarView,
+  Drawer,
+  CircularProgressIndicator,
+  LinearProgressIndicator,
+  SnackBar,
+  AlertDialog,
+  BottomSheet,
+  AnimatedAlign,
+  AnimatedSwitcher
 };

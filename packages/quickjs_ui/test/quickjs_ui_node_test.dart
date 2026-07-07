@@ -1086,6 +1086,258 @@ export default Page({
     expect(find.text('Overlay'), findsOneWidget);
   });
 
+  testWidgets('renders 0.6 built-in controls', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'tabLength': 2,
+      'appBar': <String, Object?>{
+        'type': 'AppBar',
+        'titleText': '0.6',
+        'bottom': <String, Object?>{
+          'type': 'TabBar',
+          'tabs': <Object?>['One', 'Two'],
+        },
+      },
+      'bottomNavigationBar': <String, Object?>{
+        'type': 'BottomNavigationBar',
+        'items': <Object?>[
+          <String, Object?>{'label': 'Home', 'iconName': 'home'},
+          <String, Object?>{'label': 'Settings', 'iconName': 'settings'},
+        ],
+        'onTap': <String, Object?>{'method': 'nav'},
+      },
+      'floatingActionButton': <String, Object?>{
+        'type': 'FloatingActionButton',
+        'icon': 'add',
+        'onPressed': <String, Object?>{'method': 'add'},
+      },
+      'drawer': <String, Object?>{
+        'type': 'Drawer',
+        'child': <String, Object?>{'type': 'Text', 'data': 'Menu'},
+      },
+      'body': <String, Object?>{
+        'type': 'TabBarView',
+        'children': <Object?>[
+          <String, Object?>{
+            'type': 'SingleChildScrollView',
+            'children': <Object?>[
+              <String, Object?>{
+                'type': 'Wrap',
+                'spacing': 4,
+                'children': <Object?>[
+                  <String, Object?>{'type': 'Icon', 'icon': 'home'},
+                  <String, Object?>{'type': 'Divider'},
+                  <String, Object?>{
+                    'type': 'TextButton',
+                    'label': 'text',
+                    'onPressed': <String, Object?>{'method': 'textButton'},
+                  },
+                  <String, Object?>{
+                    'type': 'OutlinedButton',
+                    'label': 'outline',
+                    'onPressed': <String, Object?>{'method': 'outlineButton'},
+                  },
+                  <String, Object?>{
+                    'type': 'IconButton',
+                    'icon': 'search',
+                    'onPressed': <String, Object?>{'method': 'iconButton'},
+                  },
+                ],
+              },
+              <String, Object?>{
+                'type': 'InkWell',
+                'onTap': <String, Object?>{'method': 'ink'},
+                'child': <String, Object?>{'type': 'Text', 'data': 'Tap area'},
+              },
+              <String, Object?>{
+                'type': 'SafeArea',
+                'child': <String, Object?>{
+                  'type': 'SizedBox',
+                  'height': 48,
+                  'child': <String, Object?>{
+                    'type': 'PageView',
+                    'children': <Object?>[
+                      <String, Object?>{'type': 'Text', 'data': 'Page 1'},
+                      <String, Object?>{'type': 'Text', 'data': 'Page 2'},
+                    ],
+                  },
+                },
+              },
+              <String, Object?>{
+                'type': 'SizedBox',
+                'height': 48,
+                'child': <String, Object?>{
+                  'type': 'RefreshIndicator',
+                  'onRefresh': <String, Object?>{'method': 'refresh'},
+                  'child': <String, Object?>{
+                    'type': 'ListView',
+                    'children': <Object?>[
+                      <String, Object?>{'type': 'Text', 'data': 'Refresh row'},
+                    ],
+                  },
+                },
+              },
+              <String, Object?>{
+                'type': 'SizedBox',
+                'height': 36,
+                'child': <String, Object?>{
+                  'type': 'Stack',
+                  'children': <Object?>[
+                    <String, Object?>{
+                      'type': 'Positioned',
+                      'left': 0,
+                      'top': 0,
+                      'child': <String, Object?>{
+                        'type': 'Text',
+                        'data': 'Positioned',
+                      },
+                    },
+                  ],
+                },
+              },
+              <String, Object?>{
+                'type': 'Row',
+                'children': <Object?>[
+                  <String, Object?>{
+                    'type': 'Expanded',
+                    'child': <String, Object?>{'type': 'Text', 'data': 'Exp'},
+                  },
+                  <String, Object?>{
+                    'type': 'Flexible',
+                    'child': <String, Object?>{'type': 'Text', 'data': 'Flex'},
+                  },
+                  <String, Object?>{'type': 'Spacer'},
+                ],
+              },
+              <String, Object?>{
+                'type': 'Margin',
+                'margin': 8,
+                'child': <String, Object?>{
+                  'type': 'Card',
+                  'child': <String, Object?>{
+                    'type': 'ClipRRect',
+                    'borderRadius': 6,
+                    'child': <String, Object?>{
+                      'type': 'DecoratedBox',
+                      'color': '#eeeeee',
+                      'child': <String, Object?>{
+                        'type': 'RichText',
+                        'spans': <Object?>[
+                          'hello ',
+                          <String, Object?>{
+                            'text': 'world',
+                            'style': <String, Object?>{'fontWeight': 700},
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+              <String, Object?>{
+                'type': 'ConstrainedBox',
+                'minHeight': 24,
+                'child': <String, Object?>{
+                  'type': 'AspectRatio',
+                  'aspectRatio': 2,
+                  'child': <String, Object?>{
+                    'type': 'AnimatedAlign',
+                    'alignment': 'center',
+                    'durationMs': 1,
+                    'child': <String, Object?>{
+                      'type': 'CircularProgressIndicator',
+                    },
+                  },
+                },
+              },
+              <String, Object?>{
+                'type': 'AnimatedSwitcher',
+                'durationMs': 1,
+                'child': <String, Object?>{
+                  'type': 'LinearProgressIndicator',
+                  'value': 0.5,
+                },
+              },
+              <String, Object?>{
+                'type': 'AlertDialog',
+                'visible': true,
+                'titleText': 'Dialog',
+                'contentText': 'Content',
+              },
+              <String, Object?>{
+                'type': 'SnackBar',
+                'visible': true,
+                'content': 'Saved',
+              },
+            ],
+          },
+          <String, Object?>{
+            'type': 'GridView',
+            'crossAxisCount': 2,
+            'children': <Object?>[
+              <String, Object?>{'type': 'Text', 'data': 'A'},
+              <String, Object?>{'type': 'Text', 'data': 'B'},
+            ],
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: events.add).build(node)),
+    );
+
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.byType(TabBarView), findsOneWidget);
+    expect(find.byType(BottomNavigationBar), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.byType(Wrap), findsOneWidget);
+    expect(find.byType(InkWell), findsAtLeastNWidgets(1));
+    expect(find.byType(SafeArea), findsAtLeastNWidgets(1));
+    expect(find.byType(PageView), findsAtLeastNWidgets(1));
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.byType(Positioned), findsOneWidget);
+    expect(find.byType(Expanded), findsAtLeastNWidgets(1));
+    expect(find.byType(Flexible), findsAtLeastNWidgets(1));
+    expect(find.byType(Spacer), findsOneWidget);
+    expect(find.byType(Card), findsOneWidget);
+    expect(find.byType(RichText), findsAtLeastNWidgets(1));
+    expect(find.byType(AnimatedAlign), findsOneWidget);
+    expect(find.byType(AnimatedSwitcher), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
+
+    await tester.pump();
+    expect(find.byType(SnackBar), findsOneWidget);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    expect(events.single['method'], 'add');
+
+    tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(Drawer), findsOneWidget);
+  });
+
+  testWidgets('shows 0.6 bottom sheet control declaratively', (tester) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'BottomSheet',
+        'visible': true,
+        'child': <String, Object?>{'type': 'Text', 'data': 'Sheet'},
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+    );
+    await tester.pump();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Sheet'), findsOneWidget);
+  });
+
   testWidgets('renders basic implicit animation widgets', (tester) async {
     final node = QuickjsUiNode.fromMap(<String, Object?>{
       'type': 'Column',
