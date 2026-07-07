@@ -50,7 +50,7 @@ export default Page({
           onPressed: page.increment()
         }),
         ElevatedButton({
-          child: Text('替换当前 JSUI 子页'),
+          child: Text('替换当前 JSUI 子页（fade 过渡）'),
           onPressed: page.replaceSelf()
         }),
         ElevatedButton({
@@ -71,6 +71,12 @@ export default Page({
     quickjsUiNavigation.replace({
       route: 'quickjs-ui.navigation.child.replaced',
       path: './navigation_child_page.mjs',
+      transition: {
+        type: 'fade',
+        durationMs: 200,
+        reverseDurationMs: 160,
+        curve: 'easeInOut'
+      },
       params: {
         source: 'jsui-child-replaced',
         itemId: props.itemId,
@@ -92,11 +98,12 @@ export default Page({
     logLifecycle('onRouteResult', payload);
   },
 
-  popToDetail(state, _payload, props) {
-    return quickjsUiNavigation.pop({
+  async popToDetail(state, _payload, props) {
+    await quickjsUiNavigation.pop({
       from: 'jsui-child',
       itemId: props.itemId,
       localCount: state.localCount
     });
+    return null;
   }
 });

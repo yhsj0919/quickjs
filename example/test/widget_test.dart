@@ -3,25 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_pages.dart';
-import 'package:quickjs_example/pages/js_call_dart_plugin_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_bundle_counter_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_counter_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_controls_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_custom_components_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_dev_panel_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_diff_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_error_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_host_capabilities_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_navigation_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_network_counter_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_permission_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_profile_form_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_network_inspector_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_scroll_transition_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_schema_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_todo_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui_video_player_plugin_page.dart';
-import 'package:quickjs_example/pages/zip_plugin_page.dart';
+import 'package:quickjs_example/pages/core/js_call_dart_plugin_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_bundle_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_controls_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_custom_components_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_dev_panel_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_diff_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_error_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_host_capabilities_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_navigation_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_network_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_network_inspector_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_permission_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_profile_form_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_schema_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_scroll_transition_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_todo_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_video_player_plugin_page.dart';
+import 'package:quickjs_example/pages/core/zip_plugin_page.dart';
 import 'package:quickjs_example/quickjs_ui_example_pages.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
@@ -399,7 +399,7 @@ void main() {
     expect(find.text('itemId: 42'), findsWidgets);
     expect(find.text('detail count: 0'), findsOneWidget);
     expect(find.text('详情计数 +1'), findsOneWidget);
-    expect(find.text('打开 JSUI 子页'), findsOneWidget);
+    expect(find.textContaining('打开 JSUI 子页'), findsOneWidget);
     expect(find.text('打开原生设置页'), findsOneWidget);
     expect(find.text('打开未注册页面'), findsOneWidget);
 
@@ -407,20 +407,22 @@ void main() {
     await tester.pump();
     await _pumpUntilFound(tester, find.text('detail count: 1'));
 
-    await tester.tap(find.text('打开 JSUI 子页'));
+    await tester.tap(find.textContaining('打开 JSUI 子页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('允许 JSUI 内部跳转？'));
     await tester.tap(find.text('始终允许此页面'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 子页'));
+    await tester.pumpAndSettle();
 
     expect(find.text('JSUI 子页'), findsOneWidget);
     expect(find.text('parent count: 1'), findsOneWidget);
     expect(find.text('child local count: 11'), findsOneWidget);
 
-    await tester.tap(find.text('替换当前 JSUI 子页'));
+    await tester.tap(find.textContaining('替换当前 JSUI 子页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('source: jsui-child-replaced'));
+    await tester.pumpAndSettle();
 
     expect(find.text('JSUI 子页'), findsOneWidget);
     expect(find.text('source: jsui-child-replaced'), findsOneWidget);
@@ -434,19 +436,22 @@ void main() {
     await tester.tap(find.text('返回 JSUI 详情页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 详情页'));
-    await _pumpUntilFound(tester, find.textContaining('jsui-child'));
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(tester, find.textContaining('"from":"jsui-child"'));
 
     expect(find.text('detail count: 1'), findsOneWidget);
     expect(find.textContaining('"from":"jsui-child"'), findsOneWidget);
     expect(find.textContaining('"localCount":41'), findsOneWidget);
 
-    await tester.tap(find.text('打开 JSUI 子页'));
+    await tester.tap(find.textContaining('打开 JSUI 子页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 子页'));
+    await tester.pumpAndSettle();
 
     await tester.pageBack();
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 详情页'));
+    await tester.pumpAndSettle();
 
     expect(find.text('JSUI 子页'), findsNothing);
     expect(find.text('detail count: 1'), findsOneWidget);

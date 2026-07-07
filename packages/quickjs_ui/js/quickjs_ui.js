@@ -665,6 +665,22 @@ export function ClipRRect(props) {
   return node('ClipRRect', props);
 }
 
+export function BackdropFilter(props) {
+  return node('BackdropFilter', props);
+}
+
+export function ImageFilter(props = {}) {
+  return imageFilter('blur', props);
+}
+
+ImageFilter.blur = function blur(props = {}) {
+  return imageFilter('blur', props);
+};
+
+function imageFilter(type, props = {}) {
+  return { type, ...props };
+}
+
 export function DecoratedBox(props) {
   return node('DecoratedBox', props);
 }
@@ -773,6 +789,8 @@ export const ui = {
   Divider,
   Card,
   ClipRRect,
+  BackdropFilter,
+  ImageFilter,
   DecoratedBox,
   RichText,
   Scaffold,

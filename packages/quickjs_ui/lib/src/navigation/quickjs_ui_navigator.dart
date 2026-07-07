@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../resource/quickjs_ui_resource_resolver.dart';
-import '../renderer/quickjs_ui_component_registry.dart';
 import '../runtime/quickjs_ui_controller.dart';
+import '../runtime/quickjs_ui_plugin.dart';
 import '../view/quickjs_ui_view.dart';
 
 typedef QuickjsUiNativeRouteBuilder =
@@ -24,6 +24,7 @@ final class QuickjsUiRouteTransition {
     this.curve = Curves.easeInOut,
     this.beginOffset = const Offset(1, 0),
     this.beginScale = 0.92,
+    this.fade = false,
   });
 
   const QuickjsUiRouteTransition.material()
@@ -53,12 +54,14 @@ final class QuickjsUiRouteTransition {
     Duration? reverseDuration,
     Curve curve = Curves.easeOutCubic,
     Offset beginOffset = const Offset(1, 0),
+    bool fade = false,
   }) : this(
          kind: QuickjsUiRouteTransitionKind.slide,
          duration: duration,
          reverseDuration: reverseDuration,
          curve: curve,
          beginOffset: beginOffset,
+         fade: fade,
        );
 
   const QuickjsUiRouteTransition.scale({
@@ -80,6 +83,7 @@ final class QuickjsUiRouteTransition {
   final Curve curve;
   final Offset beginOffset;
   final double beginScale;
+  final bool fade;
 }
 
 final class QuickjsUiJsRouteRequest {
@@ -156,6 +160,7 @@ final class QuickjsUiAssetRoute {
     this.bundleRoot,
     this.title,
     this.mounts = const <QuickjsHostMount>[],
+    this.uiPlugins = const <QuickjsUiPlugin>[],
     this.transition,
   });
 
@@ -163,6 +168,7 @@ final class QuickjsUiAssetRoute {
   final String? bundleRoot;
   final String? title;
   final List<QuickjsHostMount> mounts;
+  final List<QuickjsUiPlugin> uiPlugins;
   final QuickjsUiRouteTransition? transition;
 }
 
@@ -176,8 +182,8 @@ final class QuickjsUiNavigator {
     String? title,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     QuickjsUiRouteTransition? transition,
-    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     QuickjsUiRouteRegistry? routeRegistry,
   }) {
@@ -191,8 +197,8 @@ final class QuickjsUiNavigator {
           bundleRoot: bundleRoot,
           initialProps: initialProps,
           mounts: mounts,
+          uiPlugins: uiPlugins,
           transition: transition,
-          rendererRegistry: registry,
           onConsole: onConsole,
           routeRegistry: routeRegistry,
         ),
@@ -204,7 +210,7 @@ final class QuickjsUiNavigator {
     BuildContext context, {
     required QuickjsUiRouteRegistry registry,
     required Map<String, Object?> intent,
-    QuickjsUiComponentRegistry? rendererRegistry,
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
   }) {
     final route = _routeName(intent);
     final params = _params(intent['params']);
@@ -228,8 +234,8 @@ final class QuickjsUiNavigator {
         title: jsRoute.title ?? route,
         initialProps: params,
         mounts: jsRoute.mounts,
+        uiPlugins: <QuickjsUiPlugin>[...uiPlugins, ...jsRoute.uiPlugins],
         transition: transition ?? jsRoute.transition,
-        registry: rendererRegistry,
         routeRegistry: registry,
       );
     }
@@ -240,13 +246,13 @@ final class QuickjsUiNavigator {
   navigationHandler(
     BuildContext context,
     QuickjsUiRouteRegistry registry, {
-    QuickjsUiComponentRegistry? rendererRegistry,
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
   }) {
     return (intent) => pushIntent(
       context,
       registry: registry,
       intent: intent,
-      rendererRegistry: rendererRegistry,
+      uiPlugins: uiPlugins,
     );
   }
 }
@@ -256,10 +262,10 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
     required this.path,
     required this.initialProps,
     required this.mounts,
+    required this.uiPlugins,
     this.bundleRoot,
     this.title,
     this.transition,
-    this.rendererRegistry,
     this.onConsole,
     this.routeRegistry,
   });
@@ -269,8 +275,8 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
   final String? title;
   final Map<String, Object?> initialProps;
   final List<QuickjsHostMount> mounts;
+  final List<QuickjsUiPlugin> uiPlugins;
   final QuickjsUiRouteTransition? transition;
-  final QuickjsUiComponentRegistry? rendererRegistry;
   final QuickjsConsoleSink? onConsole;
   final QuickjsUiRouteRegistry? routeRegistry;
 
@@ -283,7 +289,7 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
             bundleRoot: bundleRoot,
             initialProps: initialProps,
             mounts: mounts,
-            registry: rendererRegistry,
+            uiPlugins: uiPlugins,
             onConsole: onConsole,
             loadingBuilder: (_) =>
                 const Center(child: CircularProgressIndicator()),
@@ -294,11 +300,12 @@ class _QuickjsUiAssetRoutePage extends StatelessWidget {
               bundleRoot: bundleRoot,
               title: title,
               mounts: mounts,
+              uiPlugins: uiPlugins,
               transition: transition,
             ),
             initialProps: initialProps,
             registry: routeRegistryValue,
-            rendererRegistry: rendererRegistry,
+            uiPlugins: uiPlugins,
             onConsole: onConsole,
           );
     final routeTitle = title;
@@ -317,14 +324,14 @@ class _QuickjsUiRouter extends StatefulWidget {
     required this.root,
     required this.initialProps,
     required this.registry,
-    this.rendererRegistry,
+    this.uiPlugins = const <QuickjsUiPlugin>[],
     this.onConsole,
   });
 
   final QuickjsUiAssetRoute root;
   final Map<String, Object?> initialProps;
   final QuickjsUiRouteRegistry registry;
-  final QuickjsUiComponentRegistry? rendererRegistry;
+  final List<QuickjsUiPlugin> uiPlugins;
   final QuickjsConsoleSink? onConsole;
 
   @override
@@ -409,17 +416,21 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
       offstage: !visible,
       child: TickerMode(
         enabled: visible,
-        child: QuickjsUiView.asset(
-          key: entry.key,
-          path: entry.route.path,
-          bundleRoot: entry.route.bundleRoot,
-          initialProps: entry.params,
-          mounts: _mountsFor(entry),
-          controller: entry.controller,
-          registry: widget.rendererRegistry,
-          loadingBuilder: (_) =>
-              const Center(child: CircularProgressIndicator()),
-          onFirstRender: () => _routeEnter(entry),
+        child: _QuickjsUiRouteContentReveal(
+          enabled: !overlay && entry.route.transition?.fade == true,
+          onFirstRender: overlay ? null : () => _routeEnter(entry),
+          builder: (context, onFirstRender) => QuickjsUiView.asset(
+            key: entry.key,
+            path: entry.route.path,
+            bundleRoot: entry.route.bundleRoot,
+            initialProps: entry.params,
+            mounts: _mountsFor(entry),
+            uiPlugins: _uiPluginsFor(entry),
+            controller: entry.controller,
+            loadingBuilder: (_) =>
+                const Center(child: CircularProgressIndicator()),
+            onFirstRender: onFirstRender,
+          ),
         ),
       ),
     );
@@ -450,6 +461,10 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
       ...entry.route.mounts,
       _navigationMountFor(entry),
     ];
+  }
+
+  List<QuickjsUiPlugin> _uiPluginsFor(_QuickjsUiRouterEntry entry) {
+    return <QuickjsUiPlugin>[...widget.uiPlugins, ...entry.route.uiPlugins];
   }
 
   QuickjsHostMount _navigationMountFor(_QuickjsUiRouterEntry source) {
@@ -995,6 +1010,80 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
   }
 }
 
+typedef _QuickjsUiRouteContentBuilder =
+    Widget Function(BuildContext context, VoidCallback? onFirstRender);
+
+class _QuickjsUiRouteContentReveal extends StatefulWidget {
+  const _QuickjsUiRouteContentReveal({
+    required this.builder,
+    required this.enabled,
+    this.onFirstRender,
+  });
+
+  final _QuickjsUiRouteContentBuilder builder;
+  final bool enabled;
+  final VoidCallback? onFirstRender;
+
+  @override
+  State<_QuickjsUiRouteContentReveal> createState() =>
+      _QuickjsUiRouteContentRevealState();
+}
+
+class _QuickjsUiRouteContentRevealState
+    extends State<_QuickjsUiRouteContentReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _offset;
+  bool _revealed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 140),
+      value: 1,
+    );
+    final curved = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _opacity = curved;
+    _offset = Tween<Offset>(
+      begin: const Offset(0.02, 0),
+      end: Offset.zero,
+    ).animate(curved);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = widget.builder(context, _handleFirstRender);
+    if (!widget.enabled || !_revealed) {
+      return child;
+    }
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(position: _offset, child: child),
+    );
+  }
+
+  void _handleFirstRender() {
+    widget.onFirstRender?.call();
+    if (!widget.enabled || _revealed || !mounted) {
+      return;
+    }
+    setState(() {
+      _revealed = true;
+      _controller.value = 0;
+    });
+    _controller.forward();
+  }
+}
+
 final class _QuickjsUiRouterTransition {
   const _QuickjsUiRouterTransition({
     required this.entryId,
@@ -1192,13 +1281,17 @@ PageRoute<T> _quickjsUiRoute<T>({
         case QuickjsUiRouteTransitionKind.fade:
           return FadeTransition(opacity: curved, child: child);
         case QuickjsUiRouteTransitionKind.slide:
-          return SlideTransition(
+          final slide = SlideTransition(
             position: Tween<Offset>(
               begin: transition.beginOffset,
               end: Offset.zero,
             ).animate(curved),
             child: child,
           );
+          if (!transition.fade) {
+            return slide;
+          }
+          return FadeTransition(opacity: curved, child: slide);
         case QuickjsUiRouteTransitionKind.scale:
           return ScaleTransition(
             scale: Tween<double>(
@@ -1230,13 +1323,17 @@ Widget _buildJsRouteTransition({
     case QuickjsUiRouteTransitionKind.fade:
       return FadeTransition(opacity: curved, child: child);
     case QuickjsUiRouteTransitionKind.slide:
-      return SlideTransition(
+      final slide = SlideTransition(
         position: Tween<Offset>(
           begin: transition.beginOffset,
           end: Offset.zero,
         ).animate(curved),
         child: child,
       );
+      if (!transition.fade) {
+        return slide;
+      }
+      return FadeTransition(opacity: curved, child: slide);
     case QuickjsUiRouteTransitionKind.scale:
       return ScaleTransition(
         scale: Tween<double>(
@@ -1291,6 +1388,7 @@ QuickjsUiRouteTransition _transitionFromMap(Map<String, Object?> value) {
         reverseDuration: reverseDuration,
         curve: curve,
         beginOffset: _transitionBeginOffset(value),
+        fade: _boolFromTransition(value['fade']),
       );
     case 'scale':
       return QuickjsUiRouteTransition.scale(
@@ -1311,6 +1409,16 @@ Duration? _durationFromMs(Object? value) {
     throw ArgumentError('quickjs_ui transition duration must be >= 0');
   }
   return Duration(milliseconds: value.round());
+}
+
+bool _boolFromTransition(Object? value) {
+  if (value == null) {
+    return false;
+  }
+  if (value is bool) {
+    return value;
+  }
+  throw ArgumentError('quickjs_ui transition fade must be a boolean');
 }
 
 Curve _curveFromName(Object? value) {

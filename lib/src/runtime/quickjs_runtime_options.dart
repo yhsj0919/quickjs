@@ -100,30 +100,39 @@ final class QuickjsHostCapabilities {
   bool get isEmpty => browserGlobals.isEmpty;
 }
 
-/// Startup/bootstrap JavaScript installed into every freshly-created runtime.
+/// 安装到每个新建 runtime 的启动/引导 JavaScript 脚本描述。
 ///
-/// Host scripts are evaluated after the built-in console and explicit host
-/// capabilities are installed. They are also re-evaluated if the runtime is
-/// rebuilt after `stop()`. Use them for opt-in globals or polyfills such as
-/// `crypto`, `Buffer`, `location`, or other application-specific objects.
+/// 宿主脚本在内置 console 与显式宿主能力安装之后执行；runtime 在 `stop()`
+/// 后重建时也会重新执行。适用于注入可选全局对象或 polyfill，例如 `crypto`、
+/// `Buffer`、`location` 或应用自定义对象。
 final class QuickjsHostScript {
+  /// 使用内联 JavaScript 源码创建宿主脚本。
+  ///
+  /// - [name]：QuickJS 堆栈中显示的脚本名称。
+  /// - [source]：要执行的 JavaScript 源码。
+  /// - [globals]：本脚本声明会安装到 `globalThis` 的全局变量名列表。
   const QuickjsHostScript.js({
     required this.name,
     required this.source,
     this.globals = const <String>[],
-  });
+  }) : assetKey = null,
+       bundle = null;
 
-  /// Creates a host script from JavaScript source embedded in Dart at build
-  /// time.
+  /// 使用 Flutter asset 创建宿主脚本描述（同步构造）。
   ///
-  /// Use this when a build step has already converted an asset into a Dart
-  /// constant. Unlike [asset], this constructor is synchronous and can be used
-  /// inside const host mounts.
-  const factory QuickjsHostScript.compiledAsset({
-    required String name,
-    required String source,
-    List<String> globals,
-  }) = QuickjsHostScript.js;
+  /// 可在 mount 列表中直接书写，无需 `await`。asset 内容在 runtime 安装宿主
+  /// 脚本时通过 [loadSource] 延迟加载。
+  ///
+  /// - [name]：QuickJS 堆栈中显示的脚本名称。
+  /// - [assetKey]：脚本所在的 Flutter asset 路径。
+  /// - [bundle]：读取 asset 时使用的 bundle；为 `null` 时使用 [rootBundle]。
+  /// - [globals]：本脚本声明会安装到 `globalThis` 的全局变量名列表。
+  const QuickjsHostScript.asset({
+    required this.name,
+    required this.assetKey,
+    this.bundle,
+    this.globals = const <String>[],
+  }) : source = null;
 
   factory QuickjsHostScript.providerGlobals({
     required String name,
@@ -144,30 +153,38 @@ globalThis[${jsonEncode(globalName)}] = (...args) =>
     );
   }
 
-  static Future<QuickjsHostScript> asset({
-    required String name,
-    required String assetKey,
-    AssetBundle? bundle,
-    List<String> globals = const <String>[],
-  }) async {
-    return QuickjsHostScript.js(
-      name: name,
-      source: await (bundle ?? rootBundle).loadString(assetKey),
-      globals: globals,
-    );
-  }
-
-  /// Source name used in QuickJS stack traces.
+  /// QuickJS 堆栈中使用的脚本 source 名称。
   final String name;
 
-  /// JavaScript source to evaluate in the runtime.
-  final String source;
+  /// 内联 JavaScript 源码；与 [assetKey] 二选一。
+  final String? source;
 
-  /// Global names installed by this script.
+  /// 包含 JavaScript 源码的 Flutter asset 路径。
+  final String? assetKey;
+
+  /// 解析 [assetKey] 时使用的 asset bundle。
+  final AssetBundle? bundle;
+
+  /// 本脚本安装到 `globalThis` 的全局变量名列表。
   ///
-  /// Mount validation rejects duplicate declared globals before rebuilding a
-  /// runtime. Scripts that do not install globals may leave this empty.
+  /// mount 校验会在重建 runtime 前拒绝重复声明的全局名。不安装全局对象的脚本
+  /// 可留空。
   final List<String> globals;
+
+  /// 加载脚本源码：优先返回内联 [source]，否则从 [assetKey] 读取 asset。
+  Future<String> loadSource() async {
+    final inlineSource = source;
+    if (inlineSource != null) {
+      return inlineSource;
+    }
+    final key = assetKey;
+    if (key == null) {
+      throw JsValueConversionException(
+        'QuickJS host script "$name" has no source or assetKey',
+      );
+    }
+    return (bundle ?? rootBundle).loadString(key);
+  }
 }
 
 String _validateHostScriptGlobalName(String name) {
@@ -194,18 +211,39 @@ String _validateHostScriptProviderName(String name) {
   return name;
 }
 
-/// JavaScript module source explicitly registered with a runtime.
+/// 显式注册到 runtime 的 JavaScript 模块描述。
 ///
-/// ES modules are loaded when JavaScript imports [specifier]. CommonJS modules
-/// are loaded when JavaScript requires [specifier] through [Quickjs.evalCommonJs].
+/// ES 模块在 JS `import` [specifier] 时加载；CommonJS 模块在通过
+/// [Quickjs.evalCommonJs] 执行 `require(specifier)` 时加载。
 final class QuickjsHostModule {
+  /// 使用内联源码创建宿主模块。
+  ///
+  /// - [specifier]：JS `import` / `require` 使用的模块标识符。
+  /// - [source]：模块 JavaScript 源码。
+  /// - [format]：模块格式（ES module 或 CommonJS）。
   const QuickjsHostModule({
     required this.specifier,
     required this.source,
     this.format = QuickjsHostModuleFormat.esModule,
-  });
+  }) : assetKey = null,
+       bundle = null;
 
-  /// Creates an ES module host module.
+  /// 使用 Flutter asset 创建宿主模块描述（同步构造）。
+  ///
+  /// asset 源码在 runtime 构建模块图时通过 [loadSource] 延迟加载。
+  ///
+  /// - [specifier]：JS `import` / `require` 使用的模块标识符。
+  /// - [assetKey]：模块源码所在的 Flutter asset 路径。
+  /// - [bundle]：读取 asset 时使用的 bundle。
+  /// - [format]：模块格式（ES module 或 CommonJS）。
+  const QuickjsHostModule.asset({
+    required this.specifier,
+    required this.assetKey,
+    this.bundle,
+    this.format = QuickjsHostModuleFormat.esModule,
+  }) : source = null;
+
+  /// 创建 ES 格式宿主模块（内联源码）。
   const QuickjsHostModule.esModule({
     required String specifier,
     required String source,
@@ -215,7 +253,19 @@ final class QuickjsHostModule {
          format: QuickjsHostModuleFormat.esModule,
        );
 
-  /// Creates a CommonJS host module.
+  /// 创建 ES 格式宿主模块（Flutter asset，同步构造）。
+  const QuickjsHostModule.esModuleAsset({
+    required String specifier,
+    required String assetKey,
+    AssetBundle? bundle,
+  }) : this.asset(
+         specifier: specifier,
+         assetKey: assetKey,
+         bundle: bundle,
+         format: QuickjsHostModuleFormat.esModule,
+       );
+
+  /// 创建 CommonJS 格式宿主模块（内联源码）。
   const QuickjsHostModule.commonJs({
     required String specifier,
     required String source,
@@ -225,14 +275,47 @@ final class QuickjsHostModule {
          format: QuickjsHostModuleFormat.commonJs,
        );
 
-  /// Module specifier used by `import` or `require`.
+  /// 创建 CommonJS 格式宿主模块（Flutter asset，同步构造）。
+  const QuickjsHostModule.commonJsAsset({
+    required String specifier,
+    required String assetKey,
+    AssetBundle? bundle,
+  }) : this.asset(
+         specifier: specifier,
+         assetKey: assetKey,
+         bundle: bundle,
+         format: QuickjsHostModuleFormat.commonJs,
+       );
+
+  /// JS `import` 或 `require` 使用的模块标识符。
   final String specifier;
 
-  /// JavaScript source for the module.
-  final String source;
+  /// 内联模块 JavaScript 源码；与 [assetKey] 二选一。
+  final String? source;
 
-  /// Module format.
+  /// 包含模块源码的 Flutter asset 路径。
+  final String? assetKey;
+
+  /// 解析 [assetKey] 时使用的 asset bundle。
+  final AssetBundle? bundle;
+
+  /// 模块格式（ES module 或 CommonJS）。
   final QuickjsHostModuleFormat format;
+
+  /// 加载模块源码：优先返回内联 [source]，否则从 [assetKey] 读取 asset。
+  Future<String> loadSource() async {
+    final inlineSource = source;
+    if (inlineSource != null) {
+      return inlineSource;
+    }
+    final key = assetKey;
+    if (key == null) {
+      throw JsValueConversionException(
+        'QuickJS host module "$specifier" has no source or assetKey',
+      );
+    }
+    return (bundle ?? rootBundle).loadString(key);
+  }
 }
 
 /// Supported host module source formats.

@@ -183,16 +183,17 @@ void main() {
       expect(bundle.permissions, <String>['quickjs_ui.host.navigation']);
     });
 
-    test('creates compiled page plugins', () {
-      final plugin = QuickjsUiPagePlugin.compiledAsset(
-        id: 'quickjs_ui_test_compiled_page',
+    test('creates page plugins from inline sources', () {
+      final plugin = QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_test_source_page',
+        version: '0.1.0',
         source: 'export default { mount() { return { type: "text" }; } };',
       );
 
-      expect(plugin.manifest.id, 'quickjs_ui_test_compiled_page');
+      expect(plugin.manifest.id, 'quickjs_ui_test_source_page');
       expect(plugin.modules.map((module) => module.specifier), <String>[
-        'quickjs_ui_test_compiled_page/page',
-        'quickjs_ui_test_compiled_page/main',
+        'quickjs_ui_test_source_page/page',
+        'quickjs_ui_test_source_page/main',
       ]);
     });
 

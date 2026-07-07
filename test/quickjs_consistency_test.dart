@@ -647,14 +647,14 @@ export function hello(name) {
 ''',
         'assets/pkg-helper.mjs': "export const suffix = ' from asset';",
       });
-      final singleFile = await QuickjsPlugin.singleFileAsset(
+      final singleFile = QuickjsPlugin.singleFileAsset(
         id: 'asset1',
         version: '1.0.0',
         assetKey: 'assets/plugin-main.mjs',
         exports: const <String>['hello'],
         bundle: bundle,
       );
-      final package = await QuickjsPlugin.asset(
+      final package = QuickjsPlugin.asset(
         manifest: const QuickjsPluginManifest(
           id: 'asset2',
           version: '1.0.0',
@@ -688,28 +688,28 @@ export function hello(name) {
       );
     });
 
-    test('creates plugins from compiled asset sources', () async {
-      final singleFile = QuickjsPlugin.singleFileCompiledAsset(
-        id: 'compiledAsset1',
+    test('creates plugins from inline sources', () async {
+      final singleFile = QuickjsPlugin.singleFile(
+        id: 'source1',
         version: '1.0.0',
         source: 'export function hello(name) { return "hello " + name; }',
         exports: const <String>['hello'],
       );
-      final package = QuickjsPlugin.compiledAssets(
+      final package = QuickjsPlugin.sources(
         manifest: const QuickjsPluginManifest(
-          id: 'compiledAsset2',
+          id: 'source2',
           version: '1.0.0',
-          entry: 'compiledAsset2/main',
+          entry: 'source2/main',
           exports: <String>['hello'],
         ),
         modules: const <String, String>{
-          'compiledAsset2/main': '''
+          'source2/main': '''
 import { suffix } from './helper';
 export function hello(name) {
   return 'hello ' + name + suffix;
 }
 ''',
-          'compiledAsset2/helper': "export const suffix = ' from compiled';",
+          'source2/helper': "export const suffix = ' from source';",
         },
       );
       final engine = await Quickjs.create(
@@ -722,14 +722,14 @@ export function hello(name) {
       expect(
         await engine.invokePlugin('hello', const <Object?>[
           'single',
-        ], pluginId: 'compiledAsset1'),
+        ], pluginId: 'source1'),
         'hello single',
       );
       expect(
         await engine.invokePlugin('hello', const <Object?>[
           'package',
-        ], pluginId: 'compiledAsset2'),
-        'hello package from compiled',
+        ], pluginId: 'source2'),
+        'hello package from source',
       );
     });
 
@@ -969,23 +969,23 @@ export function hello(name) {
       );
     });
 
-    test('creates plugin bundles from compiled manifest sources', () async {
-      final plugin = QuickjsPluginBundle.compiledAssets(
+    test('creates plugin bundles from manifest and module sources', () async {
+      final plugin = QuickjsPluginBundle.sources(
         manifestJson: jsonEncode(<String, Object?>{
-          'id': 'compiledBundleApi',
+          'id': 'sourceBundleApi',
           'version': '1.0.0',
-          'entry': 'compiledBundleApi/main',
+          'entry': 'sourceBundleApi/main',
           'exports': <String>['hello'],
         }),
         modules: const <String, String>{
-          'compiledBundleApi/main': '''
+          'sourceBundleApi/main': '''
 import { suffix } from './helper';
 export function hello(name) {
   return 'hello ' + name + suffix;
 }
 ''',
-          'compiledBundleApi/helper':
-              "export const suffix = ' from compiled bundle';",
+          'sourceBundleApi/helper':
+              "export const suffix = ' from source bundle';",
         },
       );
       final engine = await Quickjs.create(
@@ -998,7 +998,7 @@ export function hello(name) {
       await engine.validatePlugin(plugin);
       expect(
         await engine.invokePlugin('hello', const <Object?>['plugin']),
-        'hello plugin from compiled bundle',
+        'hello plugin from source bundle',
       );
     });
 
@@ -1217,7 +1217,7 @@ export function readStorage() {
       final bundle = _MemoryAssetBundle(<String, String>{
         'assets/bootstrap.js': 'globalThis.assetBootstrapValue = 42;',
       });
-      final script = await QuickjsHostScript.asset(
+      final script = QuickjsHostScript.asset(
         name: 'asset:bootstrap.js',
         assetKey: 'assets/bootstrap.js',
         globals: const <String>['assetBootstrapValue'],
@@ -1233,17 +1233,17 @@ export function readStorage() {
       expect(await engine.eval('assetBootstrapValue'), '42');
     });
 
-    test('creates host scripts from compiled asset sources', () async {
+    test('creates host scripts from inline sources', () async {
       final engine = await Quickjs.create(
         options: const QuickjsRuntimeOptions(
           mounts: <QuickjsHostMount>[
             QuickjsHostMount(
-              name: 'compiled-assets',
+              name: 'inline-sources',
               environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript.compiledAsset(
-                  name: 'asset:compiled-bootstrap.js',
-                  source: 'globalThis.compiledAssetBootstrapValue = 42;',
-                  globals: <String>['compiledAssetBootstrapValue'],
+                QuickjsHostScript.js(
+                  name: 'asset:inline-bootstrap.js',
+                  source: 'globalThis.inlineBootstrapValue = 42;',
+                  globals: <String>['inlineBootstrapValue'],
                 ),
               ],
             ),
@@ -1252,7 +1252,7 @@ export function readStorage() {
       );
       addTearDown(engine.dispose);
 
-      expect(await engine.eval('compiledAssetBootstrapValue'), '42');
+      expect(await engine.eval('inlineBootstrapValue'), '42');
     });
 
     test('creates host global wrappers for Dart providers', () async {

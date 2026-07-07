@@ -1,0 +1,25 @@
+import 'package:flutter/material.dart';
+import 'package:quickjs_ui/quickjs_ui.dart';
+
+/// 资料表单 Demo：受控输入、focus/blur、submit 与预览的实际表单场景。
+class QuickjsUiProfileFormPage extends StatelessWidget {
+  const QuickjsUiProfileFormPage({super.key});
+
+  /// 入口 JS 页面的 Flutter asset 路径。
+  static const String path = 'assets/quickjs_ui/profile_form_page.mjs';
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('QuickJS UI Profile Form')),
+      body: QuickjsUiView.asset(
+        path: path,
+        loadingBuilder: (_) => const Center(child: CircularProgressIndicator()),
+        errorBuilder: (_, error) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: SelectableText('QuickJS UI profile form error: $error'),
+        ),
+      ),
+    );
+  }
+}

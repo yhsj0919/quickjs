@@ -5,6 +5,7 @@ import '../diagnostics/quickjs_ui_diff_stats.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_registry.dart';
+import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
 
 typedef QuickjsUiDiffStatsListener = void Function(QuickjsUiDiffStats stats);
@@ -93,6 +94,13 @@ final class QuickjsUiRenderer {
         reusedKeys: reusedKeys,
       ),
     );
+    if (buildContext != null) {
+      return QuickjsUiOverlayLayer(
+        overlayContext: buildContext,
+        intents: collectQuickjsUiOverlayIntents(node, context),
+        child: widget,
+      );
+    }
     return widget;
   }
 

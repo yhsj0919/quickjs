@@ -4,10 +4,72 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 
+final class _MemoryAssetBundle extends CachingAssetBundle {
+  _MemoryAssetBundle(this.assets);
+
+  final Map<String, String> assets;
+
+  @override
+  Future<ByteData> load(String key) async {
+    final value = assets[key];
+    if (value == null) {
+      throw StateError('Unable to load asset: $key');
+    }
+    final bytes = utf8.encode(value);
+    return ByteData.sublistView(Uint8List.fromList(bytes));
+  }
+}
+
 void main() {
+  test('QuickjsAxiosMount installs Axios asset with Fetch defaults', () async {
+    final bundle = _MemoryAssetBundle(<String, String>{
+      'assets/js/axios.js': '''
+globalThis.axios = {
+  async get(url) {
+    const response = await fetch(url);
+    return { status: response.status, data: await response.text() };
+  }
+};
+''',
+    });
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      expect(request.headers.value('x-axios-mount-test'), 'from-mount');
+      request.response.write('axios mount ok');
+      await request.response.close();
+    });
+
+    final origin = 'http://${server.address.address}:${server.port}';
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(
+        mounts: <QuickjsHostMount>[
+          QuickjsAxiosMount(
+            assetKey: 'assets/js/axios.js',
+            bundle: bundle,
+            allowedOrigins: <String>{origin},
+            defaultHeaders: const <String, String>{
+              'x-axios-mount-test': 'from-mount',
+            },
+          ),
+        ],
+      ),
+    );
+    addTearDown(engine.dispose);
+
+    expect(
+      await engine.evalAsync('''
+const response = await axios.get('$origin/axios');
+return [typeof fetch, response.status, response.data].join('/');
+'''),
+      'function/200/axios mount ok',
+    );
+  });
+
   test('QuickjsFetchMount allows every origin by default', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));

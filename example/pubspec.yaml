@@ -90,6 +90,8 @@ flutter:
     - assets/quickjs_ui/package_demo/main.mjs
     - assets/quickjs_ui/package_demo/manifest.json
     - assets/quickjs_ui/package_demo/components/package_summary.mjs
+    - assets/quickjs_ui/widgets_demo_page.mjs
+    - assets/quickjs_ui/weather_demo_page.mjs
     - assets/quickjs_ui/package_demo.zip
     - assets/plugins/zip_demo.zip
     - web/icons/Icon-192.png

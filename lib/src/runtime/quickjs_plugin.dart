@@ -45,7 +45,15 @@ final class QuickjsPluginManifest {
 
 /// One ES module inside a [QuickjsPlugin].
 final class QuickjsPluginModule {
-  const QuickjsPluginModule({required this.specifier, required this.source});
+  const QuickjsPluginModule({required this.specifier, required this.source})
+    : assetKey = null,
+      bundle = null;
+
+  const QuickjsPluginModule.asset({
+    required this.specifier,
+    required this.assetKey,
+    this.bundle,
+  }) : source = null;
 
   factory QuickjsPluginModule.bytes({
     required String specifier,
@@ -59,7 +67,30 @@ final class QuickjsPluginModule {
   }
 
   final String specifier;
-  final String source;
+  final String? source;
+  final String? assetKey;
+  final AssetBundle? bundle;
+
+  QuickjsHostModule toHostModule() {
+    final inlineSource = source;
+    if (inlineSource != null) {
+      return QuickjsHostModule.esModule(
+        specifier: specifier,
+        source: inlineSource,
+      );
+    }
+    final key = assetKey;
+    if (key == null) {
+      throw JsValueConversionException(
+        'QuickJS plugin module "$specifier" has no source or assetKey',
+      );
+    }
+    return QuickjsHostModule.esModuleAsset(
+      specifier: specifier,
+      assetKey: key,
+      bundle: bundle,
+    );
+  }
 }
 
 /// Explicit plugin package made from a manifest and a module graph.
@@ -100,36 +131,7 @@ final class QuickjsPlugin {
     );
   }
 
-  /// Creates a single-file plugin from JavaScript source embedded in Dart at
-  /// build time.
-  ///
-  /// This is the synchronous counterpart of [singleFileAsset]. A build step can
-  /// read the asset and generate the [source] constant ahead of runtime.
-  factory QuickjsPlugin.singleFileCompiledAsset({
-    required String id,
-    required String version,
-    required String source,
-    required List<String> exports,
-    String? init,
-    String? dispose,
-    List<String> permissions = const <String>[],
-    Map<String, Object?> metadata = const <String, Object?>{},
-    String entryName = 'main',
-  }) {
-    return QuickjsPlugin.singleFile(
-      id: id,
-      version: version,
-      source: source,
-      exports: exports,
-      init: init,
-      dispose: dispose,
-      permissions: permissions,
-      metadata: metadata,
-      entryName: entryName,
-    );
-  }
-
-  static Future<QuickjsPlugin> singleFileAsset({
+  factory QuickjsPlugin.singleFileAsset({
     required String id,
     required String version,
     required String assetKey,
@@ -140,46 +142,52 @@ final class QuickjsPlugin {
     List<String> permissions = const <String>[],
     Map<String, Object?> metadata = const <String, Object?>{},
     String entryName = 'main',
-  }) async {
-    final source = await (bundle ?? rootBundle).loadString(assetKey);
-    return QuickjsPlugin.singleFile(
-      id: id,
-      version: version,
-      source: source,
-      exports: exports,
-      init: init,
-      dispose: dispose,
-      permissions: permissions,
-      metadata: metadata,
-      entryName: entryName,
+  }) {
+    final entry = '$id/$entryName';
+    return QuickjsPlugin(
+      manifest: QuickjsPluginManifest(
+        id: id,
+        version: version,
+        entry: entry,
+        exports: exports,
+        init: init,
+        dispose: dispose,
+        permissions: permissions,
+        metadata: metadata,
+      ),
+      modules: <QuickjsPluginModule>[
+        QuickjsPluginModule.asset(
+          specifier: entry,
+          assetKey: assetKey,
+          bundle: bundle,
+        ),
+      ],
     );
   }
 
-  static Future<QuickjsPlugin> asset({
+  factory QuickjsPlugin.asset({
     required QuickjsPluginManifest manifest,
     required Map<String, String> modules,
     AssetBundle? bundle,
-  }) async {
-    final resolvedBundle = bundle ?? rootBundle;
-    final loadedModules = <QuickjsPluginModule>[];
-    for (final entry in modules.entries) {
-      loadedModules.add(
-        QuickjsPluginModule(
-          specifier: entry.key,
-          source: await resolvedBundle.loadString(entry.value),
-        ),
-      );
-    }
-    return QuickjsPlugin(manifest: manifest, modules: loadedModules);
+  }) {
+    return QuickjsPlugin(
+      manifest: manifest,
+      modules: <QuickjsPluginModule>[
+        for (final entry in modules.entries)
+          QuickjsPluginModule.asset(
+            specifier: entry.key,
+            assetKey: entry.value,
+            bundle: bundle,
+          ),
+      ],
+    );
   }
 
-  /// Creates a multi-module plugin from JavaScript sources embedded in Dart at
-  /// build time.
+  /// Creates a multi-module plugin from inline JavaScript sources.
   ///
-  /// The [modules] map uses module specifiers as keys and JavaScript source as
-  /// values. This is the synchronous counterpart of [asset], whose map values
-  /// are Flutter asset keys.
-  factory QuickjsPlugin.compiledAssets({
+  /// The [modules] map uses module specifiers as keys and JavaScript source
+  /// values.
+  factory QuickjsPlugin.sources({
     required QuickjsPluginManifest manifest,
     required Map<String, String> modules,
   }) {
@@ -201,11 +209,7 @@ final class QuickjsPlugin {
       name: name ?? 'plugin:${manifest.id}',
       plugin: this,
       modules: <QuickjsHostModule>[
-        for (final module in modules)
-          QuickjsHostModule.esModule(
-            specifier: module.specifier,
-            source: module.source,
-          ),
+        for (final module in modules) module.toHostModule(),
       ],
     );
   }

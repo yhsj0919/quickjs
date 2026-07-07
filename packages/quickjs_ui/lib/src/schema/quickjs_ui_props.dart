@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:quickjs/quickjs.dart' show JsUndefined;
 
 typedef QuickjsUiColorResolver = Color? Function(Object? value);
 typedef QuickjsUiTextStyleResolver = TextStyle? Function(Object? value);
@@ -20,7 +21,7 @@ final class QuickjsUiProps {
   }
 
   static Map<String, Object?>? event(Object? value) {
-    if (value == null) {
+    if (value == null || value is JsUndefined) {
       return null;
     }
     if (value is Map) {
