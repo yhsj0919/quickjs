@@ -24,6 +24,8 @@
     <application
         android:label="quickjs_example"
         android:name="${applicationName}"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

@@ -8,9 +8,9 @@ import 'package:video_player/video_player.dart' as native;
 
 const String quickjsUiVideoPlayerModuleSpecifier = 'quickjs_ui/video_player';
 
-/// VideoPlayer 组件对应的内联 ES module 源码。
+/// VideoPlayer 缁勪欢瀵瑰簲鐨勫唴鑱?ES module 婧愮爜銆?
 ///
-/// JS 侧通过 `import { VideoPlayer } from 'quickjs_ui/video_player'` 使用。
+/// JS 渚ч€氳繃 `import { VideoPlayer } from 'quickjs_ui/video_player'` 浣跨敤銆?
 const String quickjsUiVideoPlayerModuleSource = '''
 export function VideoPlayer(props = {}) {
   const key = props.key ?? props.playerKey ?? 'video-player';
@@ -29,6 +29,8 @@ export function VideoPlayer(props = {}) {
     loop: props.loop === true,
     fit: props.fit,
     backgroundColor: props.backgroundColor,
+    showLoading: props.showLoading ?? props.showProgress ?? true,
+    playbackSpeed: props.playbackSpeed ?? 1,
     restartToken: props.restartToken ?? 0,
     seekToken: props.seekToken ?? 0,
     seekPositionMs: props.seekPositionMs ?? 0,
@@ -40,14 +42,14 @@ export function VideoPlayer(props = {}) {
 }
 ''';
 
-/// QuickJS UI 视频播放器的官方插件入口。
+/// QuickJS UI 瑙嗛鎾斁鍣ㄧ殑瀹樻柟鎻掍欢鍏ュ彛銆?
 ///
-/// 对外只暴露 [plugin]：同时包含 JS 模块 mount 与 Flutter `VideoPlayer` 渲染注册。
-/// 在 [QuickjsUiView] 的 `uiPlugins` 中传入即可，无需单独配置 mount 或 registry。
+/// 瀵瑰鍙毚闇?[plugin]锛氬悓鏃跺寘鍚?JS 妯″潡 mount 涓?Flutter `VideoPlayer` 娓叉煋娉ㄥ唽銆?
+/// 鍦?[QuickjsUiView] 鐨?`uiPlugins` 涓紶鍏ュ嵆鍙紝鏃犻渶鍗曠嫭閰嶇疆 mount 鎴?registry銆?
 final class QuickjsUiVideoPlayerPlugin {
   const QuickjsUiVideoPlayerPlugin._();
 
-  /// 内部 JS runtime mount，注册 `quickjs_ui/video_player` 模块。
+  /// 鍐呴儴 JS runtime mount锛屾敞鍐?`quickjs_ui/video_player` 妯″潡銆?
   static const QuickjsHostMount _mount = QuickjsHostMount(
     name: 'quickjs_ui:plugin:video_player',
     modules: <QuickjsHostModule>[
@@ -58,7 +60,7 @@ final class QuickjsUiVideoPlayerPlugin {
     ],
   );
 
-  /// 可直接传给 [QuickjsUiView.uiPlugins] 的 UI 插件实例。
+  /// 鍙洿鎺ヤ紶缁?[QuickjsUiView.uiPlugins] 鐨?UI 鎻掍欢瀹炰緥銆?
   static final QuickjsUiPlugin plugin = QuickjsUiPlugin(
     name: 'quickjs_ui:plugin:video_player',
     mounts: const <QuickjsHostMount>[_mount],
@@ -69,10 +71,10 @@ final class QuickjsUiVideoPlayerPlugin {
     registry.register('VideoPlayer', build);
   }
 
-  /// 将 schema 节点 `type: 'VideoPlayer'` 构建为 Flutter Widget。
+  /// 灏?schema 鑺傜偣 `type: 'VideoPlayer'` 鏋勫缓涓?Flutter Widget銆?
   ///
-  /// - [context]：当前渲染上下文，用于派发事件与读取主题。
-  /// - [node]：解析后的 UI schema 节点。
+  /// - [context]锛氬綋鍓嶆覆鏌撲笂涓嬫枃锛岀敤浜庢淳鍙戜簨浠朵笌璇诲彇涓婚銆?
+  /// - [node]锛氳В鏋愬悗鐨?UI schema 鑺傜偣銆?
   static Widget build(QuickjsUiRenderContext context, QuickjsUiNode node) {
     return _QuickjsUiVideoPlayerHost(context: context, node: node);
   }
@@ -131,6 +133,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     _syncRestart();
     _syncSeek();
     _syncLoop();
+    _syncPlaybackSpeed();
     _syncPlaying();
   }
 
@@ -173,6 +176,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     }
 
     await controller.setLooping(_loopFromNode(widget.node));
+    await _applyPlaybackSpeed(controller, _playbackSpeedFromNode(widget.node));
     controller.addListener(_handleControllerUpdate);
     setState(() {
       _initialized = true;
@@ -235,6 +239,31 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
       return;
     }
     unawaited(controller.setLooping(_loopFromNode(widget.node)));
+  }
+
+  void _syncPlaybackSpeed() {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    final speed = _playbackSpeedFromNode(widget.node);
+    if ((controller.value.playbackSpeed - speed).abs() < 0.001) {
+      return;
+    }
+    unawaited(_applyPlaybackSpeed(controller, speed));
+  }
+
+  Future<void> _applyPlaybackSpeed(
+    native.VideoPlayerController controller,
+    double speed,
+  ) async {
+    try {
+      await controller.setPlaybackSpeed(speed);
+    } catch (error) {
+      if (mounted && identical(_controller, controller)) {
+        _dispatchError('$error');
+      }
+    }
   }
 
   void _syncPlaying({bool force = false}) {
@@ -334,6 +363,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
         return;
       }
       await controller.setLooping(loop);
+      await _applyPlaybackSpeed(controller, _playbackSpeedFromNode(widget.node));
       if (position > Duration.zero) {
         await controller.seekTo(position);
       }
@@ -532,6 +562,19 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     return node.props['loop'] == true;
   }
 
+  double _playbackSpeedFromNode(QuickjsUiNode node) {
+    final value = node.props['playbackSpeed'];
+    if (value == null) {
+      return 1;
+    }
+    if (value is! num || !value.isFinite || value <= 0) {
+      throw const FormatException(
+        'quickjs_ui VideoPlayer.playbackSpeed must be a positive number',
+      );
+    }
+    return value.toDouble();
+  }
+
   BoxFit _fitFromNode(QuickjsUiNode node) {
     return QuickjsUiProps.boxFit(node.props['fit']) ?? BoxFit.contain;
   }
@@ -543,6 +586,19 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
         const Color(0xFF111827);
   }
 
+  bool _showLoadingFromNode(QuickjsUiNode node) {
+    final value = node.props['showLoading'] ?? node.props['showProgress'];
+    if (value == null) {
+      return true;
+    }
+    if (value is bool) {
+      return value;
+    }
+    throw const FormatException(
+      'quickjs_ui VideoPlayer.showLoading must be a bool',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -552,7 +608,9 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
         !controller.value.isInitialized) {
       return _QuickjsUiVideoPlayerSurface(
         backgroundColor: backgroundColor,
-        child: const Center(child: CircularProgressIndicator()),
+        child: _showLoadingFromNode(widget.node)
+            ? const Center(child: CircularProgressIndicator())
+            : const SizedBox.shrink(),
       );
     }
     return _QuickjsUiVideoPlayerSurface(

@@ -26,6 +26,7 @@ export default Page({
       loop: true,
       fit: 'cover',
       backgroundColor: '#000000',
+      playbackSpeed: 0.5,
       onReady: actions.ready(),
       onProgress: actions.progress()
     });
@@ -53,6 +54,7 @@ export default Page({
     expect(node?.props.containsKey('aspectRatio'), isFalse);
     expect(node?.props['fit'], 'cover');
     expect(node?.props['backgroundColor'], '#000000');
+    expect(node?.props['playbackSpeed'], 0.5);
     expect(node?.props['onReady'], isA<Map<String, Object?>>());
     expect(node?.props['onProgress'], isA<Map<String, Object?>>());
     expect(
@@ -91,6 +93,7 @@ export default Page({
     expect(props['source'], 'https://example.com/video.mp4');
     expect(props['playing'], isFalse);
     expect(props['loop'], isFalse);
+    expect(props['playbackSpeed'], 1);
     expect(props.containsKey('aspectRatio'), isFalse);
     expect(props['onReady'], isNull);
     expect(props['onProgress'], isNull);

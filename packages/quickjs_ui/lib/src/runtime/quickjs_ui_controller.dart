@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:quickjs/quickjs.dart';
 
@@ -41,6 +43,8 @@ final class QuickjsUiController extends ChangeNotifier {
   QuickjsUiPermissionPolicy? _permissionPolicy;
   bool _loading = false;
   bool _disposed = false;
+  bool _timerPumpRunning = false;
+  Timer? _timerPump;
 
   QuickjsUiSession get session => _session;
   Quickjs? get engine => _session.engine;
@@ -96,6 +100,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _stopTimerPump();
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
@@ -103,6 +108,7 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
+      _startTimerPump();
     } catch (error) {
       if (_disposed) {
         return;
@@ -129,6 +135,7 @@ final class QuickjsUiController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      _stopTimerPump();
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
@@ -136,6 +143,7 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
+      _startTimerPump();
     } catch (error) {
       if (_disposed) {
         return;
@@ -316,7 +324,9 @@ final class QuickjsUiController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      _stopTimerPump();
       await _session.reload();
+      _startTimerPump();
     } catch (error) {
       if (_disposed) {
         return;
@@ -351,6 +361,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _stopTimerPump();
       await _session.loadPlugin(
         plugin,
         initialProps: _initialProps,
@@ -358,6 +369,7 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: _grantedPermissions,
         permissionPolicy: _permissionPolicy,
       );
+      _startTimerPump();
       if (_disposed) {
         return;
       }
@@ -388,8 +400,48 @@ final class QuickjsUiController extends ChangeNotifier {
       return;
     }
     _disposed = true;
+    _stopTimerPump();
     _session.dispose();
     super.dispose();
+  }
+
+  void _startTimerPump() {
+    _timerPump?.cancel();
+    _timerPump = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      unawaited(_pumpTimers());
+    });
+  }
+
+  void _stopTimerPump() {
+    _timerPump?.cancel();
+    _timerPump = null;
+    _timerPumpRunning = false;
+  }
+
+  Future<void> _pumpTimers() async {
+    if (_disposed || _loading || _timerPumpRunning || _session.plugin == null) {
+      return;
+    }
+    _timerPumpRunning = true;
+    try {
+      await _session.pumpTimers();
+      if (_disposed) {
+        return;
+      }
+      notifyListeners();
+    } catch (error) {
+      if (_disposed) {
+        return;
+      }
+      _error = error;
+      inspector.recordError(error);
+      _stopTimerPump();
+      notifyListeners();
+    } finally {
+      if (!_disposed) {
+        _timerPumpRunning = false;
+      }
+    }
   }
 
   void _ensureActive() {

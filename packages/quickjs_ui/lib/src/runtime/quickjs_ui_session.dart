@@ -184,6 +184,26 @@ final class QuickjsUiSession {
     return _enqueue(_refreshImpl);
   }
 
+  Future<void> pumpTimers() {
+    return _enqueue(() async {
+      _ensureActive();
+      final engine = _engine;
+      if (engine == null || _plugin == null) {
+        return;
+      }
+      await engine.evalAsync(
+        'await new Promise((resolve) => setTimeout(resolve, 0)); return null;',
+        name: '<quickjs_ui_timer_pump>',
+        timeout: const Duration(milliseconds: 250),
+      );
+      if (_disposed) {
+        return;
+      }
+      await _syncStateFromJs();
+      await _refreshImpl();
+    });
+  }
+
   Future<void> _refreshImpl() async {
     _ensureActive();
     final result = await _clientCall('commit', const <Object?>[]);

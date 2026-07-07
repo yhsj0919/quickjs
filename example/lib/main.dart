@@ -8,6 +8,9 @@ void main() {
   fvp.registerWith(
     options: const <String, Object>{
       'platforms': <String>['windows', 'macos', 'linux'],
+         'video.decoders': ['BRAW:gpu', 'auto'],
+           // 'maxWidth': 540,
+           // 'maxHeight': 960,
     },
   );
   runApp(const ExampleApp());

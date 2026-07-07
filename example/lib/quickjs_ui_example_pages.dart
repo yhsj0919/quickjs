@@ -141,7 +141,7 @@ final List<ExamplePageSpec> quickjsUiWidgetExamplePages = [
 final List<ExamplePageSpec> quickjsUiIntegratedExamplePages = [
   ExamplePageSpec(
     title: 'QuickJS UI 天气综合 Demo',
-    description: '实际天气卡片场景：城市切换、刷新、当前天气、小时预报和生活提示。',
+    description: '实际天气卡片场景：IP 定位、刷新、当前天气、小时预报和生活提示。',
     builder: (_) => const QuickjsUiWeatherDemoPage(),
   ),
 ];

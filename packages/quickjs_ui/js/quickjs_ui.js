@@ -17,6 +17,7 @@ export function Page(page) {
 
   const methods = pageMethods(page);
   const actions = methodActions(methods);
+  const context = pageContext(methods, dispatchRuntimeEvent);
   const lifecycleHooks = lifecycleHookTypes(page);
   let state;
   let props = {};
@@ -75,7 +76,7 @@ export function Page(page) {
         return commitResult(false);
       }
       const normalized = normalizeDispatchEvent(event);
-      const patch = await hook(state, normalized.data, props, normalized.event);
+      const patch = await hook(state, normalized.data, props, normalized.event, context);
       const nextState = applyStatePatch(state, patch);
       if (nextState == null) {
         return commitResult(false);
@@ -164,7 +165,7 @@ export function Page(page) {
     try {
       while (eventQueue.length > 0) {
         const queued = eventQueue.shift();
-        const patch = dispatchPageMethod(state, queued.event, props, methods, () => {
+        const patch = dispatchPageMethod(state, queued.event, props, methods, context, () => {
           dispatchDepth += 1;
         }, () => {
           dispatchDepth -= 1;
@@ -176,6 +177,15 @@ export function Page(page) {
     } finally {
       drainingEvents = false;
     }
+  }
+
+  function dispatchRuntimeEvent(event) {
+    requireMounted(mounted);
+    eventQueue.push({ event });
+    if (drainingEvents) {
+      return commitResult(false);
+    }
+    return drainEvents();
   }
 
   function applyQueuedPatch(patch) {
@@ -229,7 +239,7 @@ export function eventField(event, name, fallback) {
   return value === undefined ? fallback : value;
 }
 
-function dispatchPageMethod(state, event, props, methods, enter, leave, depth) {
+function dispatchPageMethod(state, event, props, methods, context, enter, leave, depth) {
   if (depth() >= MAX_DISPATCH_DEPTH) {
     throw new RangeError('quickjs_ui dispatch recursion limit exceeded');
   }
@@ -242,7 +252,7 @@ function dispatchPageMethod(state, event, props, methods, enter, leave, depth) {
   enter();
   try {
     return settleDispatchPatch(
-      handler(state, normalized.data, props, normalized.event),
+      handler(state, normalized.data, props, normalized.event, context),
       leave
     );
   } catch (error) {
@@ -498,6 +508,24 @@ function methodActions(methods = {}) {
   return actions;
 }
 
+function pageContext(methods, dispatch) {
+  return {
+    dispatch,
+    call(name, payload) {
+      return dispatch(method(name, payload));
+    },
+    actions: methodDispatchActions(methods, dispatch)
+  };
+}
+
+function methodDispatchActions(methods = {}, dispatch) {
+  const actions = {};
+  for (const name of Object.keys(methods)) {
+    actions[name] = (payload) => dispatch(method(name, payload));
+  }
+  return actions;
+}
+
 export function Text(dataOrProps, props = {}) {
   if (typeof dataOrProps === 'string') {
     return node('Text', { data: dataOrProps, ...props });
@@ -543,6 +571,10 @@ export function Container(props) {
 
 export function Image(props) {
   return node('Image', props);
+}
+
+export function Svg(props) {
+  return node('Svg', props);
 }
 
 export function ListView(props) {
@@ -759,6 +791,7 @@ export const ui = {
   Column,
   Container,
   Image,
+  Svg,
   ListView,
   SingleChildScrollView,
   GridView,

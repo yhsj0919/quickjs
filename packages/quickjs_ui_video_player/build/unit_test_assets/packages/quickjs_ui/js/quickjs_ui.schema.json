@@ -49,6 +49,7 @@
         { "$ref": "#/$defs/column" },
         { "$ref": "#/$defs/container" },
         { "$ref": "#/$defs/image" },
+        { "$ref": "#/$defs/svg" },
         { "$ref": "#/$defs/listView" },
         { "$ref": "#/$defs/singleChildScrollView" },
         { "$ref": "#/$defs/gridView" },
@@ -442,18 +443,69 @@
           "type": "object",
           "anyOf": [
             { "required": ["src"] },
-            { "required": ["source"] }
+            { "required": ["source"] },
+            { "required": ["uri"] },
+            { "required": ["url"] },
+            { "required": ["path"] }
           ],
           "properties": {
             "type": { "const": "Image" },
             "src": { "$ref": "#/$defs/resource" },
             "source": { "$ref": "#/$defs/resource" },
+            "uri": { "$ref": "#/$defs/resource" },
+            "url": { "$ref": "#/$defs/resource" },
+            "path": { "$ref": "#/$defs/resource" },
             "width": { "type": "number" },
             "height": { "type": "number" },
             "fit": {
               "type": "string",
               "enum": ["fill", "contain", "cover", "fitWidth", "fitHeight", "none", "scaleDown"]
-            }
+            },
+            "cacheWidth": { "type": "integer", "minimum": 1 },
+            "cacheHeight": { "type": "integer", "minimum": 1 },
+            "filterQuality": {
+              "type": "string",
+              "enum": ["none", "low", "medium", "high"]
+            },
+            "gaplessPlayback": { "type": "boolean" },
+            "excludeFromSemantics": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "svg": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        {
+          "type": "object",
+          "anyOf": [
+            { "required": ["src"] },
+            { "required": ["source"] },
+            { "required": ["uri"] },
+            { "required": ["url"] },
+            { "required": ["path"] },
+            { "required": ["data"] },
+            { "required": ["string"] },
+            { "required": ["svg"] }
+          ],
+          "properties": {
+            "type": { "const": "Svg" },
+            "src": { "$ref": "#/$defs/resource" },
+            "source": { "$ref": "#/$defs/resource" },
+            "uri": { "$ref": "#/$defs/resource" },
+            "url": { "$ref": "#/$defs/resource" },
+            "path": { "$ref": "#/$defs/resource" },
+            "data": { "type": "string", "minLength": 1 },
+            "string": { "type": "string", "minLength": 1 },
+            "svg": { "type": "string", "minLength": 1 },
+            "width": { "type": "number" },
+            "height": { "type": "number" },
+            "fit": {
+              "type": "string",
+              "enum": ["fill", "contain", "cover", "fitWidth", "fitHeight", "none", "scaleDown"]
+            },
+            "color": { "$ref": "#/$defs/color" },
+            "excludeFromSemantics": { "type": "boolean" }
           }
         }
       ]

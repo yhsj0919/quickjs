@@ -15,6 +15,7 @@ export function VideoPlayer(props = {}) {
     loop: props.loop === true,
     fit: props.fit,
     backgroundColor: props.backgroundColor,
+    playbackSpeed: props.playbackSpeed ?? 1,
     restartToken: props.restartToken ?? 0,
     seekToken: props.seekToken ?? 0,
     seekPositionMs: props.seekPositionMs ?? 0,
