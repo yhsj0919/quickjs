@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import 'quickjs_ui_component_helpers.dart';
 import 'quickjs_ui_render_context.dart';
 
 sealed class QuickjsUiOverlayIntent {
@@ -100,18 +101,22 @@ QuickjsUiOverlayIntent? _dialogIntent(
   if (!_visible(node)) {
     return null;
   }
-  final title = _nodeProp(node.props['title']);
-  final content = _nodeProp(node.props['content']);
+  final title = quickjsUiNodeProp(node.props['title']);
+  final content = quickjsUiNodeProp(node.props['content']);
   return QuickjsUiDialogOverlayIntent(
     signature: jsonEncode(node.toMap()),
     dialog: AlertDialog(
       title: title == null
-          ? _optionalText(QuickjsUiProps.string(node.props['titleText']))
+          ? quickjsUiOptionalText(
+              QuickjsUiProps.string(node.props['titleText']),
+            )
           : context.build(title),
       content: content == null
-          ? _optionalText(QuickjsUiProps.string(node.props['contentText']))
+          ? quickjsUiOptionalText(
+              QuickjsUiProps.string(node.props['contentText']),
+            )
           : context.build(content),
-      actions: _nodeListProp(context, node.props['actions']),
+      actions: quickjsUiNodeListProp(context, node.props['actions']),
       backgroundColor: context.color(node.props['backgroundColor']),
     ),
   );
@@ -139,38 +144,6 @@ QuickjsUiOverlayIntent? _bottomSheetIntent(
 
 bool _visible(QuickjsUiNode node) {
   return QuickjsUiProps.boolValue(node.props['visible']) != false;
-}
-
-QuickjsUiNode? _nodeProp(Object? value) {
-  if (value == null) {
-    return null;
-  }
-  if (value is Map) {
-    return QuickjsUiNode.fromMap(
-      value.map((key, value) => MapEntry<String, Object?>('$key', value)),
-    );
-  }
-  throw const FormatException('quickjs_ui node property must be an object');
-}
-
-List<Widget>? _nodeListProp(QuickjsUiRenderContext context, Object? value) {
-  if (value == null) {
-    return null;
-  }
-  if (value is! List) {
-    throw const FormatException('quickjs_ui node list property must be a list');
-  }
-  return <Widget>[
-    for (final item in value)
-      if (_nodeProp(item) case final node?) context.build(node),
-  ];
-}
-
-Widget? _optionalText(String? value) {
-  if (value == null) {
-    return null;
-  }
-  return Text(value);
 }
 
 void _visitNode(QuickjsUiNode node, void Function(QuickjsUiNode node) visitor) {

@@ -345,6 +345,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   QuickjsUiNetworkLoader? _networkLoader;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
+  int _generation = 0;
   _QuickjsUiAppLifecycleSignal? _lastAppLifecycleSignal;
 
   @override
@@ -409,9 +410,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
       _renderer.dispose();
       _renderer = _createRenderer();
+      _advanceGeneration();
     } else if (oldWidget.uiPlugins != widget.uiPlugins) {
       _renderer.dispose();
       _renderer = _createRenderer();
+      _advanceGeneration();
     }
     if (oldWidget.plugin != widget.plugin ||
         oldWidget._path != widget._path ||
@@ -434,8 +437,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           oldWidget.networkUrl != widget.networkUrl) {
         _networkLoader = null;
       }
-      _reportedFirstRender = false;
-      _reportedShow = false;
       _load();
     }
   }
@@ -445,6 +446,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     WidgetsBinding.instance.removeObserver(this);
     _renderer.dispose();
     _eventIngress.dispose();
+    _advanceGeneration();
     _controller.removeListener(_handleControllerChanged);
     if (_ownsController) {
       _controller.dispose();
@@ -566,35 +568,43 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     if (_reportedFirstRender) {
       return;
     }
+    final generation = _generation;
     _reportedFirstRender = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) {
+      if (!_isCurrentGeneration(generation)) {
         return;
       }
       await _controller.lifecycle('mount');
-      if (!mounted) {
+      if (!_isCurrentGeneration(generation)) {
         return;
       }
-      await _showAfterFirstRender();
-      if (!mounted) {
+      await _showAfterFirstRender(generation);
+      if (!_isCurrentGeneration(generation)) {
         return;
       }
       widget.onFirstRender?.call();
     });
   }
 
-  Future<void> _showAfterFirstRender() async {
-    if (_reportedShow || _controller.plugin == null || _controller.isDisposed) {
+  Future<void> _showAfterFirstRender(int generation) async {
+    if (!_isCurrentGeneration(generation) ||
+        _reportedShow ||
+        _controller.plugin == null ||
+        _controller.isDisposed) {
       return;
     }
     _reportedShow = true;
     await _controller.routeLifecycle('show');
+    if (!_isCurrentGeneration(generation)) {
+      return;
+    }
     _renderer.show();
   }
 
   Future<void> _load() async {
+    final generation = _advanceGeneration();
     try {
-      if (!mounted) {
+      if (!_isCurrentGeneration(generation)) {
         return;
       }
       final plugin = widget.plugin;
@@ -606,6 +616,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           grantedPermissions: widget.grantedPermissions,
           permissionPolicy: widget.permissionPolicy,
         );
+        if (!_isCurrentGeneration(generation)) {
+          return;
+        }
         return;
       }
       await _controller.load(
@@ -616,7 +629,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         permissionPolicy: widget.permissionPolicy,
       );
     } catch (error) {
-      if (mounted) {
+      if (_isCurrentGeneration(generation)) {
         _controller.reportError(error);
       }
     }
@@ -674,6 +687,17 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     if (mounted) {
       setState(() {});
     }
+  }
+
+  int _advanceGeneration() {
+    _generation += 1;
+    _reportedFirstRender = false;
+    _reportedShow = false;
+    return _generation;
+  }
+
+  bool _isCurrentGeneration(int generation) {
+    return mounted && generation == _generation && !_controller.isDisposed;
   }
 }
 

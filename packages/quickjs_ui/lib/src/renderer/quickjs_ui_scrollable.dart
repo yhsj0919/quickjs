@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 
 final class QuickjsUiScrollCommand {
@@ -84,7 +85,7 @@ Widget quickjsUiWrapScrollNotifications({
       final metrics = notification.metrics;
       context.dispatchEvent(
         onScroll,
-        defaultCoalesceKey: _eventKey(node, 'onScroll'),
+        defaultCoalesceKey: quickjsUiEventKey(node, 'onScroll'),
         kind: QuickjsUiEventKind.sample,
         payload: <String, Object?>{
           'pixels': metrics.pixels,
@@ -98,14 +99,6 @@ Widget quickjsUiWrapScrollNotifications({
     },
     child: child,
   );
-}
-
-String _eventKey(QuickjsUiNode node, String prop) {
-  final key = node.props['key'];
-  if (key is String && key.isNotEmpty) {
-    return '${node.type}:$key:$prop';
-  }
-  return '${node.type}:${identityHashCode(node)}:$prop';
 }
 
 final class QuickjsUiScrollableList extends StatefulWidget {

@@ -384,6 +384,26 @@ export default Page({
       expect(secondFocus, containsPair('focusId', 'last-name'));
     });
 
+    testWidgets('text field preserves default editing completion behavior', (
+      tester,
+    ) async {
+      final node = QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'TextField',
+        'value': 'Ada',
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+        ),
+      );
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).onEditingComplete,
+        isNull,
+      );
+    });
+
     testWidgets('text field focus can be driven by schema updates', (
       tester,
     ) async {
@@ -483,6 +503,88 @@ export default Page({
         'hide',
         'dispose',
       ]);
+    });
+
+    test('lifecycle controllers are scoped by tree path and key', () {
+      final events = <String>[];
+      final registry = QuickjsUiComponentRegistry.defaults()
+        ..registerLifecycle<_ProbeComponentController>(
+          'Probe',
+          createController: (node) => _ProbeComponentController(events),
+          build: (context, node, controller) {
+            events.add('build:${node.props['label']}');
+            return Text('${node.props['label']}');
+          },
+        );
+      final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
+
+      QuickjsUiNode tree(String left, String right) {
+        return QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Column',
+          'children': <Object?>[
+            <String, Object?>{
+              'type': 'Container',
+              'key': 'left-parent',
+              'child': <String, Object?>{
+                'type': 'Probe',
+                'key': 'main',
+                'label': left,
+              },
+            },
+            <String, Object?>{
+              'type': 'Container',
+              'key': 'right-parent',
+              'child': <String, Object?>{
+                'type': 'Probe',
+                'key': 'main',
+                'label': right,
+              },
+            },
+          ],
+        });
+      }
+
+      renderer.build(tree('left', 'right'));
+      renderer.build(tree('left2', 'right2'));
+
+      expect(events, <String>[
+        'mount:left',
+        'build:left',
+        'mount:right',
+        'build:right',
+        'update:left->left2',
+        'build:left2',
+        'update:right->right2',
+        'build:right2',
+      ]);
+    });
+
+    test('duplicate sibling keys are rejected', () {
+      final registry = QuickjsUiComponentRegistry.defaults()
+        ..registerLifecycle<_ProbeComponentController>(
+          'Probe',
+          createController: (node) => _ProbeComponentController(<String>[]),
+          build: (context, node, controller) => const SizedBox.shrink(),
+        );
+      final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
+      final node = QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'Column',
+        'children': <Object?>[
+          <String, Object?>{'type': 'Text', 'key': 'duplicate', 'data': 'A'},
+          <String, Object?>{'type': 'Probe', 'key': 'duplicate'},
+        ],
+      });
+
+      expect(
+        () => renderer.build(node),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('duplicate sibling key "duplicate"'),
+          ),
+        ),
+      );
     });
 
     test('custom renderer lifecycle components require stable keys', () {
@@ -716,10 +818,9 @@ export default Page({
         });
         expect(network.kind, QuickjsUiResourceKind.network);
         expect(network.mimeType, 'image/png');
-        expect(
-          network.headers,
-          <String, String>{'Authorization': 'Bearer token'},
-        );
+        expect(network.headers, <String, String>{
+          'Authorization': 'Bearer token',
+        });
         expect(network.isCacheable, isTrue);
 
         expect(

@@ -15,3 +15,4 @@ export 'src/runtime/quickjs_value.dart';
 export 'src/module/quickjs_web_crypto_mount.dart';
 export 'src/module/quickjs_fetch_mount.dart';
 export 'src/module/quickjs_axios_mount.dart';
+export 'src/module/quickjs_websocket_mount.dart';

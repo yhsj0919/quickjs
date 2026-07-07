@@ -23,6 +23,7 @@ import 'pages/core/stream_callback_page.dart';
 import 'pages/core/structured_values_page.dart';
 import 'pages/core/timer_event_loop_page.dart';
 import 'pages/core/web_host_environment_page.dart';
+import 'pages/core/websocket_page.dart';
 import 'pages/core/zip_plugin_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
@@ -169,5 +170,11 @@ final List<ExamplePageSpec> examplePages = [
     title: 'JsCallDart 插件',
     description: '按 flutter_js main2.dart 的方式加载 asset 插件、注册 Dart 方法并运行 test2。',
     builder: (_) => const JsCallDartPluginPage(),
+  ),
+  ExamplePageSpec(
+    title: 'WebSocket',
+    description:
+        '安装 QuickjsWebSocketMount，验证 open/message/close 事件和 Origin 白名单。',
+    builder: (_) => const WebSocketPage(),
   ),
 ];

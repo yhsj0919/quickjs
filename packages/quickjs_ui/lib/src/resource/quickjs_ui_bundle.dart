@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../runtime/quickjs_ui_page_plugin.dart';
+import 'quickjs_ui_file_bytes.dart';
 import 'quickjs_ui_manifest.dart';
 import 'quickjs_ui_network_cache_store.dart';
 import 'quickjs_ui_network_loader.dart';
@@ -151,7 +151,7 @@ final class QuickjsUiBundle {
   }
 
   static Future<QuickjsUiBundle> fileZipPackage({required String path}) async {
-    return zipPackageBytes(await File(path).readAsBytes());
+    return zipPackageBytes(await readQuickjsUiFileBytes(path));
   }
 
   static Future<QuickjsUiBundle> zipPackageBytes(List<int> bytes) async {
