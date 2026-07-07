@@ -4,12 +4,19 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 
+final class _FileAssetBundle extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) async {
+    return ByteData.sublistView(await File(key).readAsBytes());
+  }
+}
+
 void main() {
   test('runs bundled Axios through QuickjsFetchMount XHR', () async {
-    final axiosSource = await File('assets/js/axios.js').readAsString();
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
@@ -35,13 +42,11 @@ void main() {
     final engine = await Quickjs.create(
       options: QuickjsRuntimeOptions(
         mounts: <QuickjsHostMount>[
-          QuickjsFetchMount(allowedOrigins: <String>{origin}),
-        ],
-        environmentPatches: <QuickjsHostScript>[
-          QuickjsHostScript.js(
-            name: 'test:axios.js',
-            source: axiosSource,
-            globals: const <String>['axios'],
+          QuickjsAxiosMount(
+            assetKey: 'assets/js/axios.js',
+            bundle: _FileAssetBundle(),
+            allowedOrigins: <String>{origin},
+            scriptName: 'test:axios.js',
           ),
         ],
       ),

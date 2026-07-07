@@ -3,8 +3,16 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
+
+final class _FileAssetBundle extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) async {
+    return ByteData.sublistView(await File(key).readAsBytes());
+  }
+}
 
 void main() {
   test('js-call-dart plugin axiosGet reads webpage content', () async {
@@ -16,7 +24,6 @@ void main() {
       await request.response.close();
     });
     final origin = 'http://${server.address.address}:${server.port}';
-    final axiosSource = await File('assets/js/axios.js').readAsString();
     final pluginSource = await File(
       'assets/js/js_call_dart_plugin.mjs',
     ).readAsString();
@@ -29,15 +36,13 @@ void main() {
     final engine = await Quickjs.create(
       options: QuickjsRuntimeOptions(
         mounts: <QuickjsHostMount>[
-          QuickjsFetchMount(allowedOrigins: <String>{origin}),
-          plugin.asMount(),
-        ],
-        environmentPatches: <QuickjsHostScript>[
-          QuickjsHostScript.js(
-            name: 'example:axios.js',
-            source: axiosSource,
-            globals: const <String>['axios'],
+          QuickjsAxiosMount(
+            assetKey: 'assets/js/axios.js',
+            bundle: _FileAssetBundle(),
+            allowedOrigins: <String>{origin},
+            scriptName: 'example:axios.js',
           ),
+          plugin.asMount(),
         ],
       ),
     );

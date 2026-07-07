@@ -11,21 +11,28 @@ class ExampleIndexPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('quickjs 示例'),
           bottom: const TabBar(
             tabs: <Widget>[
               Tab(text: 'Core'),
-              Tab(text: 'quickjs_ui'),
+              Tab(text: 'UI'),
+              Tab(text: '综合'),
             ],
           ),
         ),
         body: TabBarView(
           children: <Widget>[
-            _ExamplePageList(pages: examplePages),
-            _ExamplePageList(pages: quickjsUiExamplePages),
+            _ExamplePageList(
+              pages: <ExamplePageSpec>[
+                ...examplePages,
+                ...quickjsUiCoreExamplePages,
+              ],
+            ),
+            _ExamplePageList(pages: quickjsUiWidgetExamplePages),
+            _ExamplePageList(pages: quickjsUiIntegratedExamplePages),
           ],
         ),
       ),

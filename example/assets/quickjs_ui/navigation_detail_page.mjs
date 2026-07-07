@@ -51,7 +51,7 @@ export default Page({
           onPressed: page.increment()
         }),
         ElevatedButton({
-          child: Text('打开 JSUI 子页'),
+          child: Text('打开 JSUI 子页（slide 过渡）'),
           onPressed: page.openJsuiChild()
         }),
         ElevatedButton({
@@ -101,6 +101,14 @@ export default Page({
       const result = await quickjsUiNavigation.push({
         route: 'quickjs-ui.navigation.child',
         path: './navigation_child_page.mjs',
+        transition: {
+          type: 'slide',
+          beginOffset: { dx: 0.16, dy: 0 },
+          fade: true,
+          durationMs: 240,
+          reverseDurationMs: 200,
+          curve: 'easeOutCubic'
+        },
         params: {
           source: 'jsui-detail',
           itemId: props.itemId,
@@ -121,6 +129,13 @@ export default Page({
     try {
       await quickjsUiNavigation.push({
         route: 'quickjs-ui.navigation.missing',
+        transition: {
+          type: 'slide',
+          beginOffset: { dx: 0.16, dy: 0 },
+          fade: true,
+          durationMs: 240,
+          curve: 'easeOutCubic'
+        },
         params: { source: 'jsui-detail' }
       });
       return {
@@ -143,13 +158,17 @@ export default Page({
 
   onRouteResult(state, payload) {
     logLifecycle('onRouteResult', payload);
+    return {
+      result: describe(payload?.result ?? payload)
+    };
   },
 
-  popToNativeList(state, _payload, props) {
-    return quickjsUiNavigation.pop({
+  async popToNativeList(state, _payload, props) {
+    await quickjsUiNavigation.pop({
       from: 'jsui-detail',
       itemId: props.itemId,
       title: props.title
     });
+    return null;
   }
 });

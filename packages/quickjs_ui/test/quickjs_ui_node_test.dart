@@ -1219,17 +1219,25 @@ export default Page({
                     'type': 'ClipRRect',
                     'borderRadius': 6,
                     'child': <String, Object?>{
-                      'type': 'DecoratedBox',
-                      'color': '#eeeeee',
+                      'type': 'BackdropFilter',
+                      'filter': <String, Object?>{
+                        'type': 'blur',
+                        'sigmaX': 8,
+                        'sigmaY': 8,
+                      },
                       'child': <String, Object?>{
-                        'type': 'RichText',
-                        'spans': <Object?>[
-                          'hello ',
-                          <String, Object?>{
-                            'text': 'world',
-                            'style': <String, Object?>{'fontWeight': 700},
-                          },
-                        ],
+                        'type': 'DecoratedBox',
+                        'color': '#eeeeee',
+                        'child': <String, Object?>{
+                          'type': 'RichText',
+                          'spans': <Object?>[
+                            'hello ',
+                            <String, Object?>{
+                              'text': 'world',
+                              'style': <String, Object?>{'fontWeight': 700},
+                            },
+                          ],
+                        },
                       },
                     },
                   },
@@ -1303,6 +1311,8 @@ export default Page({
     expect(find.byType(Flexible), findsAtLeastNWidgets(1));
     expect(find.byType(Spacer), findsOneWidget);
     expect(find.byType(Card), findsOneWidget);
+    expect(find.byType(ClipRRect), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsOneWidget);
     expect(find.byType(RichText), findsAtLeastNWidgets(1));
     expect(find.byType(AnimatedAlign), findsOneWidget);
     expect(find.byType(AnimatedSwitcher), findsOneWidget);
@@ -1336,6 +1346,104 @@ export default Page({
 
     expect(find.byType(BottomSheet), findsOneWidget);
     expect(find.text('Sheet'), findsOneWidget);
+  });
+
+  testWidgets('shows 0.6 feedback overlays without scrolling them into view', (
+    tester,
+  ) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'ListView',
+        'children': <Object?>[
+          <String, Object?>{
+            'type': 'SizedBox',
+            'height': 1200,
+            'child': <String, Object?>{'type': 'Text', 'data': 'Top content'},
+          },
+          <String, Object?>{
+            'type': 'SnackBar',
+            'visible': true,
+            'content': 'Saved',
+          },
+          <String, Object?>{
+            'type': 'AlertDialog',
+            'visible': true,
+            'titleText': 'Dialog',
+            'contentText': 'Overlay content',
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return QuickjsUiRenderer(
+              onEvent: (_) {},
+            ).build(node, buildContext: context);
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Overlay content'), findsOneWidget);
+  });
+
+  testWidgets('hides 0.6 feedback overlays when schema becomes invisible', (
+    tester,
+  ) async {
+    var visible = true;
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+
+    QuickjsUiNode node() {
+      return QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'Scaffold',
+        'body': <String, Object?>{
+          'type': 'Column',
+          'children': <Object?>[
+            <String, Object?>{
+              'type': 'AlertDialog',
+              'visible': visible,
+              'titleText': 'Dialog',
+              'contentText': 'Overlay content',
+            },
+            <String, Object?>{
+              'type': 'BottomSheet',
+              'visible': visible,
+              'child': <String, Object?>{'type': 'Text', 'data': 'Sheet'},
+            },
+          ],
+        },
+      });
+    }
+
+    Widget harness() {
+      return MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return renderer.build(node(), buildContext: context);
+          },
+        ),
+      );
+    }
+
+    await tester.pumpWidget(harness());
+    await tester.pump();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(BottomSheet), findsOneWidget);
+
+    visible = false;
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
   });
 
   testWidgets('renders basic implicit animation widgets', (tester) async {
@@ -2260,14 +2368,18 @@ export default Page({
     expect(find.text('Custom'), findsOneWidget);
   });
 
-  test('QuickjsUiView accepts custom registry', () {
-    final registry = QuickjsUiComponentRegistry.defaults()
-      ..register('Badge', (context, node) {
-        return DecoratedBox(
-          decoration: const BoxDecoration(color: Color(0xffeeeeee)),
-          child: context.child(node) ?? const SizedBox.shrink(),
-        );
-      });
+  test('QuickjsUiView accepts custom UI plugins', () {
+    final uiPlugin = QuickjsUiPlugin(
+      name: 'test:custom-badge',
+      configureRegistry: (registry) {
+        registry.register('Badge', (context, node) {
+          return DecoratedBox(
+            decoration: const BoxDecoration(color: Color(0xffeeeeee)),
+            child: context.child(node) ?? const SizedBox.shrink(),
+          );
+        });
+      },
+    );
     final plugin = QuickjsUiPagePlugin.singleFile(
       id: 'quickjs_ui_custom_registry_view',
       version: '0.4.0',
@@ -2284,9 +2396,59 @@ export default Page({
 });
 ''',
     );
-    final view = QuickjsUiView.plugin(plugin, registry: registry);
+    final view = QuickjsUiView.plugin(
+      plugin,
+      uiPlugins: <QuickjsUiPlugin>[uiPlugin],
+    );
 
-    expect(view.registry, same(registry));
+    expect(view.uiPlugins, <QuickjsUiPlugin>[uiPlugin]);
+  });
+
+  test('QuickjsUiView separates UI plugins from business mounts', () {
+    var configured = false;
+    final uiPlugin = QuickjsUiPlugin(
+      name: 'test:badge-plugin',
+      mounts: const <QuickjsHostMount>[
+        QuickjsHostMount(
+          name: 'test:badge-plugin',
+          modules: <QuickjsHostModule>[
+            QuickjsHostModule.esModule(
+              specifier: 'test/badge',
+              source: '''
+export function Badge(props = {}) {
+  return { type: 'Badge', label: props.label };
+}
+''',
+            ),
+          ],
+        ),
+      ],
+      configureRegistry: (registry) {
+        configured = true;
+        registry.register('Badge', (context, node) {
+          return Text('Badge: ${node.props['label']}');
+        });
+      },
+    );
+    const businessMount = QuickjsHostMount(name: 'test:business');
+    final plugin = QuickjsUiPagePlugin.singleFile(
+      id: 'quickjs_ui_plugin_view',
+      version: '0.6.0',
+      source: 'export default { mount() { return { type: "Text" }; } };',
+    );
+    final view = QuickjsUiView.plugin(
+      plugin,
+      mounts: const <QuickjsHostMount>[businessMount],
+      uiPlugins: <QuickjsUiPlugin>[uiPlugin],
+    );
+    final registry = QuickjsUiComponentRegistry.defaults();
+
+    uiPlugin.configure(registry);
+
+    expect(view.mounts, const <QuickjsHostMount>[businessMount]);
+    expect(view.uiPlugins, <QuickjsUiPlugin>[uiPlugin]);
+    expect(uiPlugin.mounts.single.name, 'test:badge-plugin');
+    expect(configured, isTrue);
   });
 
   test('renderer skips unchanged keyed nodes', () {

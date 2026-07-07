@@ -1236,7 +1236,7 @@ try {
     }
     for (final script in _effectiveHostScripts()) {
       await _runtime.evaluate(
-        script.source,
+        await script.loadSource(),
         name: _validateSourceName(script.name),
       );
     }
@@ -2037,7 +2037,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     Iterable<String> Function(String source) specifiers,
     QuickjsHostModuleFormat format,
   ) async {
-    final configuredModules = _hostModuleSourceMap(format);
+    final configuredModules = await _hostModuleSourceMap(format);
     final loader = _options.moduleLoader;
     final modules = <String, String>{rootName: rootSource};
     final visiting = <String>{};
@@ -2076,7 +2076,9 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     return Map<String, String>.unmodifiable(modules);
   }
 
-  Map<String, String> _hostModuleSourceMap(QuickjsHostModuleFormat format) {
+  Future<Map<String, String>> _hostModuleSourceMap(
+    QuickjsHostModuleFormat format,
+  ) async {
     final configuredModules = _effectiveHostModules();
     if (configuredModules.isEmpty) {
       return const <String, String>{};
@@ -2092,9 +2094,28 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
           'QuickJS host module is registered more than once: $name',
         );
       }
-      modules[name] = module.source;
+      modules[name] = await module.loadSource();
     }
     return Map<String, String>.unmodifiable(modules);
+  }
+
+  void _validateHostModuleNames(QuickjsHostModuleFormat format) {
+    final configuredModules = _effectiveHostModules();
+    if (configuredModules.isEmpty) {
+      return;
+    }
+    final names = <String>{};
+    for (final module in configuredModules) {
+      if (module.format != format) {
+        continue;
+      }
+      final name = _canonicalModuleName(_validateModuleName(module.specifier));
+      if (!names.add(name)) {
+        throw JsValueConversionException(
+          'QuickJS host module is registered more than once: $name',
+        );
+      }
+    }
   }
 
   List<String> _debugModuleNames() {
@@ -2202,8 +2223,8 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       }
     }
 
-    _hostModuleSourceMap(QuickjsHostModuleFormat.esModule);
-    _hostModuleSourceMap(QuickjsHostModuleFormat.commonJs);
+    _validateHostModuleNames(QuickjsHostModuleFormat.esModule);
+    _validateHostModuleNames(QuickjsHostModuleFormat.commonJs);
   }
 
   void _validateMountAgainstLoadedModules(

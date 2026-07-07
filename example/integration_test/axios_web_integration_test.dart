@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:quickjs/quickjs.dart';
@@ -11,20 +10,14 @@ void main() {
     tester,
   ) async {
     expect(kIsWeb, isTrue, reason: 'Run this test with -d chrome');
-    final axiosSource = await rootBundle.loadString('assets/js/axios.js');
     final engine = await Quickjs.create(
       options: QuickjsRuntimeOptions(
         mounts: <QuickjsHostMount>[
-          QuickjsFetchMount(
+          QuickjsAxiosMount(
+            assetKey: 'assets/js/axios.js',
+            scriptName: 'test:axios.js',
             allowedOrigins: const <String>{'https://httpbingo.org'},
             timeout: const Duration(seconds: 15),
-          ),
-        ],
-        environmentPatches: <QuickjsHostScript>[
-          QuickjsHostScript.js(
-            name: 'test:axios.js',
-            source: axiosSource,
-            globals: const <String>['axios'],
           ),
         ],
       ),

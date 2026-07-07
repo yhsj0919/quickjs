@@ -5,38 +5,24 @@ import 'package:quickjs/quickjs.dart';
 final class QuickjsUiPagePlugin {
   const QuickjsUiPagePlugin._();
 
-  static Future<QuickjsPlugin> asset({
+  static QuickjsPlugin asset({
     required String id,
     required String path,
     String version = '0.1.0',
     AssetBundle? bundle,
     String entryName = 'page',
     List<String> permissions = const <String>[],
-  }) async {
-    final source = await (bundle ?? rootBundle).loadString(path);
-    return singleFile(
-      id: id,
-      version: version,
-      source: source,
-      entryName: entryName,
-      permissions: permissions,
-    );
-  }
-
-  /// Builds a page plugin from page source embedded in Dart at build time.
-  ///
-  /// This is the synchronous counterpart of [asset].
-  static QuickjsPlugin compiledAsset({
-    required String id,
-    required String source,
-    String version = '0.1.0',
-    String entryName = 'page',
-    List<String> permissions = const <String>[],
   }) {
-    return singleFile(
+    final pageSpecifier = '$id/$entryName';
+    return _plugin(
       id: id,
       version: version,
-      source: source,
+      pageSpecifier: pageSpecifier,
+      pageModule: QuickjsPluginModule.asset(
+        specifier: pageSpecifier,
+        assetKey: path,
+        bundle: bundle,
+      ),
       entryName: entryName,
       permissions: permissions,
     );
@@ -50,6 +36,24 @@ final class QuickjsUiPagePlugin {
     List<String> permissions = const <String>[],
   }) {
     final pageSpecifier = '$id/$entryName';
+    return _plugin(
+      id: id,
+      version: version,
+      pageSpecifier: pageSpecifier,
+      pageModule: QuickjsPluginModule(specifier: pageSpecifier, source: source),
+      entryName: entryName,
+      permissions: permissions,
+    );
+  }
+
+  static QuickjsPlugin _plugin({
+    required String id,
+    required String version,
+    required String pageSpecifier,
+    required QuickjsPluginModule pageModule,
+    required String entryName,
+    required List<String> permissions,
+  }) {
     final adapterSpecifier = '$id/main';
     return QuickjsPlugin(
       manifest: QuickjsPluginManifest(
@@ -69,7 +73,7 @@ final class QuickjsUiPagePlugin {
         permissions: permissions,
       ),
       modules: <QuickjsPluginModule>[
-        QuickjsPluginModule(specifier: pageSpecifier, source: source),
+        pageModule,
         QuickjsPluginModule(
           specifier: adapterSpecifier,
           source: adapterSource(pageSpecifier),

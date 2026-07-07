@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../resource/quickjs_ui_resource.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_scrollable.dart';
 
@@ -91,6 +93,7 @@ final class QuickjsUiComponentRegistry {
       'Divider': _buildDivider,
       'Card': _buildCard,
       'ClipRRect': _buildClipRRect,
+      'BackdropFilter': _buildBackdropFilter,
       'DecoratedBox': _buildDecoratedBox,
       'RichText': _buildRichText,
       'Scaffold': _buildScaffold,
@@ -159,6 +162,9 @@ final class QuickjsUiComponentRegistry {
     QuickjsUiNode node, {
     QuickjsUiComponentController? controller,
   }) {
+    if (context.buildContext != null && isQuickjsUiOverlayNode(node.type)) {
+      return const SizedBox.shrink();
+    }
     final component = _components[node.type];
     if (component == null) {
       throw FormatException('Unknown quickjs_ui node type: ${node.type}');
@@ -1057,6 +1063,16 @@ Widget _buildClipRRect(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
+Widget _buildBackdropFilter(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  return BackdropFilter(
+    filter: _imageFilter(node.props['filter'] ?? node.props['imageFilter']),
+    child: context.child(node) ?? const SizedBox.shrink(),
+  );
+}
+
 Widget _buildDecoratedBox(QuickjsUiRenderContext context, QuickjsUiNode node) {
   return DecoratedBox(
     decoration:
@@ -1482,6 +1498,35 @@ Clip _clipBehavior(Object? value) {
     'antiAliasWithSaveLayer' => Clip.antiAliasWithSaveLayer,
     _ => throw const FormatException('Unknown quickjs_ui Clip'),
   };
+}
+
+ui.ImageFilter _imageFilter(Object? value) {
+  if (value == null) {
+    return ui.ImageFilter.blur();
+  }
+  if (value is String) {
+    if (value == 'blur') {
+      return ui.ImageFilter.blur();
+    }
+    throw FormatException('Unsupported quickjs_ui ImageFilter "$value"');
+  }
+  if (value is! Map) {
+    throw const FormatException('quickjs_ui ImageFilter must be an object');
+  }
+  final props = value.map(
+    (key, value) => MapEntry<String, Object?>('$key', value),
+  );
+  final type = props['type'] ?? props['kind'];
+  switch (type) {
+    case null:
+    case 'blur':
+      final sigma = QuickjsUiProps.doubleValue(props['sigma']);
+      return ui.ImageFilter.blur(
+        sigmaX: QuickjsUiProps.doubleValue(props['sigmaX']) ?? sigma ?? 0,
+        sigmaY: QuickjsUiProps.doubleValue(props['sigmaY']) ?? sigma ?? 0,
+      );
+  }
+  throw FormatException('Unsupported quickjs_ui ImageFilter "$type"');
 }
 
 EdgeInsets _edgeInsets(EdgeInsetsGeometry? value) {
