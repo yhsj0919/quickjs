@@ -230,6 +230,8 @@ export type BoxFit =
 
 export type Axis = 'vertical' | 'horizontal';
 
+export type FilterQuality = 'none' | 'low' | 'medium' | 'high';
+
 export type StackFit = 'loose' | 'expand' | 'passthrough';
 
 export type ClipBehavior =
@@ -567,11 +569,35 @@ export type ContainerProps = AccessibilityProps & {
 };
 
 export type ImageProps = AccessibilityProps & {
-  src: QuickjsUiResourceReference;
+  src?: QuickjsUiResourceReference;
   source?: QuickjsUiResourceReference;
+  uri?: QuickjsUiResourceReference;
+  url?: QuickjsUiResourceReference;
+  path?: QuickjsUiResourceReference;
   width?: number;
   height?: number;
   fit?: BoxFit;
+  cacheWidth?: number;
+  cacheHeight?: number;
+  filterQuality?: FilterQuality;
+  gaplessPlayback?: boolean;
+  excludeFromSemantics?: boolean;
+};
+
+export type SvgProps = AccessibilityProps & {
+  src?: QuickjsUiResourceReference;
+  source?: QuickjsUiResourceReference;
+  uri?: QuickjsUiResourceReference;
+  url?: QuickjsUiResourceReference;
+  path?: QuickjsUiResourceReference;
+  data?: string;
+  string?: string;
+  svg?: string;
+  width?: number;
+  height?: number;
+  fit?: BoxFit;
+  color?: ColorValue;
+  excludeFromSemantics?: boolean;
 };
 
 export type ListViewProps = AccessibilityProps & ScrollableProps & {
@@ -890,6 +916,7 @@ export declare function Row(props: FlexProps): QuickjsUiNode;
 export declare function Column(props: FlexProps): QuickjsUiNode;
 export declare function Container(props: ContainerProps): QuickjsUiNode;
 export declare function Image(props: ImageProps): QuickjsUiNode;
+export declare function Svg(props: SvgProps): QuickjsUiNode;
 export declare function ListView(props: ListViewProps): QuickjsUiNode;
 export declare function SingleChildScrollView(
   props: SingleChildScrollViewProps
@@ -965,6 +992,7 @@ export declare const ui: {
   Column(props: FlexProps): QuickjsUiNode;
   Container(props: ContainerProps): QuickjsUiNode;
   Image(props: ImageProps): QuickjsUiNode;
+  Svg(props: SvgProps): QuickjsUiNode;
   ListView(props: ListViewProps): QuickjsUiNode;
   SingleChildScrollView(props: SingleChildScrollViewProps): QuickjsUiNode;
   GridView(props: GridViewProps): QuickjsUiNode;

@@ -17,6 +17,8 @@ declare module 'quickjs_ui/video_player' {
     /** Progress event throttle in milliseconds. Defaults to 250. */
     progressThrottleMs?: number;
     progressCoalesceKey?: string;
+    /** Playback speed multiplier. Defaults to 1. */
+    playbackSpeed?: number;
     onReady?: VideoPlayerEvent;
     onProgress?: VideoPlayerEvent;
     onEnded?: VideoPlayerEvent;

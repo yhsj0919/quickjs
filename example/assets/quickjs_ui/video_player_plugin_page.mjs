@@ -10,7 +10,7 @@ import {
 import { VideoPlayer } from 'quickjs_ui/video_player';
 
 const DEFAULT_SOURCE =
-  'https://ht-1368.oss-cn-qingdao.aliyuncs.com/media/202607/8733401de810_9%E6%9C%8830%E6%97%A5%E9%93%AD%E8%AE%B0%E5%8E%86%E5%8F%B2-%E5%BD%A9%E4%BA%91.mp4';
+  'https://ht-1368.oss-cn-qingdao.aliyuncs.com/media/202607/8221be4a8ef9_20241226004348483.mp4';
 
 function formatMs(value) {
   const totalMs = Math.max(0, value ?? 0);
@@ -58,7 +58,7 @@ export default Page({
         }),
         Text('Imported from quickjs_ui/video_player; progress updates use sample events.'),
         Container({
-          height: props.playerHeight ?? 220,
+          height: props.playerHeight ?? 600,
           color: '#000000',
           child: VideoPlayer({
             key: 'demo-player',

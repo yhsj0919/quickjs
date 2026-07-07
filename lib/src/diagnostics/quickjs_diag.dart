@@ -1,11 +1,11 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 
 /// Opt-in diagnostics for the QuickJS core runtime boundary.
 ///
-/// Enabled in debug mode by default. Keep this layer independent from
+/// Disabled by default. Keep this layer independent from
 /// quickjs_ui diagnostics so core logs are still available to non-UI callers.
 abstract final class QuickjsDiag {
-  static bool enabled = kDebugMode;
+  static bool enabled = false;
 
   static final Map<String, _QuickjsDiagBucket> _buckets =
       <String, _QuickjsDiagBucket>{};
