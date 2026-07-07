@@ -44,6 +44,7 @@ final class QuickjsUiController extends ChangeNotifier {
   bool _loading = false;
   bool _disposed = false;
   bool _timerPumpRunning = false;
+  int _loadRequestId = 0;
   Timer? _timerPump;
 
   QuickjsUiSession get session => _session;
@@ -69,8 +70,10 @@ final class QuickjsUiController extends ChangeNotifier {
     _mounts = List<QuickjsHostMount>.unmodifiable(mounts);
     _grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
     _permissionPolicy = permissionPolicy;
+    final requestId = ++_loadRequestId;
     await _loadPlugin(
       plugin,
+      requestId: requestId,
       initialProps: initialProps,
       mounts: mounts,
       grantedPermissions: grantedPermissions,
@@ -91,13 +94,14 @@ final class QuickjsUiController extends ChangeNotifier {
     _mounts = List<QuickjsHostMount>.unmodifiable(mounts);
     _grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
     _permissionPolicy = permissionPolicy;
+    final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
     notifyListeners();
 
     try {
       final plugin = await loader();
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _stopTimerPump();
@@ -110,12 +114,12 @@ final class QuickjsUiController extends ChangeNotifier {
       );
       _startTimerPump();
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _error = error;
     } finally {
-      if (!_disposed) {
+      if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
         notifyListeners();
       }
@@ -124,6 +128,7 @@ final class QuickjsUiController extends ChangeNotifier {
 
   Future<void> _loadPlugin(
     QuickjsPlugin plugin, {
+    required int requestId,
     required Map<String, Object?> initialProps,
     required List<QuickjsHostMount> mounts,
     required Iterable<String> grantedPermissions,
@@ -136,6 +141,9 @@ final class QuickjsUiController extends ChangeNotifier {
 
     try {
       _stopTimerPump();
+      if (_disposed || requestId != _loadRequestId) {
+        return;
+      }
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
@@ -143,14 +151,17 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
+      if (_disposed || requestId != _loadRequestId) {
+        return;
+      }
       _startTimerPump();
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _error = error;
     } finally {
-      if (!_disposed) {
+      if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
         notifyListeners();
       }
@@ -320,20 +331,24 @@ final class QuickjsUiController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
     notifyListeners();
     try {
       _stopTimerPump();
       await _session.reload();
+      if (_disposed || requestId != _loadRequestId) {
+        return;
+      }
       _startTimerPump();
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _error = error;
     } finally {
-      if (!_disposed) {
+      if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
         notifyListeners();
       }
@@ -353,12 +368,13 @@ final class QuickjsUiController extends ChangeNotifier {
       return;
     }
     final savedState = devOptions.preserveStateOnReload ? state : null;
+    final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
     notifyListeners();
     try {
       final plugin = await loader();
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _stopTimerPump();
@@ -369,8 +385,11 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: _grantedPermissions,
         permissionPolicy: _permissionPolicy,
       );
+      if (_disposed || requestId != _loadRequestId) {
+        return;
+      }
       _startTimerPump();
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       if (savedState is Map) {
@@ -381,13 +400,13 @@ final class QuickjsUiController extends ChangeNotifier {
         );
       }
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _error = error;
       inspector.recordError(error);
     } finally {
-      if (!_disposed) {
+      if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
         notifyListeners();
       }

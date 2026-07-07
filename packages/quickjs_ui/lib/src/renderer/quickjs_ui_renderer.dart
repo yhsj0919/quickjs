@@ -42,7 +42,7 @@ final class QuickjsUiRenderer {
     final rebuiltKeys = <String>[];
     final reusedKeys = <String>[];
     var buildDepth = 0;
-    Widget buildNode(QuickjsUiNode node) {
+    Widget buildNode(QuickjsUiNode node, {String path = '0'}) {
       if (buildDepth > maxBuildDepth) {
         throw const FormatException('quickjs_ui render tree is too deep');
       }
@@ -54,6 +54,7 @@ final class QuickjsUiRenderer {
           nextCache,
           activeLifecycleKeys,
           buildContext,
+          path: path,
           onDiff: (key, didReuse) {
             if (key == null) {
               unkeyed += 1;
@@ -74,7 +75,8 @@ final class QuickjsUiRenderer {
     }
 
     context = QuickjsUiRenderContext(
-      buildNode: buildNode,
+      buildNode: (node) => buildNode(node),
+      buildNodeAtPath: (node, path) => buildNode(node, path: path),
       onUiEvent: _dispatchEnvelope,
       onEvent: onEvent,
       eventDispatcher: _eventDispatcher,
@@ -110,15 +112,18 @@ final class QuickjsUiRenderer {
     Map<String, _RenderedNode> nextCache,
     Set<String> activeLifecycleKeys,
     BuildContext? buildContext, {
+    required String path,
     required void Function(String? key, bool didReuse) onDiff,
   }) {
-    final controller = _controllerFor(node, activeLifecycleKeys);
+    _validateChildKeys(node, path);
+    final nodeContext = context.withPath(path);
+    final controller = _controllerFor(node, activeLifecycleKeys, path);
     final key = _nodeKey(node);
     if (key == null) {
       onDiff(null, false);
       return _withAccessibility(
         node,
-        registry.build(context, node, controller: controller),
+        registry.build(nodeContext, node, controller: controller),
       );
     }
     final signature = _nodeSignature(node, buildContext);
@@ -133,7 +138,7 @@ final class QuickjsUiRenderer {
       key: ValueKey<String>(key),
       child: _withAccessibility(
         node,
-        registry.build(context, node, controller: controller),
+        registry.build(nodeContext, node, controller: controller),
       ),
     );
     nextCache[key] = _RenderedNode(signature: signature, widget: widget);
@@ -206,11 +211,12 @@ final class QuickjsUiRenderer {
   QuickjsUiComponentController? _controllerFor(
     QuickjsUiNode node,
     Set<String> activeLifecycleKeys,
+    String path,
   ) {
     if (!registry.hasLifecycle(node.type)) {
       return null;
     }
-    final lifecycleKey = _lifecycleKey(node);
+    final lifecycleKey = _lifecycleKey(node, path);
     activeLifecycleKeys.add(lifecycleKey);
     final current = _lifecycleComponents[lifecycleKey];
     if (current != null) {
@@ -245,6 +251,25 @@ final class QuickjsUiRenderer {
         entry.controller.hide();
       }
       entry.controller.dispose();
+    }
+  }
+
+  void _validateChildKeys(QuickjsUiNode node, String path) {
+    final seen = <String, String>{};
+    for (var index = 0; index < node.children.length; index += 1) {
+      final child = node.children[index];
+      final key = _nodeKey(child);
+      if (key == null) {
+        continue;
+      }
+      final previousPath = seen[key];
+      if (previousPath != null) {
+        throw FormatException(
+          'quickjs_ui duplicate sibling key "$key" under ${node.type} at '
+          '$previousPath and $path/$index',
+        );
+      }
+      seen[key] = '$path/$index';
     }
   }
 }
@@ -305,14 +330,14 @@ String? _nodeKey(QuickjsUiNode node) {
   return null;
 }
 
-String _lifecycleKey(QuickjsUiNode node) {
+String _lifecycleKey(QuickjsUiNode node, String path) {
   final key = _nodeKey(node);
   if (key == null) {
     throw FormatException(
       'quickjs_ui lifecycle component ${node.type} requires a stable string key',
     );
   }
-  return '${node.type}:$key';
+  return '${node.type}:$path:$key';
 }
 
 String _nodeSignature(QuickjsUiNode node, BuildContext? buildContext) {

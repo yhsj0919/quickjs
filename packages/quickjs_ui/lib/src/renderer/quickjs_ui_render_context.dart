@@ -14,6 +14,8 @@ typedef QuickjsUiEventHandler = void Function(Map<String, Object?> event);
 typedef QuickjsUiEventEnvelopeHandler =
     void Function(QuickjsUiEventEnvelope event);
 typedef QuickjsUiNodeBuilder = Widget Function(QuickjsUiNode node);
+typedef QuickjsUiPathNodeBuilder =
+    Widget Function(QuickjsUiNode node, String path);
 
 enum QuickjsUiEventKind { command, sample }
 
@@ -60,19 +62,37 @@ final class QuickjsUiRenderContext {
     required QuickjsUiEventEnvelopeHandler onUiEvent,
     QuickjsUiEventHandler? onEvent,
     QuickjsUiEventDispatcher? eventDispatcher,
+    QuickjsUiPathNodeBuilder? buildNodeAtPath,
+    String path = '0',
     this.buildContext,
   }) : _buildNode = buildNode,
+       _buildNodeAtPath = buildNodeAtPath,
        _onUiEvent = onUiEvent,
        onEvent =
            onEvent ??
            ((event) => onUiEvent(QuickjsUiEventEnvelope.command(event))),
-       _eventDispatcher = eventDispatcher;
+       _eventDispatcher = eventDispatcher,
+       _path = path;
 
   final QuickjsUiNodeBuilder _buildNode;
+  final QuickjsUiPathNodeBuilder? _buildNodeAtPath;
   final QuickjsUiEventEnvelopeHandler _onUiEvent;
   final QuickjsUiEventHandler onEvent;
   final QuickjsUiEventDispatcher? _eventDispatcher;
+  final String _path;
   final BuildContext? buildContext;
+
+  QuickjsUiRenderContext withPath(String path) {
+    return QuickjsUiRenderContext(
+      buildNode: _buildNode,
+      buildNodeAtPath: _buildNodeAtPath,
+      onUiEvent: _onUiEvent,
+      onEvent: onEvent,
+      eventDispatcher: _eventDispatcher,
+      buildContext: buildContext,
+      path: path,
+    );
+  }
 
   Color? color(Object? value) {
     return QuickjsUiProps.color(value, resolveColor: _themeColor);
@@ -146,11 +166,23 @@ final class QuickjsUiRenderContext {
     if (node.children.length > 1) {
       throw FormatException('${node.type} expects a single child');
     }
-    return build(node.children.single);
+    return _buildChild(node, 0);
   }
 
   List<Widget> children(QuickjsUiNode node) {
-    return <Widget>[for (final child in node.children) build(child)];
+    return <Widget>[
+      for (var index = 0; index < node.children.length; index += 1)
+        _buildChild(node, index),
+    ];
+  }
+
+  Widget _buildChild(QuickjsUiNode node, int index) {
+    final child = node.children[index];
+    final builder = _buildNodeAtPath;
+    if (builder == null) {
+      return build(child);
+    }
+    return builder(child, '$_path/$index');
   }
 
   void dispatch(Map<String, Object?> event) {
