@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quickjs/quickjs.dart' show QuickjsHostMount;
 import 'package:quickjs_ui/quickjs_ui.dart';
 import 'package:quickjs_ui_video_player/quickjs_ui_video_player.dart';
 
@@ -43,7 +42,7 @@ export default Page({
       initialProps: const <String, Object?>{
         'source': 'https://example.com/video.mp4',
       },
-      mounts: const <QuickjsHostMount>[QuickjsUiVideoPlayerPlugin.mount],
+      mounts: QuickjsUiVideoPlayerPlugin.plugin.mounts,
     );
 
     final node = session.node;
@@ -84,7 +83,7 @@ export default Page({
       initialProps: const <String, Object?>{
         'source': 'https://example.com/video.mp4',
       },
-      mounts: const <QuickjsHostMount>[QuickjsUiVideoPlayerPlugin.mount],
+      mounts: QuickjsUiVideoPlayerPlugin.plugin.mounts,
     );
 
     final props = session.node?.props ?? const <String, Object?>{};
@@ -118,7 +117,7 @@ export default Page({
         'autoplay': true,
         'loop': true,
       },
-      mounts: const <QuickjsHostMount>[QuickjsUiVideoPlayerPlugin.mount],
+      mounts: QuickjsUiVideoPlayerPlugin.plugin.mounts,
     );
 
     await session.dispatch(<String, Object?>{

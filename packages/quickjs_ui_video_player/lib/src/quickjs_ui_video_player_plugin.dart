@@ -8,6 +8,9 @@ import 'package:video_player/video_player.dart' as native;
 
 const String quickjsUiVideoPlayerModuleSpecifier = 'quickjs_ui/video_player';
 
+/// VideoPlayer 组件对应的内联 ES module 源码。
+///
+/// JS 侧通过 `import { VideoPlayer } from 'quickjs_ui/video_player'` 使用。
 const String quickjsUiVideoPlayerModuleSource = '''
 export function VideoPlayer(props = {}) {
   const key = props.key ?? props.playerKey ?? 'video-player';
@@ -37,10 +40,15 @@ export function VideoPlayer(props = {}) {
 }
 ''';
 
+/// QuickJS UI 视频播放器的官方插件入口。
+///
+/// 对外只暴露 [plugin]：同时包含 JS 模块 mount 与 Flutter `VideoPlayer` 渲染注册。
+/// 在 [QuickjsUiView] 的 `uiPlugins` 中传入即可，无需单独配置 mount 或 registry。
 final class QuickjsUiVideoPlayerPlugin {
   const QuickjsUiVideoPlayerPlugin._();
 
-  static const QuickjsHostMount mount = QuickjsHostMount(
+  /// 内部 JS runtime mount，注册 `quickjs_ui/video_player` 模块。
+  static const QuickjsHostMount _mount = QuickjsHostMount(
     name: 'quickjs_ui:plugin:video_player',
     modules: <QuickjsHostModule>[
       QuickjsHostModule.esModule(
@@ -50,14 +58,21 @@ final class QuickjsUiVideoPlayerPlugin {
     ],
   );
 
-  static QuickjsUiComponentRegistry registry([
-    QuickjsUiComponentRegistry? base,
-  ]) {
-    final registry = base ?? QuickjsUiComponentRegistry.defaults();
+  /// 可直接传给 [QuickjsUiView.uiPlugins] 的 UI 插件实例。
+  static final QuickjsUiPlugin plugin = QuickjsUiPlugin(
+    name: 'quickjs_ui:plugin:video_player',
+    mounts: const <QuickjsHostMount>[_mount],
+    configureRegistry: _configureRegistry,
+  );
+
+  static void _configureRegistry(QuickjsUiComponentRegistry registry) {
     registry.register('VideoPlayer', build);
-    return registry;
   }
 
+  /// 将 schema 节点 `type: 'VideoPlayer'` 构建为 Flutter Widget。
+  ///
+  /// - [context]：当前渲染上下文，用于派发事件与读取主题。
+  /// - [node]：解析后的 UI schema 节点。
   static Widget build(QuickjsUiRenderContext context, QuickjsUiNode node) {
     return _QuickjsUiVideoPlayerHost(context: context, node: node);
   }

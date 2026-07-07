@@ -21,6 +21,7 @@ export 'src/resource/quickjs_ui_resource_resolver.dart';
 export 'src/runtime/quickjs_ui_controller.dart';
 export 'src/runtime/quickjs_ui_helpers.dart';
 export 'src/runtime/quickjs_ui_page_plugin.dart';
+export 'src/runtime/quickjs_ui_plugin.dart';
 export 'src/runtime/quickjs_ui_session.dart';
 export 'src/schema/quickjs_ui_node.dart';
 export 'src/schema/quickjs_ui_props.dart';

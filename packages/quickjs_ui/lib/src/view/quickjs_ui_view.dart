@@ -12,16 +12,33 @@ import '../renderer/quickjs_ui_renderer.dart';
 import '../resource/quickjs_ui_bundle.dart';
 import '../resource/quickjs_ui_network_loader.dart';
 import '../runtime/quickjs_ui_controller.dart';
+import '../runtime/quickjs_ui_plugin.dart';
 import 'quickjs_ui_error_overlay.dart';
 
+/// 页面加载或渲染失败时构建错误 UI 的回调。
+///
+/// [context] 为当前 BuildContext；[error] 为捕获到的异常对象。
 typedef QuickjsUiErrorBuilder =
     Widget Function(BuildContext context, Object error);
 
+/// 页面 JS bundle 尚未就绪时构建加载中 UI 的回调。
 typedef QuickjsUiLoadingBuilder = Widget Function(BuildContext context);
 
+/// 页面渲染结果为空时构建占位 UI 的回调。
 typedef QuickjsUiEmptyBuilder = Widget Function(BuildContext context);
 
+/// QuickJS UI 页面容器 Widget。
+///
+/// 负责创建并持有 [QuickjsUiController]、加载 JS 页面、将 schema 树渲染为
+/// Flutter Widget，并在页面销毁时释放 runtime。
+///
+/// 能力注入分为两类：
+/// - [mounts]：业务 JS 能力（网络、宿主 API、polyfill 等）。
+/// - [uiPlugins]：第三方原生 UI 组件插件（同时包含 JS 模块与 Flutter 渲染注册）。
 final class QuickjsUiView extends StatefulWidget {
+  /// 通用构造：通过 [plugin] 或 [path] 二选一指定页面来源。
+  ///
+  /// 更推荐使用具名工厂 [QuickjsUiView.plugin]、[QuickjsUiView.asset] 等。
   const QuickjsUiView({
     super.key,
     this.plugin,
@@ -29,11 +46,11 @@ final class QuickjsUiView extends StatefulWidget {
     this.bundleRoot,
     this.initialProps = const <String, Object?>{},
     this.mounts = const <QuickjsHostMount>[],
+    this.uiPlugins = const <QuickjsUiPlugin>[],
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
     this.onConsole,
     this.controller,
-    this.registry,
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
@@ -49,15 +66,30 @@ final class QuickjsUiView extends StatefulWidget {
        onNetworkLog = null,
        assert(plugin != null || path != null);
 
+  /// 从已注册的 [QuickjsPlugin] 加载页面。
+  ///
+  /// - [plugin]：QuickJS 插件描述对象，通常包含入口脚本与模块图。
+  /// - [initialProps]：传给 JS 页面根组件的初始 props。
+  /// - [mounts]：业务侧 JS runtime 能力 mount。
+  /// - [uiPlugins]：需要额外原生 UI 控件时传入的 UI 插件列表。
+  /// - [grantedPermissions]：页面已授权的能力名称集合。
+  /// - [permissionPolicy]：权限拦截策略；为 `null` 时使用默认策略。
+  /// - [controller]：外部持有的控制器；为 `null` 时由本 Widget 内部创建。
+  /// - [onConsole]：接收 JS `console.*` 输出的回调。
+  /// - [placeholder]：首帧渲染前的占位 Widget。
+  /// - [loadingBuilder]：加载中状态 UI 构建器。
+  /// - [errorBuilder]：错误状态 UI 构建器。
+  /// - [emptyBuilder]：空内容状态 UI 构建器。
+  /// - [onFirstRender]：首次成功渲染后的回调。
   factory QuickjsUiView.plugin(
     QuickjsPlugin plugin, {
     Key? key,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
-    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -71,11 +103,11 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.plugin,
       initialProps: initialProps,
       mounts: mounts,
+      uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
-      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -84,16 +116,21 @@ final class QuickjsUiView extends StatefulWidget {
     );
   }
 
+  /// 从 Flutter asset 加载单文件或多文件 quickjs_ui 页面。
+  ///
+  /// - [path]：入口 `.mjs` 或其它脚本的 asset 路径（必填）。
+  /// - [bundleRoot]：多文件 bundle 的根目录；为 `null` 时根据 [path] 自动推断。
+  /// 其余参数含义同 [QuickjsUiView.plugin]。
   factory QuickjsUiView.asset({
     Key? key,
     required String path,
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
-    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -108,11 +145,11 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.asset,
       initialProps: initialProps,
       mounts: mounts,
+      uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
-      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -121,16 +158,21 @@ final class QuickjsUiView extends StatefulWidget {
     );
   }
 
+  /// 从设备本地文件系统加载 quickjs_ui 页面（主要用于开发调试）。
+  ///
+  /// - [path]：本地入口脚本绝对路径（必填）。
+  /// - [bundleRoot]：本地 bundle 根目录。
+  /// 其余参数含义同 [QuickjsUiView.asset]。
   factory QuickjsUiView.file({
     Key? key,
     required String path,
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
-    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -145,11 +187,11 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.file,
       initialProps: initialProps,
       mounts: mounts,
+      uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
-      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -158,6 +200,13 @@ final class QuickjsUiView extends StatefulWidget {
     );
   }
 
+  /// 通过网络 URL 加载 quickjs_ui 页面。
+  ///
+  /// - [url]：远程入口脚本 URL（必填）。
+  /// - [bundleRoot]：远程 bundle 根 URL；为 `null` 时根据 [url] 自动推断。
+  /// - [fetch]：自定义网络请求实现；为 `null` 时使用默认实现。
+  /// - [onNetworkLog]：网络加载诊断日志回调。
+  /// 其余参数含义同 [QuickjsUiView.asset]。
   factory QuickjsUiView.network({
     Key? key,
     required Uri url,
@@ -166,10 +215,10 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiNetworkLogHandler? onNetworkLog,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
-    QuickjsUiComponentRegistry? registry,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -187,11 +236,11 @@ final class QuickjsUiView extends StatefulWidget {
       source: _QuickjsUiViewSource.network,
       initialProps: initialProps,
       mounts: mounts,
+      uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
-      registry: registry,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -212,11 +261,11 @@ final class QuickjsUiView extends StatefulWidget {
     required this._source,
     this.initialProps = const <String, Object?>{},
     this.mounts = const <QuickjsHostMount>[],
+    this.uiPlugins = const <QuickjsUiPlugin>[],
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
     this.onConsole,
     this.controller,
-    this.registry,
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
@@ -226,22 +275,60 @@ final class QuickjsUiView extends StatefulWidget {
 
   final QuickjsPlugin? plugin;
   final String? _path;
+
+  /// 多文件 bundle 根路径（asset / 本地文件 / 网络 URL 语义由加载源决定）。
   final String? bundleRoot;
+
+  /// 网络加载模式下的入口 URL。
   final Uri? networkUrl;
+
+  /// 网络加载模式下的 bundle 根 URL。
   final Uri? networkBundleRoot;
+
+  /// 网络加载使用的自定义 fetch 实现。
   final QuickjsUiNetworkFetch? networkFetch;
+
+  /// 网络加载过程日志回调。
   final QuickjsUiNetworkLogHandler? onNetworkLog;
+
+  /// 传给 JS 页面根组件的初始 props。
   final Map<String, Object?> initialProps;
+
+  /// 页面业务 JavaScript runtime 所需的宿主能力 mount。
+  ///
+  /// 例如 [QuickjsAxiosMount]、[QuickjsFetchMount]、自定义 provider mount 等。
   final List<QuickjsHostMount> mounts;
+
+  /// 第三方原生 UI 组件插件列表。
+  ///
+  /// 每个插件同时提供 JS 模块 mount 与 Flutter 组件注册，避免只配一半。
+  final List<QuickjsUiPlugin> uiPlugins;
+
+  /// 页面已声明并授权的能力名称。
   final Iterable<String> grantedPermissions;
+
+  /// 页面权限策略；控制未授权能力调用时的拦截行为。
   final QuickjsUiPermissionPolicy? permissionPolicy;
+
+  /// JS `console.*` 输出接收器。
   final QuickjsConsoleSink? onConsole;
+
+  /// 外部传入的 UI 控制器，用于热重载、快照、导航等高级操作。
   final QuickjsUiController? controller;
-  final QuickjsUiComponentRegistry? registry;
+
+  /// 首帧渲染完成前的占位 Widget。
   final Widget? placeholder;
+
+  /// 加载中 UI 构建器。
   final QuickjsUiLoadingBuilder? loadingBuilder;
+
+  /// 错误 UI 构建器。
   final QuickjsUiErrorBuilder? errorBuilder;
+
+  /// 空内容 UI 构建器。
   final QuickjsUiEmptyBuilder? emptyBuilder;
+
+  /// 首次成功渲染 schema 后的回调。
   final VoidCallback? onFirstRender;
   final _QuickjsUiViewSource _source;
 
@@ -276,11 +363,32 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   QuickjsUiRenderer _createRenderer() {
     final devOptions = _controller.devOptions;
     return QuickjsUiRenderer(
-      registry: widget.registry,
+      registry: _effectiveRegistry(),
       onEvent: _eventIngress.submit,
       onUiEvent: _eventIngress.submitEnvelope,
       onDiffStats: devOptions.logDiff ? _controller.inspector.recordDiff : null,
     );
+  }
+
+  QuickjsUiComponentRegistry? _effectiveRegistry() {
+    if (widget.uiPlugins.isEmpty) {
+      return null;
+    }
+    final registry = QuickjsUiComponentRegistry.defaults();
+    for (final plugin in widget.uiPlugins) {
+      plugin.configure(registry);
+    }
+    return registry;
+  }
+
+  List<QuickjsHostMount> _effectiveMounts() {
+    if (widget.uiPlugins.isEmpty) {
+      return widget.mounts;
+    }
+    return <QuickjsHostMount>[
+      ...widget.mounts,
+      for (final plugin in widget.uiPlugins) ...plugin.mounts,
+    ];
   }
 
   QuickjsUiDevOptions get _devOptions => _controller.devOptions;
@@ -301,7 +409,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
       _renderer.dispose();
       _renderer = _createRenderer();
-    } else if (oldWidget.registry != widget.registry) {
+    } else if (oldWidget.uiPlugins != widget.uiPlugins) {
       _renderer.dispose();
       _renderer = _createRenderer();
     }
@@ -315,6 +423,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         oldWidget._source != widget._source ||
         oldWidget.initialProps != widget.initialProps ||
         oldWidget.mounts != widget.mounts ||
+        oldWidget.uiPlugins != widget.uiPlugins ||
         !_stringIterableSetEquals(
           oldWidget.grantedPermissions,
           widget.grantedPermissions,
@@ -493,7 +602,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         await _controller.loadPlugin(
           plugin,
           initialProps: widget.initialProps,
-          mounts: widget.mounts,
+          mounts: _effectiveMounts(),
           grantedPermissions: widget.grantedPermissions,
           permissionPolicy: widget.permissionPolicy,
         );
@@ -502,7 +611,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       await _controller.load(
         _loadPlugin,
         initialProps: widget.initialProps,
-        mounts: widget.mounts,
+        mounts: _effectiveMounts(),
         grantedPermissions: widget.grantedPermissions,
         permissionPolicy: widget.permissionPolicy,
       );
