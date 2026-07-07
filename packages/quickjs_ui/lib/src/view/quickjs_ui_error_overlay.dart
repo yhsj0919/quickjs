@@ -1,6 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/widgets.dart';
+
+import '../resource/quickjs_ui_network_loader.dart';
 
 final class QuickjsUiErrorDetails {
   const QuickjsUiErrorDetails({
@@ -82,10 +82,10 @@ final class QuickjsUiErrorOverlay extends StatelessWidget {
                 _ErrorLine(label: 'message', value: _message(error)),
                 for (final detail in details.entries)
                   _ErrorLine(label: detail.key, value: detail.value),
-                if (error is HttpException)
+                if (error is QuickjsUiNetworkException)
                   _ErrorLine(
                     label: 'uri',
-                    value: (error as HttpException).uri?.toString() ?? '',
+                    value: (error as QuickjsUiNetworkException).uri?.toString() ?? '',
                   ),
                 if (error is FormatException)
                   _FormatExceptionDetails(error: error as FormatException),
@@ -149,7 +149,7 @@ String _message(Object error) {
   if (error is FormatException) {
     return error.message;
   }
-  if (error is HttpException) {
+  if (error is QuickjsUiNetworkException) {
     return error.message;
   }
   return '$error';

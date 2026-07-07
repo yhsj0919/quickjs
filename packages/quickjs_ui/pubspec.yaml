@@ -12,6 +12,7 @@ dependencies:
   crypto: ^3.0.7
   flutter:
     sdk: flutter
+  http: ^1.2.2
   quickjs:
     path: ../../
 

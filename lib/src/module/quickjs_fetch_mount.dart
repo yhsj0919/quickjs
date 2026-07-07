@@ -10,13 +10,22 @@ import '../runtime/quickjs_runtime_options.dart';
 
 const _fetchProviderName = 'fetch.request';
 
-/// Opt-in Fetch API mount backed by the platform HTTP client.
+/// 可选的 Fetch API mount，由平台 HTTP 客户端提供 `fetch` 实现。
 ///
-/// Native platforms use `dart:io`'s `HttpClient` through `package:http`.
-/// Web uses the browser's native `fetch`. Pass a non-empty [allowedOrigins]
-/// set to restrict requests and redirects to exact HTTP(S) origins. Leave it
-/// null or empty to allow every HTTP(S) origin.
+/// 原生平台通过 `package:http`（底层为 `dart:io` 的 `HttpClient`）发起请求；
+/// Web 平台使用浏览器原生 `fetch`。
+///
+/// 传入非空的 [allowedOrigins] 可限制请求与重定向只能访问列出的 HTTP(S) 源；
+/// 留空或 `null` 表示允许所有 HTTP(S) 源。
 final class QuickjsFetchMount extends QuickjsHostMount {
+  /// 创建 Fetch mount。
+  ///
+  /// - [allowedOrigins]：允许访问的 HTTP(S) 源白名单；`null` 或空表示不限制。
+  /// - [timeout]：单次请求超时时间，必须为正数。
+  /// - [maxRequestBytes]：请求体最大字节数，`-1` 表示不限制。
+  /// - [maxResponseBytes]：响应体最大字节数，`-1` 表示不限制。
+  /// - [maxRedirects]：允许跟随的最大重定向次数。
+  /// - [defaultHeaders]：注入到每次请求中的默认 HTTP 头。
   factory QuickjsFetchMount({
     Set<String>? allowedOrigins,
     Duration timeout = const Duration(seconds: 30),

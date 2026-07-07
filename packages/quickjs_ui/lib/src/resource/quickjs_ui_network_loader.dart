@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import 'quickjs_ui_bundle.dart';
 import 'quickjs_ui_manifest.dart';
@@ -12,6 +13,27 @@ typedef QuickjsUiNetworkFetch =
 typedef QuickjsUiNetworkLogHandler =
     void Function(QuickjsUiNetworkLogEvent event);
 typedef QuickjsUiNetworkCacheBuster = String Function(Uri uri);
+
+const _httpHeaderIfNoneMatch = 'if-none-match';
+const _httpHeaderEtag = 'etag';
+const _httpStatusNotModified = 304;
+
+/// quickjs_ui 网络加载失败时抛出的异常。
+final class QuickjsUiNetworkException implements Exception {
+  const QuickjsUiNetworkException(this.message, {this.uri});
+
+  final String message;
+  final Uri? uri;
+
+  @override
+  String toString() {
+    final uri = this.uri;
+    if (uri == null) {
+      return message;
+    }
+    return '$message ($uri)';
+  }
+}
 
 enum QuickjsUiNetworkRefreshMode { conditional, force, staleWhileRevalidate }
 
@@ -113,7 +135,7 @@ final class QuickjsUiNetworkLoader {
         uri: normalizedUrl,
         headers: <String, String>{
           if (cached?.etag != null)
-            HttpHeaders.ifNoneMatchHeader: cached!.etag!,
+            _httpHeaderIfNoneMatch: cached!.etag!,
         },
       );
       _log(
@@ -129,7 +151,7 @@ final class QuickjsUiNetworkLoader {
       try {
         final response = await (_fetch ?? _defaultFetch)(request);
         stopwatch.stop();
-        final etag = _header(response.headers, HttpHeaders.etagHeader);
+        final etag = _header(response.headers, _httpHeaderEtag);
         _log(
           QuickjsUiNetworkLogEvent(
             id: eventId,
@@ -143,9 +165,9 @@ final class QuickjsUiNetworkLoader {
             timestamp: DateTime.now(),
           ),
         );
-        if (response.statusCode == HttpStatus.notModified) {
+        if (response.statusCode == _httpStatusNotModified) {
           if (cached == null) {
-            throw HttpException(
+            throw QuickjsUiNetworkException(
               'quickjs_ui network resource returned 304 without cache',
               uri: normalizedUrl,
             );
@@ -175,7 +197,7 @@ final class QuickjsUiNetworkLoader {
           return;
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw HttpException(
+          throw QuickjsUiNetworkException(
             'quickjs_ui network resource failed with ${response.statusCode}',
             uri: normalizedUrl,
           );
@@ -319,7 +341,7 @@ final class QuickjsUiNetworkLoader {
       headers: <String, String>{
         if (refreshMode != QuickjsUiNetworkRefreshMode.force &&
             cached?.etag != null)
-          HttpHeaders.ifNoneMatchHeader: cached!.etag!,
+          _httpHeaderIfNoneMatch: cached!.etag!,
       },
     );
     _log(
@@ -335,7 +357,7 @@ final class QuickjsUiNetworkLoader {
     try {
       final response = await (_fetch ?? _defaultFetch)(request);
       stopwatch.stop();
-      final etag = _header(response.headers, HttpHeaders.etagHeader);
+      final etag = _header(response.headers, _httpHeaderEtag);
       _log(
         QuickjsUiNetworkLogEvent(
           id: eventId,
@@ -349,9 +371,9 @@ final class QuickjsUiNetworkLoader {
           timestamp: DateTime.now(),
         ),
       );
-      if (response.statusCode == HttpStatus.notModified) {
+      if (response.statusCode == _httpStatusNotModified) {
         if (cached == null) {
-          throw HttpException(
+          throw QuickjsUiNetworkException(
             'quickjs_ui network resource returned 304 without cache',
             uri: normalizedUri,
           );
@@ -373,7 +395,7 @@ final class QuickjsUiNetworkLoader {
         return cached.body;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
+        throw QuickjsUiNetworkException(
           'quickjs_ui network resource failed with ${response.statusCode}',
           uri: normalizedUri,
         );
@@ -453,26 +475,15 @@ final class QuickjsUiNetworkLoader {
 Future<QuickjsUiNetworkResponse> _defaultFetch(
   QuickjsUiNetworkRequest fetchRequest,
 ) async {
-  final client = HttpClient();
-  try {
-    final request = await client.getUrl(fetchRequest.uri);
-    for (final header in fetchRequest.headers.entries) {
-      request.headers.set(header.key, header.value);
-    }
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    final headers = <String, String>{};
-    response.headers.forEach((name, values) {
-      headers[name] = values.join(',');
-    });
-    return QuickjsUiNetworkResponse(
-      body: body,
-      statusCode: response.statusCode,
-      headers: headers,
-    );
-  } finally {
-    client.close(force: true);
-  }
+  final response = await http.get(
+    fetchRequest.uri,
+    headers: fetchRequest.headers,
+  );
+  return QuickjsUiNetworkResponse(
+    body: response.body,
+    statusCode: response.statusCode,
+    headers: Map<String, String>.from(response.headers),
+  );
 }
 
 String? _header(Map<String, String> headers, String name) {
