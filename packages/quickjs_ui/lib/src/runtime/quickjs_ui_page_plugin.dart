@@ -69,6 +69,7 @@ final class QuickjsUiPagePlugin {
           'snapshot',
           'capabilities',
           'dispose',
+          'bootstrap',
         ],
         permissions: permissions,
       ),
@@ -97,6 +98,22 @@ function requireRuntimeMethod(name) {
 export function capabilities() {
   requireRuntimeMethod('capabilities');
   return page.capabilities();
+}
+
+// Initial page startup crosses the Dart/worker/QuickJS boundary only once.
+// Keep the individual exports below for updates after the first render.
+export async function bootstrap(props) {
+  requireRuntimeMethod('capabilities');
+  requireRuntimeMethod('mount');
+  requireRuntimeMethod('commit');
+  const runtimeCapabilities = page.capabilities();
+  const snapshot = await page.mount(props);
+  const committed = await page.commit();
+  return {
+    capabilities: runtimeCapabilities,
+    snapshot,
+    commit: committed
+  };
 }
 
 export function mount(props) {

@@ -365,8 +365,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   bool _reportedShow = false;
   int _generation = 0;
   _QuickjsUiAppLifecycleSignal? _lastAppLifecycleSignal;
-  DateTime? _firstBuildEndedAt;
-  DateTime _loadScheduledAt = DateTime.now();
 
   @override
   void initState() {
@@ -383,7 +381,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _controller.addListener(_handleControllerChanged);
     _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
-    _scheduleLoad();
+    _scheduleLoad(immediate: true);
   }
 
   QuickjsUiRenderer _createRenderer() {
@@ -560,28 +558,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
 
     try {
-      final metrics = _controller.lastLoadMetrics;
-      final buildStartedAt = DateTime.now();
-      if (metrics != null) {
-        _controller.recordLoadDetail(
-          'flutter.schemaReadyToBuildStart',
-          buildStartedAt.difference(metrics.schemaReadyAt),
-        );
-        final readyNotifiedAt = metrics.readyNotifiedAt;
-        if (readyNotifiedAt != null) {
-          _controller.recordLoadDetail(
-            'flutter.notifyToBuildStart',
-            buildStartedAt.difference(readyNotifiedAt),
-          );
-        }
-      }
-      final renderWatch = Stopwatch()..start();
       final rendered = _renderer.build(node, buildContext: context);
-      _controller.recordLoadDetail(
-        'flutter.rendererBuild',
-        renderWatch.elapsed,
-      );
-      _firstBuildEndedAt ??= DateTime.now();
       if (_devOptions.logSchema) {
         QuickjsUiDiag.log('schema', node.toMap().toString());
       }
@@ -639,14 +616,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_isCurrentGeneration(generation)) {
         return;
       }
-      final buildEndedAt = _firstBuildEndedAt;
-      if (buildEndedAt != null) {
-        _controller.recordLoadDetail(
-          'flutter.buildEndToPostFrame',
-          DateTime.now().difference(buildEndedAt),
-        );
-      }
-      final lifecycleWatch = Stopwatch()..start();
       await _controller.lifecycle('mount');
       if (!_isCurrentGeneration(generation)) {
         return;
@@ -655,10 +624,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_isCurrentGeneration(generation)) {
         return;
       }
-      _controller.recordLoadDetail(
-        'flutter.postFrameLifecycle',
-        lifecycleWatch.elapsed,
-      );
       widget.onFirstRender?.call();
     });
   }
@@ -679,11 +644,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 
   Future<void> _load() async {
-    final loadStartedAt = DateTime.now();
-    _controller.beginLoadTiming(
-      'pipeline.viewScheduleToLoadStart',
-      loadStartedAt.difference(_loadScheduledAt),
-    );
     final generation = _advanceGeneration();
     try {
       if (!_isCurrentGeneration(generation)) {
@@ -698,6 +658,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           grantedPermissions: widget.grantedPermissions,
           permissionPolicy: widget.permissionPolicy,
           errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
+          notifyLoading: false,
         );
         if (!_isCurrentGeneration(generation)) {
           return;
@@ -711,6 +672,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         grantedPermissions: widget.grantedPermissions,
         permissionPolicy: widget.permissionPolicy,
         errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
+        notifyLoading: false,
       );
     } catch (error, stackTrace) {
       if (_isCurrentGeneration(generation)) {
@@ -726,9 +688,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
   }
 
-  void _scheduleLoad() {
-    _loadScheduledAt = DateTime.now();
-    _loadCoordinator.schedule(_load);
+  void _scheduleLoad({bool immediate = false}) {
+    _loadCoordinator.schedule(_load, immediate: immediate);
   }
 
   Future<QuickjsPlugin> _loadPlugin() async {
@@ -789,7 +750,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _generation += 1;
     _reportedFirstRender = false;
     _reportedShow = false;
-    _firstBuildEndedAt = null;
     return _generation;
   }
 
@@ -809,15 +769,21 @@ final class _QuickjsUiLoadCoordinator {
 
   bool get isPending => _pending;
 
-  void schedule(Future<void> Function() load) {
+  void schedule(Future<void> Function() load, {bool immediate = false}) {
     if (_disposed) return;
     _pending = true;
     final requestId = ++_requestId;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void start() {
       if (_disposed || requestId != _requestId) return;
       _pending = false;
       unawaited(load());
-    });
+    }
+
+    if (immediate) {
+      start();
+    } else {
+      scheduleMicrotask(start);
+    }
   }
 
   void dispose() {

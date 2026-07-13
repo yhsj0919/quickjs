@@ -343,6 +343,7 @@ final class QuickjsUiBundle {
           'snapshot',
           'capabilities',
           'dispose',
+          'bootstrap',
         ],
         permissions: permissions,
       ),

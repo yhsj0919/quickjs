@@ -45,7 +45,6 @@ final class QuickjsUiController extends ChangeNotifier {
   final QuickjsUiInspector inspector;
   QuickjsUiError? _error;
   QuickjsUiLoadMetrics? _lastLoadMetrics;
-  final Map<String, Duration> _pendingLoadDetails = <String, Duration>{};
   _QuickjsUiLoadConfig _loadConfig = _QuickjsUiLoadConfig.copy();
   bool _loading = false;
   bool _disposed = false;
@@ -64,32 +63,9 @@ final class QuickjsUiController extends ChangeNotifier {
   QuickjsUiError? get error => _error;
   QuickjsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
 
-  /// Adds a nested load timing without notifying UI listeners.
-  void recordLoadDetail(String name, Duration duration) {
-    final metrics = _lastLoadMetrics;
-    if (metrics != null) {
-      _lastLoadMetrics = metrics.withDetail(name, duration);
-    } else {
-      _pendingLoadDetails[name] = duration;
-    }
-  }
-
-  /// Starts a new end-to-end load timeline before session metrics exist.
-  void beginLoadTiming(String name, Duration duration) {
-    _lastLoadMetrics = null;
-    _pendingLoadDetails
-      ..clear()
-      ..[name] = duration;
-  }
-
   void _acceptLoadMetrics(QuickjsUiLoadMetrics? metrics) {
     if (metrics == null) return;
-    var result = metrics;
-    for (final entry in _pendingLoadDetails.entries) {
-      result = result.withDetail(entry.key, entry.value);
-    }
-    _pendingLoadDetails.clear();
-    _lastLoadMetrics = result;
+    _lastLoadMetrics = metrics;
   }
 
   bool get hasError => _error != null;
@@ -103,6 +79,7 @@ final class QuickjsUiController extends ChangeNotifier {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
+    bool notifyLoading = true,
   }) async {
     _loadConfig = _QuickjsUiLoadConfig.copy(
       plugin: plugin,
@@ -121,6 +98,7 @@ final class QuickjsUiController extends ChangeNotifier {
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
+      notifyLoading: notifyLoading,
     );
   }
 
@@ -131,6 +109,7 @@ final class QuickjsUiController extends ChangeNotifier {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
+    bool notifyLoading = true,
   }) async {
     _ensureActive();
     _loadConfig = _QuickjsUiLoadConfig.copy(
@@ -144,12 +123,11 @@ final class QuickjsUiController extends ChangeNotifier {
     final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
-    final loadingNotifyWatch = Stopwatch()..start();
-    notifyListeners();
-    final loadingNotifyDuration = loadingNotifyWatch.elapsed;
+    if (notifyLoading) {
+      notifyListeners();
+    }
 
     try {
-      final resourceStartedAt = DateTime.now();
       final resourceWatch = Stopwatch()..start();
       final plugin = await loader();
       resourceWatch.stop();
@@ -157,13 +135,6 @@ final class QuickjsUiController extends ChangeNotifier {
         return;
       }
       _stopTimerPump();
-      final sessionStartedAt = DateTime.now();
-      recordLoadDetail(
-        'pipeline.resourceToSessionStart',
-        sessionStartedAt.difference(
-          resourceStartedAt.add(resourceWatch.elapsed),
-        ),
-      );
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
@@ -173,13 +144,7 @@ final class QuickjsUiController extends ChangeNotifier {
       );
       final metrics = _session.lastLoadMetrics;
       _acceptLoadMetrics(
-        metrics
-            ?.withStage('resourceLoad', resourceWatch.elapsed)
-            .withDetail('flutter.loadingNotify', loadingNotifyDuration)
-            .withDetail(
-              'pipeline.sessionReturnToMetrics',
-              DateTime.now().difference(metrics.schemaReadyAt),
-            ),
+        metrics?.withStage('resourceLoad', resourceWatch.elapsed),
       );
       _startTimerPump();
     } catch (error) {
@@ -190,22 +155,7 @@ final class QuickjsUiController extends ChangeNotifier {
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
-        final notifyStartedAt = DateTime.now();
-        final beforeNotifyMetrics = _lastLoadMetrics;
-        if (beforeNotifyMetrics != null) {
-          _lastLoadMetrics = beforeNotifyMetrics.withDetail(
-            'flutter.schemaReadyToNotify',
-            notifyStartedAt.difference(beforeNotifyMetrics.schemaReadyAt),
-          );
-        }
-        final readyNotifyWatch = Stopwatch()..start();
         notifyListeners();
-        final metrics = _lastLoadMetrics;
-        if (metrics != null) {
-          _lastLoadMetrics = metrics
-              .withDetail('flutter.readyNotify', readyNotifyWatch.elapsed)
-              .withReadyNotifiedAt(DateTime.now());
-        }
       }
     }
   }
@@ -218,20 +168,20 @@ final class QuickjsUiController extends ChangeNotifier {
     required Iterable<String> grantedPermissions,
     required QuickjsUiPermissionPolicy? permissionPolicy,
     required QuickjsUiErrorContext errorContext,
+    required bool notifyLoading,
   }) async {
     _ensureActive();
     _loading = true;
     _error = null;
-    final loadingNotifyWatch = Stopwatch()..start();
-    notifyListeners();
-    final loadingNotifyDuration = loadingNotifyWatch.elapsed;
+    if (notifyLoading) {
+      notifyListeners();
+    }
 
     try {
       _stopTimerPump();
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      final sessionStartedAt = DateTime.now();
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
@@ -239,21 +189,7 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
-      final metrics = _session.lastLoadMetrics;
-      _acceptLoadMetrics(
-        metrics
-            ?.withDetail('flutter.loadingNotify', loadingNotifyDuration)
-            .withDetail(
-              'pipeline.controllerToSessionStart',
-              sessionStartedAt.difference(
-                metrics.schemaReadyAt.subtract(metrics.totalToSchema),
-              ),
-            )
-            .withDetail(
-              'pipeline.sessionReturnToMetrics',
-              DateTime.now().difference(metrics.schemaReadyAt),
-            ),
-      );
+      _acceptLoadMetrics(_session.lastLoadMetrics);
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
@@ -266,22 +202,7 @@ final class QuickjsUiController extends ChangeNotifier {
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
-        final notifyStartedAt = DateTime.now();
-        final beforeNotifyMetrics = _lastLoadMetrics;
-        if (beforeNotifyMetrics != null) {
-          _lastLoadMetrics = beforeNotifyMetrics.withDetail(
-            'flutter.schemaReadyToNotify',
-            notifyStartedAt.difference(beforeNotifyMetrics.schemaReadyAt),
-          );
-        }
-        final readyNotifyWatch = Stopwatch()..start();
         notifyListeners();
-        final readyMetrics = _lastLoadMetrics;
-        if (readyMetrics != null) {
-          _lastLoadMetrics = readyMetrics
-              .withDetail('flutter.readyNotify', readyNotifyWatch.elapsed)
-              .withReadyNotifiedAt(DateTime.now());
-        }
       }
     }
   }

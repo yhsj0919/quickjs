@@ -138,6 +138,12 @@ callbacks, handles and pending Promises remain context-local.
 - `QuickjsUiRuntime` now owns one application-scoped core runtime and leases a
   fresh context to every `QuickjsUiSession`. Dynamic asset/file/network bundles
   remain page inputs; no page list is required during runtime initialization.
+- Generated quickjs_ui page adapters expose `bootstrap(props)`. The first load
+  validates the manifest locally, then obtains capabilities, mounts state and
+  commits the initial schema in one worker/QuickJS call. This removes three
+  scheduling boundaries without changing the page author's `Page(...)` API.
+  Existing custom runtime plugins without `bootstrap` continue to use the v1
+  `capabilities` / `mount` / `commit` sequence.
 
 ## Invariants
 
