@@ -37,6 +37,12 @@ final List<ExamplePageSpec> quickjsUiWidgetExamplePages = [
     builder: (_) => const QuickjsUiCounterPage(),
   ),
   ExamplePageSpec(
+    title: 'QuickJS UI Shared Runtime Counter',
+    description:
+        'Uses the same counter page with the application-scoped preheated runtime.',
+    builder: (_) => const QuickjsUiSharedRuntimeCounterPage(),
+  ),
+  ExamplePageSpec(
     title: 'QuickJS UI 多文件计数器',
     description: '从入口 .mjs 加载多文件 quickjs_ui 页面，自动解析相对 import 后渲染。',
     builder: (_) => const QuickjsUiBundleCounterPage(),

@@ -8,14 +8,14 @@ import '../diagnostics/quickjs_exception.dart';
 import 'quickjs.dart';
 import 'quickjs_plugin.dart';
 
-/// Lightweight client for one plugin mounted in a [Quickjs] runtime.
+/// Lightweight client for one plugin mounted in a [QuickjsPluginHost].
 final class QuickjsPluginClient {
   const QuickjsPluginClient(this.engine, this.plugin);
 
   static int _nextCallId = 0;
   static DateTime? _lastCoreCallEndedAt;
 
-  final Quickjs engine;
+  final QuickjsPluginHost engine;
   final QuickjsPlugin plugin;
 
   String get pluginId => plugin.manifest.id;

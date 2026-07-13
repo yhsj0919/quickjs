@@ -360,7 +360,7 @@ final class QuickjsInspectorSnapshot {
 ///
 /// 这个类只负责管理请求队列和 runtime 生命周期；真正的执行发生在平台 backend
 /// 里，native 侧是 Dart isolate + FFI，web 侧是 Web Worker + WASM。
-class Quickjs {
+class Quickjs implements QuickjsPluginHost {
   Quickjs._(this._backend, this._runtime, this._options, this._onConsole);
 
   /// Creates a [Quickjs] wrapper around a supplied backend/runtime pair.
@@ -408,6 +408,27 @@ class Quickjs {
   }) async {
     final backend = await createQuickjsBackend();
     final runtime = await backend.createRuntime(options);
+    final engine = Quickjs._(backend, runtime, options, onConsole);
+    try {
+      await engine._installConsoleOnCurrentRuntime();
+      await engine._installHostEnvironmentOnCurrentRuntime();
+    } catch (_) {
+      await runtime.dispose();
+      rethrow;
+    }
+    return engine;
+  }
+
+  /// Builds the high-level QuickJS API on an already-created backend context.
+  ///
+  /// Context runtimes use this path so mounts and plugins reuse the canonical
+  /// installer without creating or rebuilding another native `JSRuntime`.
+  static Future<Quickjs> attachContext(
+    QuickjsBackend backend,
+    QuickjsJsRuntimeBase runtime, {
+    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+    QuickjsConsoleSink? onConsole,
+  }) async {
     final engine = Quickjs._(backend, runtime, options, onConsole);
     try {
       await engine._installConsoleOnCurrentRuntime();
@@ -484,6 +505,18 @@ class Quickjs {
         ..clear()
         ..addAll(previousMounts);
       rethrow;
+    }
+
+    if (_runtime is QuickjsInPlaceMountRuntime) {
+      try {
+        await _installMountOnCurrentContext(mount);
+      } catch (_) {
+        _runtimeMounts
+          ..clear()
+          ..addAll(previousMounts);
+        rethrow;
+      }
+      return;
     }
 
     _state = QuickjsRuntimeState.stopping;
@@ -682,6 +715,7 @@ class Quickjs {
   }
 
   /// Validates that a plugin entry module exposes every declared function.
+  @override
   Future<void> validatePlugin(QuickjsPlugin plugin, {Duration? timeout}) async {
     final entry = plugin.manifest.entry;
     final lifecycleExports = <String>[
@@ -717,6 +751,7 @@ return JSON.stringify({ type: 'null' });
   /// Calls the plugin's optional init lifecycle export.
   ///
   /// If the manifest does not declare an init export, this is a no-op.
+  @override
   Future<Object?> initPlugin(
     QuickjsPlugin plugin, {
     Map<String, Object?> context = const <String, Object?>{},
@@ -738,6 +773,7 @@ return JSON.stringify({ type: 'null' });
   /// Calls the plugin's optional dispose lifecycle export.
   ///
   /// If the manifest does not declare a dispose export, this is a no-op.
+  @override
   Future<Object?> disposePlugin(QuickjsPlugin plugin, {Duration? timeout}) {
     final dispose = plugin.manifest.dispose;
     if (dispose == null) {
@@ -753,6 +789,7 @@ return JSON.stringify({ type: 'null' });
   }
 
   /// Calls a declared function from a plugin entry module.
+  @override
   Future<Object?> callPlugin(
     QuickjsPlugin plugin,
     String method,
@@ -1242,8 +1279,10 @@ try {
     }
   }
 
-  Future<Map<String, String>> _installHostProvidersOnCurrentRuntime() async {
-    final providers = _effectiveHostProviders();
+  Future<Map<String, String>> _installHostProvidersOnCurrentRuntime([
+    Iterable<QuickjsHostProvider>? selectedProviders,
+  ]) async {
+    final providers = selectedProviders?.toList() ?? _effectiveHostProviders();
     if (providers.isEmpty) {
       return const <String, String>{};
     }
@@ -1268,6 +1307,41 @@ try {
       callbackNames[providerName] = callbackName;
     }
     return callbackNames;
+  }
+
+  Future<void> _installMountOnCurrentContext(QuickjsHostMount mount) async {
+    final capabilities = _effectiveHostCapabilities();
+    if (!capabilities.isEmpty) {
+      await _runtime.evaluate(
+        _wrapInstallHostCapabilities(capabilities),
+        name: '<quickjs:context-mount-capabilities:${mount.name}>',
+      );
+    }
+    final providerNames = await _installHostProvidersOnCurrentRuntime(
+      mount.providers,
+    );
+    if (providerNames.isNotEmpty) {
+      await _runtime.evaluate(
+        _wrapInstallHostProviderRegistry(providerNames),
+        name: '<quickjs:context-mount-providers:${mount.name}>',
+      );
+    }
+    final globalsScript = _providerGlobalsHostScript(
+      mount.providers,
+      mount.name,
+    );
+    if (globalsScript != null) {
+      await _runtime.evaluate(
+        await globalsScript.loadSource(),
+        name: _validateSourceName(globalsScript.name),
+      );
+    }
+    for (final script in mount.environmentPatches) {
+      await _runtime.evaluate(
+        await script.loadSource(),
+        name: _validateSourceName(script.name),
+      );
+    }
   }
 
   Future<Object?> _invokeHostProvider(
@@ -2561,6 +2635,17 @@ String _wrapInstallHostProviderRegistry(Map<String, String> providers) {
 (() => {
   const bindings = $encodedProviders;
   const registry = Object.create(null);
+  const previous = globalThis.__quickjsHostProviders;
+  if (previous && typeof previous === 'object') {
+    for (const name of Object.keys(previous)) {
+      Object.defineProperty(registry, name, {
+        value: previous[name],
+        configurable: false,
+        enumerable: true,
+        writable: false,
+      });
+    }
+  }
   for (const name of Object.keys(bindings)) {
     const callbackName = bindings[name];
     Object.defineProperty(registry, name, {

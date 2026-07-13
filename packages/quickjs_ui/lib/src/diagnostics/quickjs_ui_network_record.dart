@@ -84,9 +84,4 @@ final class QuickjsUiNetworkRecord {
 
 enum QuickjsUiNetworkSource { bundle, host }
 
-enum QuickjsUiNetworkRecordPhase {
-  pending,
-  completed,
-  cacheHit,
-  failed,
-}
+enum QuickjsUiNetworkRecordPhase { pending, completed, cacheHit, failed }

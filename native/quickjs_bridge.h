@@ -22,6 +22,7 @@ QJS_BRIDGE_EXPORT const char *quickjs_version(void);
 
 /* Dart 侧只持有这个不透明指针，不直接访问内部 JSRuntime / JSContext。 */
 typedef struct QuickjsRuntime QuickjsRuntime;
+typedef struct QuickjsContext QuickjsContext;
 typedef int64_t (*QuickjsHostCallback)(int64_t callback_id,
                                        const char *args_json);
 typedef int64_t (*QuickjsHostStreamPull)(int64_t stream_id);
@@ -31,6 +32,30 @@ typedef int64_t (*QuickjsHostSinkAction)(int64_t sink_id, const char *action,
 
 QJS_BRIDGE_EXPORT QuickjsRuntime *quickjs_runtime_new(void);
 QJS_BRIDGE_EXPORT void quickjs_runtime_free(QuickjsRuntime *runtime);
+
+/*
+ * Creates an additional JavaScript context inside an existing runtime.
+ * Contexts share the QuickJS job queue and memory limits but own independent
+ * globals and ES module instances. The runtime must outlive every context.
+ */
+QJS_BRIDGE_EXPORT QuickjsContext *quickjs_context_new(
+    QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT void quickjs_context_free(QuickjsContext *context);
+QJS_BRIDGE_EXPORT char *quickjs_context_eval_timeout_named(
+    QuickjsContext *context, const char *code, const char *name,
+    int64_t timeout_ms);
+QJS_BRIDGE_EXPORT char *quickjs_context_eval_module(
+    QuickjsContext *context, const char *source, const char *name,
+    const char *modules);
+QJS_BRIDGE_EXPORT int quickjs_context_bind_callback(
+    QuickjsContext *context, int64_t callback_id, const char *name,
+    QuickjsHostCallback callback);
+QJS_BRIDGE_EXPORT char *quickjs_context_eval_async_start_named(
+    QuickjsContext *context, const char *code, const char *name);
+QJS_BRIDGE_EXPORT char *quickjs_context_eval_async_poll(
+    QuickjsContext *context);
+QJS_BRIDGE_EXPORT int quickjs_context_bind_sink(
+    QuickjsContext *context, int64_t sink_id, const char *name);
 QJS_BRIDGE_EXPORT void quickjs_runtime_set_memory_limit(
     QuickjsRuntime *runtime, int64_t limit_bytes);
 QJS_BRIDGE_EXPORT void quickjs_runtime_set_stack_limit(

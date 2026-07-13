@@ -5,6 +5,26 @@ import 'package:flutter/services.dart';
 import '../diagnostics/quickjs_exception.dart';
 import 'quickjs_runtime_options.dart';
 
+/// Minimal execution contract shared by standalone engines and child contexts.
+abstract interface class QuickjsPluginHost {
+  Future<void> validatePlugin(QuickjsPlugin plugin, {Duration? timeout});
+
+  Future<Object?> initPlugin(
+    QuickjsPlugin plugin, {
+    Map<String, Object?> context = const <String, Object?>{},
+    Duration? timeout,
+  });
+
+  Future<Object?> callPlugin(
+    QuickjsPlugin plugin,
+    String method,
+    List<Object?> args, {
+    Duration? timeout,
+  });
+
+  Future<Object?> disposePlugin(QuickjsPlugin plugin, {Duration? timeout});
+}
+
 /// Manifest describing a JavaScript plugin contract.
 final class QuickjsPluginManifest {
   const QuickjsPluginManifest({

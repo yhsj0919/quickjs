@@ -177,7 +177,9 @@ final class QuickjsUiNetworkJournal {
         etag: etag ?? pending.etag,
         fromCache: fromCache,
         phase: failed ? QuickjsUiNetworkRecordPhase.failed : phase,
-        error: error ?? (failed ? 'HTTP ${statusCode ?? pending.statusCode}' : null),
+        error:
+            error ??
+            (failed ? 'HTTP ${statusCode ?? pending.statusCode}' : null),
       ),
     );
   }
@@ -327,10 +329,7 @@ QuickjsUiHostApiHandlers instrumentHostNetworkLogging(
     onClipboardWriteText: handlers.onClipboardWriteText,
     onNetworkRequest: (request) {
       final map = Map<String, Object?>.from(request);
-      return journal.traceHostRequest(
-        map,
-        () => onNetworkRequest(map),
-      );
+      return journal.traceHostRequest(map, () => onNetworkRequest(map));
     },
     onFileSystemOperation: handlers.onFileSystemOperation,
     onNativeCall: handlers.onNativeCall,

@@ -750,6 +750,239 @@ export function echo(value) {
     );
   });
 
+  test('native worker contexts isolate global objects', () async {
+    final runtime = await NativeQuickjsWorkerRuntime.create();
+    addTearDown(runtime.dispose);
+
+    final first = await runtime.createContext();
+    final second = await runtime.createContext();
+    addTearDown(() => runtime.disposeContext(first));
+    addTearDown(() => runtime.disposeContext(second));
+
+    expect(
+      await runtime.evaluateContext(first, 'globalThis.value = 41; value'),
+      '41',
+    );
+    expect(await runtime.evaluateContext(second, 'typeof value'), 'undefined');
+    expect(
+      await runtime.evaluateContext(second, 'globalThis.value = 7; value'),
+      '7',
+    );
+    expect(await runtime.evaluateContext(first, 'value + 1'), '42');
+  });
+
+  test('native worker contexts isolate module source tables', () async {
+    final runtime = await NativeQuickjsWorkerRuntime.create();
+    addTearDown(runtime.dispose);
+
+    final first = await runtime.createContext();
+    final second = await runtime.createContext();
+    addTearDown(() => runtime.disposeContext(first));
+    addTearDown(() => runtime.disposeContext(second));
+
+    const entry =
+        "import { value } from './shared.mjs'; globalThis.moduleValue = value";
+    expect(
+      await runtime.evaluateModuleContext(
+        first,
+        entry,
+        name: 'first.mjs',
+        modules: const {'shared.mjs': 'export const value = 41'},
+      ),
+      'undefined',
+    );
+    expect(
+      await runtime.evaluateModuleContext(
+        second,
+        entry,
+        name: 'second.mjs',
+        modules: const {'shared.mjs': 'export const value = 7'},
+      ),
+      'undefined',
+    );
+    expect(await runtime.evaluateContext(first, 'moduleValue'), '41');
+    expect(await runtime.evaluateContext(second, 'moduleValue'), '7');
+  });
+
+  test('public runtime creates isolated contexts', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final first = await runtime.createContext();
+    final second = await runtime.createContext();
+
+    expect(await first.eval('globalThis.value = 11; value'), '11');
+    expect(await second.eval('typeof value'), 'undefined');
+    await first.dispose();
+    expect(() => first.eval('value'), throwsA(isA<JsRuntimeClosedException>()));
+    expect(await second.eval('6 * 7'), '42');
+  });
+
+  test('public contexts keep host callbacks isolated', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final first = await runtime.createContext();
+    final second = await runtime.createContext();
+
+    await first.bindCallback('hostValue', (args) => (args.single as int) + 1);
+    await second.bindCallback('hostValue', (args) => (args.single as int) * 2);
+    await first.eval('hostValue(20).then(value => globalThis.result = value)');
+    await second.eval('hostValue(20).then(value => globalThis.result = value)');
+
+    await _waitForContextValue(first, 'result', '21');
+    await _waitForContextValue(second, 'result', '40');
+  });
+
+  test(
+    'late context callback response does not close shared runtime',
+    () async {
+      final runtime = await QuickjsRuntime.create();
+      addTearDown(runtime.dispose);
+      final disposed = await runtime.createContext();
+      final sibling = await runtime.createContext();
+      final started = Completer<void>();
+
+      await disposed.bindCallback('slowHost', (_) async {
+        started.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        return 1;
+      });
+      await disposed.eval('slowHost()');
+      await started.future;
+      await disposed.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(await sibling.eval('40 + 2'), '42');
+    },
+  );
+
+  test('context async evaluation pumps isolated timers', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final first = await runtime.createContext();
+    final second = await runtime.createContext();
+
+    expect(
+      await first.evalAsync(
+        'new Promise(resolve => setTimeout(() => resolve(21), 5))',
+      ),
+      '21',
+    );
+    expect(await second.eval('typeof result'), 'undefined');
+    expect(
+      await second.evalAsync(
+        'new Promise(resolve => setTimeout(() => resolve(40), 5))',
+      ),
+      '40',
+    );
+  });
+
+  test('disposing a context cancels only its timers', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final disposed = await runtime.createContext();
+    final sibling = await runtime.createContext();
+
+    await disposed.eval('setInterval(() => {}, 1)');
+    await disposed.dispose();
+    expect(
+      await sibling.evalAsync(
+        'new Promise(resolve => setTimeout(() => resolve(42), 5))',
+      ),
+      '42',
+    );
+  });
+
+  test('context callback exposes Dart Stream to its JS context', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final context = await runtime.createContext();
+
+    await context.bindCallback(
+      'numbers',
+      (_) => Stream<Object?>.fromIterable(<Object?>[1, 2, 3]),
+    );
+    expect(
+      await context.evalAsync('''
+(async () => {
+  const values = [];
+  for await (const value of await numbers()) values.push(value);
+  return values.join(',');
+})()
+'''),
+      '1,2,3',
+    );
+  });
+
+  test('context JS sink emits to its Dart stream', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final context = await runtime.createContext();
+    final values = <Object?>[];
+    final done = Completer<void>();
+    final stream = await context.bindJsSink('progress');
+    final subscription = stream.listen(values.add, onDone: done.complete);
+    addTearDown(subscription.cancel);
+
+    await context.evalAsync('''
+(async () => {
+  await progress.emit(10);
+  await progress.emit(20);
+  await progress.close();
+})()
+''');
+    await done.future.timeout(const Duration(seconds: 1));
+    expect(values, <Object?>[10, 20]);
+  });
+
+  test(
+    'contexts install and isolate plugins without rebuilding runtime',
+    () async {
+      final runtime = await QuickjsRuntime.create();
+      addTearDown(runtime.dispose);
+      final firstPlugin = QuickjsPlugin.singleFile(
+        id: 'counter',
+        version: '1.0.0',
+        source: 'export function add(value) { return value + 1; }',
+        exports: const <String>['add'],
+      );
+      final secondPlugin = QuickjsPlugin.singleFile(
+        id: 'counter',
+        version: '2.0.0',
+        source: 'export function add(value) { return value + 10; }',
+        exports: const <String>['add'],
+      );
+      final first = await runtime.createContext(
+        options: QuickjsContextOptions(plugins: <QuickjsPlugin>[firstPlugin]),
+      );
+      final second = await runtime.createContext(
+        options: QuickjsContextOptions(plugins: <QuickjsPlugin>[secondPlugin]),
+      );
+
+      await first.validatePlugin(firstPlugin);
+      await second.validatePlugin(secondPlugin);
+      expect(await first.callPlugin(firstPlugin, 'add', <Object?>[5]), 6);
+      expect(await second.callPlugin(secondPlugin, 'add', <Object?>[5]), 15);
+    },
+  );
+
+  test('context loads a plugin in place and preserves globals', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+    final context = await runtime.createContext();
+    await context.eval('globalThis.beforeMount = 41');
+    final plugin = QuickjsPlugin.singleFile(
+      id: 'dynamic',
+      version: '1.0.0',
+      source: 'export function read() { return globalThis.beforeMount + 1; }',
+      exports: const <String>['read'],
+    );
+
+    await context.loadPlugin(plugin);
+
+    expect(await context.callPlugin(plugin, 'read', const <Object?>[]), 42);
+    expect(await context.eval('beforeMount'), '41');
+  });
+
   // crash 后 runtime 进入 closed 状态，后续请求必须立即失败。
   test('native worker crash closes runtime for later evaluations', () async {
     final runtime = await NativeQuickjsWorkerRuntime.create();
@@ -784,4 +1017,17 @@ Future<void> _expectHundredQueuedEvals(Quickjs engine) async {
     expected.add(value);
   }
   expect(results, expected);
+}
+
+Future<void> _waitForContextValue(
+  QuickjsContext context,
+  String expression,
+  String expected,
+) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    final value = await context.eval(expression);
+    if (value == expected) return;
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+  }
+  expect(await context.eval(expression), expected);
 }

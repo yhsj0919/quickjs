@@ -29,10 +29,10 @@ abstract final class QuickjsUiDiag {
     final now = DateTime.now();
     if (bucket.lastReportedAt == null ||
         now.difference(bucket.lastReportedAt!) >= bucket.interval) {
-      final suffix = bucket.lastDetail == null ? '' : ' last=${bucket.lastDetail}';
-      debugPrint(
-        '[quickjs_ui_diag/$channel] count=${bucket.count}$suffix',
-      );
+      final suffix = bucket.lastDetail == null
+          ? ''
+          : ' last=${bucket.lastDetail}';
+      debugPrint('[quickjs_ui_diag/$channel] count=${bucket.count}$suffix');
       bucket.count = 0;
       bucket.lastDetail = null;
       bucket.lastReportedAt = now;

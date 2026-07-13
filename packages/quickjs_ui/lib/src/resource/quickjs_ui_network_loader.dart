@@ -134,8 +134,7 @@ final class QuickjsUiNetworkLoader {
       final request = QuickjsUiNetworkRequest(
         uri: normalizedUrl,
         headers: <String, String>{
-          if (cached?.etag != null)
-            _httpHeaderIfNoneMatch: cached!.etag!,
+          if (cached?.etag != null) _httpHeaderIfNoneMatch: cached!.etag!,
         },
       );
       _log(

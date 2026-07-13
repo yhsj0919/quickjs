@@ -46,3 +46,45 @@ abstract class QuickjsJsRuntimeBase {
   /// Releases resources owned by the current runtime.
   Future<void> dispose();
 }
+
+/// Optional backend capability for multiple isolated JS contexts in one runtime.
+abstract interface class QuickjsMultiContextRuntimeBase {
+  Future<int> createContext();
+
+  Future<String> evaluateContext(
+    int contextId,
+    String code, {
+    Duration? timeout,
+    String name = '<context-eval>',
+  });
+
+  Future<String> evaluateModuleContext(
+    int contextId,
+    String source, {
+    required String name,
+    Map<String, String> modules = const {},
+  });
+
+  Future<void> bindContextCallback(
+    int contextId,
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  );
+
+  Future<String> evaluateContextAsync(
+    int contextId,
+    String code, {
+    Duration? timeout,
+    String name = '<context-evalAsync>',
+  });
+
+  Future<void> unbindContextCallback(int contextId, int callbackId);
+
+  Future<Stream<Object?>> bindContextJsSink(int contextId, String name);
+
+  Future<void> disposeContext(int contextId);
+}
+
+/// Marker for a child-context adapter that can accept mounts in place.
+abstract interface class QuickjsInPlaceMountRuntime {}
