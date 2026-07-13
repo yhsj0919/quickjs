@@ -17,8 +17,7 @@ import '../resource/quickjs_ui_network_loader.dart';
 final class QuickjsUiInspector extends ChangeNotifier {
   static const int maxLifecycleEvents = 256;
 
-  final List<QuickjsUiLifecycleEvent> _lifecycle =
-      <QuickjsUiLifecycleEvent>[];
+  final List<QuickjsUiLifecycleEvent> _lifecycle = <QuickjsUiLifecycleEvent>[];
   Map<String, Object?>? _lastAction;
   QuickjsUiDiffStats? _lastDiff;
   Map<String, Object?>? _lastSchema;
@@ -43,11 +42,7 @@ final class QuickjsUiInspector extends ChangeNotifier {
 
   Object? get lastError => _lastError;
 
-  void recordLifecycle(
-    String phase,
-    String type, {
-    Object? payload,
-  }) {
+  void recordLifecycle(String phase, String type, {Object? payload}) {
     _lifecycle.add(
       QuickjsUiLifecycleEvent(
         phase: phase,

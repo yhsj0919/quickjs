@@ -1,9 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 
+import '../../../example_quickjs_ui_runtime.dart';
+
 /// QuickJS UI 计数器 Demo：加载单文件 Page（.mjs）并用原生 Flutter Widget 渲染。
 class QuickjsUiCounterPage extends StatefulWidget {
-  const QuickjsUiCounterPage({super.key});
+  const QuickjsUiCounterPage({
+    super.key,
+    this.runtime,
+    this.title = 'QuickJS UI Counter',
+    this.timingLabel = 'QuickJS UI first render',
+  });
+
+  /// Optional application-scoped runtime. A null value preserves the original
+  /// cold-start behavior and lets the controller own its engine.
+  final QuickjsUiRuntime? runtime;
+  final String title;
+  final String timingLabel;
 
   /// 单文件入口脚本的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/counter_page.mjs';
@@ -22,7 +35,8 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
   @override
   void initState() {
     super.initState();
-    _controller = QuickjsUiController()..addListener(_handleControllerChanged);
+    _controller = QuickjsUiController(runtime: widget.runtime)
+      ..addListener(_handleControllerChanged);
   }
 
   @override
@@ -37,7 +51,7 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
     final canControl = _controller.plugin != null && !_controller.isLoading;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QuickJS UI Counter'),
+        title: Text(widget.title),
         actions: <Widget>[
           IconButton(
             tooltip: 'Refresh render',
@@ -102,9 +116,17 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
     _stopwatch.stop();
     final elapsed = _stopwatch.elapsed;
     debugPrint(
-      'QuickJS UI first render: ${elapsed.inMilliseconds}ms '
+      '${widget.timingLabel}: ${elapsed.inMilliseconds}ms '
       '(${QuickjsUiCounterPage.path})',
     );
+    final metrics = _controller.lastLoadMetrics;
+    if (metrics != null) {
+      final flutterTail = elapsed - metrics.totalToSchema;
+      debugPrint(
+        '${widget.timingLabel} stages: ${metrics.format()}, '
+        'flutterFirstFrame=${flutterTail.inMicroseconds / 1000}ms',
+      );
+    }
     setState(() {
       _firstRenderElapsed = elapsed;
       _status = 'rendered';
@@ -140,6 +162,21 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
     if (mounted) {
       setState(() {});
     }
+  }
+}
+
+/// Warm-runtime variant of the counter used for an apples-to-apples benchmark.
+/// It delegates to the same widget and JS asset as the cold counter.
+class QuickjsUiSharedRuntimeCounterPage extends StatelessWidget {
+  const QuickjsUiSharedRuntimeCounterPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return QuickjsUiCounterPage(
+      runtime: exampleQuickjsUiRuntime,
+      title: 'QuickJS UI Counter (Shared Runtime)',
+      timingLabel: 'QuickJS UI shared runtime first render',
+    );
   }
 }
 

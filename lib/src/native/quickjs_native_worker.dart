@@ -14,6 +14,7 @@ import '../bridge/quickjs_stream_bridge.dart';
 
 const String _messageTypeKey = 'type';
 const String _messageIdKey = 'id';
+const String _messageContextIdKey = 'contextId';
 const String _messageCodeKey = 'code';
 const String _messageSourceNameKey = 'sourceName';
 const String _messageModuleNameKey = 'moduleName';
@@ -41,15 +42,22 @@ const String _pendingSentinel = '\u001eQuickJS_PENDING';
 
 const String _readyMessage = 'ready';
 const String _evalMessage = 'eval';
+const String _createContextMessage = 'createContext';
+const String _disposeContextMessage = 'disposeContext';
+const String _evalContextMessage = 'evalContext';
+const String _evalContextAsyncMessage = 'evalContextAsync';
+const String _evalModuleContextMessage = 'evalModuleContext';
 const String _evalModuleMessage = 'evalModule';
 const String _evalAsyncMessage = 'evalAsync';
 const String _bindCallbackMessage = 'bindCallback';
+const String _bindContextCallbackMessage = 'bindContextCallback';
 const String _callbackRequestMessage = 'callbackRequest';
 const String _callbackResponseMessage = 'callbackResponse';
 const String _streamPullRequestMessage = 'streamPullRequest';
 const String _streamPullResponseMessage = 'streamPullResponse';
 const String _streamCancelRequestMessage = 'streamCancelRequest';
 const String _bindSinkMessage = 'bindSink';
+const String _bindContextSinkMessage = 'bindContextSink';
 const String _sinkActionRequestMessage = 'sinkActionRequest';
 const String _sinkActionResponseMessage = 'sinkActionResponse';
 const String _disposeMessage = 'dispose';
@@ -151,7 +159,8 @@ _nativeHostSinkActionPointer =
 ///
 /// 这个对象运行在调用方 isolate 中，只持有 worker isolate 的端口和 pending Future。
 /// 真正的 `QuickjsRuntime*` 指针只存在于 [_nativeQuickjsWorkerMain]。
-final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
+final class NativeQuickjsWorkerRuntime
+    implements QuickjsJsRuntimeBase, QuickjsMultiContextRuntimeBase {
   NativeQuickjsWorkerRuntime._(
     this._isolate,
     this._receivePort,
@@ -173,8 +182,12 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
   final StreamSubscription<dynamic> _exitSubscription;
   final Pointer<Int32> _cancelFlag;
   final String quickjsVersion;
-  final Map<int, Completer<String?>> _pending = <int, Completer<String?>>{};
+  final Map<int, Completer<Object?>> _pending = <int, Completer<Object?>>{};
   final Map<int, _QuickjsCallback> _callbacks = <int, _QuickjsCallback>{};
+  final Map<int, Set<int>> _contextCallbackIds = <int, Set<int>>{};
+  final Map<int, int> _callbackContextIds = <int, int>{};
+  final Map<int, Set<int>> _contextStreamIds = <int, Set<int>>{};
+  final Map<int, Set<int>> _contextSinkIds = <int, Set<int>>{};
   late final QuickjsDartStreamRegistry _streamRegistry =
       QuickjsDartStreamRegistry(
         (pullRequestId, payloadJson) {
@@ -332,6 +345,131 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
       calloc.free(cancelFlag);
       rethrow;
     }
+  }
+
+  /// Creates an additional native JSContext in this worker's shared JSRuntime.
+  @override
+  Future<int> createContext() {
+    return _sendRequest<int>(_createContextMessage, const <String, Object?>{});
+  }
+
+  /// Evaluates code in an additional context without affecting its siblings.
+  @override
+  Future<String> evaluateContext(
+    int contextId,
+    String code, {
+    Duration? timeout,
+    String name = '<context-eval>',
+  }) {
+    return _sendRequest<String>(_evalContextMessage, <String, Object?>{
+      _messageContextIdKey: contextId,
+      _messageCodeKey: code,
+      _messageSourceNameKey: name,
+      if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
+    });
+  }
+
+  @override
+  Future<String> evaluateContextAsync(
+    int contextId,
+    String code, {
+    Duration? timeout,
+    String name = '<context-evalAsync>',
+  }) {
+    return _sendRequest<String>(_evalContextAsyncMessage, <String, Object?>{
+      _messageContextIdKey: contextId,
+      _messageCodeKey: code,
+      _messageSourceNameKey: name,
+      if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
+    });
+  }
+
+  @override
+  Future<void> disposeContext(int contextId) {
+    final callbackIds = _contextCallbackIds.remove(contextId);
+    if (callbackIds != null) {
+      for (final callbackId in callbackIds) {
+        _callbacks.remove(callbackId);
+        _callbackContextIds.remove(callbackId);
+      }
+    }
+    for (final streamId
+        in _contextStreamIds.remove(contextId) ?? const <int>{}) {
+      _streamRegistry.disposeStream(streamId);
+    }
+    for (final sinkId in _contextSinkIds.remove(contextId) ?? const <int>{}) {
+      _sinkRegistry.disposeSink(sinkId);
+    }
+    return _sendRequest<void>(_disposeContextMessage, <String, Object?>{
+      _messageContextIdKey: contextId,
+    });
+  }
+
+  @override
+  Future<void> bindContextCallback(
+    int contextId,
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  ) async {
+    if (_closed) throw JsRuntimeClosedException();
+    _callbacks[callbackId] = callback;
+    _callbackContextIds[callbackId] = contextId;
+    _contextCallbackIds.putIfAbsent(contextId, () => <int>{}).add(callbackId);
+    try {
+      await _sendRequest<void>(_bindContextCallbackMessage, <String, Object?>{
+        _messageContextIdKey: contextId,
+        _messageCallbackIdKey: callbackId,
+        _messageCallbackNameKey: name,
+      });
+    } catch (_) {
+      _callbacks.remove(callbackId);
+      _callbackContextIds.remove(callbackId);
+      _contextCallbackIds[contextId]?.remove(callbackId);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> unbindContextCallback(int contextId, int callbackId) async {
+    _callbacks.remove(callbackId);
+    _callbackContextIds.remove(callbackId);
+    _contextCallbackIds[contextId]?.remove(callbackId);
+  }
+
+  @override
+  Future<Stream<Object?>> bindContextJsSink(int contextId, String name) async {
+    if (_closed) throw JsRuntimeClosedException();
+    final created = _sinkRegistry.createSink();
+    _contextSinkIds.putIfAbsent(contextId, () => <int>{}).add(created.sinkId);
+    try {
+      await _sendRequest<void>(_bindContextSinkMessage, <String, Object?>{
+        _messageContextIdKey: contextId,
+        _messageSinkIdKey: created.sinkId,
+        _messageCallbackNameKey: name,
+      });
+      return created.stream;
+    } catch (_) {
+      _contextSinkIds[contextId]?.remove(created.sinkId);
+      _sinkRegistry.disposeSink(created.sinkId);
+      rethrow;
+    }
+  }
+
+  /// Evaluates an ES module with a source table owned only by this context.
+  @override
+  Future<String> evaluateModuleContext(
+    int contextId,
+    String source, {
+    required String name,
+    Map<String, String> modules = const {},
+  }) {
+    return _sendRequest<String>(_evalModuleContextMessage, <String, Object?>{
+      _messageContextIdKey: contextId,
+      _messageCodeKey: source,
+      _messageModuleNameKey: name,
+      _messageModulesKey: _encodeModuleTable(modules),
+    });
   }
 
   @override
@@ -499,7 +637,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
     Map<String, Object?> payload = const <String, Object?>{},
   ]) {
     final requestId = _nextRequestId++;
-    final completer = Completer<String?>();
+    final completer = Completer<Object?>();
     _pending[requestId] = completer;
     // 所有 worker 命令都带 requestId，响应回来后用它完成对应 Future。
     _sendPort.send(<String, Object?>{
@@ -531,7 +669,7 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
         return;
       }
       if (ok) {
-        completer.complete(message['result'] as String?);
+        completer.complete(message['result']);
       } else {
         final error = '${message['error']}';
         // C bridge 和 web bridge 都通过 sentinel / 文本协议把错误还原为 Dart 异常。
@@ -626,13 +764,14 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
           ? [for (final item in decoded) decodeCallbackWireValue(item)]
           : <Object?>[];
       final result = await callback(args);
+      final encodedResult = result is Stream
+          ? _encodeContextStream(callbackId, result.cast<Object?>())
+          : _streamRegistry.encodeCallbackResult(result);
       _sendPort.send(<String, Object?>{
         _messageTypeKey: _callbackResponseMessage,
         _messageCallbackRequestIdKey: callbackRequestId,
         _messageSuccessKey: true,
-        _messagePayloadJsonKey: jsonEncode(
-          _streamRegistry.encodeCallbackResult(result),
-        ),
+        _messagePayloadJsonKey: jsonEncode(encodedResult),
       });
     } catch (error) {
       _sendPort.send(<String, Object?>{
@@ -642,6 +781,15 @@ final class NativeQuickjsWorkerRuntime implements QuickjsJsRuntimeBase {
         _messagePayloadJsonKey: '$error',
       });
     }
+  }
+
+  Object _encodeContextStream(int callbackId, Stream<Object?> stream) {
+    final streamId = _streamRegistry.register(stream);
+    final contextId = _callbackContextIds[callbackId];
+    if (contextId != null) {
+      _contextStreamIds.putIfAbsent(contextId, () => <int>{}).add(streamId);
+    }
+    return encodeDartStreamWire(streamId);
   }
 
   void _failAll(Object error) {
@@ -687,6 +835,8 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
 
   late final QuickjsBindings bindings;
   Pointer<QuickjsRuntime> runtime = nullptr;
+  final contexts = <int, Pointer<QuickjsContext>>{};
+  var nextContextId = 1;
   var closed = false;
 
   try {
@@ -783,6 +933,70 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
           throw StateError('QuickJS runtime is closed');
         }
         switch (type) {
+          case _createContextMessage:
+            final context = bindings.contextNew(runtime);
+            if (context == nullptr) {
+              throw StateError('Failed to create QuickJS context');
+            }
+            final contextId = nextContextId++;
+            contexts[contextId] = context;
+            _sendOk(responseSendPort, requestId, contextId);
+          case _disposeContextMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts.remove(contextId);
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            bindings.contextFree(context);
+            _sendOk(responseSendPort, requestId, null);
+          case _evalContextMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts[contextId];
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            final code = message[_messageCodeKey] as String;
+            final name =
+                message[_messageSourceNameKey] as String? ?? '<context-eval>';
+            final timeoutMs = message[_messageTimeoutMsKey] as int?;
+            final result = _evalContext(
+              bindings,
+              context,
+              code,
+              name,
+              timeoutMs,
+            );
+            _sendOk(responseSendPort, requestId, result);
+          case _evalContextAsyncMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts[contextId];
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            final result = await _evalContextAsync(
+              bindings,
+              context,
+              message[_messageCodeKey] as String,
+              message[_messageSourceNameKey] as String? ??
+                  '<context-evalAsync>',
+              message[_messageTimeoutMsKey] as int?,
+              cancelFlag,
+            );
+            _sendOk(responseSendPort, requestId, result);
+          case _evalModuleContextMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts[contextId];
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            final result = _evalModuleContext(
+              bindings,
+              context,
+              message[_messageCodeKey] as String,
+              message[_messageModuleNameKey] as String,
+              message[_messageModulesKey] as String? ?? '',
+            );
+            _sendOk(responseSendPort, requestId, result);
           case _evalMessage:
             final code = message[_messageCodeKey] as String;
             final name = message[_messageSourceNameKey] as String? ?? '<eval>';
@@ -820,14 +1034,41 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             final name = message[_messageCallbackNameKey] as String;
             _bindCallback(bindings, runtime, callbackId, name);
             _sendOk(responseSendPort, requestId, null);
+          case _bindContextCallbackMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts[contextId];
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            _bindContextCallback(
+              bindings,
+              context,
+              message[_messageCallbackIdKey] as int,
+              message[_messageCallbackNameKey] as String,
+            );
+            _sendOk(responseSendPort, requestId, null);
           case _bindSinkMessage:
             final sinkId = message[_messageSinkIdKey] as int;
             final name = message[_messageCallbackNameKey] as String;
             _bindSink(bindings, runtime, sinkId, name);
             _sendOk(responseSendPort, requestId, null);
+          case _bindContextSinkMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts[contextId];
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            _bindContextSink(
+              bindings,
+              context,
+              message[_messageSinkIdKey] as int,
+              message[_messageCallbackNameKey] as String,
+            );
+            _sendOk(responseSendPort, requestId, null);
           case _disposeMessage:
             // runtime 必须在持有它的 worker isolate 中释放。
             closed = true;
+            contexts.clear();
             bindings.runtimeFree(runtime);
             _nativeHostCallbackSendPort = null;
             runtime = nullptr;
@@ -860,6 +1101,22 @@ void _bindSink(
   }
 }
 
+void _bindContextSink(
+  QuickjsBindings bindings,
+  Pointer<QuickjsContext> context,
+  int sinkId,
+  String name,
+) {
+  final namePtr = name.toNativeUtf8();
+  try {
+    if (bindings.contextBindSink(context, sinkId, namePtr) < 0) {
+      throw StateError('QuickJS context sink binding failed');
+    }
+  } finally {
+    calloc.free(namePtr);
+  }
+}
+
 void _bindCallback(
   QuickjsBindings bindings,
   Pointer<QuickjsRuntime> runtime,
@@ -882,6 +1139,28 @@ void _bindCallback(
   }
 }
 
+void _bindContextCallback(
+  QuickjsBindings bindings,
+  Pointer<QuickjsContext> context,
+  int callbackId,
+  String name,
+) {
+  final namePtr = name.toNativeUtf8();
+  try {
+    final result = bindings.contextBindCallback(
+      context,
+      callbackId,
+      namePtr,
+      _nativeHostCallbackPointer,
+    );
+    if (result < 0) {
+      throw StateError('QuickJS context callback binding failed');
+    }
+  } finally {
+    calloc.free(namePtr);
+  }
+}
+
 void _resolveCallback(
   QuickjsBindings bindings,
   Pointer<QuickjsRuntime> runtime,
@@ -898,7 +1177,10 @@ void _resolveCallback(
       payloadPtr,
     );
     if (result < 0) {
-      throw StateError('QuickJS callback resolution failed');
+      // The owning context may have been disposed while Dart work was in
+      // flight. Its pending Promise is already released, so a late response is
+      // intentionally dropped instead of crashing the shared runtime worker.
+      return;
     }
   } finally {
     calloc.free(payloadPtr);
@@ -921,7 +1203,8 @@ void _resolveStreamPull(
       payloadPtr,
     );
     if (result < 0) {
-      throw StateError('QuickJS stream pull resolution failed');
+      // A disposed context no longer owns a Promise to receive this response.
+      return;
     }
   } finally {
     calloc.free(payloadPtr);
@@ -944,7 +1227,8 @@ void _resolveSinkAction(
       messagePtr,
     );
     if (result < 0) {
-      throw StateError('QuickJS sink action resolution failed');
+      // Sink actions may complete after their context has been disposed.
+      return;
     }
   } finally {
     calloc.free(messagePtr);
@@ -971,6 +1255,28 @@ String _evalModule(
   calloc.free(namePtr);
   calloc.free(modulesPtr);
   return _takeResult(bindings, resultPtr);
+}
+
+String _evalModuleContext(
+  QuickjsBindings bindings,
+  Pointer<QuickjsContext> context,
+  String source,
+  String name,
+  String modules,
+) {
+  final sourcePtr = source.toNativeUtf8();
+  final namePtr = name.toNativeUtf8();
+  final modulesPtr = modules.toNativeUtf8();
+  try {
+    return _takeResult(
+      bindings,
+      bindings.contextEvalModule(context, sourcePtr, namePtr, modulesPtr),
+    );
+  } finally {
+    calloc.free(sourcePtr);
+    calloc.free(namePtr);
+    calloc.free(modulesPtr);
+  }
 }
 
 String _encodeModuleTable(Map<String, String> modules) {
@@ -1027,6 +1333,26 @@ String _eval(
   }
 }
 
+String _evalContext(
+  QuickjsBindings bindings,
+  Pointer<QuickjsContext> context,
+  String code,
+  String name,
+  int? timeoutMs,
+) {
+  final codePtr = code.toNativeUtf8();
+  final namePtr = name.toNativeUtf8();
+  final resultPtr = bindings.contextEvalTimeoutNamed(
+    context,
+    codePtr,
+    namePtr,
+    timeoutMs ?? 0,
+  );
+  calloc.free(codePtr);
+  calloc.free(namePtr);
+  return _takeResult(bindings, resultPtr);
+}
+
 Future<String> _evalAsync(
   QuickjsBindings bindings,
   Pointer<QuickjsRuntime> runtime,
@@ -1065,6 +1391,37 @@ Future<String> _evalAsync(
   }
 }
 
+Future<String> _evalContextAsync(
+  QuickjsBindings bindings,
+  Pointer<QuickjsContext> context,
+  String code,
+  String name,
+  int? timeoutMs,
+  Pointer<Int32> cancelFlag,
+) async {
+  final codePtr = code.toNativeUtf8();
+  final namePtr = name.toNativeUtf8();
+  final stopwatch = Stopwatch()..start();
+  Pointer<Utf8> resultPtr = bindings.contextEvalAsyncStartNamed(
+    context,
+    codePtr,
+    namePtr,
+  );
+  calloc.free(codePtr);
+  calloc.free(namePtr);
+
+  while (true) {
+    if (cancelFlag.value != 0) throw JsCancelledException();
+    final result = _takeResult(bindings, resultPtr);
+    if (result != _pendingSentinel) return result;
+    if (timeoutMs != null && stopwatch.elapsedMilliseconds >= timeoutMs) {
+      throw const JsTimeoutException();
+    }
+    await Future<void>.delayed(Duration.zero);
+    resultPtr = bindings.contextEvalAsyncPoll(context);
+  }
+}
+
 String _takeResult(QuickjsBindings bindings, Pointer<Utf8> resultPtr) {
   if (resultPtr == nullptr) {
     throw StateError('QuickJS eval returned null');
@@ -1088,7 +1445,7 @@ String _takeResult(QuickjsBindings bindings, Pointer<Utf8> resultPtr) {
   }
 }
 
-void _sendOk(SendPort sendPort, int requestId, String? result) {
+void _sendOk(SendPort sendPort, int requestId, Object? result) {
   sendPort.send(<String, Object?>{
     _messageTypeKey: _responseMessage,
     _messageIdKey: requestId,

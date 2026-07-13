@@ -7,9 +7,11 @@ import 'package:quickjs/quickjs.dart';
 
 import '../diagnostics/quickjs_ui_error.dart';
 import '../diagnostics/quickjs_ui_inspector.dart';
+import '../diagnostics/quickjs_ui_load_metrics.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
+import 'quickjs_ui_runtime.dart';
 
 const int _quickjsUiStackLimitBytes = 1024 * 1024;
 const int _minimumSupportedQuickjsUiSchemaVersion = 1;
@@ -25,9 +27,12 @@ final class QuickjsUiSession {
   // Keep the public constructor parameters named `engine` and `onConsole`.
   QuickjsUiSession({
     Quickjs? engine,
+    QuickjsUiRuntime? runtime,
     QuickjsConsoleSink? onConsole,
     QuickjsUiInspector? inspector,
-  }) : _engineBinding = engine == null
+  }) : assert(engine == null || runtime == null),
+       _runtime = runtime,
+       _engineBinding = engine == null
            ? null
            : _QuickjsUiEngineBinding.attached(engine),
        _onConsole = onConsole,
@@ -38,11 +43,13 @@ final class QuickjsUiSession {
   }
 
   _QuickjsUiEngineBinding? _engineBinding;
+  final QuickjsUiRuntime? _runtime;
   final QuickjsConsoleSink? _onConsole;
   QuickjsUiInspector? inspector;
   _QuickjsUiPageBinding? _pageBinding;
   Object? _state;
   QuickjsUiNode? _node;
+  QuickjsUiLoadMetrics? _lastLoadMetrics;
   final Object _engineLease = Object();
   bool _disposed = false;
   Future<void>? _disposeFuture;
@@ -51,6 +58,7 @@ final class QuickjsUiSession {
   final _SessionOperationScheduler _scheduler = _SessionOperationScheduler();
 
   Quickjs? get engine => _engineBinding?.engine;
+  QuickjsContext? get context => _engineBinding?.context;
   QuickjsPlugin? get plugin => _pageBinding?.plugin;
   Map<String, Object?> get props =>
       _pageBinding?.props ?? const <String, Object?>{};
@@ -62,6 +70,7 @@ final class QuickjsUiSession {
       _pageBinding?.permissionPolicy;
   Object? get state => _state;
   QuickjsUiNode? get node => _node;
+  QuickjsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
   bool get isDisposed => _disposed;
 
   Future<void> loadPlugin(
@@ -72,34 +81,43 @@ final class QuickjsUiSession {
     QuickjsUiPermissionPolicy? permissionPolicy,
   }) async {
     return _enqueue(() async {
+      final total = Stopwatch()..start();
+      final stages = <String, Duration>{};
+      var lap = Duration.zero;
+      void record(String name) {
+        final elapsed = total.elapsed;
+        stages[name] = elapsed - lap;
+        lap = elapsed;
+      }
+
       _ensureActive();
       permissionPolicy?.validate(
         plugin: plugin,
         grantedPermissions: grantedPermissions,
       );
       final requestedMounts = List<QuickjsHostMount>.unmodifiable(mounts);
-      final engine = await _engineForPage(requestedMounts);
+      final host = await _hostForPage(requestedMounts);
+      record('runtimeAcquire');
       if (_disposed) {
         if (_engineBinding?.ownsEngine == true) {
-          unawaited(engine.dispose());
+          unawaited(_disposeHost(host));
         }
         return;
       }
       await _closeCurrentPage();
+      record('pageCleanup');
       if (_disposed) {
         return;
       }
-      await engine.mount(
-        plugin.asMount(name: _quickjsUiPageMountSlot),
-        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
-      );
+      await _mountPagePlugin(host, plugin);
+      record('pluginMount');
       if (_disposed) {
         return;
       }
       _disposeLifecycleSent = false;
       final page = _QuickjsUiPageBinding(
         plugin: plugin,
-        client: QuickjsPluginClient(engine, plugin),
+        client: QuickjsPluginClient(host, plugin),
         props: Map<String, Object?>.unmodifiable(initialProps),
         mounts: requestedMounts,
         grantedPermissions: Set<String>.unmodifiable(grantedPermissions),
@@ -107,15 +125,35 @@ final class QuickjsUiSession {
       );
       _pageBinding = page;
       try {
+        final details = <String, Duration>{};
+        final validateWatch = Stopwatch()..start();
         await page.client.validate();
-        page.lifecycleTypes = await _loadLifecycleTypes(page.client, plugin);
+        details['validate.pluginCall'] = validateWatch.elapsed;
+        record('validate');
+        page.lifecycleTypes = await _loadLifecycleTypes(
+          page.client,
+          plugin,
+          details: details,
+        );
+        record('capabilities');
+        final mountCallWatch = Stopwatch()..start();
         final initialSnapshot = await _clientCall('mount', <Object?>[
           page.props,
         ]);
+        details['stateMount.pluginCall'] = mountCallWatch.elapsed;
+        record('stateMount');
         if (_disposed) return;
+        final snapshotWatch = Stopwatch()..start();
         _applySnapshot(initialSnapshot);
+        details['stateMount.snapshotApply'] = snapshotWatch.elapsed;
         inspector?.recordLifecycle('widget', 'load');
-        await _refreshImpl();
+        await _refreshImplMeasured(details: details);
+        record('firstCommit');
+        _lastLoadMetrics = QuickjsUiLoadMetrics(
+          stages: Map<String, Duration>.unmodifiable(stages),
+          totalToSchema: total.elapsed,
+          details: Map<String, Duration>.unmodifiable(details),
+        );
       } catch (_) {
         if (identical(_pageBinding, page)) {
           _clearPageBinding();
@@ -125,14 +163,37 @@ final class QuickjsUiSession {
     });
   }
 
-  Future<Quickjs> _engineForPage(List<QuickjsHostMount> requestedMounts) async {
+  Future<QuickjsPluginHost> _hostForPage(
+    List<QuickjsHostMount> requestedMounts,
+  ) async {
     final currentBinding = _engineBinding;
     if (currentBinding == null) {
+      final runtime = _runtime;
+      if (runtime != null) {
+        final lease = await runtime.acquire(mounts: requestedMounts);
+        _engineBinding = _QuickjsUiEngineBinding.leased(lease, requestedMounts);
+        return lease.context;
+      }
       final created = await _createOwnedEngine(requestedMounts);
       _engineBinding = _QuickjsUiEngineBinding.owned(created, requestedMounts);
       return created;
     }
-    final current = currentBinding.engine;
+    final current = currentBinding.host;
+    final currentLease = currentBinding.runtimeLease;
+    if (currentLease != null) {
+      // ES module instances cannot be replaced inside one JSContext. Dynamic
+      // page reload therefore releases the old context and creates a fresh one
+      // while retaining the shared worker/JSRuntime.
+      await _closeCurrentPage();
+      _engineBinding = null;
+      await currentLease.release();
+      final replacement = await _runtime!.acquire(mounts: requestedMounts);
+      _engineBinding = _QuickjsUiEngineBinding.leased(
+        replacement,
+        requestedMounts,
+      );
+      return replacement.context;
+    }
     if (!currentBinding.ownsEngine) {
       if (requestedMounts.isNotEmpty) {
         throw StateError(
@@ -140,8 +201,8 @@ final class QuickjsUiSession {
           'configure the Quickjs engine before attaching it',
         );
       }
-      await _ensureHelperModuleMounted(current);
-      return current;
+      await _ensureHelperModuleMounted(currentBinding.engine!);
+      return currentBinding.engine!;
     }
     if (_sameMountConfiguration(currentBinding.mounts, requestedMounts)) {
       return current;
@@ -149,7 +210,7 @@ final class QuickjsUiSession {
 
     await _closeCurrentPage();
     _engineBinding = null;
-    await current.dispose();
+    await _disposeHost(current);
     final replacement = await _createOwnedEngine(requestedMounts);
     _engineBinding = _QuickjsUiEngineBinding.owned(
       replacement,
@@ -166,6 +227,29 @@ final class QuickjsUiSession {
         mounts: <QuickjsHostMount>[quickjsUiHelperMount, ...mounts],
       ),
     );
+  }
+
+  Future<void> _mountPagePlugin(QuickjsPluginHost host, QuickjsPlugin plugin) {
+    final mount = plugin.asMount(name: _quickjsUiPageMountSlot);
+    return switch (host) {
+      QuickjsContext context => context.mount(
+        mount,
+        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+      ),
+      Quickjs engine => engine.mount(
+        mount,
+        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+      ),
+      _ => throw StateError('Unsupported QuickJS UI plugin host'),
+    };
+  }
+
+  Future<void> _disposeHost(QuickjsPluginHost host) {
+    return switch (host) {
+      QuickjsContext context => context.dispose(),
+      Quickjs engine => engine.dispose(),
+      _ => Future<void>.value(),
+    };
   }
 
   Future<void> _closeCurrentPage() async {
@@ -268,15 +352,24 @@ final class QuickjsUiSession {
   Future<void> pumpTimers() {
     return _enqueue(() async {
       _ensureActive();
-      final engine = _engineBinding?.engine;
-      if (engine == null || _pageBinding == null) {
+      final binding = _engineBinding;
+      if (binding == null || _pageBinding == null) {
         return;
       }
-      await engine.evalAsync(
-        'await new Promise((resolve) => setTimeout(resolve, 0)); return null;',
-        name: '<quickjs_ui_timer_pump>',
-        timeout: const Duration(milliseconds: 250),
-      );
+      final context = binding.context;
+      if (context != null) {
+        await context.evalAsync(
+          'new Promise((resolve) => setTimeout(() => resolve(null), 0))',
+          name: '<quickjs_ui_timer_pump>',
+          timeout: const Duration(milliseconds: 250),
+        );
+      } else {
+        await binding.engine!.evalAsync(
+          'await new Promise((resolve) => setTimeout(resolve, 0)); return null;',
+          name: '<quickjs_ui_timer_pump>',
+          timeout: const Duration(milliseconds: 250),
+        );
+      }
       if (_disposed) {
         return;
       }
@@ -286,8 +379,14 @@ final class QuickjsUiSession {
   }
 
   Future<void> _refreshImpl() async {
+    return _refreshImplMeasured();
+  }
+
+  Future<void> _refreshImplMeasured({Map<String, Duration>? details}) async {
     _ensureActive();
+    final commitWatch = Stopwatch()..start();
     final result = await _clientCall('commit', const <Object?>[]);
+    details?['firstCommit.pluginCall'] = commitWatch.elapsed;
     if (_disposed) {
       return;
     }
@@ -300,9 +399,11 @@ final class QuickjsUiSession {
         'quickjs_ui commit() must return a UI node object',
       );
     }
+    final decodeWatch = Stopwatch()..start();
     _node = QuickjsUiNode.fromMap(
       rendered.map((key, value) => MapEntry<String, Object?>('$key', value)),
     );
+    details?['firstCommit.schemaDecode'] = decodeWatch.elapsed;
     inspector?.recordSchema(_node!.toMap());
   }
 
@@ -355,6 +456,7 @@ final class QuickjsUiSession {
     final engineBinding = _engineBinding;
     final engine = engineBinding?.engine;
     final ownsEngine = engineBinding?.ownsEngine ?? false;
+    final runtimeLease = engineBinding?.runtimeLease;
     final hasActiveCalls = _activeCalls > 0;
     _disposed = true;
     _clearPageBinding(clearSnapshot: false);
@@ -364,6 +466,7 @@ final class QuickjsUiSession {
         _cancelActiveRuntime(engine, ownsEngine: ownsEngine),
         engine: engine,
         ownsEngine: ownsEngine,
+        runtimeLease: runtimeLease,
       );
     }
     return _disposeFuture = _releaseEngineAfter(
@@ -376,6 +479,7 @@ final class QuickjsUiSession {
       ),
       engine: engine,
       ownsEngine: ownsEngine,
+      runtimeLease: runtimeLease,
     );
   }
 
@@ -383,11 +487,14 @@ final class QuickjsUiSession {
     Future<void> cleanup, {
     required Quickjs? engine,
     required bool ownsEngine,
+    QuickjsUiRuntimeLease? runtimeLease,
   }) async {
     try {
       await cleanup;
     } finally {
-      if (engine != null && !ownsEngine) {
+      if (runtimeLease != null) {
+        await runtimeLease.release();
+      } else if (engine != null && !ownsEngine) {
         _releaseAttachedEngine(engine);
       }
     }
@@ -547,8 +654,10 @@ final class QuickjsUiSession {
 
   Future<Set<String>> _loadLifecycleTypes(
     QuickjsPluginClient client,
-    QuickjsPlugin plugin,
-  ) async {
+    QuickjsPlugin plugin, {
+    Map<String, Duration>? details,
+  }) async {
+    final manifestWatch = Stopwatch()..start();
     final exports = plugin.manifest.exports;
     const requiredExports = <String>{
       'mount',
@@ -567,12 +676,17 @@ final class QuickjsUiSession {
         '${missing.join(', ')}',
       );
     }
+    details?['capabilities.manifestCheck'] = manifestWatch.elapsed;
+    final callWatch = Stopwatch()..start();
     final value = await _clientCallWith(
       client,
       'capabilities',
       const <Object?>[],
     );
+    details?['capabilities.pluginCall'] = callWatch.elapsed;
+    final parseWatch = Stopwatch()..start();
     if (value is! Map) {
+      details?['capabilities.parse'] = parseWatch.elapsed;
       return const <String>{};
     }
     final protocol = value['protocol'];
@@ -582,9 +696,12 @@ final class QuickjsUiSession {
     _validateCompatibility(value);
     final lifecycle = value['lifecycle'];
     if (lifecycle is! List) {
+      details?['capabilities.parse'] = parseWatch.elapsed;
       return const <String>{};
     }
-    return Set<String>.unmodifiable(lifecycle.whereType<String>());
+    final result = Set<String>.unmodifiable(lifecycle.whereType<String>());
+    details?['capabilities.parse'] = parseWatch.elapsed;
+    return result;
   }
 
   void _validateCompatibility(Map<Object?, Object?> capabilities) {
@@ -805,9 +922,11 @@ final class QuickjsUiSession {
 
 final class _QuickjsUiEngineBinding {
   const _QuickjsUiEngineBinding._({
-    required this.engine,
+    this.engine,
+    this.context,
     required this.ownsEngine,
     required this.mounts,
+    this.runtimeLease,
   });
 
   factory _QuickjsUiEngineBinding.attached(Quickjs engine) {
@@ -829,9 +948,24 @@ final class _QuickjsUiEngineBinding {
     );
   }
 
-  final Quickjs engine;
+  factory _QuickjsUiEngineBinding.leased(
+    QuickjsUiRuntimeLease lease,
+    List<QuickjsHostMount> mounts,
+  ) {
+    return _QuickjsUiEngineBinding._(
+      context: lease.context,
+      ownsEngine: false,
+      mounts: mounts,
+      runtimeLease: lease,
+    );
+  }
+
+  final Quickjs? engine;
+  final QuickjsContext? context;
+  QuickjsPluginHost get host => context ?? engine!;
   final bool ownsEngine;
   final List<QuickjsHostMount> mounts;
+  final QuickjsUiRuntimeLease? runtimeLease;
 }
 
 final class _QuickjsUiPageBinding {

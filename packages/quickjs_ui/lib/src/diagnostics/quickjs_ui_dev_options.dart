@@ -39,6 +39,5 @@ final class QuickjsUiDevOptions {
   static const QuickjsUiDevOptions release = QuickjsUiDevOptions();
 
   /// Debug-mode defaults used when callers do not pass explicit options.
-  static QuickjsUiDevOptions get defaults =>
-      kDebugMode ? debug : release;
+  static QuickjsUiDevOptions get defaults => kDebugMode ? debug : release;
 }

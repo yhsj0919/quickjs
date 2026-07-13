@@ -6,6 +6,8 @@ import 'package:ffi/ffi.dart';
 /// C 侧 QuickjsRuntime 的不透明指针。
 final class QuickjsRuntime extends Opaque {}
 
+final class QuickjsContext extends Opaque {}
+
 typedef QuickjsVersionNative = Pointer<Utf8> Function();
 typedef QuickjsVersion = Pointer<Utf8> Function();
 
@@ -14,6 +16,74 @@ typedef QuickjsRuntimeNew = Pointer<QuickjsRuntime> Function();
 
 typedef QuickjsRuntimeFreeNative = Void Function(Pointer<QuickjsRuntime>);
 typedef QuickjsRuntimeFree = void Function(Pointer<QuickjsRuntime>);
+typedef QuickjsContextNewNative =
+    Pointer<QuickjsContext> Function(Pointer<QuickjsRuntime>);
+typedef QuickjsContextNew =
+    Pointer<QuickjsContext> Function(Pointer<QuickjsRuntime>);
+typedef QuickjsContextFreeNative = Void Function(Pointer<QuickjsContext>);
+typedef QuickjsContextFree = void Function(Pointer<QuickjsContext>);
+typedef QuickjsContextEvalTimeoutNamedNative =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsContext>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Int64,
+    );
+typedef QuickjsContextEvalTimeoutNamed =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsContext>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      int,
+    );
+typedef QuickjsContextEvalModuleNative =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsContext>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+typedef QuickjsContextEvalModule =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsContext>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+typedef QuickjsContextBindCallbackNative =
+    Int32 Function(
+      Pointer<QuickjsContext>,
+      Int64,
+      Pointer<Utf8>,
+      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+    );
+typedef QuickjsContextBindCallback =
+    int Function(
+      Pointer<QuickjsContext>,
+      int,
+      Pointer<Utf8>,
+      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+    );
+typedef QuickjsContextEvalAsyncStartNamedNative =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsContext>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+typedef QuickjsContextEvalAsyncStartNamed =
+    Pointer<Utf8> Function(
+      Pointer<QuickjsContext>,
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+    );
+typedef QuickjsContextEvalAsyncPollNative =
+    Pointer<Utf8> Function(Pointer<QuickjsContext>);
+typedef QuickjsContextEvalAsyncPoll =
+    Pointer<Utf8> Function(Pointer<QuickjsContext>);
+typedef QuickjsContextBindSinkNative =
+    Int32 Function(Pointer<QuickjsContext>, Int64, Pointer<Utf8>);
+typedef QuickjsContextBindSink =
+    int Function(Pointer<QuickjsContext>, int, Pointer<Utf8>);
 
 typedef QuickjsRuntimeSetMemoryLimitNative =
     Void Function(Pointer<QuickjsRuntime>, Int64);
@@ -176,6 +246,43 @@ class QuickjsBindings {
           .lookupFunction<QuickjsRuntimeFreeNative, QuickjsRuntimeFree>(
             'quickjs_runtime_free',
           ),
+      contextNew = lib
+          .lookupFunction<QuickjsContextNewNative, QuickjsContextNew>(
+            'quickjs_context_new',
+          ),
+      contextFree = lib
+          .lookupFunction<QuickjsContextFreeNative, QuickjsContextFree>(
+            'quickjs_context_free',
+          ),
+      contextEvalTimeoutNamed = lib
+          .lookupFunction<
+            QuickjsContextEvalTimeoutNamedNative,
+            QuickjsContextEvalTimeoutNamed
+          >('quickjs_context_eval_timeout_named'),
+      contextEvalModule = lib
+          .lookupFunction<
+            QuickjsContextEvalModuleNative,
+            QuickjsContextEvalModule
+          >('quickjs_context_eval_module'),
+      contextBindCallback = lib
+          .lookupFunction<
+            QuickjsContextBindCallbackNative,
+            QuickjsContextBindCallback
+          >('quickjs_context_bind_callback'),
+      contextEvalAsyncStartNamed = lib
+          .lookupFunction<
+            QuickjsContextEvalAsyncStartNamedNative,
+            QuickjsContextEvalAsyncStartNamed
+          >('quickjs_context_eval_async_start_named'),
+      contextEvalAsyncPoll = lib
+          .lookupFunction<
+            QuickjsContextEvalAsyncPollNative,
+            QuickjsContextEvalAsyncPoll
+          >('quickjs_context_eval_async_poll'),
+      contextBindSink = lib
+          .lookupFunction<QuickjsContextBindSinkNative, QuickjsContextBindSink>(
+            'quickjs_context_bind_sink',
+          ),
       runtimeSetMemoryLimit = lib
           .lookupFunction<
             QuickjsRuntimeSetMemoryLimitNative,
@@ -254,6 +361,14 @@ class QuickjsBindings {
   final QuickjsVersion version;
   final QuickjsRuntimeNew runtimeNew;
   final QuickjsRuntimeFree runtimeFree;
+  final QuickjsContextNew contextNew;
+  final QuickjsContextFree contextFree;
+  final QuickjsContextEvalTimeoutNamed contextEvalTimeoutNamed;
+  final QuickjsContextEvalModule contextEvalModule;
+  final QuickjsContextBindCallback contextBindCallback;
+  final QuickjsContextEvalAsyncStartNamed contextEvalAsyncStartNamed;
+  final QuickjsContextEvalAsyncPoll contextEvalAsyncPoll;
+  final QuickjsContextBindSink contextBindSink;
   final QuickjsRuntimeSetMemoryLimit runtimeSetMemoryLimit;
   final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;

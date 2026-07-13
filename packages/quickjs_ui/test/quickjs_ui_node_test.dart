@@ -2814,6 +2814,54 @@ export default Page({
     expect(session.node?.children.first.props['data'], 'Count: 9');
   });
 
+  test(
+    'QuickjsUiRuntime shares one runtime across isolated page contexts',
+    () async {
+      final runtime = QuickjsUiRuntime(idleCapacity: 1, maxCapacity: 1);
+      addTearDown(runtime.dispose);
+      await runtime.init();
+
+      final first = QuickjsUiSession(runtime: runtime);
+      await first.loadPlugin(_counterPlugin());
+      final firstContext = first.context;
+      await first.dispose();
+
+      final second = QuickjsUiSession(runtime: runtime);
+      addTearDown(second.dispose);
+      await second.loadPlugin(_counterPlugin());
+
+      expect(firstContext, isNotNull);
+      expect(second.context, isNotNull);
+      expect(second.context, isNot(same(firstContext)));
+      expect(runtime.activeCount, 1);
+      expect(runtime.idleCount, 0);
+    },
+  );
+
+  test('shared runtime reload replaces the page context', () async {
+    final runtime = QuickjsUiRuntime(maxCapacity: 1);
+    addTearDown(runtime.dispose);
+    final session = QuickjsUiSession(runtime: runtime);
+    addTearDown(session.dispose);
+    await session.loadPlugin(_counterPlugin());
+    final firstContext = session.context;
+
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_reloaded_page',
+        version: '0.6.0',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+export default Page({ build() { return Text('reloaded'); } });
+''',
+      ),
+    );
+
+    expect(session.context, isNot(same(firstContext)));
+    expect(session.node?.props['data'], 'reloaded');
+    expect(runtime.activeCount, 1);
+  });
+
   test('accepts current quickjs_ui compatibility metadata', () async {
     final engine = await Quickjs.create();
     final session = QuickjsUiSession(engine: engine);

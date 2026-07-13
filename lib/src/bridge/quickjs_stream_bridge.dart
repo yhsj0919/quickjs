@@ -62,6 +62,8 @@ final class QuickjsDartStreamRegistry {
     _sessions.remove(streamId)?.cancel();
   }
 
+  void disposeStream(int streamId) => handleCancel(streamId);
+
   void dispose() {
     for (final session in _sessions.values) {
       session.cancel();
@@ -241,6 +243,13 @@ final class QuickjsJsSinkRegistry {
       _onActionComplete(actionRequestId);
     } catch (error) {
       _onActionError(actionRequestId, '$error');
+    }
+  }
+
+  void disposeSink(int sinkId) {
+    final controller = _controllers.remove(sinkId);
+    if (controller != null && !controller.isClosed) {
+      unawaited(controller.close());
     }
   }
 

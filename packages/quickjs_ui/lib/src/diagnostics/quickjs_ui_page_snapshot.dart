@@ -87,9 +87,7 @@ final class QuickjsUiPageSnapshot {
     if (plugin == null) {
       return const <String>[];
     }
-    return <String>[
-      for (final module in plugin.modules) module.specifier,
-    ];
+    return <String>[for (final module in plugin.modules) module.specifier];
   }
 
   static List<String> hostApisFor(List<QuickjsHostMount> mounts) {

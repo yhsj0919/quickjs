@@ -14,6 +14,7 @@ import '../resource/quickjs_ui_bundle.dart';
 import '../resource/quickjs_ui_network_loader.dart';
 import '../runtime/quickjs_ui_controller.dart';
 import '../runtime/quickjs_ui_plugin.dart';
+import '../runtime/quickjs_ui_runtime.dart';
 import 'quickjs_ui_error_overlay.dart';
 
 /// 页面加载或渲染失败时构建错误 UI 的回调。
@@ -51,6 +52,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
     this.onConsole,
+    this.runtime,
     this.controller,
     this.placeholder,
     this.loadingBuilder,
@@ -65,7 +67,8 @@ final class QuickjsUiView extends StatefulWidget {
        networkBundleRoot = null,
        networkFetch = null,
        onNetworkLog = null,
-       assert(plugin != null || path != null);
+       assert(plugin != null || path != null),
+       assert(runtime == null || controller == null);
 
   /// 从已注册的 [QuickjsPlugin] 加载页面。
   ///
@@ -91,6 +94,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiRuntime? runtime,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -109,6 +113,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      runtime: runtime,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -132,6 +137,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiRuntime? runtime,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -151,6 +157,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      runtime: runtime,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -174,6 +181,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiRuntime? runtime,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -193,6 +201,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      runtime: runtime,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -220,6 +229,7 @@ final class QuickjsUiView extends StatefulWidget {
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
+    QuickjsUiRuntime? runtime,
     QuickjsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
@@ -242,6 +252,7 @@ final class QuickjsUiView extends StatefulWidget {
       permissionPolicy: permissionPolicy,
       onConsole: onConsole,
       controller: controller,
+      runtime: runtime,
       placeholder: placeholder,
       loadingBuilder: loadingBuilder,
       errorBuilder: errorBuilder,
@@ -266,13 +277,14 @@ final class QuickjsUiView extends StatefulWidget {
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
     this.onConsole,
+    this.runtime,
     this.controller,
     this.placeholder,
     this.loadingBuilder,
     this.errorBuilder,
     this.emptyBuilder,
     this.onFirstRender,
-  });
+  }) : assert(runtime == null || controller == null);
 
   final QuickjsPlugin? plugin;
   final String? _path;
@@ -314,6 +326,10 @@ final class QuickjsUiView extends StatefulWidget {
   /// JS `console.*` 输出接收器。
   final QuickjsConsoleSink? onConsole;
 
+  /// Shared owner of pre-initialized engines. Page [mounts] remain scoped to
+  /// the leased engine configuration and are never merged into other pages.
+  final QuickjsUiRuntime? runtime;
+
   /// 外部传入的 UI 控制器，用于热重载、快照、导航等高级操作。
   final QuickjsUiController? controller;
 
@@ -349,6 +365,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   bool _reportedShow = false;
   int _generation = 0;
   _QuickjsUiAppLifecycleSignal? _lastAppLifecycleSignal;
+  DateTime? _firstBuildEndedAt;
+  DateTime _loadScheduledAt = DateTime.now();
 
   @override
   void initState() {
@@ -356,12 +374,16 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     WidgetsBinding.instance.addObserver(this);
     _loadCoordinator = _QuickjsUiLoadCoordinator();
     _controller =
-        widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
+        widget.controller ??
+        QuickjsUiController(
+          runtime: widget.runtime,
+          onConsole: widget.onConsole,
+        );
     _ownsController = widget.controller == null;
     _controller.addListener(_handleControllerChanged);
     _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
-    _loadCoordinator.schedule(_load);
+    _scheduleLoad();
   }
 
   QuickjsUiRenderer _createRenderer() {
@@ -400,13 +422,18 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   @override
   void didUpdateWidget(covariant QuickjsUiView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.runtime != widget.runtime) {
       _controller.removeListener(_handleControllerChanged);
       if (_ownsController) {
         _controller.dispose();
       }
       _controller =
-          widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
+          widget.controller ??
+          QuickjsUiController(
+            runtime: widget.runtime,
+            onConsole: widget.onConsole,
+          );
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
       _eventIngress.dispose();
@@ -420,6 +447,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       _advanceGeneration();
     }
     if (oldWidget.plugin != widget.plugin ||
+        oldWidget.runtime != widget.runtime ||
         oldWidget._path != widget._path ||
         oldWidget.bundleRoot != widget.bundleRoot ||
         oldWidget.networkUrl != widget.networkUrl ||
@@ -440,7 +468,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           oldWidget.networkUrl != widget.networkUrl) {
         _networkLoader = null;
       }
-      _loadCoordinator.schedule(_load);
+      _scheduleLoad();
     }
   }
 
@@ -532,7 +560,28 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
 
     try {
+      final metrics = _controller.lastLoadMetrics;
+      final buildStartedAt = DateTime.now();
+      if (metrics != null) {
+        _controller.recordLoadDetail(
+          'flutter.schemaReadyToBuildStart',
+          buildStartedAt.difference(metrics.schemaReadyAt),
+        );
+        final readyNotifiedAt = metrics.readyNotifiedAt;
+        if (readyNotifiedAt != null) {
+          _controller.recordLoadDetail(
+            'flutter.notifyToBuildStart',
+            buildStartedAt.difference(readyNotifiedAt),
+          );
+        }
+      }
+      final renderWatch = Stopwatch()..start();
       final rendered = _renderer.build(node, buildContext: context);
+      _controller.recordLoadDetail(
+        'flutter.rendererBuild',
+        renderWatch.elapsed,
+      );
+      _firstBuildEndedAt ??= DateTime.now();
       if (_devOptions.logSchema) {
         QuickjsUiDiag.log('schema', node.toMap().toString());
       }
@@ -590,6 +639,14 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_isCurrentGeneration(generation)) {
         return;
       }
+      final buildEndedAt = _firstBuildEndedAt;
+      if (buildEndedAt != null) {
+        _controller.recordLoadDetail(
+          'flutter.buildEndToPostFrame',
+          DateTime.now().difference(buildEndedAt),
+        );
+      }
+      final lifecycleWatch = Stopwatch()..start();
       await _controller.lifecycle('mount');
       if (!_isCurrentGeneration(generation)) {
         return;
@@ -598,6 +655,10 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_isCurrentGeneration(generation)) {
         return;
       }
+      _controller.recordLoadDetail(
+        'flutter.postFrameLifecycle',
+        lifecycleWatch.elapsed,
+      );
       widget.onFirstRender?.call();
     });
   }
@@ -618,6 +679,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 
   Future<void> _load() async {
+    final loadStartedAt = DateTime.now();
+    _controller.beginLoadTiming(
+      'pipeline.viewScheduleToLoadStart',
+      loadStartedAt.difference(_loadScheduledAt),
+    );
     final generation = _advanceGeneration();
     try {
       if (!_isCurrentGeneration(generation)) {
@@ -658,6 +724,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         );
       }
     }
+  }
+
+  void _scheduleLoad() {
+    _loadScheduledAt = DateTime.now();
+    _loadCoordinator.schedule(_load);
   }
 
   Future<QuickjsPlugin> _loadPlugin() async {
@@ -718,6 +789,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _generation += 1;
     _reportedFirstRender = false;
     _reportedShow = false;
+    _firstBuildEndedAt = null;
     return _generation;
   }
 

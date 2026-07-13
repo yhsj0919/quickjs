@@ -6,6 +6,7 @@
 library;
 
 export 'src/runtime/quickjs.dart';
+export 'src/runtime/quickjs_context.dart';
 export 'src/module/quickjs_asset_module_loader.dart';
 export 'src/diagnostics/quickjs_exception.dart';
 export 'src/runtime/quickjs_plugin.dart';
