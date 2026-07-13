@@ -1,6 +1,8 @@
 const MAX_DISPATCH_DEPTH = 64;
 const MAX_RENDER_DEPTH = 64;
-const MAX_COMPONENT_RENDER_DEPTH = 64;
+// Keep this below the QuickJS native call-stack limit. Component recursion is
+// a protocol error and must be reported before the engine stack overflows.
+const MAX_COMPONENT_RENDER_DEPTH = 16;
 export const quickjsUiRuntimeProtocol = 'quickjs_ui.runtime.v1';
 export const quickjsUiSchemaVersion = 1;
 export const quickjsUiHelperVersion = 1;

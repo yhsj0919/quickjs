@@ -343,6 +343,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   late bool _ownsController;
   late QuickjsUiRenderer _renderer;
   late QuickjsUiEventIngress _eventIngress;
+  late final _QuickjsUiLoadCoordinator _loadCoordinator;
   QuickjsUiNetworkLoader? _networkLoader;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
@@ -353,13 +354,14 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadCoordinator = _QuickjsUiLoadCoordinator();
     _controller =
         widget.controller ?? QuickjsUiController(onConsole: widget.onConsole);
     _ownsController = widget.controller == null;
     _controller.addListener(_handleControllerChanged);
     _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
-    _load();
+    _loadCoordinator.schedule(_load);
   }
 
   QuickjsUiRenderer _createRenderer() {
@@ -438,7 +440,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           oldWidget.networkUrl != widget.networkUrl) {
         _networkLoader = null;
       }
-      _load();
+      _loadCoordinator.schedule(_load);
     }
   }
 
@@ -447,6 +449,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     WidgetsBinding.instance.removeObserver(this);
     _renderer.dispose();
     _eventIngress.dispose();
+    _loadCoordinator.dispose();
     _advanceGeneration();
     _controller.removeListener(_handleControllerChanged);
     if (_ownsController) {
@@ -508,7 +511,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       return QuickjsUiErrorOverlay(error: error);
     }
 
-    if (_controller.isLoading) {
+    if (_loadCoordinator.isPending || _controller.isLoading) {
       final loadingBuilder = widget.loadingBuilder;
       if (loadingBuilder != null) {
         return loadingBuilder(context);
@@ -726,6 +729,31 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
 enum _QuickjsUiViewSource { plugin, asset, file, network }
 
 enum _QuickjsUiAppLifecycleSignal { resumed, paused, detached }
+
+final class _QuickjsUiLoadCoordinator {
+  int _requestId = 0;
+  bool _disposed = false;
+  bool _pending = false;
+
+  bool get isPending => _pending;
+
+  void schedule(Future<void> Function() load) {
+    if (_disposed) return;
+    _pending = true;
+    final requestId = ++_requestId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed || requestId != _requestId) return;
+      _pending = false;
+      unawaited(load());
+    });
+  }
+
+  void dispose() {
+    _disposed = true;
+    _pending = false;
+    _requestId += 1;
+  }
+}
 
 bool _stringIterableSetEquals(Iterable<String> left, Iterable<String> right) {
   final leftSet = left.toSet();

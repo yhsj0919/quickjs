@@ -201,11 +201,30 @@ final class QuickjsUiSession {
   }
 
   Future<void> dispatch(Map<String, Object?> event) async {
+    return dispatchBatch(<Map<String, Object?>>[event]);
+  }
+
+  /// Dispatches a burst of events through one session operation and performs
+  /// one state sync and one renderer refresh after the whole burst completes.
+  /// Event handlers still execute in input order inside QuickJS.
+  Future<void> dispatchBatch(Iterable<Map<String, Object?>> events) async {
+    final batch = List<Map<String, Object?>>.unmodifiable(events);
+    if (batch.isEmpty) {
+      return;
+    }
     return _enqueue(() async {
       _ensureActive();
-      inspector?.recordAction(event);
-      final result = await _clientCall('handleEvent', <Object?>[event]);
-      await _commitCallResult(result);
+      var changed = false;
+      for (final event in batch) {
+        inspector?.recordAction(event);
+        final result = await _clientCall('handleEvent', <Object?>[event]);
+        changed = _resultChanged(result) || changed;
+      }
+      if (!changed || _disposed) {
+        return;
+      }
+      await _syncStateFromJs();
+      await _refreshImpl();
     });
   }
 
