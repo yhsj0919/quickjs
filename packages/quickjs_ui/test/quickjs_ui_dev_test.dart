@@ -48,9 +48,7 @@ export default Page({
         initialProps: const <String, Object?>{'title': 'dev'},
       );
 
-      await controller.dispatch(const <String, Object?>{
-        'method': 'increment',
-      });
+      await controller.dispatch(const <String, Object?>{'method': 'increment'});
 
       final snapshot = controller.exportPageSnapshotMap();
       expect(snapshot['props'], const <String, Object?>{'title': 'dev'});
@@ -129,9 +127,7 @@ export default Page({
             builder: (context, _) {
               buildCount += 1;
               if (buildCount == 1) {
-                inspector.recordDiff(
-                  const QuickjsUiDiffStats(rebuilt: 1),
-                );
+                inspector.recordDiff(const QuickjsUiDiffStats(rebuilt: 1));
               }
               return Text('builds: $buildCount');
             },
@@ -152,12 +148,14 @@ export default Page({
         const MaterialApp(
           home: Scaffold(
             body: QuickjsUiErrorOverlay(
-              error: FormatException('Unknown quickjs_ui node type: Missing'),
-              details: QuickjsUiErrorDetails(
+              error: QuickjsUiError(
+                kind: QuickjsUiErrorKind.schema,
+                message: 'Unknown quickjs_ui node type: Missing',
+                cause: FormatException('Unknown quickjs_ui node type: Missing'),
                 source: 'asset',
-                resourceKey: 'assets/quickjs_ui/dev_panel_page.mjs',
+                resource: 'assets/quickjs_ui/dev_panel_page.mjs',
                 schemaPath: 'root.children[1]',
-                routeName: 'dev_panel',
+                route: 'dev_panel',
                 action: 'render',
               ),
             ),
@@ -175,6 +173,28 @@ export default Page({
       expect(find.text('schema path: root.children[1]'), findsOneWidget);
       expect(find.text('route: dev_panel'), findsOneWidget);
       expect(find.text('action: render'), findsOneWidget);
+    });
+
+    test('unified errors preserve cause and add operation context', () {
+      final base = QuickjsUiError.wrap(
+        const FormatException('bad schema'),
+        kind: QuickjsUiErrorKind.schema,
+        operation: 'render',
+        schemaPath: 'root.children[0]',
+      );
+      final enriched = QuickjsUiError.wrap(
+        base,
+        kind: QuickjsUiErrorKind.render,
+        action: 'openDetails',
+        route: 'details',
+      );
+
+      expect(identical(enriched.cause, base.cause), isTrue);
+      expect(enriched.kind, QuickjsUiErrorKind.schema);
+      expect(enriched.operation, 'render');
+      expect(enriched.action, 'openDetails');
+      expect(enriched.route, 'details');
+      expect(enriched.schemaPath, 'root.children[0]');
     });
 
     test('records lifecycle timeline in predictable order', () async {

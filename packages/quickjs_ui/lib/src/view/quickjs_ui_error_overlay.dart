@@ -1,59 +1,14 @@
 import 'package:flutter/widgets.dart';
 
-import '../resource/quickjs_ui_network_loader.dart';
-
-final class QuickjsUiErrorDetails {
-  const QuickjsUiErrorDetails({
-    this.schemaPath,
-    this.resourceKey,
-    this.routeName,
-    this.action,
-    this.source,
-  });
-
-  final String? schemaPath;
-  final String? resourceKey;
-  final String? routeName;
-  final String? action;
-  final String? source;
-
-  Iterable<MapEntry<String, String>> get entries sync* {
-    final source = this.source;
-    if (source != null && source.isNotEmpty) {
-      yield MapEntry<String, String>('source', source);
-    }
-    final resourceKey = this.resourceKey;
-    if (resourceKey != null && resourceKey.isNotEmpty) {
-      yield MapEntry<String, String>('resource', resourceKey);
-    }
-    final schemaPath = this.schemaPath;
-    if (schemaPath != null && schemaPath.isNotEmpty) {
-      yield MapEntry<String, String>('schema path', schemaPath);
-    }
-    final routeName = this.routeName;
-    if (routeName != null && routeName.isNotEmpty) {
-      yield MapEntry<String, String>('route', routeName);
-    }
-    final action = this.action;
-    if (action != null && action.isNotEmpty) {
-      yield MapEntry<String, String>('action', action);
-    }
-  }
-}
+import '../diagnostics/quickjs_ui_error.dart';
 
 final class QuickjsUiErrorOverlay extends StatelessWidget {
-  const QuickjsUiErrorOverlay({
-    super.key,
-    required this.error,
-    this.details = const QuickjsUiErrorDetails(),
-  });
+  const QuickjsUiErrorOverlay({super.key, required this.error});
 
-  final Object error;
-  final QuickjsUiErrorDetails details;
+  final QuickjsUiError error;
 
   @override
   Widget build(BuildContext context) {
-    final stackTrace = _stackTrace(error);
     return ColoredBox(
       color: const Color(0xfffff6f6),
       child: Padding(
@@ -78,25 +33,24 @@ final class QuickjsUiErrorOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                _ErrorLine(label: 'type', value: error.runtimeType.toString()),
-                _ErrorLine(label: 'message', value: _message(error)),
-                for (final detail in details.entries)
-                  _ErrorLine(label: detail.key, value: detail.value),
-                if (error is QuickjsUiNetworkException)
-                  _ErrorLine(
-                    label: 'uri',
-                    value: (error as QuickjsUiNetworkException).uri?.toString() ?? '',
-                  ),
-                if (error is FormatException)
-                  _FormatExceptionDetails(error: error as FormatException),
-                if (stackTrace != null && stackTrace.isNotEmpty) ...<Widget>[
+                _ErrorLine(label: 'kind', value: error.kind.name),
+                _ErrorLine(label: 'message', value: error.message),
+                for (final entry in error.toMap().entries)
+                  if (entry.key != 'kind' &&
+                      entry.key != 'message' &&
+                      entry.key != 'stackTrace')
+                    _ErrorLine(
+                      label: _label(entry.key),
+                      value: '${entry.value}',
+                    ),
+                if (error.stackTrace != null) ...<Widget>[
                   const SizedBox(height: 12),
                   const Text(
                     'stack',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
-                  Text(stackTrace),
+                  Text('${error.stackTrace}'),
                 ],
               ],
             ),
@@ -107,25 +61,13 @@ final class QuickjsUiErrorOverlay extends StatelessWidget {
   }
 }
 
-final class _FormatExceptionDetails extends StatelessWidget {
-  const _FormatExceptionDetails({required this.error});
-
-  final FormatException error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        if (error.source != null)
-          _ErrorLine(label: 'schema source', value: '${error.source}'),
-        if (error.offset != null)
-          _ErrorLine(label: 'schema offset', value: '${error.offset}'),
-      ],
-    );
-  }
-}
+String _label(String key) => switch (key) {
+  'schemaPath' => 'schema path',
+  'causeType' => 'cause type',
+  'causeSource' => 'schema source',
+  'causeOffset' => 'schema offset',
+  _ => key,
+};
 
 final class _ErrorLine extends StatelessWidget {
   const _ErrorLine({required this.label, required this.value});
@@ -143,21 +85,4 @@ final class _ErrorLine extends StatelessWidget {
       child: Text('$label: $value'),
     );
   }
-}
-
-String _message(Object error) {
-  if (error is FormatException) {
-    return error.message;
-  }
-  if (error is QuickjsUiNetworkException) {
-    return error.message;
-  }
-  return '$error';
-}
-
-String? _stackTrace(Object error) {
-  if (error is Error) {
-    return error.stackTrace?.toString();
-  }
-  return null;
 }

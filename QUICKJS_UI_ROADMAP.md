@@ -8,13 +8,13 @@
 
 ### 设计原则
 
-- [ ] JS 是页面的主控制方：负责页面结构、状态、事件处理、业务控制流和页面间行为决策。
-- [ ] Flutter 默认只负责页面绘制：把 JS 返回的 UI schema 渲染为原生 Widget，并处理 layout、paint、
+- [x] JS 是页面的主控制方：负责页面结构、状态、事件处理、业务控制流和页面间行为决策。
+- [x] Flutter 默认只负责页面绘制：把 JS 返回的 UI schema 渲染为原生 Widget，并处理 layout、paint、
   input bridge 和生命周期挂接。
-- [ ] Flutter 不默认接管业务状态；除非宿主显式暴露 provider / host API，否则状态来源只在 JS 页面内。
-- [ ] JS 与 Flutter 可以互相调用，但必须通过显式注册的 host API、action handler、原生 route registry 或
+- [x] Flutter 不默认接管业务状态；除非宿主显式暴露 provider / host API，否则状态来源只在 JS 页面内。
+- [x] JS 与 Flutter 可以互相调用，但必须通过显式注册的 host API、action handler、原生 route registry 或
   `QuickjsHostMount`，不做隐式全局能力注入。
-- [ ] 双向调用只传递 structured value，不传递 Flutter Widget、Dart object handle、JS function handle
+- [x] 双向调用只传递 structured value，不传递 Flutter Widget、Dart object handle、JS function handle
   或不可序列化对象。
 - [ ] 每个新增 quickjs_ui 能力必须同步补 example 测试页或更新现有测试页，并注册到示例入口；后续开发默认执行，
   不再依赖单独提醒。
@@ -28,11 +28,11 @@
 
 ### 核心边界
 
-- [ ] `quickjs` core 只继续提供 runtime、plugin、module、host mount、structured value codec 和 debug 能力。
-- [ ] `quickjs_ui` 独立承载页面协议、UI schema、Flutter renderer、组件库、事件分发和页面生命周期。
-- [ ] JS 不直接操作 Flutter Widget，不暴露 DOM/CSSOM/WebView，也不把 Flutter class 暴露给 JS 页面。
-- [ ] JS 页面默认没有网络、存储、文件系统等能力；需要时由宿主显式传入 `QuickjsHostMount` / provider。
-- [ ] 第一版先做协议和渲染，不先做 `.ux` / template 语法；后续 DSL 只作为编译到协议的语法糖。
+- [x] `quickjs` core 只继续提供 runtime、plugin、module、host mount、structured value codec 和 debug 能力。
+- [x] `quickjs_ui` 独立承载页面协议、UI schema、Flutter renderer、组件库、事件分发和页面生命周期。
+- [x] JS 不直接操作 Flutter Widget，不暴露 DOM/CSSOM/WebView，也不把 Flutter class 暴露给 JS 页面。
+- [x] JS 页面默认没有网络、存储、文件系统等能力；需要时由宿主显式传入 `QuickjsHostMount` / provider。
+- [x] 第一版先做协议和渲染，不先做 `.ux` / template 语法；后续 DSL 只作为编译到协议的语法糖。
 
 ### 页面协议
 
@@ -71,9 +71,9 @@ export default Page({
   以及 `createState(props) -> state`、`build(state, props, page) -> UiNode` 和页面方法。
 - [x] `build()` 返回 JSON-compatible UI schema，不返回 JS function、handle、Dart 对象或 Flutter Widget。
 - [x] 事件绑定使用 `page.methodName()` 生成可序列化 descriptor；页面作者不手写 action 字符串。
-- [ ] 状态更新支持 `setState(patch | updater)` 语义：JS 页面可主动更新局部 state，并触发页面刷新。
+- [~] 状态更新已支持 `setState(patch)`：JS 页面可主动更新局部 state 并触发刷新；函数式 updater 尚未支持。
 - [x] `dispatch()` 可返回新 state，并统一进入 renderer update pipeline。
-- [ ] JS 页面侧 `setState()` helper 与 `dispatch()` 的统一提交流程后续再补。
+- [x] JS 页面侧 `setState()`、`dispatch()` 和 lifecycle state patch 已统一进入单一提交函数；Dart 侧统一执行 state sync + renderer refresh。
 - [x] renderer update pipeline 支持基于 schema 的局部刷新判断；未变化的 keyed 节点不参与刷新，避免整页无差别 rebuild。
 - [ ] schema patch 传输后续按需要再补，当前先重 render + renderer 侧 diff。
 - [x] diff 第一版基于 stable key、节点类型和 props hash 判断变化；没有 key 的节点按保守策略刷新。
@@ -158,7 +158,7 @@ Flutter 风格控件名称。
 - [x] 提供 `QuickjsUiDevOptions`：控制 reload、error overlay、schema dump、diff log、resource/network log。
 - [x] 支持页面热重载：重新加载 loader/plugin，并保留 route params / initial props。
 - [x] 热重载是否保留 JS state 由 `preserveStateOnReload` 控制。
-- [x] error overlay 展示运行时错误；更细的 schema path/resource key/action 关联继续通过 inspector snapshot 补足。
+- [x] error overlay 使用统一 `QuickjsUiError`，展示并向 inspector 传递 cause/stack、schema path、resource、action、route 和 lifecycle 上下文。
 - [x] 提供 `QuickjsUiInspector`：查看 page name、props、state、当前 UI schema、resource graph、mounted host APIs。
 - [x] 支持导出当前 page snapshot：props、state、schema、resource manifest 和最近一次 action，方便复现问题。
 - [x] 支持 rebuild / diff 诊断日志：记录刷新、复用、无 key 节点和 key 列表。
@@ -202,7 +202,7 @@ DOM/CSSOM/WebView。资源加载属于 `quickjs_ui` / 应用层能力，不进�
 - [ ] 支持暗色模式和宿主 theme 注入；theme 更新后触发受影响节点刷新。
 - [x] 布局控件已补充 `Stack`、`Padding`、`Center`、`SizedBox`。
 - [x] 布局控件后续补充 `Positioned`、`Expanded`、`Flexible`。
-- [ ] 表单控件补充 `Form`、`Checkbox`、`Switch`、`Radio`、`DropdownButton`；表单状态和校验规则仍由 JS 控制。
+- [x] 表单控件已补充 `Form`、`Checkbox`、`Switch`、`Radio`、`DropdownButton`；表单状态和校验规则仍由 JS 控制。
 
 ### 异步数据与状态恢复
 
@@ -217,22 +217,22 @@ DOM/CSSOM/WebView。资源加载属于 `quickjs_ui` / 应用层能力，不进�
 Flutter 侧 App、Route、Widget 和 resource lifecycle 需要同步到 JS 页面；JS 页面只接收结构化生命周期事件，
 不直接持有 Flutter lifecycle object。
 
-- [ ] JS 页面协议补充生命周期 hook：`onMount`、`onShow`、`onHide`、`onPause`、`onResume`、
+- [x] JS 页面协议补充生命周期 hook：`onMount`、`onShow`、`onHide`、`onPause`、`onResume`、
   `onRouteEnter`、`onRouteLeave`、`onRouteResult`、`onDispose`。
-- [ ] Flutter `State.initState` / first render 完成后同步 `onMount`，页面可在此启动数据加载或订阅。
+- [x] Flutter first render 完成后同步 `onMount`，页面可在此启动数据加载或订阅。
 - [x] Flutter route push/pop/replace、native <-> JSUI 跳转时同步 route lifecycle 和 route result。
-- [ ] App lifecycle 同步：前台、后台、暂停、恢复、内存压力等事件转为 structured event。
-- [ ] Widget subtree 暂时不可见但未销毁时使用 `onHide` / `onShow`，真正销毁时才触发 `onDispose`。
-- [ ] 生命周期 hook 可以返回 state patch、effect descriptor 或 async task；最终仍进入统一 state update pipeline。
+- [~] App lifecycle 已同步 pause/resume/detach；内存压力 structured event 尚未实现。
+- [x] 路由页面暂时不可见但未销毁时使用 `onHide` / `onShow`，真正销毁时才触发 `onDispose`；任意 Widget subtree 可见性不在当前自动检测范围内。
+- [~] 生命周期 hook 可以返回 state patch 或 async state patch，并进入 state update pipeline；effect descriptor 尚未实现。
 - [ ] `onDispose` 必须触发资源清理：timer、stream、pending async、host subscription、resource handle。
-- [ ] lifecycle event 顺序需要可预测、可测试，并在 inspector 中记录最近生命周期事件。
+- [x] lifecycle event 顺序已有 conformance test，并在 inspector 中记录最近生命周期事件。
 
 ### 交互模型
 
 交互默认仍由 JS 决定状态和控制流；Flutter 负责把原生输入事件转换为 structured event，再投递给
 JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 
-- [ ] 统一事件 envelope：`{ action, payload, source, timestamp }`，source 可定位控件 key/path。
+- [x] 统一事件 envelope：`{ action, payload, source, timestamp }`，source 可定位控件 key/path。
 - [x] 支持常用手势：tap、longPress、doubleTap、drag、swipe；第一版优先 tap/longPress。
 - [x] 支持滚动事件和滚动控制：`onScroll`、`initialScrollOffset`、`scrollTo(key|offset)`，滚动控制通过
   controller/action bridge 显式触发。
@@ -293,7 +293,7 @@ Flutter 开发者学习成本：
 
 - [x] `Text`
 - [x] `ElevatedButton`
-- [ ] `TextButton` / `OutlinedButton`
+- [x] `TextButton` / `OutlinedButton`
 - [x] `Row`
 - [x] `Column`
 - [x] `Container`
@@ -308,46 +308,46 @@ Flutter 开发者学习成本：
 - [x] `Column`
 - [x] `Container`
 - [x] `Stack`
-- [ ] `Positioned`
+- [x] `Positioned`
 - [x] `Padding`
 - [x] `Center`
-- [ ] `Align`
+- [x] `Align`
 - [x] `SizedBox`
-- [ ] `Expanded`
-- [ ] `Flexible`
-- [ ] `Spacer`
-- [ ] `Wrap`
-- [ ] `AspectRatio`
-- [ ] `ConstrainedBox`
-- [ ] `SafeArea`
+- [x] `Expanded`
+- [x] `Flexible`
+- [x] `Spacer`
+- [x] `Wrap`
+- [x] `AspectRatio`
+- [x] `ConstrainedBox`
+- [x] `SafeArea`
 
 展示与内容：
 - [x] `Text`
-- [ ] `RichText` / `TextSpan`
-- [ ] `Icon`
+- [x] `RichText` / `TextSpan`
+- [x] `Icon`
 - [x] `Image`
-- [ ] `Divider`
+- [x] `Divider`
 - [ ] `VerticalDivider`
 - [ ] `Placeholder`
-- [ ] `Card`
-- [ ] `ClipRRect`
-- [ ] `DecoratedBox`
+- [x] `Card`
+- [x] `ClipRRect`
+- [x] `DecoratedBox`
 
 按钮与可点击区域：
 - [x] `ElevatedButton`
-- [ ] `TextButton`
-- [ ] `OutlinedButton`
-- [ ] `IconButton`
-- [ ] `FloatingActionButton`
+- [x] `TextButton`
+- [x] `OutlinedButton`
+- [x] `IconButton`
+- [x] `FloatingActionButton`
 - [ ] `GestureDetector`
-- [ ] `InkWell`
+- [x] `InkWell`
 
 滚动与列表：
 - [x] `SingleChildScrollView`
 - [x] `ListView`
-- [ ] `GridView`
-- [ ] `PageView`
-- [ ] `RefreshIndicator`
+- [x] `GridView`
+- [x] `PageView`
+- [x] `RefreshIndicator`
 
 表单与输入：
 - [x] `TextField`
@@ -360,41 +360,41 @@ Flutter 开发者学习成本：
 - [x] `Form`
 
 导航与页面结构：
-- [ ] `Scaffold`
-- [ ] `AppBar`
-- [ ] `BottomNavigationBar`
-- [ ] `TabBar` / `TabBarView`
-- [ ] `Drawer`
+- [x] `Scaffold`
+- [x] `AppBar`
+- [x] `BottomNavigationBar`
+- [x] `TabBar` / `TabBarView`
+- [x] `Drawer`
 
 反馈与状态：
-- [ ] `CircularProgressIndicator`
-- [ ] `LinearProgressIndicator`
-- [ ] `SnackBar`
-- [ ] `AlertDialog`
-- [ ] `BottomSheet`
+- [x] `CircularProgressIndicator`
+- [x] `LinearProgressIndicator`
+- [x] `SnackBar`
+- [x] `AlertDialog`
+- [x] `BottomSheet`
 - [ ] `Tooltip`
 
 动画与过渡：
 - [ ] `AnimatedContainer`
 - [ ] `AnimatedOpacity`
-- [ ] `AnimatedAlign`
+- [x] `AnimatedAlign`
 - [ ] `AnimatedPadding`
-- [ ] `AnimatedSwitcher`
+- [x] `AnimatedSwitcher`
 - [ ] `Hero`
 
 Flutter 风格对象写法：
 
-- [ ] 页面基础控件书写风格尽量贴近 Flutter Widget tree，只是把 Dart 构造函数改成 JSON-compatible
+- [x] 页面基础控件书写风格尽量贴近 Flutter Widget tree，只是把 Dart 构造函数改成 JSON-compatible
   object，例如 `{ type: 'Column', children: [...] }` 对应 `Column(children: [...])`。
-- [ ] 控件名默认使用 Flutter Widget 名称：`Text`、`Container`、`Row`、`Column`、`Stack`、
+- [x] 控件名默认使用 Flutter Widget 名称：`Text`、`Container`、`Row`、`Column`、`Stack`、
   `Padding`、`Center`、`SizedBox`、`Image`、`ListView`、`TextField` 等。
-- [ ] 属性名优先沿用 Flutter 原名：`child`、`children`、`padding`、`margin`、`alignment`、
+- [x] 属性名优先沿用 Flutter 原名：`child`、`children`、`padding`、`margin`、`alignment`、
   `width`、`height`、`mainAxisAlignment`、`crossAxisAlignment`、`decoration`、`style`、
   `onPressed`、`onChanged`。
-- [ ] 样式和装饰也尽量贴近 Flutter 对象结构，例如 `TextStyle`、`BoxDecoration`、`BorderRadius`、
+- [x] 样式和装饰也尽量贴近 Flutter 对象结构，例如 `TextStyle`、`BoxDecoration`、`BorderRadius`、
   `EdgeInsets`、`Alignment` 使用可序列化对象表达。
 - [ ] 仅在 JS/JSON 表达明显更自然时提供简短 alias；alias 必须文档化，并最终归一化为 Flutter 风格属性。
-- [ ] 不引入 HTML/CSS 风格命名作为主写法，例如不把 `className`、`onclick`、`background-color`
+- [x] 不引入 HTML/CSS 风格命名作为主写法，例如不把 `className`、`onclick`、`background-color`
   作为推荐字段。
 
 默认属性集合优先跟 Flutter 对齐：
@@ -409,13 +409,13 @@ Flutter 风格对象写法：
 
 设计约束：
 
-- [ ] schema 必须可序列化、可打印、可测试、可重放。
-- [ ] renderer 对未知 `type`、未知 style 字段、错误字段类型返回结构化错误，不静默失败。
-- [ ] 默认控件属性名尽量沿用 Flutter，例如 `mainAxisAlignment`、`crossAxisAlignment`、`child`、
+- [x] schema 必须可序列化、可打印、可测试、可重放。
+- [~] renderer 对未知 `type` 和错误字段类型会抛出统一结构化错误；未知 style 字段严格校验仍待收口。
+- [x] 默认控件属性名尽量沿用 Flutter，例如 `mainAxisAlignment`、`crossAxisAlignment`、`child`、
   `children`、`onPressed`、`decoration`、`style`；确实需要简化时提供文档化 alias。
-- [ ] Flutter enum 用字符串表示，例如 `"center"`、`"stretch"`、`"spaceBetween"`；renderer 做严格校验。
-- [ ] schema 不做 CSS selector；style 只作用于当前节点。
-- [ ] schema 不做浏览器布局模型，直接映射到 Flutter 约束和 Widget 组合。
+- [x] Flutter enum 用字符串表示，例如 `"center"`、`"stretch"`、`"spaceBetween"`；renderer 做严格校验。
+- [x] schema 不做 CSS selector；style 只作用于当前节点。
+- [x] schema 不做浏览器布局模型，直接映射到 Flutter 约束和 Widget 组合。
 
 ### 0.1：最小可用原型
 
@@ -534,7 +534,7 @@ Flutter 风格对象写法：
   replacement 后续 `pop(result)` 仍回传给原始 `push()` 调用方。
 - [x] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场；JSUI 内部 router
   动画并入 0.4 可见性生命周期与动画能力处理。
-- [x] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`；路由生命周期使用独立队列，避免被当前 dispatch 的 `await push()` 压住。
+- [x] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`；route lifecycle、dispatch 和普通 lifecycle 共享单一有序状态通道，禁止并发修改 JS state。
 - [x] `quickjsUiNavigation` 按 route entry 注入并限制当前页单次 pending navigation，避免非当前页或重复调用持续入栈。
 - [x] 支持 JSUI 页面跳转状态保持：JSUI router 持有已 push 页面的 state/schema snapshot，用于 route 返回、
   后台恢复和开发 reload 场景。

@@ -1,4 +1,5 @@
 export 'src/diagnostics/quickjs_ui_dev_options.dart';
+export 'src/diagnostics/quickjs_ui_error.dart';
 export 'src/diagnostics/quickjs_ui_diff_stats.dart';
 export 'src/diagnostics/quickjs_ui_inspector.dart';
 export 'src/diagnostics/quickjs_ui_inspector_panel.dart';

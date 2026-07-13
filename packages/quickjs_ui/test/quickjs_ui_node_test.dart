@@ -2524,11 +2524,13 @@ export function Badge(props = {}) {
   testWidgets('QuickjsUiView catches renderer errors with errorBuilder', (
     tester,
   ) async {
+    QuickjsUiError? capturedError;
     await tester.pumpWidget(
       MaterialApp(
         home: QuickjsUiView.plugin(
           _unknownComponentPlugin(),
           errorBuilder: (context, error) {
+            capturedError = error;
             return Text('Render error: $error');
           },
         ),
@@ -2540,6 +2542,10 @@ export function Badge(props = {}) {
     );
 
     expect(find.textContaining('Unknown quickjs_ui node type'), findsOneWidget);
+    expect(capturedError?.kind, QuickjsUiErrorKind.render);
+    expect(capturedError?.schemaPath, 'root');
+    expect(capturedError?.source, 'plugin');
+    expect(capturedError?.stackTrace, isNotNull);
   });
 
   testWidgets('QuickjsUiView shows default error overlay with resource', (
@@ -2572,12 +2578,14 @@ export function Badge(props = {}) {
     await tester.pumpWidget(
       const MaterialApp(
         home: QuickjsUiErrorOverlay(
-          error: FormatException('bad node', 'preview.json', 7),
-          details: QuickjsUiErrorDetails(
+          error: QuickjsUiError(
+            kind: QuickjsUiErrorKind.schema,
+            message: 'bad node',
+            cause: FormatException('bad node', 'preview.json', 7),
             source: 'asset',
-            resourceKey: 'assets/quickjs_ui/schema_preview.json',
+            resource: 'assets/quickjs_ui/schema_preview.json',
             schemaPath: 'root.children[0]',
-            routeName: 'schema_preview',
+            route: 'schema_preview',
             action: 'render',
           ),
         ),
@@ -3076,6 +3084,175 @@ export default Page({
     expect(context.cancellationReason, isA<JsRuntimeClosedException>());
   });
 
+  test('dispose stops an attached engine and leaves it reusable', () async {
+    final invoked = Completer<QuickjsHostProviderContext>();
+    final engine = await Quickjs.create(
+      options: QuickjsRuntimeOptions(
+        mounts: <QuickjsHostMount>[
+          QuickjsHostMount(
+            name: 'quickjs_ui:test:attached-cancel',
+            providers: <QuickjsHostProvider>[
+              QuickjsHostProvider.dart(
+                name: 'test.attachedWait',
+                callback: (_, context) async {
+                  invoked.complete(context);
+                  await context.cancelled;
+                  context.throwIfCancelled();
+                  return null;
+                },
+              ),
+            ],
+            environmentPatches: const <QuickjsHostScript>[
+              QuickjsHostScript.js(
+                name: 'attached-cancel:globals.js',
+                globals: <String>['attachedWait'],
+                source: '''
+globalThis.attachedWait = () =>
+  globalThis.__quickjsHostProviders['test.attachedWait']();
+''',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    addTearDown(engine.dispose);
+    final session = QuickjsUiSession(engine: engine);
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_attached_engine_cancel',
+        version: '0.6.0',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+export default Page({
+  createState() { return { status: 'idle' }; },
+  build(state) { return Text(state.status); },
+  async wait() {
+    await attachedWait();
+    return { status: 'returned' };
+  }
+});
+''',
+      ),
+    );
+
+    final dispatch = session.dispatch(<String, Object?>{'method': 'wait'});
+    final context = await invoked.future.timeout(const Duration(seconds: 2));
+    final disposing = session.dispose();
+
+    await context.cancelled.timeout(const Duration(seconds: 2));
+    await expectLater(dispatch, throwsA(isA<QuickjsUiError>()));
+    await disposing;
+    expect(context.cancellationReason, isA<JsCancelledException>());
+    expect(engine.state, QuickjsRuntimeState.ready);
+    expect(await engine.eval('1 + 1'), '2');
+  });
+
+  test(
+    'attached engines have one session lease until dispose completes',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+      final first = QuickjsUiSession(engine: engine);
+
+      expect(
+        () => QuickjsUiSession(engine: engine),
+        throwsA(isA<StateError>()),
+      );
+
+      await first.dispose();
+      final second = QuickjsUiSession(engine: engine);
+      await second.dispose();
+    },
+  );
+
+  test('attach is a one-time pre-load engine binding', () async {
+    final firstEngine = await Quickjs.create();
+    final secondEngine = await Quickjs.create();
+    addTearDown(firstEngine.dispose);
+    addTearDown(secondEngine.dispose);
+    final session = QuickjsUiSession()..attach(firstEngine);
+
+    expect(session.engine, same(firstEngine));
+    expect(() => session.attach(secondEngine), throwsA(isA<StateError>()));
+    expect(session.engine, same(firstEngine));
+    expect(
+      () => QuickjsUiSession(engine: firstEngine),
+      throwsA(isA<StateError>()),
+    );
+
+    final secondSession = QuickjsUiSession(engine: secondEngine);
+    await secondSession.dispose();
+    await session.dispose();
+  });
+
+  test('attach rejects engine changes after a page is loaded', () async {
+    final replacement = await Quickjs.create();
+    addTearDown(replacement.dispose);
+    final session = QuickjsUiSession();
+    await session.loadPlugin(_counterPlugin());
+
+    expect(() => session.attach(replacement), throwsA(isA<StateError>()));
+    expect(session.engine, isNot(same(replacement)));
+
+    final replacementSession = QuickjsUiSession(engine: replacement);
+    await replacementSession.dispose();
+    await session.dispose();
+  });
+
+  test('owned engine closes even when page dispose export throws', () async {
+    final session = QuickjsUiSession();
+    await session.loadPlugin(
+      QuickjsPlugin(
+        manifest: const QuickjsPluginManifest(
+          id: 'quickjs_ui_dispose_failure',
+          version: '0.6.0',
+          entry: 'quickjs_ui_dispose_failure/main',
+          exports: <String>[
+            'mount',
+            'handleEvent',
+            'commit',
+            'setState',
+            'lifecycle',
+            'snapshot',
+            'capabilities',
+            'dispose',
+          ],
+        ),
+        modules: <QuickjsPluginModule>[
+          QuickjsPluginModule(
+            specifier: 'quickjs_ui_dispose_failure/main',
+            source: '''
+export function capabilities() {
+  return {
+    protocol: 'quickjs_ui.runtime.v1',
+    schemaVersion: 1,
+    helperVersion: 1,
+    minimumQuickjsUiVersion: 1,
+    lifecycle: []
+  };
+}
+export function mount() { return { state: {} }; }
+export function handleEvent() { return { changed: false }; }
+export function setState() { return { changed: false }; }
+export function lifecycle() { return { changed: false }; }
+export function snapshot() { return { state: {} }; }
+export function commit() {
+  return { changed: true, node: { type: 'Text', data: 'ready' } };
+}
+export function dispose() { throw new Error('dispose failed'); }
+''',
+          ),
+        ],
+      ),
+    );
+    final engine = session.engine!;
+
+    await session.dispose();
+
+    expect(engine.state, QuickjsRuntimeState.closed);
+  });
+
   testWidgets('maps navigation transition intent to Flutter route', (
     WidgetTester tester,
   ) async {
@@ -3204,6 +3381,262 @@ export default Page({
     await controller.reload();
 
     expect(controller.node?.props['data'], 'Version 2');
+  });
+
+  test(
+    'reload preserves owned engine and disposes each page binding',
+    () async {
+      var disposeCount = 0;
+      final session = QuickjsUiSession();
+      final mount = QuickjsHostMount(
+        name: 'quickjs_ui:test:reload-dispose',
+        providers: <QuickjsHostProvider>[
+          QuickjsHostProvider.dart(
+            name: 'test.reloadDisposed',
+            callback: (_, _) {
+              disposeCount += 1;
+              return true;
+            },
+          ),
+        ],
+        environmentPatches: const <QuickjsHostScript>[
+          QuickjsHostScript.js(
+            name: 'reload-dispose:globals.js',
+            globals: <String>['reloadDisposed'],
+            source: '''
+globalThis.reloadDisposed = () =>
+  globalThis.__quickjsHostProviders['test.reloadDisposed']();
+''',
+          ),
+        ],
+      );
+      final plugin = QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_reload_dispose',
+        version: '0.6.0',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+export default Page({
+  build() { return Text('ready'); },
+  async onDispose() { await reloadDisposed(); }
+});
+''',
+      );
+
+      await session.loadPlugin(plugin, mounts: <QuickjsHostMount>[mount]);
+      final ownedEngine = session.engine!;
+      await session.reload();
+
+      expect(disposeCount, 1);
+      expect(session.engine, same(ownedEngine));
+      await session.dispose();
+      expect(disposeCount, 2);
+      expect(ownedEngine.state, QuickjsRuntimeState.closed);
+    },
+  );
+
+  test('reload retains load error context', () async {
+    var loadCount = 0;
+    const context = QuickjsUiErrorContext(
+      operation: 'load',
+      source: 'network',
+      resource: 'https://example.test/page.mjs',
+      schemaPath: 'root',
+    );
+    final controller = QuickjsUiController();
+    addTearDown(controller.dispose);
+
+    await controller.load(() async {
+      loadCount += 1;
+      if (loadCount > 1) {
+        throw const FormatException('reload failed');
+      }
+      return _counterPlugin();
+    }, errorContext: context);
+    await controller.reload();
+
+    expect(controller.error?.operation, 'load');
+    expect(controller.error?.source, 'network');
+    expect(controller.error?.resource, 'https://example.test/page.mjs');
+    expect(controller.error?.schemaPath, 'root');
+  });
+
+  test('page replacement reuses one runtime mount slot', () async {
+    final session = QuickjsUiSession();
+    await session.loadPlugin(_counterPlugin());
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_second_page',
+        version: '0.6.0',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+export default Page({ build() { return Text('second'); } });
+''',
+      ),
+    );
+
+    final snapshot = await session.engine!.debugInspect();
+    expect(
+      snapshot.registeredMounts.where((name) => name == 'quickjs_ui:page'),
+      hasLength(1),
+    );
+    expect(session.node?.props['data'], 'second');
+    await session.dispose();
+  });
+
+  test('owned engine rebuilds when host mount configuration changes', () async {
+    final firstMount = QuickjsHostMount(name: 'quickjs_ui:test:first');
+    final secondMount = QuickjsHostMount(name: 'quickjs_ui:test:second');
+    final session = QuickjsUiSession();
+    await session.loadPlugin(
+      _counterPlugin(),
+      mounts: <QuickjsHostMount>[firstMount],
+    );
+    final firstEngine = session.engine!;
+
+    await session.loadPlugin(
+      _counterPlugin(),
+      mounts: <QuickjsHostMount>[secondMount],
+    );
+
+    expect(firstEngine.state, QuickjsRuntimeState.closed);
+    expect(session.engine, isNot(same(firstEngine)));
+    final snapshot = await session.engine!.debugInspect();
+    expect(snapshot.registeredMounts, contains('quickjs_ui:test:second'));
+    expect(snapshot.registeredMounts, isNot(contains('quickjs_ui:test:first')));
+    await session.dispose();
+  });
+
+  test('failed engine replacement leaves the session recreatable', () async {
+    final originalMount = QuickjsHostMount(name: 'quickjs_ui:test:original');
+    final conflictingA = QuickjsHostMount(name: 'quickjs_ui:test:conflict');
+    final conflictingB = QuickjsHostMount(name: 'quickjs_ui:test:conflict');
+    final session = QuickjsUiSession();
+    await session.loadPlugin(
+      _counterPlugin(),
+      mounts: <QuickjsHostMount>[originalMount],
+    );
+    final originalEngine = session.engine!;
+
+    await expectLater(
+      session.loadPlugin(
+        _counterPlugin(),
+        mounts: <QuickjsHostMount>[conflictingA, conflictingB],
+      ),
+      throwsA(anything),
+    );
+
+    expect(originalEngine.state, QuickjsRuntimeState.closed);
+    expect(session.engine, isNull);
+    expect(session.plugin, isNull);
+
+    await session.loadPlugin(
+      _counterPlugin(),
+      mounts: <QuickjsHostMount>[originalMount],
+    );
+
+    expect(session.engine, isNotNull);
+    expect(session.engine, isNot(same(originalEngine)));
+    expect(session.state, <String, Object?>{'count': 0});
+    await session.dispose();
+  });
+
+  test('failed page loading clears the complete page binding', () async {
+    final session = QuickjsUiSession();
+    final mount = QuickjsHostMount(name: 'quickjs_ui:test:page-metadata');
+    await session.loadPlugin(
+      _counterPlugin(),
+      initialProps: const <String, Object?>{'old': true},
+      mounts: <QuickjsHostMount>[mount],
+      grantedPermissions: const <String>['old.permission'],
+    );
+
+    await expectLater(
+      session.loadPlugin(
+        QuickjsPlugin(
+          manifest: const QuickjsPluginManifest(
+            id: 'quickjs_ui_invalid_page_binding',
+            version: '0.6.0',
+            entry: 'quickjs_ui_invalid_page_binding/main',
+            exports: <String>['mount'],
+          ),
+          modules: const <QuickjsPluginModule>[
+            QuickjsPluginModule(
+              specifier: 'quickjs_ui_invalid_page_binding/main',
+              source: 'export const invalid = true;',
+            ),
+          ],
+        ),
+        initialProps: const <String, Object?>{'new': true},
+        mounts: <QuickjsHostMount>[mount],
+        grantedPermissions: const <String>['new.permission'],
+      ),
+      throwsA(anything),
+    );
+
+    expect(session.plugin, isNull);
+    expect(session.props, isEmpty);
+    expect(session.mounts, isEmpty);
+    expect(session.grantedPermissions, isEmpty);
+    expect(session.permissionPolicy, isNull);
+    expect(session.state, isNull);
+    expect(session.node, isNull);
+    await session.dispose();
+  });
+
+  test('attached engines reject session host mount configuration', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+    final session = QuickjsUiSession(engine: engine);
+
+    await expectLater(
+      session.loadPlugin(
+        _counterPlugin(),
+        mounts: <QuickjsHostMount>[
+          QuickjsHostMount(name: 'quickjs_ui:test:ignored'),
+        ],
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(session.plugin, isNull);
+    await session.dispose();
+  });
+
+  test('reload retries from saved config after mount failure', () async {
+    var attempts = 0;
+    final controller = QuickjsUiController();
+    addTearDown(controller.dispose);
+
+    await controller.load(() async {
+      attempts += 1;
+      if (attempts == 1) {
+        return QuickjsPlugin(
+          manifest: const QuickjsPluginManifest(
+            id: 'quickjs_ui_mount_failure',
+            version: '0.6.0',
+            entry: 'quickjs_ui',
+            exports: <String>[],
+          ),
+          modules: const <QuickjsPluginModule>[
+            QuickjsPluginModule(
+              specifier: 'quickjs_ui',
+              source: 'export default null;',
+            ),
+          ],
+        );
+      }
+      return _counterPlugin();
+    });
+
+    expect(controller.error, isNotNull);
+    expect(controller.plugin, isNull);
+
+    await controller.reload();
+
+    expect(attempts, 2);
+    expect(controller.error, isNull);
+    expect(controller.plugin, isNotNull);
+    expect(controller.state, <String, Object?>{'count': 0});
   });
 
   test('runs multi-file entry bundle page protocol', () async {
@@ -3350,7 +3783,7 @@ export default Page({
           ),
         ),
         throwsA(
-          isA<QuickjsUiRuntimeException>().having(
+          isA<QuickjsUiError>().having(
             (error) => '$error',
             'error',
             contains('quickjs_ui component render recursion limit exceeded'),
