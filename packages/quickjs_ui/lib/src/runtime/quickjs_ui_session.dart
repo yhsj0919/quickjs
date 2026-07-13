@@ -125,34 +125,35 @@ final class QuickjsUiSession {
       );
       _pageBinding = page;
       try {
-        final details = <String, Duration>{};
-        final validateWatch = Stopwatch()..start();
-        await page.client.validate();
-        details['validate.pluginCall'] = validateWatch.elapsed;
-        record('validate');
-        page.lifecycleTypes = await _loadLifecycleTypes(
-          page.client,
-          plugin,
-          details: details,
-        );
-        record('capabilities');
-        final mountCallWatch = Stopwatch()..start();
-        final initialSnapshot = await _clientCall('mount', <Object?>[
-          page.props,
-        ]);
-        details['stateMount.pluginCall'] = mountCallWatch.elapsed;
-        record('stateMount');
-        if (_disposed) return;
-        final snapshotWatch = Stopwatch()..start();
-        _applySnapshot(initialSnapshot);
-        details['stateMount.snapshotApply'] = snapshotWatch.elapsed;
+        if (plugin.manifest.exports.contains('bootstrap')) {
+          _validateRuntimeManifest(plugin);
+          final bootstrap = await _clientCall('bootstrap', <Object?>[
+            page.props,
+          ]);
+          record('bootstrap');
+          if (_disposed) return;
+          _applyBootstrapResult(page, bootstrap);
+        } else {
+          await page.client.validate();
+          record('validate');
+          page.lifecycleTypes = await _loadLegacyLifecycleTypes(
+            page.client,
+            plugin,
+          );
+          record('capabilities');
+          final initialSnapshot = await _clientCall('mount', <Object?>[
+            page.props,
+          ]);
+          record('stateMount');
+          if (_disposed) return;
+          _applySnapshot(initialSnapshot);
+          await _refreshImpl();
+          record('firstCommit');
+        }
         inspector?.recordLifecycle('widget', 'load');
-        await _refreshImplMeasured(details: details);
-        record('firstCommit');
         _lastLoadMetrics = QuickjsUiLoadMetrics(
           stages: Map<String, Duration>.unmodifiable(stages),
           totalToSchema: total.elapsed,
-          details: Map<String, Duration>.unmodifiable(details),
         );
       } catch (_) {
         if (identical(_pageBinding, page)) {
@@ -382,28 +383,28 @@ final class QuickjsUiSession {
     return _refreshImplMeasured();
   }
 
-  Future<void> _refreshImplMeasured({Map<String, Duration>? details}) async {
+  Future<void> _refreshImplMeasured() async {
     _ensureActive();
-    final commitWatch = Stopwatch()..start();
     final result = await _clientCall('commit', const <Object?>[]);
-    details?['firstCommit.pluginCall'] = commitWatch.elapsed;
     if (_disposed) {
       return;
     }
     if (result is Map && result['changed'] == false) {
       return;
     }
+    _applyCommitResult(result);
+  }
+
+  void _applyCommitResult(Object? result) {
     final rendered = result is Map ? result['node'] : result;
     if (rendered is! Map) {
       throw const FormatException(
         'quickjs_ui commit() must return a UI node object',
       );
     }
-    final decodeWatch = Stopwatch()..start();
     _node = QuickjsUiNode.fromMap(
       rendered.map((key, value) => MapEntry<String, Object?>('$key', value)),
     );
-    details?['firstCommit.schemaDecode'] = decodeWatch.elapsed;
     inspector?.recordSchema(_node!.toMap());
   }
 
@@ -652,12 +653,7 @@ final class QuickjsUiSession {
     return _clientCallWith(_requireClient(), name, args);
   }
 
-  Future<Set<String>> _loadLifecycleTypes(
-    QuickjsPluginClient client,
-    QuickjsPlugin plugin, {
-    Map<String, Duration>? details,
-  }) async {
-    final manifestWatch = Stopwatch()..start();
+  void _validateRuntimeManifest(QuickjsPlugin plugin) {
     final exports = plugin.manifest.exports;
     const requiredExports = <String>{
       'mount',
@@ -676,32 +672,53 @@ final class QuickjsUiSession {
         '${missing.join(', ')}',
       );
     }
-    details?['capabilities.manifestCheck'] = manifestWatch.elapsed;
-    final callWatch = Stopwatch()..start();
+  }
+
+  Future<Set<String>> _loadLegacyLifecycleTypes(
+    QuickjsPluginClient client,
+    QuickjsPlugin plugin,
+  ) async {
+    _validateRuntimeManifest(plugin);
     final value = await _clientCallWith(
       client,
       'capabilities',
       const <Object?>[],
     );
-    details?['capabilities.pluginCall'] = callWatch.elapsed;
-    final parseWatch = Stopwatch()..start();
-    if (value is! Map) {
-      details?['capabilities.parse'] = parseWatch.elapsed;
-      return const <String>{};
-    }
+    if (value is! Map) return const <String>{};
     final protocol = value['protocol'];
     if (protocol != quickjsUiRuntimeProtocol) {
       throw StateError('quickjs_ui unsupported runtime protocol: $protocol');
     }
     _validateCompatibility(value);
     final lifecycle = value['lifecycle'];
-    if (lifecycle is! List) {
-      details?['capabilities.parse'] = parseWatch.elapsed;
-      return const <String>{};
+    return lifecycle is List
+        ? Set<String>.unmodifiable(lifecycle.whereType<String>())
+        : const <String>{};
+  }
+
+  void _applyBootstrapResult(_QuickjsUiPageBinding page, Object? value) {
+    if (value is! Map) {
+      throw const FormatException(
+        'quickjs_ui bootstrap() must return an object',
+      );
     }
-    final result = Set<String>.unmodifiable(lifecycle.whereType<String>());
-    details?['capabilities.parse'] = parseWatch.elapsed;
-    return result;
+    final capabilities = value['capabilities'];
+    if (capabilities is! Map) {
+      throw const FormatException(
+        'quickjs_ui bootstrap().capabilities must be an object',
+      );
+    }
+    final protocol = capabilities['protocol'];
+    if (protocol != quickjsUiRuntimeProtocol) {
+      throw StateError('quickjs_ui unsupported runtime protocol: $protocol');
+    }
+    _validateCompatibility(capabilities);
+    final lifecycle = capabilities['lifecycle'];
+    page.lifecycleTypes = lifecycle is List
+        ? Set<String>.unmodifiable(lifecycle.whereType<String>())
+        : const <String>{};
+    _applySnapshot(value['snapshot']);
+    _applyCommitResult(value['commit']);
   }
 
   void _validateCompatibility(Map<Object?, Object?> capabilities) {
@@ -907,7 +924,7 @@ final class QuickjsUiSession {
       'lifecycle' => QuickjsUiErrorKind.lifecycle,
       'setState' || 'state' => QuickjsUiErrorKind.state,
       'render' => QuickjsUiErrorKind.render,
-      'mount' || 'capabilities' => QuickjsUiErrorKind.load,
+      'bootstrap' || 'mount' || 'capabilities' => QuickjsUiErrorKind.load,
       'dispose' => QuickjsUiErrorKind.disposed,
       _ => QuickjsUiErrorKind.runtime,
     };
