@@ -199,6 +199,20 @@ final class QuickjsUiController extends ChangeNotifier {
     }
   }
 
+  Future<void> dispatchBatch(Iterable<Map<String, Object?>> events) async {
+    _ensureActive();
+    _error = null;
+    try {
+      await _session.dispatchBatch(events);
+      if (_disposed) return;
+      notifyListeners();
+    } catch (error) {
+      if (_disposed) return;
+      _recordError(error, kind: QuickjsUiErrorKind.dispatch);
+      notifyListeners();
+    }
+  }
+
   Future<void> setState(Map<String, Object?> patch) async {
     _ensureActive();
     _error = null;

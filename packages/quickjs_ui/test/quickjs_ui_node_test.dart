@@ -2731,27 +2731,29 @@ export default Page({
       initialProps: const <String, Object?>{'title': 'Custom components'},
     );
 
+    final events = <Map<String, Object?>>[];
     for (var index = 0; index < 5000; index += 1) {
-      await session.dispatch(<String, Object?>{
+      events.add(<String, Object?>{
         'method': 'setExpanded',
         'value': index.isEven,
       });
       if (index % 5 == 0) {
-        await session.dispatch(<String, Object?>{
+        events.add(<String, Object?>{
           'method': 'setEnabled',
           'value': index.isOdd,
         });
       }
       if (index % 7 == 0) {
-        await session.dispatch(<String, Object?>{
+        events.add(<String, Object?>{
           'method': 'setSize',
           'value': index.isEven ? 'large' : 'small',
         });
       }
       if (index % 97 == 0) {
-        await session.dispatch(<String, Object?>{'method': 'reset'});
+        events.add(<String, Object?>{'method': 'reset'});
       }
     }
+    await session.dispatchBatch(events);
 
     expect((session.state! as Map)['expanded'], isFalse);
   });
@@ -4136,14 +4138,15 @@ export default Page({
 
     await session.loadPlugin(bundle.toPlugin());
 
-    for (var i = 0; i < 5000; i++) {
-      await session.dispatch(<String, Object?>{
-        'method': 'onProgress',
-        'positionMs': i * 10,
-        'durationMs': 60000,
-        'isPlaying': false,
-      });
-    }
+    await session.dispatchBatch(<Map<String, Object?>>[
+      for (var i = 0; i < 5000; i++)
+        <String, Object?>{
+          'method': 'onProgress',
+          'positionMs': i * 10,
+          'durationMs': 60000,
+          'isPlaying': false,
+        },
+    ]);
 
     await session.dispatch(<String, Object?>{
       'method': 'scrub',
