@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../diagnostics/quickjs_ui_dev_options.dart';
+import '../diagnostics/quickjs_ui_error.dart';
 import '../diagnostics/quickjs_ui_diag.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../renderer/quickjs_ui_component_registry.dart';
@@ -19,7 +20,7 @@ import 'quickjs_ui_error_overlay.dart';
 ///
 /// [context] 为当前 BuildContext；[error] 为捕获到的异常对象。
 typedef QuickjsUiErrorBuilder =
-    Widget Function(BuildContext context, Object error);
+    Widget Function(BuildContext context, QuickjsUiError error);
 
 /// 页面 JS bundle 尚未就绪时构建加载中 UI 的回调。
 typedef QuickjsUiLoadingBuilder = Widget Function(BuildContext context);
@@ -504,10 +505,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_devOptions.showErrorOverlay) {
         return widget.placeholder ?? const SizedBox.shrink();
       }
-      return QuickjsUiErrorOverlay(
-        error: error,
-        details: _errorDetails(schemaPath: 'root'),
-      );
+      return QuickjsUiErrorOverlay(error: error);
     }
 
     if (_controller.isLoading) {
@@ -537,29 +535,44 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       }
       _reportFirstRender();
       return rendered;
-    } catch (error) {
-      return _buildError(context, error, schemaPath: 'root');
+    } catch (error, stackTrace) {
+      return _buildError(
+        context,
+        error,
+        stackTrace: stackTrace,
+        schemaPath: 'root',
+      );
     }
   }
 
-  Widget _buildError(BuildContext context, Object error, {String? schemaPath}) {
+  Widget _buildError(
+    BuildContext context,
+    Object error, {
+    StackTrace? stackTrace,
+    String? schemaPath,
+  }) {
+    final unified = QuickjsUiError.wrap(
+      error,
+      kind: QuickjsUiErrorKind.render,
+      stackTrace: stackTrace,
+      context: _errorContext(schemaPath: schemaPath, operation: 'render'),
+    );
+    _controller.inspector.recordError(unified);
     final builder = widget.errorBuilder;
     if (builder != null) {
-      return builder(context, error);
+      return builder(context, unified);
     }
     if (!_devOptions.showErrorOverlay) {
       return widget.placeholder ?? const SizedBox.shrink();
     }
-    return QuickjsUiErrorOverlay(
-      error: error,
-      details: _errorDetails(schemaPath: schemaPath),
-    );
+    return QuickjsUiErrorOverlay(error: unified);
   }
 
-  QuickjsUiErrorDetails _errorDetails({String? schemaPath}) {
-    return QuickjsUiErrorDetails(
+  QuickjsUiErrorContext _errorContext({String? schemaPath, String? operation}) {
+    return QuickjsUiErrorContext(
+      operation: operation,
       source: widget._source.name,
-      resourceKey: widget.networkUrl?.toString() ?? widget._path,
+      resource: widget.networkUrl?.toString() ?? widget._path,
       schemaPath: schemaPath,
     );
   }
@@ -615,6 +628,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           mounts: _effectiveMounts(),
           grantedPermissions: widget.grantedPermissions,
           permissionPolicy: widget.permissionPolicy,
+          errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
         );
         if (!_isCurrentGeneration(generation)) {
           return;
@@ -627,10 +641,18 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         mounts: _effectiveMounts(),
         grantedPermissions: widget.grantedPermissions,
         permissionPolicy: widget.permissionPolicy,
+        errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (_isCurrentGeneration(generation)) {
-        _controller.reportError(error);
+        _controller.reportError(
+          QuickjsUiError.wrap(
+            error,
+            kind: QuickjsUiErrorKind.load,
+            stackTrace: stackTrace,
+            context: _errorContext(operation: 'load', schemaPath: 'root'),
+          ),
+        );
       }
     }
   }

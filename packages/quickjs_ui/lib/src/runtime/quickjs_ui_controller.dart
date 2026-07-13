@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../diagnostics/quickjs_ui_dev_options.dart';
+import '../diagnostics/quickjs_ui_error.dart';
 import '../diagnostics/quickjs_ui_inspector.dart';
 import '../diagnostics/quickjs_ui_page_snapshot.dart';
 import '../diagnostics/quickjs_ui_network_journal.dart';
@@ -35,14 +36,12 @@ final class QuickjsUiController extends ChangeNotifier {
   final QuickjsUiSession _session;
   final QuickjsUiDevOptions devOptions;
   final QuickjsUiInspector inspector;
-  Object? _error;
-  QuickjsUiPluginLoader? _loader;
-  Map<String, Object?> _initialProps = const <String, Object?>{};
-  List<QuickjsHostMount> _mounts = const <QuickjsHostMount>[];
-  Set<String> _grantedPermissions = const <String>{};
-  QuickjsUiPermissionPolicy? _permissionPolicy;
+  QuickjsUiError? _error;
+  _QuickjsUiLoadConfig _loadConfig = _QuickjsUiLoadConfig.copy();
   bool _loading = false;
   bool _disposed = false;
+  bool _notifierDisposed = false;
+  Future<void>? _closeFuture;
   bool _timerPumpRunning = false;
   int _loadRequestId = 0;
   Timer? _timerPump;
@@ -53,7 +52,7 @@ final class QuickjsUiController extends ChangeNotifier {
   Map<String, Object?> get props => _session.props;
   Object? get state => _session.state;
   QuickjsUiNode? get node => _session.node;
-  Object? get error => _error;
+  QuickjsUiError? get error => _error;
   bool get hasError => _error != null;
   bool get isLoading => _loading;
   bool get isDisposed => _disposed;
@@ -64,12 +63,16 @@ final class QuickjsUiController extends ChangeNotifier {
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
+    QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
   }) async {
-    _loader = null;
-    _initialProps = Map<String, Object?>.unmodifiable(initialProps);
-    _mounts = List<QuickjsHostMount>.unmodifiable(mounts);
-    _grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
-    _permissionPolicy = permissionPolicy;
+    _loadConfig = _QuickjsUiLoadConfig.copy(
+      plugin: plugin,
+      initialProps: initialProps,
+      mounts: mounts,
+      grantedPermissions: grantedPermissions,
+      permissionPolicy: permissionPolicy,
+      errorContext: errorContext,
+    );
     final requestId = ++_loadRequestId;
     await _loadPlugin(
       plugin,
@@ -78,6 +81,7 @@ final class QuickjsUiController extends ChangeNotifier {
       mounts: mounts,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
+      errorContext: errorContext,
     );
   }
 
@@ -87,13 +91,17 @@ final class QuickjsUiController extends ChangeNotifier {
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
+    QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
   }) async {
     _ensureActive();
-    _loader = loader;
-    _initialProps = Map<String, Object?>.unmodifiable(initialProps);
-    _mounts = List<QuickjsHostMount>.unmodifiable(mounts);
-    _grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
-    _permissionPolicy = permissionPolicy;
+    _loadConfig = _QuickjsUiLoadConfig.copy(
+      loader: loader,
+      initialProps: initialProps,
+      mounts: mounts,
+      grantedPermissions: grantedPermissions,
+      permissionPolicy: permissionPolicy,
+      errorContext: errorContext,
+    );
     final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
@@ -117,7 +125,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _error = error;
+      _recordError(error, kind: QuickjsUiErrorKind.load, context: errorContext);
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -133,6 +141,7 @@ final class QuickjsUiController extends ChangeNotifier {
     required List<QuickjsHostMount> mounts,
     required Iterable<String> grantedPermissions,
     required QuickjsUiPermissionPolicy? permissionPolicy,
+    required QuickjsUiErrorContext errorContext,
   }) async {
     _ensureActive();
     _loading = true;
@@ -159,7 +168,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _error = error;
+      _recordError(error, kind: QuickjsUiErrorKind.load, context: errorContext);
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -181,19 +190,31 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _error = error;
-      inspector.recordError(error);
+      _recordError(
+        error,
+        kind: QuickjsUiErrorKind.dispatch,
+        action: '${event['method'] ?? event['action'] ?? 'unknown'}',
+      );
       notifyListeners();
     }
   }
 
   Future<void> setState(Map<String, Object?> patch) async {
     _ensureActive();
-    await _session.setState(patch);
-    if (_disposed) {
-      return;
+    _error = null;
+    try {
+      await _session.setState(patch);
+      if (_disposed) {
+        return;
+      }
+      notifyListeners();
+    } catch (error) {
+      if (_disposed) {
+        return;
+      }
+      _recordError(error, kind: QuickjsUiErrorKind.state);
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<void> refresh() async {
@@ -209,7 +230,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _error = error;
+      _recordError(error, kind: QuickjsUiErrorKind.render);
       notifyListeners();
     }
   }
@@ -237,7 +258,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _error = error;
+      _recordError(error, kind: QuickjsUiErrorKind.lifecycle, lifecycle: type);
       notifyListeners();
     }
   }
@@ -265,7 +286,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _error = error;
+      _recordError(error, kind: QuickjsUiErrorKind.lifecycle, lifecycle: type);
       notifyListeners();
     }
   }
@@ -279,8 +300,7 @@ final class QuickjsUiController extends ChangeNotifier {
 
   void reportError(Object error) {
     _ensureActive();
-    _error = error;
-    inspector.recordError(error);
+    _recordError(error, kind: QuickjsUiErrorKind.unknown);
     notifyListeners();
   }
 
@@ -326,18 +346,29 @@ final class QuickjsUiController extends ChangeNotifier {
 
   Future<void> restart() async {
     _ensureActive();
-    if (_session.plugin == null) {
-      _error = null;
-      notifyListeners();
-      return;
-    }
+    final config = _loadConfig;
     final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
     notifyListeners();
     try {
       _stopTimerPump();
-      await _session.reload();
+      final currentPlugin = _session.plugin;
+      if (currentPlugin != null) {
+        await _session.reload();
+      } else {
+        final configuredPlugin = config.plugin;
+        if (configuredPlugin == null) {
+          throw StateError('QuickjsUiController has no page to restart');
+        }
+        await _session.loadPlugin(
+          configuredPlugin,
+          initialProps: config.initialProps,
+          mounts: config.mounts,
+          grantedPermissions: config.grantedPermissions,
+          permissionPolicy: config.permissionPolicy,
+        );
+      }
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
@@ -346,7 +377,11 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _error = error;
+      _recordError(
+        error,
+        kind: QuickjsUiErrorKind.load,
+        context: _loadConfig.errorContext,
+      );
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -357,12 +392,8 @@ final class QuickjsUiController extends ChangeNotifier {
 
   Future<void> reload() async {
     _ensureActive();
-    if (_session.plugin == null) {
-      _error = null;
-      notifyListeners();
-      return;
-    }
-    final loader = _loader;
+    final config = _loadConfig;
+    final loader = config.loader;
     if (loader == null) {
       await restart();
       return;
@@ -380,10 +411,10 @@ final class QuickjsUiController extends ChangeNotifier {
       _stopTimerPump();
       await _session.loadPlugin(
         plugin,
-        initialProps: _initialProps,
-        mounts: _mounts,
-        grantedPermissions: _grantedPermissions,
-        permissionPolicy: _permissionPolicy,
+        initialProps: config.initialProps,
+        mounts: config.mounts,
+        grantedPermissions: config.grantedPermissions,
+        permissionPolicy: config.permissionPolicy,
       );
       if (_disposed || requestId != _loadRequestId) {
         return;
@@ -403,8 +434,11 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _error = error;
-      inspector.recordError(error);
+      _recordError(
+        error,
+        kind: QuickjsUiErrorKind.load,
+        context: config.errorContext,
+      );
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -415,13 +449,26 @@ final class QuickjsUiController extends ChangeNotifier {
 
   @override
   void dispose() {
-    if (_disposed) {
+    if (_notifierDisposed) {
       return;
+    }
+    _notifierDisposed = true;
+    unawaited(close());
+    super.dispose();
+  }
+
+  /// Stops this controller and waits until its QuickJS session is cleaned up.
+  ///
+  /// Call this before replacing a controller that uses an attached engine.
+  /// Flutter's synchronous [dispose] delegates here but cannot await it.
+  Future<void> close() {
+    final currentClose = _closeFuture;
+    if (currentClose != null) {
+      return currentClose;
     }
     _disposed = true;
     _stopTimerPump();
-    _session.dispose();
-    super.dispose();
+    return _closeFuture = _session.dispose();
   }
 
   void _startTimerPump() {
@@ -452,8 +499,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _error = error;
-      inspector.recordError(error);
+      _recordError(error, kind: QuickjsUiErrorKind.runtime);
       _stopTimerPump();
       notifyListeners();
     } finally {
@@ -468,4 +514,70 @@ final class QuickjsUiController extends ChangeNotifier {
       throw StateError('QuickjsUiController is disposed');
     }
   }
+
+  void _recordError(
+    Object error, {
+    required QuickjsUiErrorKind kind,
+    String? action,
+    String? lifecycle,
+    QuickjsUiErrorContext context = const QuickjsUiErrorContext(),
+  }) {
+    final cause = error is QuickjsUiError ? error.cause : error;
+    final resolvedKind = switch (cause) {
+      QuickjsUiNetworkException() => QuickjsUiErrorKind.network,
+      QuickjsUiPermissionException() => QuickjsUiErrorKind.permission,
+      FormatException() when kind == QuickjsUiErrorKind.load =>
+        QuickjsUiErrorKind.resource,
+      _ => kind,
+    };
+    final unified = QuickjsUiError.wrap(
+      error,
+      kind: resolvedKind,
+      action: action,
+      lifecycle: lifecycle,
+      context: context,
+    );
+    _error = unified;
+    inspector.recordError(unified);
+  }
+}
+
+final class _QuickjsUiLoadConfig {
+  factory _QuickjsUiLoadConfig.copy({
+    QuickjsUiPluginLoader? loader,
+    QuickjsPlugin? plugin,
+    Map<String, Object?> initialProps = const <String, Object?>{},
+    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    Iterable<String> grantedPermissions = const <String>[],
+    QuickjsUiPermissionPolicy? permissionPolicy,
+    QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
+  }) {
+    return _QuickjsUiLoadConfig._(
+      loader: loader,
+      plugin: plugin,
+      initialProps: Map<String, Object?>.unmodifiable(initialProps),
+      mounts: List<QuickjsHostMount>.unmodifiable(mounts),
+      grantedPermissions: Set<String>.unmodifiable(grantedPermissions),
+      permissionPolicy: permissionPolicy,
+      errorContext: errorContext,
+    );
+  }
+
+  const _QuickjsUiLoadConfig._({
+    required this.loader,
+    required this.plugin,
+    required this.initialProps,
+    required this.mounts,
+    required this.grantedPermissions,
+    required this.permissionPolicy,
+    required this.errorContext,
+  });
+
+  final QuickjsUiPluginLoader? loader;
+  final QuickjsPlugin? plugin;
+  final Map<String, Object?> initialProps;
+  final List<QuickjsHostMount> mounts;
+  final Set<String> grantedPermissions;
+  final QuickjsUiPermissionPolicy? permissionPolicy;
+  final QuickjsUiErrorContext errorContext;
 }

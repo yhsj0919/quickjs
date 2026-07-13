@@ -698,6 +698,40 @@ export default Page({
       );
     });
 
+    test('dispatch and route lifecycle share one ordered state lane', () async {
+      final engine = await Quickjs.create();
+      final session = QuickjsUiSession(engine: engine);
+      addTearDown(session.dispose);
+
+      await session.loadPlugin(
+        QuickjsUiPagePlugin.singleFile(
+          id: 'quickjs_ui_single_state_lane',
+          version: '0.6.0',
+          source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() { return { order: '' }; },
+  build(state) { return Text(state.order); },
+  first(state) { return { order: state.order + 'dispatch>' }; },
+  onShow(state) { return { order: state.order + 'show>' }; },
+  onPause(state) { return { order: state.order + 'pause>' }; }
+});
+''',
+        ),
+      );
+
+      final operations = <Future<void>>[
+        session.dispatch(<String, Object?>{'method': 'first'}),
+        session.routeLifecycle('show'),
+        session.lifecycle('pause'),
+      ];
+      await Future.wait(operations);
+
+      expect(session.state, <String, Object?>{'order': 'dispatch>show>pause>'});
+      expect(session.node?.props['data'], 'dispatch>show>pause>');
+    });
+
     testWidgets(
       'event backpressure coalesces samples and defers reentrant work',
       (tester) async {

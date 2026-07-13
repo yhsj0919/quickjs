@@ -10,16 +10,19 @@ class QuickjsUiErrorPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('QuickJS UI Error Overlay')),
       body: const QuickjsUiErrorOverlay(
-        error: FormatException(
-          'Unknown quickjs_ui node type: DemoMissing',
-          'controls_page.mjs',
-          128,
-        ),
-        details: QuickjsUiErrorDetails(
+        error: QuickjsUiError(
+          kind: QuickjsUiErrorKind.schema,
+          message: 'Unknown quickjs_ui node type: DemoMissing',
+          cause: FormatException(
+            'Unknown quickjs_ui node type: DemoMissing',
+            'controls_page.mjs',
+            128,
+          ),
+          operation: 'render',
           source: 'asset',
-          resourceKey: 'assets/quickjs_ui/controls_page.mjs',
+          resource: 'assets/quickjs_ui/controls_page.mjs',
           schemaPath: 'root.children[2]',
-          routeName: 'quickjs_ui_error_demo',
+          route: 'quickjs_ui_error_demo',
           action: 'render',
         ),
       ),

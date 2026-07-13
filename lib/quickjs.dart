@@ -3,6 +3,8 @@
 /// 常用 mount：
 /// - [QuickjsFetchMount]：注入 Fetch API。
 /// - [QuickjsAxiosMount]：组合 Fetch 与 Axios 脚本。
+library;
+
 export 'src/runtime/quickjs.dart';
 export 'src/module/quickjs_asset_module_loader.dart';
 export 'src/diagnostics/quickjs_exception.dart';

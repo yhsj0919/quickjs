@@ -77,25 +77,11 @@ export function Page(page) {
       }
       const normalized = normalizeDispatchEvent(event);
       const patch = await hook(state, normalized.data, props, normalized.event, context);
-      const nextState = applyStatePatch(state, patch);
-      if (nextState == null) {
-        return commitResult(false);
-      }
-      state = nextState;
-      dirty = true;
-      version += 1;
-      return commitResult(true);
+      return commitStatePatch(patch);
     },
     setState(patch) {
       requireMounted(mounted);
-      const nextState = applyStatePatch(state, patch);
-      if (nextState == null) {
-        return commitResult(false);
-      }
-      state = nextState;
-      dirty = true;
-      version += 1;
-      return commitResult(true);
+      return commitStatePatch(patch);
     },
     commit() {
       requireMounted(mounted);
@@ -132,7 +118,7 @@ export function Page(page) {
     }
   };
 
-  function applyStateResult(patch) {
+  function commitStatePatch(patch) {
     if (patch === state) {
       throw new TypeError(
         'quickjs_ui page handlers must return a state patch, not the current state'
@@ -190,7 +176,7 @@ export function Page(page) {
 
   function applyQueuedPatch(patch) {
     const before = version;
-    const result = applyStateResult(patch);
+    const result = commitStatePatch(patch);
     return result.changed === true && version != before;
   }
 }
