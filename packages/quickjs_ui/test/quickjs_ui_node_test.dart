@@ -3595,6 +3595,20 @@ export function dispose() { throw new Error('dispose failed'); }
     expect(await policy.allows(deniedByAllowlist), isFalse);
     expect(requests, <QuickjsUiJsRouteRequest>[allowedRequest]);
 
+    final relativePathPolicy = QuickjsUiJsRoutePolicy(
+      allowedPaths: const <String>{'./allowed_page.mjs'},
+    );
+    const escapedRelativeRequest = QuickjsUiJsRouteRequest(
+      route: 'quickjs-ui.allowed',
+      path: './allowed_page.mjs',
+      resolvedPath: 'untrusted/allowed_page.mjs',
+      from: 'untrusted/main.mjs',
+      action: 'push',
+      params: <String, Object?>{},
+      isRegistered: false,
+    );
+    expect(await relativePathPolicy.allows(escapedRelativeRequest), isFalse);
+
     allowFromGuard = false;
     expect(await policy.allows(allowedRequest), isFalse);
     expect(requests, <QuickjsUiJsRouteRequest>[allowedRequest, allowedRequest]);

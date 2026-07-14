@@ -386,6 +386,17 @@ void main() {
   testWidgets('runs quickjs_ui native and JSUI navigation page', (
     WidgetTester tester,
   ) async {
+    final navigationLogs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) {
+        navigationLogs.add(message);
+      }
+    };
+    addTearDown(() {
+      debugPrint = previousDebugPrint;
+    });
+
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiNavigationPage()));
 
     expect(find.text('QuickJS UI 页面互通'), findsOneWidget);
@@ -415,6 +426,9 @@ void main() {
     expect(find.text('JSUI 子页'), findsOneWidget);
     expect(find.text('parent count: 1'), findsOneWidget);
     expect(find.text('child local count: 11'), findsOneWidget);
+    final parentLeave = navigationLogs.indexWhere(
+      (line) => line.contains('detail onRouteLeave'),
+    );
 
     await tester.tap(find.textContaining('替换当前 JSUI 子页'));
     await tester.pump();
@@ -487,6 +501,12 @@ void main() {
     expect(find.text('QuickJS UI 页面互通'), findsOneWidget);
     expect(find.textContaining('from: jsui-detail'), findsOneWidget);
     expect(find.textContaining('itemId: 42'), findsWidgets);
+    final childEnter = navigationLogs.indexWhere(
+      (line) => line.contains('child onRouteEnter'),
+    );
+    debugPrint = previousDebugPrint;
+    expect(parentLeave, greaterThanOrEqualTo(0));
+    expect(childEnter, greaterThan(parentLeave));
   });
 
   testWidgets('registers core example pages', (WidgetTester tester) async {

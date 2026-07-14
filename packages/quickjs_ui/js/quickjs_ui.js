@@ -30,7 +30,7 @@ export function Page(page) {
   const eventQueue = [];
   let drainingEvents = false;
 
-  return {
+  const runtime = {
     name: page.name,
     metadata: page.metadata,
     capabilities() {
@@ -116,9 +116,25 @@ export function Page(page) {
       state = undefined;
       props = {};
       dirty = false;
+      if (globalThis.__quickjsUiPageLifecycle === invokeLifecycle) {
+        delete globalThis.__quickjsUiPageLifecycle;
+      }
       return true;
     }
   };
+
+  // Navigation providers are invoked while handleEvent is still active. A
+  // second host-side client call would queue behind that event and deadlock if
+  // push() is waiting for a child result. This private entry lets the injected
+  // navigation facade run routeLeave/hide inside the current JS turn instead.
+  const invokeLifecycle = (event) => runtime.lifecycle(event);
+  Object.defineProperty(globalThis, '__quickjsUiPageLifecycle', {
+    value: invokeLifecycle,
+    configurable: true,
+    writable: false,
+    enumerable: false
+  });
+  return runtime;
 
   function commitStatePatch(patch) {
     if (patch === state) {
