@@ -33,17 +33,21 @@ export default Page({
       await legacy.pumpTimers();
     }
 
-    final optimizedResult = await _measure(optimized, ticks);
-    final legacyResult = await _measure(legacy, ticks);
+    final optimizedResult = await _measureScheduled(optimized, ticks);
+    final legacyResult = await _measureScheduled(legacy, ticks);
     _printResult('version-poll', optimizedResult, workerRequestsPerTick: 2);
     _printResult('legacy', legacyResult, workerRequestsPerTick: 3);
 
+    // An idle runtime has no next deadline. The event-driven scheduler performs
+    // one discovery pump, then leaves the Dart event loop completely quiet.
+    expect(optimizedResult.samples, hasLength(1));
+    expect(legacyResult.samples, hasLength(1));
     expect(optimizedResult.changedTicks, 0);
-    expect(legacyResult.changedTicks, ticks);
+    expect(legacyResult.changedTicks, 1);
   });
 }
 
-Future<_PumpBenchmarkResult> _measure(
+Future<_PumpBenchmarkResult> _measureScheduled(
   QuickjsUiSession session,
   int ticks,
 ) async {
@@ -52,8 +56,10 @@ Future<_PumpBenchmarkResult> _measure(
   final total = Stopwatch()..start();
   for (var index = 0; index < ticks; index += 1) {
     final sample = Stopwatch()..start();
-    if (await session.pumpTimers()) changedTicks += 1;
+    final result = await session.pumpTimers();
+    if (result.changed) changedTicks += 1;
     samples.add(sample.elapsedMicroseconds);
+    if (result.nextDelay == null) break;
   }
   total.stop();
   samples.sort();
@@ -77,7 +83,7 @@ void _printResult(
     'p95=${_ms(_percentile(result.samples, 0.95))}ms '
     'max=${_ms(result.samples.last)}ms '
     'total=${_ms(result.total.inMicroseconds)}ms '
-    'projectedWorkerRequests=${result.samples.length * workerRequestsPerTick} '
+    'workerRequests=${result.samples.length * workerRequestsPerTick} '
     'projectedFlutterNotifies=${result.changedTicks}',
   );
 }

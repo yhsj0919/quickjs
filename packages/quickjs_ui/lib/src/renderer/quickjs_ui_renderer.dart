@@ -42,6 +42,11 @@ final class QuickjsUiRenderer {
     final rebuiltKeys = <String>[];
     final reusedKeys = <String>[];
     var buildDepth = 0;
+    // Theme is shared by this render pass. Resolve its identity once instead
+    // of performing an inherited-widget lookup for every keyed node.
+    final themeSignature = buildContext == null
+        ? ''
+        : '${Theme.of(buildContext).hashCode}';
     Widget buildNode(QuickjsUiNode node, {String path = '0'}) {
       if (buildDepth > maxBuildDepth) {
         throw const FormatException('quickjs_ui render tree is too deep');
@@ -53,7 +58,7 @@ final class QuickjsUiRenderer {
           node,
           nextCache,
           activeLifecycleKeys,
-          buildContext,
+          themeSignature,
           path: path,
           onDiff: (key, didReuse) {
             if (key == null) {
@@ -111,7 +116,7 @@ final class QuickjsUiRenderer {
     QuickjsUiNode node,
     Map<String, _RenderedNode> nextCache,
     Set<String> activeLifecycleKeys,
-    BuildContext? buildContext, {
+    String themeSignature, {
     required String path,
     required void Function(String? key, bool didReuse) onDiff,
   }) {
@@ -126,7 +131,7 @@ final class QuickjsUiRenderer {
         registry.build(nodeContext, node, controller: controller),
       );
     }
-    final signature = _nodeSignature(node, buildContext);
+    final signature = '${node.structuralSignature}|theme=$themeSignature';
     final cached = _cache[key];
     if (cached != null && cached.signature == signature) {
       nextCache[key] = cached;
@@ -255,6 +260,11 @@ final class QuickjsUiRenderer {
   }
 
   void _validateChildKeys(QuickjsUiNode node, String path) {
+    if (node.duplicateSiblingKey == null) {
+      return;
+    }
+    // Duplicate detection is precomputed by QuickjsUiNode. Re-scan only the
+    // invalid branch to retain the precise diagnostic paths.
     final seen = <String, String>{};
     for (var index = 0; index < node.children.length; index += 1) {
       final child = node.children[index];
@@ -323,11 +333,7 @@ final class _LifecycleComponentEntry {
 }
 
 String? _nodeKey(QuickjsUiNode node) {
-  final key = node.props['key'];
-  if (key is String && key.isNotEmpty) {
-    return key;
-  }
-  return null;
+  return node.key;
 }
 
 String _lifecycleKey(QuickjsUiNode node, String path) {
@@ -338,38 +344,4 @@ String _lifecycleKey(QuickjsUiNode node, String path) {
     );
   }
   return '${node.type}:$path:$key';
-}
-
-String _nodeSignature(QuickjsUiNode node, BuildContext? buildContext) {
-  final buffer = StringBuffer()
-    ..write(node.type)
-    ..write('|')
-    ..write(_stableValue(node.props))
-    ..write('|theme=')
-    ..write(buildContext == null ? '' : Theme.of(buildContext).hashCode)
-    ..write('|children=[');
-  for (final child in node.children) {
-    buffer
-      ..write(_nodeSignature(child, buildContext))
-      ..write(',');
-  }
-  buffer.write(']');
-  return buffer.toString();
-}
-
-String _stableValue(Object? value) {
-  if (value == null || value is num || value is bool || value is String) {
-    return '$value';
-  }
-  if (value is Map) {
-    final entries = value.entries.toList()
-      ..sort((a, b) => '${a.key}'.compareTo('${b.key}'));
-    return '{${entries.map((entry) {
-      return '${entry.key}:${_stableValue(entry.value)}';
-    }).join(',')}}';
-  }
-  if (value is Iterable) {
-    return '[${value.map(_stableValue).join(',')}]';
-  }
-  return '$value';
 }

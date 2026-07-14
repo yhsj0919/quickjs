@@ -67,6 +67,57 @@ void main() {
     });
   });
 
+  test('precomputes stable subtree identity and freezes nested props', () {
+    final first = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'style': <String, Object?>{
+        'padding': <Object?>[8, 12],
+        'color': '#ffffff',
+      },
+      'children': <Object?>[
+        <String, Object?>{'type': 'Text', 'key': 'title', 'data': 'Hello'},
+      ],
+    });
+    final same = QuickjsUiNode.fromMap(<String, Object?>{
+      'children': <Object?>[
+        <String, Object?>{'data': 'Hello', 'key': 'title', 'type': 'Text'},
+      ],
+      'style': <String, Object?>{
+        'color': '#ffffff',
+        'padding': <Object?>[8, 12],
+      },
+      'type': 'Column',
+    });
+    final changed = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'children': <Object?>[
+        <String, Object?>{'type': 'Text', 'key': 'title', 'data': 'Changed'},
+      ],
+    });
+
+    expect(first.structuralSignature, same.structuralSignature);
+    expect(changed.structuralSignature, isNot(first.structuralSignature));
+    expect(first.children.single.key, 'title');
+    final style = first.props['style']! as Map<String, Object?>;
+    expect(() => style['color'] = '#000000', throwsUnsupportedError);
+    expect(
+      () => (style['padding']! as List<Object?>).add(16),
+      throwsUnsupportedError,
+    );
+  });
+
+  test('records duplicate sibling keys during node preparation', () {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'children': <Object?>[
+        <String, Object?>{'type': 'Text', 'key': 'same'},
+        <String, Object?>{'type': 'Text', 'key': 'same'},
+      ],
+    });
+
+    expect(node.duplicateSiblingKey, 'same');
+  });
+
   test('rejects overly deep node trees before stack overflow', () {
     Map<String, Object?> node = <String, Object?>{
       'type': 'Text',
@@ -1445,6 +1496,85 @@ export default Page({
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(BottomSheet), findsNothing);
   });
+
+  testWidgets(
+    'barrier-dismissed dialog stays closed until declaration resets',
+    (tester) async {
+      var visible = true;
+      var hostRevision = 0;
+      final events = <Map<String, Object?>>[];
+      final renderer = QuickjsUiRenderer(onEvent: events.add);
+
+      QuickjsUiNode createSchema() {
+        return QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Scaffold',
+          'body': <String, Object?>{
+            'type': 'Column',
+            'children': <Object?>[
+              <String, Object?>{'type': 'Text', 'data': 'Page content'},
+              <String, Object?>{
+                'type': 'AlertDialog',
+                'visible': visible,
+                'titleText': 'Dismissible dialog',
+                'contentText': 'Tap outside',
+                'onDismissed': <String, Object?>{'method': 'dialogDismissed'},
+              },
+            ],
+          },
+        });
+      }
+
+      var schema = createSchema();
+      Widget harness() {
+        return MaterialApp(
+          home: Builder(
+            builder: (context) => Stack(
+              children: <Widget>[
+                Text('Host revision $hostRevision'),
+                renderer.build(schema, buildContext: context),
+              ],
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(events.single['method'], 'dialogDismissed');
+
+      // A Flutter-only rebuild retains the same schema declaration and must
+      // not reopen a route that the user just dismissed.
+      hostRevision += 1;
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+
+      // An unrelated JS state change also produces a new schema object. Equal
+      // active declarations remain suppressed until their controlled visible
+      // state acknowledges the close.
+      schema = createSchema();
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+
+      // Apply the onDismissed/onClosing state transition, then a later open
+      // action can move visible from false to true and reactivate the dialog.
+      visible = false;
+      schema = createSchema();
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      visible = true;
+      schema = createSchema();
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+    },
+  );
 
   testWidgets('renders basic implicit animation widgets', (tester) async {
     final node = QuickjsUiNode.fromMap(<String, Object?>{
@@ -3025,14 +3155,59 @@ export default Page({
         ),
       );
 
-      expect(await session.pumpTimers(), isFalse);
+      expect((await session.pumpTimers()).changed, isFalse);
       await session.lifecycle('mount', render: false);
-      expect(await session.pumpTimers(), isTrue);
+      expect((await session.pumpTimers()).changed, isTrue);
       expect((session.state as Map)['count'], 1);
       expect(session.node?.props['data'], 'Count: 1');
-      expect(await session.pumpTimers(), isFalse);
+      expect((await session.pumpTimers()).changed, isFalse);
     },
   );
+
+  test('timer pump preserves cancelled and nested deadlines', () async {
+    final runtime = QuickjsUiRuntime();
+    addTearDown(runtime.dispose);
+    final session = QuickjsUiSession(runtime: runtime);
+    addTearDown(session.dispose);
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'quickjs_ui_nested_timer_test',
+        version: '1.0.0',
+        source: '''
+import { Page, Text } from 'quickjs_ui';
+export default Page({
+  createState() { return { count: 0 }; },
+  first(state, data, props, event, context) {
+    setTimeout(() => context.call('second'), 50);
+    return { count: 1 };
+  },
+  second() { return { count: 2 }; },
+  onMount(state, data, props, event, context) {
+    const cancelled = setTimeout(() => context.call('second'), 1);
+    clearTimeout(cancelled);
+    setTimeout(() => context.call('first'), 100);
+  },
+  build(state) { return Text('Count: ' + state.count); }
+});
+''',
+      ),
+    );
+    await session.lifecycle('mount', render: false);
+
+    final scheduled = await session.pumpTimers();
+    expect(scheduled.changed, isFalse);
+    expect(scheduled.nextDelay, isNotNull);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final first = await session.pumpTimers();
+    expect(first.changed, isTrue);
+    expect((session.state as Map)['count'], 1);
+    expect(first.nextDelay, isNotNull);
+    await Future<void>.delayed(const Duration(milliseconds: 70));
+    final second = await session.pumpTimers();
+    expect(second.changed, isTrue);
+    expect((session.state as Map)['count'], 2);
+    expect(second.nextDelay, isNull);
+  });
 
   test('ignores pending async dispatch result after dispose', () async {
     final pending = Completer<Object?>();

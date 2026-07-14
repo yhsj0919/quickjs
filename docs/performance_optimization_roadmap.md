@@ -133,21 +133,29 @@ QuickjsUiResourceCache.shared.clear()
 
 目标是将常见 Asset 热加载从 12–15ms 降至约 1–3ms。
 
-## P1：批量 Context 初始化
+## P1：批量 Context 初始化（已完成）
 
 创建 Context 后当前会依次安装 console、text encoding、capabilities、providers、provider registry、environment patches 和 mounts。多个步骤会形成独立 worker 请求。
 
-建议将 Context 创建配置整体发送给 worker：
+当前实现将 Context 创建配置作为一个初始化计划处理：
 
 ```text
 createContext + bind callbacks + install environment + register modules
 ```
 
-可先在 Dart 层完成配置校验和源码加载，再一次提交安装计划；worker 内顺序执行并保持失败时原子释放 Context。
+具体边界如下：
+
+- Dart 侧先校验配置、加载 environment patch 源码并绑定 provider callbacks。
+- console、text encoding、capabilities、provider registry 和 environment patches 合并为一次 bootstrap eval。
+- 每段源码仍通过独立 indirect global eval 执行，保留原先的全局作用域和失败顺序语义。
+- `QuickjsRuntime.createContext()` 在任一步失败时释放整个 Context；`activeContextCount` 可用于容量诊断。
+- quickjs_ui 创建共享 Context 时将 helper、业务 mounts 和页面 plugin mount 一起传入，不再创建后进行第二次页面挂载。
+
+2026-07-14 Release native DLL、8 个启动脚本、30 次 Context 创建/释放基准：批量初始化 median 约 1.517ms，逐脚本安装约 1.771ms，中位数减少约 0.25ms。基础页面收益较小；脚本和 capability 越多，减少 worker 往返的收益越明显。基准入口为 `benchmark/context_initialization_benchmark_test.dart`。
 
 该优化主要改善冷启动和 capabilities 较多页面的 `runtimeAcquire`，基础页面收益预计较小。
 
-## P1：事件驱动的 timer/job pump（第一阶段已完成）
+## P1：事件驱动的 timer/job pump（已完成）
 
 当前 Controller 每 500ms 固定执行 timer pump。即使没有 timer 或状态变化，也可能发生 eval、snapshot、commit 和 Flutter notify。
 
@@ -170,24 +178,30 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 
 第一阶段将空闲执行时间降低约 40.6%，并消除了空闲 Flutter rebuild。剩余成本主要是每个 tick 的 timer eval 与 poll 两次 worker 往返；基准入口为 `packages/quickjs_ui/benchmark/timer_pump_benchmark_test.dart`。
 
-长期方案：由 QuickJS timer 调度主动通知 Dart，在下一个到期时间触发 pump，取消固定轮询。
+第二阶段现已完成：native 为 root Runtime 和独立 Context 暴露下一次 `due_ms`。Controller 使用一次性 Dart Timer 按该延迟调度，timer 回调结束后重新读取最早 deadline；没有 timer 时不再创建 Dart Timer。页面操作完成后会立即重新同步 deadline，因此操作中新建或取消 timer 不会遗漏。
+
+同日 Release 基准验证了空闲调度：优化协议只执行 1 次发现性 pump（1.254ms、2 次 worker 请求、0 次 Flutter 通知），随后 60 秒内保持静默；旧协议的首次发现调用为 2.758ms、3 次 worker 请求并产生 1 次通知。与固定周期模型相比，后续 119 次空闲唤醒被完全移除。
+
+默认语义为 `always`：quickjs_ui 不因页面隐藏、暂停或应用进入后台而主动停止调度。操作系统仍可能挂起或节流进程；恢复后已到期 timeout 执行一次，interval 从当前时间重新安排，不补跑所有错过周期。
 
 验收指标：
 
 - 空闲页面不产生周期性 schema decode 和 Flutter rebuild。
 - 定时器触发时间、Promise jobs、取消和 dispose 行为保持正确。
 
-## P2：Renderer 与 schema 树优化
+## P2：Renderer 与 schema 树优化（第一阶段已完成）
 
 当前 Renderer 每次构建会递归校验 sibling key、生成完整字符串 signature，并再次遍历树收集 overlay intents。嵌套 keyed tree 可能重复计算子树。
 
-可选方向：
+已完成：
 
-- `QuickjsUiNode` 解码时自底向上计算结构 hash。
-- Renderer 使用结构 hash 替代递归字符串 signature。
-- schema decode 与 overlay intent 提取合并为一次遍历。
-- Inspector 未启用时避免 `node.toMap()`。
-- 仅对大型页面基准确认收益后实施。
+- `QuickjsUiNode` 构造时深度冻结 props，并自底向上生成固定 64 字符 SHA-256 结构签名。
+- key 与重复 sibling key 在节点准备阶段计算；Renderer 正常路径只做 O(1) 校验。
+- Renderer 使用预计算签名，不再为每个 keyed 节点递归序列化子树；Theme identity 每次 render 只读取一次。
+- overlay declaration 在节点准备阶段汇总，构建结束后不再第二次遍历完整 schema 树。
+- Inspector 的 `node.toMap()` 保持在 null-aware 调用内，未启用时不会执行。
+
+2026-07-14 Release/JIT 测试进程中的 1021 节点基准：schema 准备中位数约 6.2ms；旧递归 keyed signature 约 1.1–1.4ms/次，预计算签名读取低于 1µs 计时分辨率。单叶更新的 parse + render 约 7–8ms，只重建 root、变更 section 和变更 leaf 共 3 个节点，并复用 68 个完整 keyed 子树。基准入口为 `packages/quickjs_ui/benchmark/node_pipeline_benchmark_test.dart`。
 
 计数器页面 Renderer 约 0.1ms，因此该项不应早于调用边界和资源缓存优化。
 

@@ -98,7 +98,8 @@ final class QuickjsUiSession {
         grantedPermissions: grantedPermissions,
       );
       final requestedMounts = List<QuickjsHostMount>.unmodifiable(mounts);
-      final host = await _hostForPage(requestedMounts);
+      final hostBinding = await _hostForPage(requestedMounts, plugin);
+      final host = hostBinding.host;
       record('runtimeAcquire');
       if (_disposed) {
         if (_engineBinding?.ownsEngine == true) {
@@ -111,7 +112,9 @@ final class QuickjsUiSession {
       if (_disposed) {
         return;
       }
-      await _mountPagePlugin(host, plugin);
+      if (!hostBinding.pagePluginInstalled) {
+        await _mountPagePlugin(host, plugin);
+      }
       record('pluginMount');
       if (_disposed) {
         return;
@@ -166,20 +169,27 @@ final class QuickjsUiSession {
     });
   }
 
-  Future<QuickjsPluginHost> _hostForPage(
+  Future<_QuickjsUiPageHost> _hostForPage(
     List<QuickjsHostMount> requestedMounts,
+    QuickjsPlugin plugin,
   ) async {
     final currentBinding = _engineBinding;
     if (currentBinding == null) {
       final runtime = _runtime;
       if (runtime != null) {
-        final lease = await runtime.acquire(mounts: requestedMounts);
+        final lease = await runtime.acquire(
+          mounts: requestedMounts,
+          pagePlugin: plugin,
+        );
         _engineBinding = _QuickjsUiEngineBinding.leased(lease, requestedMounts);
-        return lease.context;
+        return _QuickjsUiPageHost(
+          host: lease.context,
+          pagePluginInstalled: true,
+        );
       }
       final created = await _createOwnedEngine(requestedMounts);
       _engineBinding = _QuickjsUiEngineBinding.owned(created, requestedMounts);
-      return created;
+      return _QuickjsUiPageHost(host: created, pagePluginInstalled: false);
     }
     final current = currentBinding.host;
     final currentLease = currentBinding.runtimeLease;
@@ -190,12 +200,18 @@ final class QuickjsUiSession {
       await _closeCurrentPage();
       _engineBinding = null;
       await currentLease.release();
-      final replacement = await _runtime!.acquire(mounts: requestedMounts);
+      final replacement = await _runtime!.acquire(
+        mounts: requestedMounts,
+        pagePlugin: plugin,
+      );
       _engineBinding = _QuickjsUiEngineBinding.leased(
         replacement,
         requestedMounts,
       );
-      return replacement.context;
+      return _QuickjsUiPageHost(
+        host: replacement.context,
+        pagePluginInstalled: true,
+      );
     }
     if (!currentBinding.ownsEngine) {
       if (requestedMounts.isNotEmpty) {
@@ -205,10 +221,13 @@ final class QuickjsUiSession {
         );
       }
       await _ensureHelperModuleMounted(currentBinding.engine!);
-      return currentBinding.engine!;
+      return _QuickjsUiPageHost(
+        host: currentBinding.engine!,
+        pagePluginInstalled: false,
+      );
     }
     if (_sameMountConfiguration(currentBinding.mounts, requestedMounts)) {
-      return current;
+      return _QuickjsUiPageHost(host: current, pagePluginInstalled: false);
     }
 
     await _closeCurrentPage();
@@ -219,7 +238,7 @@ final class QuickjsUiSession {
       replacement,
       requestedMounts,
     );
-    return replacement;
+    return _QuickjsUiPageHost(host: replacement, pagePluginInstalled: false);
   }
 
   Future<Quickjs> _createOwnedEngine(List<QuickjsHostMount> mounts) {
@@ -365,38 +384,32 @@ final class QuickjsUiSession {
     return _enqueue(_refreshImpl);
   }
 
-  Future<bool> pumpTimers() {
+  Future<({bool changed, Duration? nextDelay})> pumpTimers() {
     return _enqueue(() async {
       _ensureActive();
       final binding = _engineBinding;
       if (binding == null || _pageBinding == null) {
-        return false;
+        return (changed: false, nextDelay: null);
       }
       final context = binding.context;
+      Duration? nextDelay;
       if (context != null) {
-        await context.evalAsync(
-          'new Promise((resolve) => setTimeout(() => resolve(null), 0))',
-          name: '<quickjs_ui_timer_pump>',
-          timeout: const Duration(milliseconds: 250),
-        );
+        nextDelay = await context.pumpTimers();
       } else {
-        await binding.engine!.evalAsync(
-          'await new Promise((resolve) => setTimeout(resolve, 0)); return null;',
-          name: '<quickjs_ui_timer_pump>',
-          timeout: const Duration(milliseconds: 250),
-        );
+        nextDelay = await binding.engine!.pumpTimers();
       }
       if (_disposed) {
-        return false;
+        return (changed: false, nextDelay: null);
       }
       if (_pageBinding!.plugin.manifest.exports.contains('poll')) {
-        return _applyPolledResult(
+        final changed = _applyPolledResult(
           await _clientCall('poll', <Object?>[_stateVersion]),
         );
+        return (changed: changed, nextDelay: nextDelay);
       }
       await _syncStateFromJs();
       await _refreshImpl();
-      return true;
+      return (changed: true, nextDelay: nextDelay);
     });
   }
 
@@ -1035,6 +1048,19 @@ final class QuickjsUiSession {
       throw StateError('QuickjsUiSession is disposed');
     }
   }
+}
+
+final class _QuickjsUiPageHost {
+  const _QuickjsUiPageHost({
+    required this.host,
+    required this.pagePluginInstalled,
+  });
+
+  final QuickjsPluginHost host;
+
+  /// True when the page mount was part of atomic Context creation. Attached
+  /// and reusable standalone engines still use the in-place replacement path.
+  final bool pagePluginInstalled;
 }
 
 final class _QuickjsUiEngineBinding {

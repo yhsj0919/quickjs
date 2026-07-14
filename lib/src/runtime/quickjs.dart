@@ -410,8 +410,7 @@ class Quickjs implements QuickjsPluginHost {
     final runtime = await backend.createRuntime(options);
     final engine = Quickjs._(backend, runtime, options, onConsole);
     try {
-      await engine._installConsoleOnCurrentRuntime();
-      await engine._installHostEnvironmentOnCurrentRuntime();
+      await engine._installInitialEnvironmentOnCurrentRuntime();
     } catch (_) {
       await runtime.dispose();
       rethrow;
@@ -431,8 +430,7 @@ class Quickjs implements QuickjsPluginHost {
   }) async {
     final engine = Quickjs._(backend, runtime, options, onConsole);
     try {
-      await engine._installConsoleOnCurrentRuntime();
-      await engine._installHostEnvironmentOnCurrentRuntime();
+      await engine._installInitialEnvironmentOnCurrentRuntime();
     } catch (_) {
       await runtime.dispose();
       rethrow;
@@ -712,6 +710,23 @@ class Quickjs implements QuickjsPluginHost {
     Duration? timeout,
   }) {
     return evalModule(source, name: name, timeout: timeout);
+  }
+
+  /// Runs due timers/jobs and returns the delay until the next native timer.
+  /// Null means no timer is scheduled. Non-native backends retain a bounded
+  /// compatibility poll because they cannot inspect the native timer queue.
+  Future<Duration?> pumpTimers() async {
+    final runtime = _runtime;
+    if (runtime is QuickjsTimerRuntimeBase) {
+      final milliseconds = await (runtime as QuickjsTimerRuntimeBase)
+          .pumpTimers();
+      return milliseconds == null ? null : Duration(milliseconds: milliseconds);
+    }
+    await evalAsync(
+      'await new Promise((resolve) => setTimeout(resolve, 0)); return null;',
+      name: '<quickjs:timer-pump>',
+    );
+    return const Duration(milliseconds: 500);
   }
 
   /// Validates that a plugin entry module exposes every declared function.
@@ -1224,7 +1239,7 @@ try {
     return _runtime.bindJsSink(_validateGlobalName(name));
   }
 
-  Future<void> _installConsoleOnCurrentRuntime() async {
+  Future<String> _prepareConsoleInstall() async {
     const callbackName = '__quickjsConsoleCallback';
     final onConsole = _onConsole;
     if (onConsole != null) {
@@ -1246,37 +1261,46 @@ try {
         return null;
       });
     }
-    await _runtime.evaluate(
-      _wrapInstallConsole(onConsole == null ? null : callbackName),
-    );
+    return _wrapInstallConsole(onConsole == null ? null : callbackName);
   }
 
-  Future<void> _installHostEnvironmentOnCurrentRuntime() async {
+  /// Installs the complete initial global environment through one worker eval.
+  ///
+  /// Provider callbacks must be bound first because the generated registry
+  /// references their global names. Each source is then executed through an
+  /// independent indirect eval inside the batch, preserving the global-scope
+  /// behavior of the former multi-request installer while removing its fixed
+  /// isolate/worker round trips.
+  Future<void> _installInitialEnvironmentOnCurrentRuntime() async {
     _validateStaticHostConfiguration();
-    await _runtime.evaluate(
-      _wrapInstallTextEncoding(),
-      name: '<quickjs:text-encoding>',
-    );
+    final sources = <({String name, String source})>[
+      (name: '<quickjs:console>', source: await _prepareConsoleInstall()),
+      (name: '<quickjs:text-encoding>', source: _wrapInstallTextEncoding()),
+    ];
     final capabilities = _effectiveHostCapabilities();
     if (!capabilities.isEmpty) {
-      await _runtime.evaluate(
-        _wrapInstallHostCapabilities(capabilities),
+      sources.add((
         name: '<quickjs:host-capabilities>',
-      );
+        source: _wrapInstallHostCapabilities(capabilities),
+      ));
     }
     final providerNames = await _installHostProvidersOnCurrentRuntime();
     if (providerNames.isNotEmpty) {
-      await _runtime.evaluate(
-        _wrapInstallHostProviderRegistry(providerNames),
+      sources.add((
         name: '<quickjs:host-providers>',
-      );
+        source: _wrapInstallHostProviderRegistry(providerNames),
+      ));
     }
     for (final script in _effectiveHostScripts()) {
-      await _runtime.evaluate(
-        await script.loadSource(),
+      sources.add((
         name: _validateSourceName(script.name),
-      );
+        source: await script.loadSource(),
+      ));
     }
+    await _runtime.evaluate(
+      _wrapInitialEnvironmentBatch(sources),
+      name: '<quickjs:initial-environment>',
+    );
   }
 
   Future<Map<String, String>> _installHostProvidersOnCurrentRuntime([
@@ -1708,8 +1732,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     _moduleDebugNames.clear();
     _moduleNamespaceGlobalNames.clear();
     _runtime = await _backend.createRuntime(_options);
-    await _installConsoleOnCurrentRuntime();
-    await _installHostEnvironmentOnCurrentRuntime();
+    await _installInitialEnvironmentOnCurrentRuntime();
   }
 
   Future<String> _enqueue(
@@ -2606,6 +2629,20 @@ String _wrapInstallConsole(String? callbackName) {
   });
 })()
 ''';
+}
+
+String _wrapInitialEnvironmentBatch(
+  List<({String name, String source})> sources,
+) {
+  final buffer = StringBuffer('(() => {\n');
+  for (final source in sources) {
+    final namedSource = '${source.source}\n//# sourceURL=${source.name}';
+    buffer
+      ..write('(0, eval)(')
+      ..write(jsonEncode(namedSource))
+      ..writeln(');');
+  }
+  return (buffer..write('})()')).toString();
 }
 
 String _wrapInstallHostCapabilities(QuickjsHostCapabilities capabilities) {

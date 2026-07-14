@@ -1155,6 +1155,37 @@ static int qjs_run_due_timers(QuickjsRuntime *runtime) {
   return ran;
 }
 
+static int64_t qjs_next_timer_delay(QuickjsTimer *timers) {
+  QuickjsTimer *entry;
+  int64_t now_ms = qjs_now_ms();
+  int64_t next_due = -1;
+  for (entry = timers; entry; entry = entry->next) {
+    if (!entry->cancelled && (next_due < 0 || entry->due_ms < next_due)) {
+      next_due = entry->due_ms;
+    }
+  }
+  if (next_due < 0) return -1;
+  return next_due <= now_ms ? 0 : next_due - now_ms;
+}
+
+int64_t quickjs_context_pump_timers(QuickjsContext *context) {
+  if (!context || !context->runtime || !context->ctx) return -2;
+  qjs_update_stack_top(context->runtime);
+  if (qjs_run_due_timer_list(context->ctx, &context->timers) > 0 &&
+      qjs_execute_pending_jobs(context->runtime) < 0) {
+    return -2;
+  }
+  return qjs_next_timer_delay(context->timers);
+}
+
+int64_t quickjs_runtime_pump_timers(QuickjsRuntime *runtime) {
+  if (!runtime || !runtime->ctx) return -2;
+  qjs_update_stack_top(runtime);
+  if (qjs_run_due_timer_list(runtime->ctx, &runtime->timers) > 0 &&
+      qjs_execute_pending_jobs(runtime) < 0) return -2;
+  return qjs_next_timer_delay(runtime->timers);
+}
+
 static void qjs_install_timers(JSContext *ctx) {
   JSValue global;
   JSValue set_timeout;

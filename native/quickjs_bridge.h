@@ -54,6 +54,10 @@ QJS_BRIDGE_EXPORT char *quickjs_context_eval_async_start_named(
     QuickjsContext *context, const char *code, const char *name);
 QJS_BRIDGE_EXPORT char *quickjs_context_eval_async_poll(
     QuickjsContext *context);
+/* Runs due timers/jobs for one context and returns milliseconds until its
+ * next timer. -1 means no timer; -2 means a pending-job failure. */
+QJS_BRIDGE_EXPORT int64_t quickjs_context_pump_timers(
+    QuickjsContext *context);
 QJS_BRIDGE_EXPORT int quickjs_context_bind_sink(
     QuickjsContext *context, int64_t sink_id, const char *name);
 QJS_BRIDGE_EXPORT void quickjs_runtime_set_memory_limit(
@@ -62,6 +66,8 @@ QJS_BRIDGE_EXPORT void quickjs_runtime_set_stack_limit(
     QuickjsRuntime *runtime, int64_t limit_bytes);
 QJS_BRIDGE_EXPORT void quickjs_runtime_set_cancel_flag(
     QuickjsRuntime *runtime, int32_t *cancel_flag);
+QJS_BRIDGE_EXPORT int64_t quickjs_runtime_pump_timers(
+    QuickjsRuntime *runtime);
 
 /*
  * 在全局作用域执行 JavaScript。

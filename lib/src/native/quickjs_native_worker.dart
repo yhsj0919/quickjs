@@ -46,6 +46,8 @@ const String _createContextMessage = 'createContext';
 const String _disposeContextMessage = 'disposeContext';
 const String _evalContextMessage = 'evalContext';
 const String _evalContextAsyncMessage = 'evalContextAsync';
+const String _pumpContextTimersMessage = 'pumpContextTimers';
+const String _pumpTimersMessage = 'pumpTimers';
 const String _evalModuleContextMessage = 'evalModuleContext';
 const String _evalModuleMessage = 'evalModule';
 const String _evalAsyncMessage = 'evalAsync';
@@ -160,7 +162,10 @@ _nativeHostSinkActionPointer =
 /// 这个对象运行在调用方 isolate 中，只持有 worker isolate 的端口和 pending Future。
 /// 真正的 `QuickjsRuntime*` 指针只存在于 [_nativeQuickjsWorkerMain]。
 final class NativeQuickjsWorkerRuntime
-    implements QuickjsJsRuntimeBase, QuickjsMultiContextRuntimeBase {
+    implements
+        QuickjsJsRuntimeBase,
+        QuickjsMultiContextRuntimeBase,
+        QuickjsTimerRuntimeBase {
   NativeQuickjsWorkerRuntime._(
     this._isolate,
     this._receivePort,
@@ -382,6 +387,18 @@ final class NativeQuickjsWorkerRuntime
       _messageSourceNameKey: name,
       if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
     });
+  }
+
+  @override
+  Future<int?> pumpContextTimers(int contextId) {
+    return _sendRequest<int?>(_pumpContextTimersMessage, <String, Object?>{
+      _messageContextIdKey: contextId,
+    });
+  }
+
+  @override
+  Future<int?> pumpTimers() {
+    return _sendRequest<int?>(_pumpTimersMessage, const <String, Object?>{});
   }
 
   @override
@@ -997,6 +1014,23 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
               message[_messageModulesKey] as String? ?? '',
             );
             _sendOk(responseSendPort, requestId, result);
+          case _pumpContextTimersMessage:
+            final contextId = message[_messageContextIdKey] as int;
+            final context = contexts[contextId];
+            if (context == null) {
+              throw StateError('Unknown QuickJS context: $contextId');
+            }
+            final delay = bindings.contextPumpTimers(context);
+            if (delay < -1) {
+              throw StateError('QuickJS timer pending job failed');
+            }
+            _sendOk(responseSendPort, requestId, delay < 0 ? null : delay);
+          case _pumpTimersMessage:
+            final delay = bindings.runtimePumpTimers(runtime);
+            if (delay < -1) {
+              throw StateError('QuickJS timer pending job failed');
+            }
+            _sendOk(responseSendPort, requestId, delay < 0 ? null : delay);
           case _evalMessage:
             final code = message[_messageCodeKey] as String;
             final name = message[_messageSourceNameKey] as String? ?? '<eval>';
