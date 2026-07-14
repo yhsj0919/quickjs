@@ -49,12 +49,14 @@
         { "$ref": "#/$defs/column" },
         { "$ref": "#/$defs/container" },
         { "$ref": "#/$defs/image" },
+        { "$ref": "#/$defs/svg" },
         { "$ref": "#/$defs/listView" },
         { "$ref": "#/$defs/singleChildScrollView" },
         { "$ref": "#/$defs/gridView" },
         { "$ref": "#/$defs/pageView" },
         { "$ref": "#/$defs/refreshIndicator" },
         { "$ref": "#/$defs/textField" },
+        { "$ref": "#/$defs/gestureDetector" },
         { "$ref": "#/$defs/stack" },
         { "$ref": "#/$defs/positioned" },
         { "$ref": "#/$defs/padding" },
@@ -77,6 +79,9 @@
         { "$ref": "#/$defs/dropdownButton" },
         { "$ref": "#/$defs/icon" },
         { "$ref": "#/$defs/divider" },
+        { "$ref": "#/$defs/verticalDivider" },
+        { "$ref": "#/$defs/placeholder" },
+        { "$ref": "#/$defs/tooltip" },
         { "$ref": "#/$defs/card" },
         { "$ref": "#/$defs/clipRRect" },
         { "$ref": "#/$defs/backdropFilter" },
@@ -94,7 +99,11 @@
         { "$ref": "#/$defs/alertDialog" },
         { "$ref": "#/$defs/bottomSheet" },
         { "$ref": "#/$defs/animatedAlign" },
-        { "$ref": "#/$defs/animatedSwitcher" }
+        { "$ref": "#/$defs/animatedContainer" },
+        { "$ref": "#/$defs/animatedOpacity" },
+        { "$ref": "#/$defs/animatedPadding" },
+        { "$ref": "#/$defs/animatedSwitcher" },
+        { "$ref": "#/$defs/hero" }
       ]
     },
     "baseNode": {
@@ -442,18 +451,69 @@
           "type": "object",
           "anyOf": [
             { "required": ["src"] },
-            { "required": ["source"] }
+            { "required": ["source"] },
+            { "required": ["uri"] },
+            { "required": ["url"] },
+            { "required": ["path"] }
           ],
           "properties": {
             "type": { "const": "Image" },
             "src": { "$ref": "#/$defs/resource" },
             "source": { "$ref": "#/$defs/resource" },
+            "uri": { "$ref": "#/$defs/resource" },
+            "url": { "$ref": "#/$defs/resource" },
+            "path": { "$ref": "#/$defs/resource" },
             "width": { "type": "number" },
             "height": { "type": "number" },
             "fit": {
               "type": "string",
               "enum": ["fill", "contain", "cover", "fitWidth", "fitHeight", "none", "scaleDown"]
-            }
+            },
+            "cacheWidth": { "type": "integer", "minimum": 1 },
+            "cacheHeight": { "type": "integer", "minimum": 1 },
+            "filterQuality": {
+              "type": "string",
+              "enum": ["none", "low", "medium", "high"]
+            },
+            "gaplessPlayback": { "type": "boolean" },
+            "excludeFromSemantics": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "svg": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        {
+          "type": "object",
+          "anyOf": [
+            { "required": ["src"] },
+            { "required": ["source"] },
+            { "required": ["uri"] },
+            { "required": ["url"] },
+            { "required": ["path"] },
+            { "required": ["data"] },
+            { "required": ["string"] },
+            { "required": ["svg"] }
+          ],
+          "properties": {
+            "type": { "const": "Svg" },
+            "src": { "$ref": "#/$defs/resource" },
+            "source": { "$ref": "#/$defs/resource" },
+            "uri": { "$ref": "#/$defs/resource" },
+            "url": { "$ref": "#/$defs/resource" },
+            "path": { "$ref": "#/$defs/resource" },
+            "data": { "type": "string", "minLength": 1 },
+            "string": { "type": "string", "minLength": 1 },
+            "svg": { "type": "string", "minLength": 1 },
+            "width": { "type": "number" },
+            "height": { "type": "number" },
+            "fit": {
+              "type": "string",
+              "enum": ["fill", "contain", "cover", "fitWidth", "fitHeight", "none", "scaleDown"]
+            },
+            "color": { "$ref": "#/$defs/color" },
+            "excludeFromSemantics": { "type": "boolean" }
           }
         }
       ]
@@ -499,12 +559,14 @@
         {
           "type": "object",
           "properties": {
-            "type": { "const": "TextField" },
+            "type": { "enum": ["TextField", "TextFormField"] },
             "focusId": { "type": "string" },
             "value": { "type": "string" },
             "initialValue": { "type": "string" },
             "labelText": { "type": "string" },
             "hintText": { "type": "string" },
+            "helperText": { "type": "string" },
+            "errorText": { "type": "string" },
             "enabled": { "type": "boolean" },
             "autofocus": { "type": "boolean" },
             "focusOnMount": { "type": "boolean" },
@@ -624,6 +686,9 @@
     "dropdownButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "DropdownButton" } } }] },
     "icon": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Icon" } } }] },
     "divider": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Divider" } } }] },
+    "verticalDivider": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "VerticalDivider" } } }] },
+    "placeholder": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Placeholder" } } }] },
+    "tooltip": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "required": ["message"], "properties": { "type": { "const": "Tooltip" }, "message": { "type": "string", "minLength": 1 } } }] },
     "card": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Card" } } }] },
     "clipRRect": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "ClipRRect" } } }] },
     "backdropFilter": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "BackdropFilter" } } }] },
@@ -641,7 +706,12 @@
     "alertDialog": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "AlertDialog" } } }] },
     "bottomSheet": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "BottomSheet" } } }] },
     "animatedAlign": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "AnimatedAlign" } } }] },
+    "animatedContainer": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "AnimatedContainer" } } }] },
+    "animatedOpacity": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "required": ["opacity"], "properties": { "type": { "const": "AnimatedOpacity" }, "opacity": { "type": "number", "minimum": 0, "maximum": 1 } } }] },
+    "animatedPadding": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "AnimatedPadding" }, "padding": { "$ref": "#/$defs/edgeInsets" } } }] },
     "animatedSwitcher": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "AnimatedSwitcher" } } }] },
+    "hero": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "required": ["tag", "child"], "properties": { "type": { "const": "Hero" }, "tag": { "type": ["string", "number", "boolean"] }, "transitionOnUserGestures": { "type": "boolean" } } }] },
+    "gestureDetector": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "GestureDetector" } } }] },
     "textButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "TextButton" } } }] },
     "outlinedButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "OutlinedButton" } } }] },
     "iconButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "IconButton" } } }] },

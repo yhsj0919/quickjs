@@ -1,15 +1,26 @@
 import {
+    AnimatedContainer,
+    AnimatedOpacity,
+    AnimatedPadding,
     Center,
     Column,
     Container,
+    ElevatedButton,
+    GestureDetector,
+    Hero,
     Image,
     ListView,
     Page,
     Padding,
+    Placeholder,
+    Row,
     SizedBox,
     Stack,
     Text,
     TextField,
+    TextFormField,
+    Tooltip,
+    VerticalDivider,
 } from 'quickjs_ui';
 
 export default Page({
@@ -18,7 +29,10 @@ export default Page({
     createState() {
         return {
             name: 'Ada',
-            status: 'ready'
+            status: 'ready',
+            formValue: 'QuickJS UI',
+            gestureCount: 0,
+            animated: false
         };
     },
 
@@ -106,6 +120,125 @@ export default Page({
                         ]
                     })
                 }),
+                Container({
+                    padding: {all: 12},
+                    margin: {bottom: 12},
+                    decoration: {
+                        color: '$surface',
+                        borderRadius: 10,
+                        border: {color: '$outline', width: 1}
+                    },
+                    child: Column({
+                        crossAxisAlignment: 'stretch',
+                        gap: 12,
+                        children: [
+                            Text('Planned controls', {
+                                style: {fontWeight: 'w700', color: '$primary'}
+                            }),
+                            SizedBox({
+                                height: 44,
+                                child: Row({
+                                    children: [
+                                        Text('Vertical'),
+                                        VerticalDivider({
+                                            width: 24,
+                                            thickness: 2,
+                                            color: '$primary'
+                                        }),
+                                        Text('Divider')
+                                    ]
+                                })
+                            }),
+                            SizedBox({
+                                height: 72,
+                                child: Placeholder({
+                                    color: '$outline',
+                                    strokeWidth: 2,
+                                    fallbackHeight: 72
+                                })
+                            }),
+                            GestureDetector({
+                                onTap: page.tapGesture(),
+                                child: Container({
+                                    padding: {all: 12},
+                                    decoration: {
+                                        color: '$secondaryContainer',
+                                        borderRadius: 8
+                                    },
+                                    child: Text(`GestureDetector taps: ${state.gestureCount}`, {
+                                        style: {color: '$onSecondaryContainer'}
+                                    })
+                                })
+                            }),
+                            TextFormField({
+                                value: state.formValue,
+                                labelText: 'TextFormField',
+                                helperText: 'At least 3 characters',
+                                ...(state.formValue.length < 3
+                                    ? {errorText: 'Value is too short'}
+                                    : {}),
+                                onChanged: page.changeFormValue()
+                            }),
+                            Tooltip({
+                                message: 'Rendered by Flutter Tooltip',
+                                waitDurationMs: 300,
+                                child: Container({
+                                    padding: {all: 10},
+                                    alignment: 'center',
+                                    decoration: {
+                                        color: '$primaryContainer',
+                                        borderRadius: 8
+                                    },
+                                    child: Text('Long press for Tooltip')
+                                })
+                            }),
+                            ElevatedButton({
+                                label: state.animated ? 'Reset animation' : 'Run animation',
+                                onPressed: page.toggleAnimation()
+                            }),
+                            AnimatedContainer({
+                                durationMs: 260,
+                                animationCurve: 'easeInOut',
+                                height: state.animated ? 84 : 48,
+                                padding: state.animated ? 16 : 6,
+                                alignment: 'center',
+                                decoration: {
+                                    color: state.animated ? '$primary' : '$primaryContainer',
+                                    borderRadius: state.animated ? 20 : 6
+                                },
+                                child: AnimatedOpacity({
+                                    durationMs: 260,
+                                    opacity: state.animated ? 1 : 0.45,
+                                    child: AnimatedPadding({
+                                        durationMs: 260,
+                                        padding: state.animated ? 8 : 0,
+                                        child: Text('AnimatedContainer + Opacity + Padding', {
+                                            style: {
+                                                color: state.animated
+                                                    ? '$onPrimary'
+                                                    : '$onPrimaryContainer'
+                                            }
+                                        })
+                                    })
+                                })
+                            }),
+                            Hero({
+                                tag: 'controls-page-hero',
+                                child: Container({
+                                    height: 52,
+                                    alignment: 'center',
+                                    decoration: {
+                                        color: '$tertiary',
+                                        borderRadius: 26
+                                    },
+                                    child: Text('Hero tag: controls-page-hero', {
+                                        style: {color: '$onTertiary'}
+                                    })
+                                })
+                            })
+                        ]
+                    })
+                }),
                 SizedBox({
                     height: 120,
                     child: Stack({
@@ -166,5 +299,17 @@ export default Page({
 
     blurName(state) {
         return {status: 'blurred'};
+    },
+
+    tapGesture(state) {
+        return {gestureCount: state.gestureCount + 1};
+    },
+
+    changeFormValue(state, payload, props, event) {
+        return {formValue: event.value ?? ''};
+    },
+
+    toggleAnimation(state) {
+        return {animated: !state.animated};
     }
 });

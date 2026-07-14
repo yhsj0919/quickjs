@@ -1399,6 +1399,95 @@ export default Page({
     expect(find.text('Sheet'), findsOneWidget);
   });
 
+  testWidgets('renders the remaining planned Flutter controls', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'SingleChildScrollView',
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'SizedBox',
+          'height': 24,
+          'child': <String, Object?>{
+            'type': 'Row',
+            'children': <Object?>[
+              <String, Object?>{'type': 'Text', 'data': 'left'},
+              <String, Object?>{'type': 'VerticalDivider'},
+              <String, Object?>{'type': 'Text', 'data': 'right'},
+            ],
+          },
+        },
+        <String, Object?>{
+          'type': 'SizedBox',
+          'height': 30,
+          'child': <String, Object?>{
+            'type': 'Placeholder',
+            'fallbackWidth': 40,
+            'fallbackHeight': 30,
+          },
+        },
+        <String, Object?>{
+          'type': 'GestureDetector',
+          'onTap': <String, Object?>{'method': 'gestureTap'},
+          'child': <String, Object?>{'type': 'Text', 'data': 'gesture'},
+        },
+        <String, Object?>{
+          'type': 'TextFormField',
+          'value': 'form value',
+          'helperText': 'helper',
+        },
+        <String, Object?>{
+          'type': 'Tooltip',
+          'message': 'tip',
+          'child': <String, Object?>{'type': 'Text', 'data': 'tooltip'},
+        },
+        <String, Object?>{
+          'type': 'AnimatedContainer',
+          'durationMs': 1,
+          'height': 20,
+          'color': '#ff0000',
+        },
+        <String, Object?>{
+          'type': 'AnimatedOpacity',
+          'durationMs': 1,
+          'opacity': 0.5,
+          'child': <String, Object?>{'type': 'Text', 'data': 'opacity'},
+        },
+        <String, Object?>{
+          'type': 'AnimatedPadding',
+          'durationMs': 1,
+          'padding': 4,
+          'child': <String, Object?>{'type': 'Text', 'data': 'padding'},
+        },
+        <String, Object?>{
+          'type': 'Hero',
+          'tag': 'planned-control-hero',
+          'child': <String, Object?>{'type': 'Text', 'data': 'hero'},
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    expect(find.byType(VerticalDivider), findsOneWidget);
+    expect(find.byType(Placeholder), findsOneWidget);
+    expect(find.byType(GestureDetector), findsAtLeastNWidgets(1));
+    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.byType(Tooltip), findsOneWidget);
+    expect(find.byType(AnimatedContainer), findsOneWidget);
+    expect(find.byType(AnimatedOpacity), findsOneWidget);
+    expect(find.byType(AnimatedPadding), findsOneWidget);
+    expect(find.byType(Hero), findsOneWidget);
+
+    await tester.tap(find.text('gesture'));
+    expect(events.single['method'], 'gestureTap');
+  });
+
   testWidgets('shows 0.6 feedback overlays without scrolling them into view', (
     tester,
   ) async {

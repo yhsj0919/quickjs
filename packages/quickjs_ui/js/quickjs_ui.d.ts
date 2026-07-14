@@ -646,6 +646,8 @@ export type TextFieldProps = AccessibilityProps & {
   initialValue?: string;
   labelText?: string;
   hintText?: string;
+  helperText?: string;
+  errorText?: string;
   enabled?: boolean;
   autofocus?: boolean;
   focusOnMount?: boolean;
@@ -757,6 +759,31 @@ export type DividerProps = AccessibilityProps & {
   indent?: number;
   endIndent?: number;
   color?: ColorValue;
+};
+
+export type PlaceholderProps = AccessibilityProps & {
+  color?: ColorValue;
+  strokeWidth?: number;
+  fallbackWidth?: number;
+  fallbackHeight?: number;
+};
+
+export type GestureDetectorProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+  onTap?: QuickjsUiEvent;
+  onDoubleTap?: QuickjsUiEvent;
+  onLongPress?: QuickjsUiEvent;
+  onDragStart?: QuickjsUiEvent;
+  onDragUpdate?: QuickjsUiEvent;
+  onDragEnd?: QuickjsUiEvent;
+  onSwipe?: QuickjsUiEvent;
+};
+
+export type TooltipProps = AccessibilityProps & {
+  message: string;
+  child?: QuickjsUiNode;
+  waitDurationMs?: number;
+  showDurationMs?: number;
 };
 
 export type CardProps = AccessibilityProps & {
@@ -892,6 +919,32 @@ export type AnimatedAlignProps = AlignProps & {
   animationCurve?: Curve;
 };
 
+export type AnimatedContainerProps = ContainerProps & {
+  durationMs?: number;
+  animationDurationMs?: number;
+  animationCurve?: Curve;
+};
+
+export type AnimatedOpacityProps = AccessibilityProps & {
+  opacity: number;
+  child?: QuickjsUiNode;
+  durationMs?: number;
+  animationDurationMs?: number;
+  animationCurve?: Curve;
+};
+
+export type AnimatedPaddingProps = PaddingProps & {
+  durationMs?: number;
+  animationDurationMs?: number;
+  animationCurve?: Curve;
+};
+
+export type HeroProps = AccessibilityProps & {
+  tag: string | number | boolean;
+  child: QuickjsUiNode;
+  transitionOnUserGestures?: boolean;
+};
+
 export type AnimatedSwitcherProps = AccessibilityProps & {
   child?: QuickjsUiNode;
   durationMs?: number;
@@ -927,6 +980,8 @@ export declare function RefreshIndicator(
   props: RefreshIndicatorProps
 ): QuickjsUiNode;
 export declare function TextField(props: TextFieldProps): QuickjsUiNode;
+export declare function TextFormField(props: TextFieldProps): QuickjsUiNode;
+export declare function GestureDetector(props: GestureDetectorProps): QuickjsUiNode;
 export declare function Stack(props: StackProps): QuickjsUiNode;
 export declare function Positioned(props: PositionedProps): QuickjsUiNode;
 export declare function Padding(props: PaddingProps): QuickjsUiNode;
@@ -953,6 +1008,9 @@ export declare function DropdownButton(
 ): QuickjsUiNode;
 export declare function Icon(props: IconProps): QuickjsUiNode;
 export declare function Divider(props?: DividerProps): QuickjsUiNode;
+export declare function VerticalDivider(props?: DividerProps): QuickjsUiNode;
+export declare function Placeholder(props?: PlaceholderProps): QuickjsUiNode;
+export declare function Tooltip(props: TooltipProps): QuickjsUiNode;
 export declare function Card(props: CardProps): QuickjsUiNode;
 export declare function ClipRRect(props: ClipRRectProps): QuickjsUiNode;
 export declare function DecoratedBox(props: DecoratedBoxProps): QuickjsUiNode;
@@ -975,9 +1033,13 @@ export declare function SnackBar(props: SnackBarProps): QuickjsUiNode;
 export declare function AlertDialog(props: AlertDialogProps): QuickjsUiNode;
 export declare function BottomSheet(props: BottomSheetProps): QuickjsUiNode;
 export declare function AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
+export declare function AnimatedContainer(props: AnimatedContainerProps): QuickjsUiNode;
+export declare function AnimatedOpacity(props: AnimatedOpacityProps): QuickjsUiNode;
+export declare function AnimatedPadding(props: AnimatedPaddingProps): QuickjsUiNode;
 export declare function AnimatedSwitcher(
   props: AnimatedSwitcherProps
 ): QuickjsUiNode;
+export declare function Hero(props: HeroProps): QuickjsUiNode;
 
 export declare const ui: {
   Text(data: string, props?: Omit<TextProps, 'data'>): QuickjsUiNode;
@@ -999,6 +1061,8 @@ export declare const ui: {
   PageView(props: PageViewProps): QuickjsUiNode;
   RefreshIndicator(props: RefreshIndicatorProps): QuickjsUiNode;
   TextField(props: TextFieldProps): QuickjsUiNode;
+  TextFormField(props: TextFieldProps): QuickjsUiNode;
+  GestureDetector(props: GestureDetectorProps): QuickjsUiNode;
   Stack(props: StackProps): QuickjsUiNode;
   Positioned(props: PositionedProps): QuickjsUiNode;
   Padding(props: PaddingProps): QuickjsUiNode;
@@ -1021,6 +1085,9 @@ export declare const ui: {
   DropdownButton(props: DropdownButtonProps): QuickjsUiNode;
   Icon(props: IconProps): QuickjsUiNode;
   Divider(props?: DividerProps): QuickjsUiNode;
+  VerticalDivider(props?: DividerProps): QuickjsUiNode;
+  Placeholder(props?: PlaceholderProps): QuickjsUiNode;
+  Tooltip(props: TooltipProps): QuickjsUiNode;
   Card(props: CardProps): QuickjsUiNode;
   ClipRRect(props: ClipRRectProps): QuickjsUiNode;
   DecoratedBox(props: DecoratedBoxProps): QuickjsUiNode;
@@ -1037,7 +1104,11 @@ export declare const ui: {
   AlertDialog(props: AlertDialogProps): QuickjsUiNode;
   BottomSheet(props: BottomSheetProps): QuickjsUiNode;
   AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
+  AnimatedContainer(props: AnimatedContainerProps): QuickjsUiNode;
+  AnimatedOpacity(props: AnimatedOpacityProps): QuickjsUiNode;
+  AnimatedPadding(props: AnimatedPaddingProps): QuickjsUiNode;
   AnimatedSwitcher(props: AnimatedSwitcherProps): QuickjsUiNode;
+  Hero(props: HeroProps): QuickjsUiNode;
 };
 
 export type QuickjsUiHostApi = {
