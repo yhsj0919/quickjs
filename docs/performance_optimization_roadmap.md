@@ -16,7 +16,7 @@
 
 当前阶段不应优先优化 Flutter Renderer。主要成本来自 Dart UI isolate、Runtime worker 和 QuickJS 之间的调用边界，以及资源重复加载。
 
-## P0：合并 UI 状态变更调用
+## P0：合并 UI 状态变更调用（已完成）
 
 当前一次发生状态变化的事件通常需要：
 
@@ -26,7 +26,7 @@ handleEvent → snapshot → commit
 
 `dispatchBatch` 仍会逐个调用 `handleEvent`，因此 N 个事件需要 `N + 2` 次 worker 往返。
 
-建议在 quickjs_ui 页面适配器中提供统一 mutation 协议：
+quickjs_ui 页面适配器现已提供统一 `mutate` 协议：
 
 ```js
 dispatch(events) => {
@@ -48,6 +48,8 @@ lifecycle(event) => {
 }
 ```
 
+实际实现还包含超大事件批次保护：普通批次一次完成；超过 128 条时分块更新 JS 状态，中间不生成 snapshot/schema，最后通过一次 `finalize` 返回最终 snapshot 和 commit。旧自定义 runtime 插件继续使用原协议。
+
 无变化时允许省略 snapshot 和 commit。单事件、批量事件、setState 和 lifecycle 应共享同一结果结构。
 
 预期收益：
@@ -62,9 +64,18 @@ lifecycle(event) => {
 - 无状态变化时不得触发 schema decode 或 Flutter notify。
 - 保持事件顺序、异步 handler、嵌套 dispatch 和生命周期测试通过。
 
-## P0：core 原生模块调用通道
+## P0：core 原生模块调用通道（暂缓）
 
 当前 `Quickjs.callModule()` 每次调用都会动态生成 JS 包装代码，并重复注入 `inflate()`、`convert()`、breadcrumb 和 JSON 转换逻辑，然后通过 `evalAsync` 执行。
+
+2026-07-14 使用 50 次 warm-up、500 次空模块调用测得：
+
+| Native DLL | Median | P95 | P99 | Max | Average |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Debug | 1.568ms | 1.959ms | 2.530ms | 3.755ms | 1.588ms |
+| Release | 0.913ms | 1.199ms | 1.657ms | 3.387ms | 0.943ms |
+
+Release 中位数低于 1ms，P95 与中位数相差约 0.286ms，暂未显示明显的稳定性问题。该测量运行在 Flutter test VM 中，并非完整 AOT Release runner。当前不实施 native ABI 重构；保留 `benchmark/call_module_benchmark_test.dart`，待真实交互 P95 出现问题或 AOT 基准确认固定开销超过约 1ms 后再启动。
 
 建议增加 worker/native 级模块调用命令：
 
@@ -98,17 +109,19 @@ callModuleContext(contextId, moduleHandle, method, encodedArgs)
 - 单独统计 Dart 编码、isolate 往返、JS 执行和结果转换。
 - API 错误类型、堆栈、超时和 Context 隔离行为保持一致。
 
-## P1：可失效的动态 UI 资源缓存
+## P1：可失效的动态 UI 资源缓存（已完成）
 
 Asset 页面热加载仍会重复执行资源读取、Bundle 解析以及 Plugin/Module 对象构建。缓存不得要求 Runtime 初始化时声明页面，也不得破坏动态更新模式。
 
-建议提供独立资源缓存：
+现已提供默认启用的独立资源缓存：
 
 ```dart
-QuickjsUiAssetCache.load(path, bundleRoot: ...)
-QuickjsUiAssetCache.invalidate(path)
-QuickjsUiAssetCache.clear()
+QuickjsUiResourceCache.shared.loadAsset(path: path, bundleRoot: ...)
+QuickjsUiResourceCache.shared.invalidate(path)
+QuickjsUiResourceCache.shared.clear()
 ```
+
+实际公开类型为 `QuickjsUiResourceCache`，默认边界为 10 分钟、16MiB、64 条，采用最大存活时间 TTL 与 LRU 容量淘汰。相同 key 的并发加载共享 Future；失败和超过总字节上限的单项不入缓存。缓存仅持有 JS module 文本和 Plugin 描述，不缓存 Context、页面状态、Widget 或图片字节。
 
 缓存策略：
 
@@ -134,17 +147,28 @@ createContext + bind callbacks + install environment + register modules
 
 该优化主要改善冷启动和 capabilities 较多页面的 `runtimeAcquire`，基础页面收益预计较小。
 
-## P1：事件驱动的 timer/job pump
+## P1：事件驱动的 timer/job pump（第一阶段已完成）
 
 当前 Controller 每 500ms 固定执行 timer pump。即使没有 timer 或状态变化，也可能发生 eval、snapshot、commit 和 Flutter notify。
 
-短期方案：
+第一阶段现已实现：
 
 ```dart
 context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 ```
 
 只有 `changed == true` 时更新 schema 和通知 Flutter。
+
+自动 Page/Bundle 适配器通过 `poll(lastVersion)` 在 JS 内先比较 state version。空闲 tick 只返回 unchanged 标记，不传输 snapshot/schema，也不触发 Controller listener。timer/job 修改状态时，一次 poll 返回最终 snapshot 和 commit。旧自定义 runtime 插件继续使用原 pump 路径。
+
+2026-07-14 使用 Release native DLL 模拟默认 500ms 周期下 60 秒的 120 次空闲 tick：
+
+| 协议 | Median | P95 | Max | 120 ticks 总计 | Worker 请求 | Flutter 通知 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| version poll | 1.360ms | 1.773ms | 3.254ms | 167.056ms | 240 | 0 |
+| legacy | 2.291ms | 2.814ms | 4.446ms | 281.401ms | 360 | 120 |
+
+第一阶段将空闲执行时间降低约 40.6%，并消除了空闲 Flutter rebuild。剩余成本主要是每个 tick 的 timer eval 与 poll 两次 worker 往返；基准入口为 `packages/quickjs_ui/benchmark/timer_pump_benchmark_test.dart`。
 
 长期方案：由 QuickJS timer 调度主动通知 Dart，在下一个到期时间触发 pump，取消固定轮询。
 

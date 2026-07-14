@@ -10,8 +10,8 @@ import '../host/quickjs_ui_permission_policy.dart';
 import '../renderer/quickjs_ui_component_registry.dart';
 import '../renderer/quickjs_ui_event_ingress.dart';
 import '../renderer/quickjs_ui_renderer.dart';
-import '../resource/quickjs_ui_bundle.dart';
 import '../resource/quickjs_ui_network_loader.dart';
+import '../resource/quickjs_ui_resource_cache.dart';
 import '../runtime/quickjs_ui_controller.dart';
 import '../runtime/quickjs_ui_plugin.dart';
 import '../runtime/quickjs_ui_runtime.dart';
@@ -59,6 +59,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.errorBuilder,
     this.emptyBuilder,
     this.onFirstRender,
+    this.resourceCache,
   }) : _source = plugin != null
            ? _QuickjsUiViewSource.plugin
            : _QuickjsUiViewSource.asset,
@@ -101,6 +102,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiErrorBuilder? errorBuilder,
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
+    QuickjsUiResourceCache? resourceCache,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -119,6 +121,7 @@ final class QuickjsUiView extends StatefulWidget {
       errorBuilder: errorBuilder,
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
+      resourceCache: resourceCache,
     );
   }
 
@@ -144,6 +147,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiErrorBuilder? errorBuilder,
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
+    QuickjsUiResourceCache? resourceCache,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -163,6 +167,7 @@ final class QuickjsUiView extends StatefulWidget {
       errorBuilder: errorBuilder,
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
+      resourceCache: resourceCache,
     );
   }
 
@@ -188,6 +193,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiErrorBuilder? errorBuilder,
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
+    QuickjsUiResourceCache? resourceCache,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -207,6 +213,7 @@ final class QuickjsUiView extends StatefulWidget {
       errorBuilder: errorBuilder,
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
+      resourceCache: resourceCache,
     );
   }
 
@@ -236,6 +243,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiErrorBuilder? errorBuilder,
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
+    QuickjsUiResourceCache? resourceCache,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -258,6 +266,7 @@ final class QuickjsUiView extends StatefulWidget {
       errorBuilder: errorBuilder,
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
+      resourceCache: resourceCache,
     );
   }
 
@@ -284,6 +293,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.errorBuilder,
     this.emptyBuilder,
     this.onFirstRender,
+    this.resourceCache,
   }) : assert(runtime == null || controller == null);
 
   final QuickjsPlugin? plugin;
@@ -347,6 +357,11 @@ final class QuickjsUiView extends StatefulWidget {
 
   /// 首次成功渲染 schema 后的回调。
   final VoidCallback? onFirstRender;
+
+  /// Bounded cache for parsed UI resources. Resource constructors use the
+  /// process-wide [QuickjsUiResourceCache.shared] by default. Pass a dedicated
+  /// cache for isolation, or one with `maxAge: Duration.zero` to disable it.
+  final QuickjsUiResourceCache? resourceCache;
   final _QuickjsUiViewSource _source;
 
   @override
@@ -360,7 +375,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   late QuickjsUiRenderer _renderer;
   late QuickjsUiEventIngress _eventIngress;
   late final _QuickjsUiLoadCoordinator _loadCoordinator;
-  QuickjsUiNetworkLoader? _networkLoader;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
   int _generation = 0;
@@ -452,6 +466,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         oldWidget.networkBundleRoot != widget.networkBundleRoot ||
         oldWidget.networkFetch != widget.networkFetch ||
         oldWidget.onNetworkLog != widget.onNetworkLog ||
+        oldWidget.resourceCache != widget.resourceCache ||
         oldWidget._source != widget._source ||
         oldWidget.initialProps != widget.initialProps ||
         oldWidget.mounts != widget.mounts ||
@@ -461,11 +476,6 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           widget.grantedPermissions,
         ) ||
         oldWidget.permissionPolicy != widget.permissionPolicy) {
-      if (oldWidget.networkFetch != widget.networkFetch ||
-          oldWidget.onNetworkLog != widget.onNetworkLog ||
-          oldWidget.networkUrl != widget.networkUrl) {
-        _networkLoader = null;
-      }
       _scheduleLoad();
     }
   }
@@ -708,31 +718,26 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 
   Future<QuickjsPlugin> _loadAssetPlugin(String path) async {
-    final bundle = await QuickjsUiBundle.asset(
+    return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadAsset(
       path: path,
       bundleRoot: widget.bundleRoot,
     );
-    return bundle.toPlugin();
   }
 
   Future<QuickjsPlugin> _loadNetworkPlugin(Uri url) async {
-    final loader = _networkLoader ??= QuickjsUiNetworkLoader(
+    return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadNetwork(
+      url: url,
+      bundleRoot: widget.networkBundleRoot,
       fetch: widget.networkFetch,
       onLog: _handleNetworkLog,
     );
-    final bundle = await loader.load(
-      url: url,
-      bundleRoot: widget.networkBundleRoot,
-    );
-    return bundle.toPlugin();
   }
 
   Future<QuickjsPlugin> _loadFilePlugin(String path) async {
-    final bundle = await QuickjsUiBundle.file(
+    return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadFile(
       path: path,
       bundleRoot: widget.bundleRoot,
     );
-    return bundle.toPlugin();
   }
 
   void _handleNetworkLog(QuickjsUiNetworkLogEvent event) {

@@ -18,6 +18,7 @@ const int _minimumSupportedQuickjsUiSchemaVersion = 1;
 const int _maximumSupportedQuickjsUiSchemaVersion = quickjsUiSchemaVersion;
 const int _currentQuickjsUiRuntimeVersion = 1;
 const String _quickjsUiPageMountSlot = 'quickjs_ui:page';
+const int _quickjsUiDispatchChunkSize = 128;
 
 final class QuickjsUiSession {
   static final Expando<Object> _attachedEngineLeases = Expando<Object>(
@@ -48,6 +49,7 @@ final class QuickjsUiSession {
   QuickjsUiInspector? inspector;
   _QuickjsUiPageBinding? _pageBinding;
   Object? _state;
+  int? _stateVersion;
   QuickjsUiNode? _node;
   QuickjsUiLoadMetrics? _lastLoadMetrics;
   final Object _engineLease = Object();
@@ -281,6 +283,7 @@ final class QuickjsUiSession {
     _disposeLifecycleSent = false;
     if (clearSnapshot) {
       _state = null;
+      _stateVersion = null;
       _node = null;
     }
   }
@@ -299,9 +302,15 @@ final class QuickjsUiSession {
     }
     return _enqueue(() async {
       _ensureActive();
-      var changed = false;
       for (final event in batch) {
         inspector?.recordAction(event);
+      }
+      if (_supportsMutationProtocol()) {
+        await _dispatchMutationBatch(batch);
+        return;
+      }
+      var changed = false;
+      for (final event in batch) {
         final result = await _clientCall('handleEvent', <Object?>[event]);
         changed = _resultChanged(result) || changed;
       }
@@ -316,6 +325,12 @@ final class QuickjsUiSession {
   Future<void> setState(Map<String, Object?> patch) async {
     return _enqueue(() async {
       _ensureActive();
+      if (_supportsMutationProtocol()) {
+        await _applyMutation(
+          await _clientCall('mutate', <Object?>['setState', patch, true]),
+        );
+        return;
+      }
       final result = await _clientCall('setState', <Object?>[patch]);
       await _commitCallResult(result);
     });
@@ -350,12 +365,12 @@ final class QuickjsUiSession {
     return _enqueue(_refreshImpl);
   }
 
-  Future<void> pumpTimers() {
+  Future<bool> pumpTimers() {
     return _enqueue(() async {
       _ensureActive();
       final binding = _engineBinding;
       if (binding == null || _pageBinding == null) {
-        return;
+        return false;
       }
       final context = binding.context;
       if (context != null) {
@@ -372,11 +387,29 @@ final class QuickjsUiSession {
         );
       }
       if (_disposed) {
-        return;
+        return false;
+      }
+      if (_pageBinding!.plugin.manifest.exports.contains('poll')) {
+        return _applyPolledResult(
+          await _clientCall('poll', <Object?>[_stateVersion]),
+        );
       }
       await _syncStateFromJs();
       await _refreshImpl();
+      return true;
     });
+  }
+
+  bool _applyPolledResult(Object? result) {
+    if (_disposed || !_resultChanged(result)) return false;
+    if (result is! Map || result['snapshot'] == null) {
+      throw const FormatException(
+        'quickjs_ui poll() must return snapshot and commit after a change',
+      );
+    }
+    _applySnapshot(result['snapshot']);
+    _applyCommitResult(result['commit']);
+    return true;
   }
 
   Future<void> _refreshImpl() async {
@@ -621,6 +654,12 @@ final class QuickjsUiSession {
       event['payload'] = payload;
     }
     inspector?.recordLifecycle(phase, type, payload: payload);
+    if (_supportsMutationProtocol()) {
+      return _applyMutation(
+        await _clientCall('mutate', <Object?>['lifecycle', event, render]),
+        render: render,
+      );
+    }
     final result = await _clientCall('lifecycle', <Object?>[event]);
     return _commitCallResult(result, render: render);
   }
@@ -632,6 +671,64 @@ final class QuickjsUiSession {
     await _syncStateFromJs();
     if (render) {
       await _refreshImpl();
+    }
+    return true;
+  }
+
+  bool _supportsMutationProtocol() {
+    return _pageBinding?.plugin.manifest.exports.contains('mutate') == true;
+  }
+
+  Future<void> _dispatchMutationBatch(List<Map<String, Object?>> events) async {
+    if (events.length <= _quickjsUiDispatchChunkSize) {
+      await _applyMutation(
+        await _clientCall('mutate', <Object?>['dispatch', events, true]),
+      );
+      return;
+    }
+    var changed = false;
+    for (
+      var offset = 0;
+      offset < events.length;
+      offset += _quickjsUiDispatchChunkSize
+    ) {
+      final end = (offset + _quickjsUiDispatchChunkSize).clamp(
+        0,
+        events.length,
+      );
+      final result = await _clientCall('mutate', <Object?>[
+        'dispatch',
+        events.sublist(offset, end),
+        false,
+      ]);
+      changed = _resultChanged(result) || changed;
+    }
+    if (!changed || _disposed) {
+      return;
+    }
+    await _applyMutation(
+      await _clientCall('mutate', const <Object?>['finalize', null, true]),
+    );
+  }
+
+  Future<bool> _applyMutation(Object? result, {bool render = true}) async {
+    if (_disposed || !_resultChanged(result)) {
+      return false;
+    }
+    if (result is! Map || !result.containsKey('snapshot')) {
+      throw const FormatException(
+        'quickjs_ui mutate() must return a snapshot after a state change',
+      );
+    }
+    _applySnapshot(result['snapshot']);
+    if (render) {
+      final commit = result['commit'];
+      if (commit == null) {
+        throw const FormatException(
+          'quickjs_ui mutate() must return a commit when render is enabled',
+        );
+      }
+      _applyCommitResult(commit);
     }
     return true;
   }
@@ -797,9 +894,12 @@ final class QuickjsUiSession {
 
   void _applySnapshot(Object? snapshot) {
     if (snapshot is Map) {
+      final version = snapshot['version'];
+      _stateVersion = version is num ? version.toInt() : null;
       _state = snapshot['state'];
       return;
     }
+    _stateVersion = null;
     _state = snapshot;
   }
 

@@ -70,6 +70,8 @@ final class QuickjsUiPagePlugin {
           'capabilities',
           'dispose',
           'bootstrap',
+          'mutate',
+          'poll',
         ],
         permissions: permissions,
       ),
@@ -113,6 +115,81 @@ export async function bootstrap(props) {
     capabilities: runtimeCapabilities,
     snapshot,
     commit: committed
+  };
+}
+
+// Runs one complete state mutation without returning to Dart between the
+// handler, state snapshot and schema commit.
+export async function mutate(operation, payload, render = true) {
+  let changed = false;
+  switch (operation) {
+    case 'finalize':
+      requireRuntimeMethod('snapshot');
+      requireRuntimeMethod('commit');
+      return {
+        changed: true,
+        snapshot: page.snapshot(),
+        commit: page.commit()
+      };
+    case 'dispatch': {
+      requireRuntimeMethod('handleEvent');
+      const events = Array.isArray(payload) ? payload : [payload];
+      for (const event of events) {
+        const result = await page.handleEvent(event);
+        changed = result?.changed === true || result === true || changed;
+      }
+      break;
+    }
+    case 'setState': {
+      requireRuntimeMethod('setState');
+      const result = await page.setState(payload);
+      changed = result?.changed === true || result === true;
+      break;
+    }
+    case 'lifecycle': {
+      requireRuntimeMethod('lifecycle');
+      const result = await page.lifecycle(payload);
+      changed = result?.changed === true || result === true;
+      break;
+    }
+    default:
+      throw new TypeError('quickjs_ui unknown mutation operation: ' + operation);
+  }
+  if (!changed) {
+    return { changed: false };
+  }
+  // Large event bursts are sent in bounded chunks. Intermediate chunks update
+  // JS-owned state only; one final call materializes the Dart state and schema.
+  if (operation === 'dispatch' && !render) {
+    return { changed: true };
+  }
+  requireRuntimeMethod('snapshot');
+  const snapshot = page.snapshot();
+  let committed = null;
+  if (render) {
+    requireRuntimeMethod('commit');
+    committed = page.commit();
+  }
+  return {
+    changed: true,
+    snapshot,
+    commit: committed
+  };
+}
+
+// Polling compares the JS-owned state version before materializing data for
+// Dart. Idle timer ticks therefore return only a small unchanged marker.
+export function poll(lastVersion) {
+  requireRuntimeMethod('snapshot');
+  const snapshot = page.snapshot();
+  if (snapshot?.version === lastVersion) {
+    return { changed: false, version: lastVersion };
+  }
+  requireRuntimeMethod('commit');
+  return {
+    changed: true,
+    snapshot,
+    commit: page.commit()
   };
 }
 
