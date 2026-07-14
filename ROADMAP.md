@@ -822,6 +822,27 @@ stream 的工具层 helper。0.10.1 不改变 runtime 的插件隔离、模块�
 - [ ] verify / CI 稳定性继续跟进：Windows 下 Flutter CLI 卡住时记录环境问题，保持 Dart analyzer
   和目标测试可独立运行。
 
+## HarmonyOS / OpenHarmony 支持计划
+
+鸿蒙端仍然使用 Flutter，不建设 ArkUI 应用层或独立的鸿蒙 UI backend。目标是在不改变
+`Quickjs`、`QuickjsContext`、plugin、mount 和 provider 公共 API 的前提下，将现有
+native FFI 执行模型扩展到 Flutter 鸿蒙应用。鸿蒙与其他 native 平台共享 Dart API、
+isolate worker 和 JS 运行语义，不引入平台专用的 JS 调用入口。该计划依赖可用且稳定的
+Flutter 鸿蒙工具链，因此暂不承诺具体版本和发布日期。
+
+- [ ] 确认目标工具链、最低系统版本、设备架构和产物格式，第一阶段以 ARM64 真机为准。
+- [ ] 增加 QuickJS native library 的鸿蒙构建脚本、符号导出和 Flutter asset 打包流程。
+- [ ] 接入 native backend 动态库发现与加载，保持 isolate worker、timeout、stop、dispose
+  和 runtime/context 隔离语义与 Android/iOS/桌面端一致。
+- [ ] 审核文件、网络、随机源、时钟、WebSocket 等预制 host mount 的鸿蒙实现；不支持的
+  平台能力必须显式报告，而不是静默降级。
+- [ ] 建立 analyzer、native smoke、module/provider/callback/timer、异常、内存限制和生命周期
+  测试矩阵，并至少覆盖一台 ARM64 真机。
+- [ ] 补充鸿蒙接入、构建、发布、动态库诊断和常见错误文档。
+
+完成标准：同一组 core consistency tests 在鸿蒙通过，业务代码无需按平台改写
+`Quickjs.create()`、plugin 或 provider 的调用方式。
+
 ## quickjs_ui
 
 UI 相关计划已拆分到独立 roadmap：[QUICKJS_UI_ROADMAP.md](QUICKJS_UI_ROADMAP.md)。

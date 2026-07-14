@@ -4,8 +4,6 @@
 
 更底层的运行栈与事件流说明见 [architecture.md](./architecture.md)。
 
----
-
 ## 1. 概述
 
 `quickjs_ui` 是一套**用 JavaScript 描述 UI、由 Flutter 原生渲染**的实验性 UI 框架。它与 `package:quickjs` 分工明确：
@@ -913,6 +911,22 @@ DropdownButton({
   onChanged: actions.setSize()
 })
 ```
+
+### 4.18 补充基础控件
+
+以下控件保持 Flutter 命名和属性语义：
+
+- `VerticalDivider(props)`：支持 `width`、`thickness`、`indent`、`endIndent` 和 `color`。
+- `Placeholder(props)`：支持 `color`、`strokeWidth`、`fallbackWidth` 和 `fallbackHeight`。
+- `GestureDetector({ child, ...events })`：支持通用点击、长按、双击、拖动和 swipe 事件。
+- `TextFormField(props)`：沿用 `TextField` 的受控值、焦点和事件字段，并支持 `helperText`、`errorText`。
+- `Tooltip({ message, child, waitDurationMs, showDurationMs })`。
+- `AnimatedContainer`、`AnimatedOpacity`、`AnimatedPadding`：使用 `durationMs` / `animationDurationMs`
+  和 `animationCurve` 描述隐式动画。
+- `Hero({ tag, child, transitionOnUserGestures })`：`tag` 仅接受 string、number 或 boolean，
+  保证页面 schema 可序列化且跨运行时稳定。
+
+这些 helper 只生成 UI schema；动画、手势和 Hero flight 均由 Flutter 执行。
 
 ---
 

@@ -327,8 +327,8 @@ Flutter 开发者学习成本：
 - [x] `Icon`
 - [x] `Image`
 - [x] `Divider`
-- [ ] `VerticalDivider`
-- [ ] `Placeholder`
+- [x] `VerticalDivider`
+- [x] `Placeholder`
 - [x] `Card`
 - [x] `ClipRRect`
 - [x] `DecoratedBox`
@@ -339,7 +339,7 @@ Flutter 开发者学习成本：
 - [x] `OutlinedButton`
 - [x] `IconButton`
 - [x] `FloatingActionButton`
-- [ ] `GestureDetector`
+- [x] `GestureDetector`
 - [x] `InkWell`
 
 滚动与列表：
@@ -351,7 +351,7 @@ Flutter 开发者学习成本：
 
 表单与输入：
 - [x] `TextField`
-- [ ] `TextFormField`
+- [x] `TextFormField`
 - [x] `Checkbox`
 - [x] `Switch`
 - [x] `Radio`
@@ -372,15 +372,15 @@ Flutter 开发者学习成本：
 - [x] `SnackBar`
 - [x] `AlertDialog`
 - [x] `BottomSheet`
-- [ ] `Tooltip`
+- [x] `Tooltip`
 
 动画与过渡：
-- [ ] `AnimatedContainer`
-- [ ] `AnimatedOpacity`
+- [x] `AnimatedContainer`
+- [x] `AnimatedOpacity`
 - [x] `AnimatedAlign`
-- [ ] `AnimatedPadding`
+- [x] `AnimatedPadding`
 - [x] `AnimatedSwitcher`
-- [ ] `Hero`
+- [x] `Hero`
 
 Flutter 风格对象写法：
 
@@ -677,6 +677,29 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 - [ ] `.ux` / template compiler 作为可选工具包或构建步骤。
 - [ ] template 只生成 JS module 的 `render()` 或 UI schema factory。
 - [ ] 不追求兼容 Vue、QuickApp、Vela 完整语法。
+
+### HarmonyOS / OpenHarmony 支持计划
+
+鸿蒙端继续使用 Flutter Widget、Flutter Renderer、Navigator 和 plugin 体系，不实现
+ArkUI renderer。`quickjs_ui` 的 schema、页面协议和 JS DSL 保持平台无关。鸿蒙支持建立在
+quickjs core 鸿蒙 native backend 与 Flutter 鸿蒙工具链之上，不增加鸿蒙专用控件名，也
+不允许页面脚本直接访问 ArkUI 对象。平台差异通过现有 Flutter plugin、host capability
+和自定义 renderer 边界处理。
+
+- [ ] 在 core 鸿蒙 backend 可用后运行 quickjs_ui conformance tests，验证加载、共享 runtime、
+  dispatch、snapshot、commit、timer 和资源缓存行为一致。
+- [ ] 验证基础控件、主题、Semantics、动画、滚动、Dialog、BottomSheet 和 Overlay 渲染。
+- [ ] 验证应用前后台、页面 show/hide、路由 push/replace/pop、系统返回和导航超时回收。
+- [ ] 验证中文输入法、焦点、软键盘、安全区域、屏幕密度和横竖屏变化。
+- [ ] 审核 asset/file/network bundle、图片和媒体资源解析；平台文件路径与权限不得泄漏到
+  JS 页面协议。
+- [ ] 为视频、地图、相机等鸿蒙平台组件提供 plugin/custom renderer 接入示例，不放入
+  quickjs_ui core 默认能力。
+- [ ] 增加 ARM64 真机 smoke、典型动态页面 golden/交互测试和首屏/连续 dispatch 性能基线。
+- [ ] 补充鸿蒙应用集成、打包、权限声明、调试和发布文档。
+
+完成标准：现有 JSUI 页面包无需修改即可在鸿蒙加载和交互；平台插件之外的 JS API、
+schema 和 Dart 页面使用方式与 Android/iOS 保持一致。
 
 ### 明确不做
 

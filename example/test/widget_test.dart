@@ -121,6 +121,24 @@ void main() {
     expect(find.text('ThemeData tokens from JS'), findsOneWidget);
     await _scrollUntilFound(tester, find.text('Third-party image resource'));
     expect(find.text('Third-party image resource'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Planned controls'));
+    expect(find.text('Planned controls'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('GestureDetector taps: 0'));
+    await tester.ensureVisible(find.text('GestureDetector taps: 0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GestureDetector taps: 0'));
+    await _pumpUntilFound(tester, find.text('GestureDetector taps: 1'));
+    expect(find.text('GestureDetector taps: 1'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Run animation'));
+    await tester.ensureVisible(find.text('Run animation'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run animation'));
+    await _pumpUntilFound(tester, find.text('Reset animation'));
+    expect(find.text('Reset animation'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Hero tag: controls-page-hero'));
+    await tester.ensureVisible(find.text('Hero tag: controls-page-hero'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Hero), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui custom components page', (

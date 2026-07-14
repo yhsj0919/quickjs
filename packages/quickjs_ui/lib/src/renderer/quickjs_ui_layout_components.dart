@@ -26,7 +26,11 @@ final QuickjsUiComponentBuilderMap quickjsUiLayoutComponentBuilders =
       'ConstrainedBox': _buildConstrainedBox,
       'SafeArea': _buildSafeArea,
       'AnimatedAlign': _buildAnimatedAlign,
+      'AnimatedContainer': _buildAnimatedContainer,
+      'AnimatedOpacity': _buildAnimatedOpacity,
+      'AnimatedPadding': _buildAnimatedPadding,
       'AnimatedSwitcher': _buildAnimatedSwitcher,
+      'Hero': _buildHero,
     };
 
 Widget _buildRow(QuickjsUiRenderContext context, QuickjsUiNode node) {
@@ -298,6 +302,70 @@ Widget _buildAnimatedAlign(QuickjsUiRenderContext context, QuickjsUiNode node) {
     widthFactor: QuickjsUiProps.doubleValue(node.props['widthFactor']),
     heightFactor: QuickjsUiProps.doubleValue(node.props['heightFactor']),
     child: context.child(node),
+  );
+}
+
+Widget _buildAnimatedContainer(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  final decoration = context.boxDecoration(node.props);
+  return AnimatedContainer(
+    duration:
+        quickjsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    curve: QuickjsUiProps.curve(node.props['animationCurve']),
+    width: QuickjsUiProps.doubleValue(node.props['width']),
+    height: QuickjsUiProps.doubleValue(node.props['height']),
+    padding: context.edgeInsets(node.props['padding']),
+    margin: context.edgeInsets(node.props['margin']),
+    alignment: QuickjsUiProps.alignment(node.props['alignment']),
+    decoration: decoration,
+    color: decoration == null
+        ? context.color(node.props['color'] ?? node.props['backgroundColor'])
+        : null,
+    child: context.child(node),
+  );
+}
+
+Widget _buildAnimatedOpacity(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  return AnimatedOpacity(
+    opacity: QuickjsUiProps.opacity(node.props['opacity']),
+    duration:
+        quickjsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    curve: QuickjsUiProps.curve(node.props['animationCurve']),
+    child: context.child(node) ?? const SizedBox.shrink(),
+  );
+}
+
+Widget _buildAnimatedPadding(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  return AnimatedPadding(
+    padding: context.edgeInsets(node.props['padding']) ?? EdgeInsets.zero,
+    duration:
+        quickjsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    curve: QuickjsUiProps.curve(node.props['animationCurve']),
+    child: context.child(node) ?? const SizedBox.shrink(),
+  );
+}
+
+Widget _buildHero(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final tag = node.props['tag'];
+  if (tag is! String && tag is! num && tag is! bool) {
+    throw const FormatException(
+      'quickjs_ui Hero tag must be a string, number or boolean',
+    );
+  }
+  return Hero(
+    tag: tag as Object,
+    transitionOnUserGestures:
+        QuickjsUiProps.boolValue(node.props['transitionOnUserGestures']) ??
+        false,
+    child: context.child(node) ?? const SizedBox.shrink(),
   );
 }
 

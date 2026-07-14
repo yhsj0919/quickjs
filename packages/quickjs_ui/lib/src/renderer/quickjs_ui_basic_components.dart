@@ -19,6 +19,10 @@ final QuickjsUiComponentBuilderMap quickjsUiBasicComponentBuilders =
       'FloatingActionButton': _buildFloatingActionButton,
       'Icon': _buildIcon,
       'Divider': _buildDivider,
+      'VerticalDivider': _buildVerticalDivider,
+      'Placeholder': _buildPlaceholder,
+      'GestureDetector': _buildGestureDetector,
+      'Tooltip': _buildTooltip,
       'Card': _buildCard,
       'ClipRRect': _buildClipRRect,
       'BackdropFilter': _buildBackdropFilter,
@@ -135,6 +139,54 @@ Widget _buildDivider(QuickjsUiRenderContext context, QuickjsUiNode node) {
     indent: QuickjsUiProps.doubleValue(node.props['indent']),
     endIndent: QuickjsUiProps.doubleValue(node.props['endIndent']),
     color: context.color(node.props['color']),
+  );
+}
+
+Widget _buildVerticalDivider(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  return VerticalDivider(
+    width: QuickjsUiProps.doubleValue(node.props['width']),
+    thickness: QuickjsUiProps.doubleValue(node.props['thickness']),
+    indent: QuickjsUiProps.doubleValue(node.props['indent']),
+    endIndent: QuickjsUiProps.doubleValue(node.props['endIndent']),
+    color: context.color(node.props['color']),
+  );
+}
+
+Widget _buildPlaceholder(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  return Placeholder(
+    color: context.color(node.props['color']) ?? const Color(0xFF455A64),
+    strokeWidth: QuickjsUiProps.doubleValue(node.props['strokeWidth']) ?? 2,
+    fallbackWidth:
+        QuickjsUiProps.doubleValue(node.props['fallbackWidth']) ?? 400,
+    fallbackHeight:
+        QuickjsUiProps.doubleValue(node.props['fallbackHeight']) ?? 400,
+  );
+}
+
+Widget _buildGestureDetector(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  return withQuickjsUiGestures(
+    context,
+    node,
+    context.child(node) ?? const SizedBox.shrink(),
+  );
+}
+
+Widget _buildTooltip(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  final message = QuickjsUiProps.string(node.props['message']);
+  if (message == null || message.isEmpty) {
+    throw const FormatException('quickjs_ui Tooltip message is required');
+  }
+  return Tooltip(
+    message: message,
+    waitDuration: QuickjsUiProps.duration(node.props['waitDurationMs']),
+    showDuration: QuickjsUiProps.duration(node.props['showDurationMs']),
+    child: context.child(node) ?? const SizedBox.shrink(),
   );
 }
 

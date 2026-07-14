@@ -7,6 +7,7 @@ native FFI 与 Flutter Web WASM。
 | --- | --- |
 | Android / iOS / macOS / Linux / Windows | FFI + QuickJS 源码编译 |
 | Web | `quickjs-wasi` WASM + Web Worker bridge |
+| HarmonyOS / OpenHarmony | 计划支持：Flutter 渲染与应用层 + FFI QuickJS 后端 |
 
 ## 使用
 

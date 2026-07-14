@@ -619,6 +619,14 @@ export function TextField(props) {
   return node('TextField', props);
 }
 
+export function TextFormField(props) {
+  return node('TextFormField', props);
+}
+
+export function GestureDetector(props) {
+  return node('GestureDetector', props);
+}
+
 export function Stack(props) {
   return node('Stack', props);
 }
@@ -707,6 +715,18 @@ export function Divider(props) {
   return node('Divider', props);
 }
 
+export function VerticalDivider(props) {
+  return node('VerticalDivider', props);
+}
+
+export function Placeholder(props) {
+  return node('Placeholder', props);
+}
+
+export function Tooltip(props) {
+  return node('Tooltip', props);
+}
+
 export function Card(props) {
   return node('Card', props);
 }
@@ -787,8 +807,24 @@ export function AnimatedAlign(props) {
   return node('AnimatedAlign', props);
 }
 
+export function AnimatedContainer(props) {
+  return node('AnimatedContainer', props);
+}
+
+export function AnimatedOpacity(props) {
+  return node('AnimatedOpacity', props);
+}
+
+export function AnimatedPadding(props) {
+  return node('AnimatedPadding', props);
+}
+
 export function AnimatedSwitcher(props) {
   return node('AnimatedSwitcher', props);
+}
+
+export function Hero(props) {
+  return node('Hero', props);
 }
 
 export const ui = {
@@ -816,6 +852,8 @@ export const ui = {
   PageView,
   RefreshIndicator,
   TextField,
+  TextFormField,
+  GestureDetector,
   Stack,
   Positioned,
   Padding,
@@ -838,6 +876,9 @@ export const ui = {
   DropdownButton,
   Icon,
   Divider,
+  VerticalDivider,
+  Placeholder,
+  Tooltip,
   Card,
   ClipRRect,
   BackdropFilter,
@@ -856,5 +897,9 @@ export const ui = {
   AlertDialog,
   BottomSheet,
   AnimatedAlign,
-  AnimatedSwitcher
+  AnimatedContainer,
+  AnimatedOpacity,
+  AnimatedPadding,
+  AnimatedSwitcher,
+  Hero
 };

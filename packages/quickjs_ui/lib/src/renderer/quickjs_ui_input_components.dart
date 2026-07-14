@@ -9,6 +9,7 @@ import 'quickjs_ui_render_context.dart';
 final QuickjsUiComponentBuilderMap quickjsUiInputComponentBuilders =
     <String, QuickjsUiComponentBuilder>{
       'TextField': _buildTextField,
+      'TextFormField': _buildTextFormField,
       'Form': _buildForm,
       'Checkbox': _buildCheckbox,
       'Switch': _buildSwitch,
@@ -18,6 +19,18 @@ final QuickjsUiComponentBuilderMap quickjsUiInputComponentBuilders =
     };
 
 Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  return _buildTextInput(context, node, formField: false);
+}
+
+Widget _buildTextFormField(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  return _buildTextInput(context, node, formField: true);
+}
+
+Widget _buildTextInput(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node, {
+  required bool formField,
+}) {
   final onChanged = QuickjsUiProps.event(node.props['onChanged']);
   final onSubmitted = QuickjsUiProps.event(node.props['onSubmitted']);
   final onFocus = QuickjsUiProps.event(node.props['onFocus']);
@@ -30,6 +43,7 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
   final focusId = QuickjsUiProps.string(node.props['focusId']);
   return _QuickjsUiTextField(
+    formField: formField,
     value:
         QuickjsUiProps.string(
           node.props['value'] ?? node.props['initialValue'],
@@ -58,6 +72,8 @@ Widget _buildTextField(QuickjsUiRenderContext context, QuickjsUiNode node) {
     decoration: InputDecoration(
       labelText: QuickjsUiProps.string(node.props['labelText']),
       hintText: QuickjsUiProps.string(node.props['hintText']),
+      helperText: QuickjsUiProps.string(node.props['helperText']),
+      errorText: QuickjsUiProps.string(node.props['errorText']),
     ),
     onChanged: onChanged == null
         ? null
@@ -255,6 +271,7 @@ DropdownMenuItem<Object?> _dropdownItem(Object? value) {
 
 final class _QuickjsUiTextField extends StatefulWidget {
   const _QuickjsUiTextField({
+    required this.formField,
     required this.value,
     required this.focusId,
     required this.enabled,
@@ -274,6 +291,8 @@ final class _QuickjsUiTextField extends StatefulWidget {
     this.onBlur,
     this.onSelectionChanged,
   });
+
+  final bool formField;
 
   final String value;
   final String? focusId;
@@ -418,6 +437,30 @@ final class _QuickjsUiTextFieldState extends State<_QuickjsUiTextField> {
     final handleEditingComplete =
         widget.onEditingComplete != null ||
         widget.submitFocusAction != _QuickjsUiSubmitFocusAction.none;
+    final onChanged = widget.onChanged == null
+        ? null
+        : (_) => widget.onChanged?.call(_snapshot());
+    final onSubmitted = widget.onSubmitted == null
+        ? null
+        : (_) => widget.onSubmitted?.call(_snapshot());
+    if (widget.formField) {
+      return TextFormField(
+        controller: _controller,
+        focusNode: _focusNode,
+        enabled: widget.enabled,
+        autofocus: widget.autofocus,
+        obscureText: widget.obscureText,
+        maxLines: widget.maxLines,
+        keyboardType: widget.keyboardType,
+        textInputAction: widget.textInputAction,
+        decoration: widget.decoration,
+        onChanged: onChanged,
+        onFieldSubmitted: onSubmitted,
+        onEditingComplete: handleEditingComplete
+            ? _handleEditingComplete
+            : null,
+      );
+    }
     return TextField(
       controller: _controller,
       focusNode: _focusNode,
@@ -428,12 +471,8 @@ final class _QuickjsUiTextFieldState extends State<_QuickjsUiTextField> {
       keyboardType: widget.keyboardType,
       textInputAction: widget.textInputAction,
       decoration: widget.decoration,
-      onChanged: widget.onChanged == null
-          ? null
-          : (_) => widget.onChanged?.call(_snapshot()),
-      onSubmitted: widget.onSubmitted == null
-          ? null
-          : (_) => widget.onSubmitted?.call(_snapshot()),
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
       onEditingComplete: handleEditingComplete ? _handleEditingComplete : null,
     );
   }
