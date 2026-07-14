@@ -19,6 +19,7 @@ export 'src/resource/quickjs_ui_manifest.dart';
 export 'src/resource/quickjs_ui_network_cache_store.dart';
 export 'src/resource/quickjs_ui_network_loader.dart';
 export 'src/resource/quickjs_ui_resource.dart';
+export 'src/resource/quickjs_ui_resource_cache.dart';
 export 'src/resource/quickjs_ui_resource_resolver.dart';
 export 'src/runtime/quickjs_ui_controller.dart';
 export 'src/runtime/quickjs_ui_helpers.dart';

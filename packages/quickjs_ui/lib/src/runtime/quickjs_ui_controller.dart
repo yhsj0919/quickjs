@@ -534,11 +534,13 @@ final class QuickjsUiController extends ChangeNotifier {
     }
     _timerPumpRunning = true;
     try {
-      await _session.pumpTimers();
+      final changed = await _session.pumpTimers();
       if (_disposed) {
         return;
       }
-      notifyListeners();
+      if (changed) {
+        notifyListeners();
+      }
     } catch (error) {
       if (_disposed) {
         return;

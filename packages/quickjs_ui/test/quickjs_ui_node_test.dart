@@ -3001,6 +3001,39 @@ export default Page({
     expect(controller.node?.children.first.props['data'], 'Count: 2');
   });
 
+  test(
+    'timer pump skips idle pages and returns timer mutations once',
+    () async {
+      final session = QuickjsUiSession();
+      addTearDown(session.dispose);
+      await session.loadPlugin(
+        QuickjsUiPagePlugin.singleFile(
+          id: 'quickjs_ui_timer_poll_test',
+          version: '1.0.0',
+          source: '''
+import { Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() { return { count: 0 }; },
+  increment(state) { return { count: state.count + 1 }; },
+  onMount(state, data, props, event, context) {
+    setTimeout(() => context.call('increment'), 0);
+  },
+  build(state) { return Text('Count: ' + state.count); }
+});
+''',
+        ),
+      );
+
+      expect(await session.pumpTimers(), isFalse);
+      await session.lifecycle('mount', render: false);
+      expect(await session.pumpTimers(), isTrue);
+      expect((session.state as Map)['count'], 1);
+      expect(session.node?.props['data'], 'Count: 1');
+      expect(await session.pumpTimers(), isFalse);
+    },
+  );
+
   test('ignores pending async dispatch result after dispose', () async {
     final pending = Completer<Object?>();
     final engine = await Quickjs.create(

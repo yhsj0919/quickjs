@@ -344,6 +344,8 @@ final class QuickjsUiBundle {
           'capabilities',
           'dispose',
           'bootstrap',
+          'mutate',
+          'poll',
         ],
         permissions: permissions,
       ),
