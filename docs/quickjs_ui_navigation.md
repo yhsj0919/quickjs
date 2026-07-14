@@ -21,12 +21,15 @@ The router follows Flutter `Navigator.push` semantics:
 - `onRouteEnter`, `onRouteLeave`, and `onRouteResult` are lifecycle
   notifications. They are not the primary data return path.
 
-Route lifecycle notifications use a dedicated route lifecycle queue instead of
-the page session's normal dispatch/render queue. This keeps `onRouteLeave`
-ordered with other route events even when the current JS handler is suspended at
-`await quickjsUiNavigation.push()`.
+Internal navigation uses a two-phase protocol. The host first validates and
+locks the requested operation, then `quickjsUiNavigation` invokes
+`onRouteLeave` and `onHide` inside the current JS dispatch before committing
+the route mutation. This avoids a second call into the same QuickJS context
+while preserving `await push()` result semantics. The entering page therefore
+cannot receive `onRouteEnter` before the covered page has finished its departure
+hooks.
 
-Page visibility lifecycle follows the same route lifecycle queue for internal
+Page visibility lifecycle follows the same two-phase ordering for internal
 router transitions. A newly rendered page receives `onMount` and then `onShow`.
 When a page is covered or removed by JSUI navigation it receives `onRouteLeave`
 and then `onHide`; when a previous page becomes visible again it receives
@@ -69,9 +72,11 @@ await quickjsUiNavigation.push({
 ```
 
 The host can restrict these JSUI-internal jumps with `jsRoutePolicy`.
-`allowedRoutes` / `allowedPaths` are static allowlists. `onRequest` is called
-for each JSUI route request that passes the static rules, so the host can log,
-show UI, ask the user, or reject in real time.
+`allowedRoutes` / `allowedPaths` are static allowlists. Paths are matched only
+after resolution and normalization; relative request text is never trusted as
+an allowlist identity. `onRequest` is called for each JSUI route request that
+passes the static rules, so the host can log, show UI, ask the user, or reject
+in real time.
 
 ```dart
 final registry = QuickjsUiRouteRegistry(
