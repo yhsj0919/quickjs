@@ -418,13 +418,14 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     // ignore: deprecated_member_use
     return WillPopScope(
       onWillPop: () async {
+        final current = _routes.top;
+        if (current.navigationLocked) {
+          return false;
+        }
         if (_routes.length <= 1) {
-          final root = _routes.top;
-          if (root.navigationLocked) {
-            return false;
-          }
+          final root = current;
           root.navigationLocked = true;
-          await _leaveAndHideForNavigation(root, to: 'native', action: 'pop');
+          await _coordinateRouteDeparture(root, to: 'native', action: 'pop');
           return true;
         }
         await _popJsRoute(null);
@@ -882,7 +883,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     final to = _routes.length <= 1
         ? 'native'
         : _entryRouteIdentity(_routes.previous);
-    await _leaveAndHideForNavigation(
+    await _coordinateRouteDeparture(
       entry,
       to: to,
       result: result,
@@ -994,22 +995,41 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
   /// Lifecycle hooks are page notifications, not navigation guards. A broken
   /// hook must not leave the router permanently locked or half-transitioned;
   /// policy rejection is handled separately before this phase.
-  Future<void> _leaveAndHideForNavigation(
+  Future<void> _coordinateRouteDeparture(
     _QuickjsUiRouterEntry entry, {
     required String to,
     Map<String, Object?>? params,
     Object? result,
     required String action,
   }) async {
-    try {
-      await _sendRouteLeave(
-        entry,
-        to: to,
-        params: params,
-        result: result,
-        action: action,
+    final timeout = widget.registry.options.lifecycleTimeout;
+    if (timeout <= Duration.zero) {
+      throw ArgumentError.value(
+        timeout,
+        'lifecycleTimeout',
+        'must be greater than zero',
       );
-      await _sendRouteHide(entry);
+    }
+    try {
+      await (() async {
+        await _sendRouteLeave(
+          entry,
+          to: to,
+          params: params,
+          result: result,
+          action: action,
+        );
+        await _sendRouteHide(entry);
+      })().timeout(timeout);
+    } on TimeoutException {
+      // Departure hooks only observe an approved navigation. Continuing after
+      // the deadline prevents a broken page from trapping system back. The
+      // departing entry is removed immediately afterwards, which cancels its
+      // session and prevents a late hook result from reaching Flutter state.
+      debugPrint(
+        '[quickjs_ui navigation] $action lifecycle timed out after '
+        '${timeout.inMilliseconds}ms',
+      );
     } catch (error) {
       debugPrint(
         '[quickjs_ui navigation] ignored route departure error: $error',

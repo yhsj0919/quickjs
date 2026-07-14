@@ -162,9 +162,11 @@ final registry = QuickjsUiRouteRegistry(
 `lifecycleTimeout` bounds `onRouteLeave` and `onHide` as one departure phase.
 After timeout the approved navigation continues; the hook Promise is no longer
 allowed to hold the route lock indefinitely, and a state patch returned later
-by that hook is discarded. `maxJsRouteDepth` bounds retained JSUI entries and
-their controllers. It applies only to JSUI-internal `push`; `replace`, `pop`,
-and native Flutter routes do not consume additional depth.
+by that hook is discarded. The same deadline applies to Flutter/system back;
+its departing page session is released as the pop proceeds. `maxJsRouteDepth`
+bounds retained JSUI entries and their controllers. It applies only to
+JSUI-internal `push`; `replace`, `pop`, and native Flutter routes do not consume
+additional depth.
 
 ## Transition Intent
 

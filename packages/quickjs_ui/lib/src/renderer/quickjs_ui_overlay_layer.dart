@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -89,7 +87,7 @@ QuickjsUiOverlayIntent? _snackBarIntent(
             '',
       );
   return QuickjsUiSnackBarOverlayIntent(
-    signature: jsonEncode(node.toMap()),
+    signature: node.structuralSignature,
     content: content,
     backgroundColor: context.color(node.props['backgroundColor']),
     duration:
@@ -111,7 +109,7 @@ QuickjsUiOverlayIntent? _dialogIntent(
     node.props['onDismissed'] ?? node.props['onClosing'],
   );
   return QuickjsUiDialogOverlayIntent(
-    signature: jsonEncode(node.toMap()),
+    signature: node.structuralSignature,
     barrierDismissible:
         QuickjsUiProps.boolValue(node.props['barrierDismissible']) != false,
     onDismissed: () {
@@ -145,7 +143,7 @@ QuickjsUiOverlayIntent? _bottomSheetIntent(
   }
   final onClosing = QuickjsUiProps.event(node.props['onClosing']);
   return QuickjsUiBottomSheetOverlayIntent(
-    signature: jsonEncode(node.toMap()),
+    signature: node.structuralSignature,
     backgroundColor: context.color(node.props['backgroundColor']),
     onClosing: () {
       if (onClosing != null) {

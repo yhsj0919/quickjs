@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -25,7 +23,7 @@ Widget _buildSnackBar(QuickjsUiRenderContext context, QuickjsUiNode node) {
             '',
       );
   return _QuickjsUiSnackBarHost(
-    signature: jsonEncode(node.toMap()),
+    signature: node.structuralSignature,
     content: content,
     backgroundColor: context.color(node.props['backgroundColor']),
     duration:
@@ -60,7 +58,7 @@ Widget _buildBottomSheet(QuickjsUiRenderContext context, QuickjsUiNode node) {
   }
   final onClosing = QuickjsUiProps.event(node.props['onClosing']);
   return _QuickjsUiBottomSheetHost(
-    signature: jsonEncode(node.toMap()),
+    signature: node.structuralSignature,
     backgroundColor: context.color(node.props['backgroundColor']),
     onClosing: () {
       if (onClosing != null) {
