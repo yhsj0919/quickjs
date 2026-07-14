@@ -72,14 +72,7 @@ export function Page(page) {
       return drainEvents();
     },
     async lifecycle(event) {
-      requireMounted(mounted);
-      const hook = getLifecycleHook(page, event?.type);
-      if (typeof hook !== 'function') {
-        return commitResult(false);
-      }
-      const normalized = normalizeDispatchEvent(event);
-      const patch = await hook(state, normalized.data, props, normalized.event, context);
-      return commitStatePatch(patch);
+      return runLifecycle(event);
     },
     setState(patch) {
       requireMounted(mounted);
@@ -127,7 +120,8 @@ export function Page(page) {
   // second host-side client call would queue behind that event and deadlock if
   // push() is waiting for a child result. This private entry lets the injected
   // navigation facade run routeLeave/hide inside the current JS turn instead.
-  const invokeLifecycle = (event) => runtime.lifecycle(event);
+  const invokeLifecycle = (event, cancellation) =>
+    runLifecycle(event, cancellation);
   Object.defineProperty(globalThis, '__quickjsUiPageLifecycle', {
     value: invokeLifecycle,
     configurable: true,
@@ -135,6 +129,26 @@ export function Page(page) {
     enumerable: false
   });
   return runtime;
+
+  async function runLifecycle(event, cancellation) {
+    requireMounted(mounted);
+    const hook = getLifecycleHook(page, event?.type);
+    if (typeof hook !== 'function') {
+      return commitResult(false);
+    }
+    const normalized = normalizeDispatchEvent(event);
+    const patch = await hook(
+      state,
+      normalized.data,
+      props,
+      normalized.event,
+      context
+    );
+    if (cancellation?.cancelled === true) {
+      return commitResult(false);
+    }
+    return commitStatePatch(patch);
+  }
 
   function commitStatePatch(patch) {
     if (patch === state) {
