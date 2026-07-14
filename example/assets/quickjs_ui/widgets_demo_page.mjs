@@ -435,6 +435,7 @@ function feedbackPage(state, page) {
       }),
       AlertDialog({
         visible: state.showDialog,
+        onClosing: page.closeDialog(),
         titleText: '0.6 Dialog',
         contentText: '这个 Dialog 现在应该作为真正的 overlay 显示。',
         actions: [

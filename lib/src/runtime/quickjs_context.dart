@@ -74,6 +74,9 @@ final class QuickjsRuntime {
   String get quickjsVersion => _backend.quickjsVersion;
   bool get closed => _closed;
 
+  /// Number of live child contexts, primarily useful for capacity diagnostics.
+  int get activeContextCount => _contexts.length;
+
   /// Creates a context with an independent global object and module registry.
   Future<QuickjsContext> createContext({
     QuickjsContextOptions options = const QuickjsContextOptions(),
@@ -176,6 +179,15 @@ final class QuickjsContext implements QuickjsPluginHost {
       modules: modules,
       timeout: timeout,
     );
+  }
+
+  /// Runs due native timers/jobs and reports when this context next needs work.
+  /// Null means no timer is scheduled. Backends without native deadline
+  /// inspection retain a bounded 500ms compatibility poll.
+  Future<Duration?> pumpTimers() async {
+    _ensureOpen();
+    final milliseconds = await _adapter.pumpTimers();
+    return milliseconds == null ? null : Duration(milliseconds: milliseconds);
   }
 
   /// Installs a Promise-returning Dart callback on this context's global object.
@@ -362,6 +374,19 @@ final class _QuickjsContextRuntimeAdapter
             modules: modules,
             timeout: timeout,
           );
+  }
+
+  Future<int?> pumpTimers() async {
+    _ensureOpen();
+    final shared = _shared;
+    if (shared != null) {
+      return shared.pumpContextTimers(_contextId!);
+    }
+    await _isolated!.evaluateAsync(
+      'new Promise((resolve) => setTimeout(resolve, 0))',
+      name: '<quickjs:timer-pump>',
+    );
+    return 500;
   }
 
   @override

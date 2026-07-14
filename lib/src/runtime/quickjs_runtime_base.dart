@@ -79,6 +79,10 @@ abstract interface class QuickjsMultiContextRuntimeBase {
     String name = '<context-evalAsync>',
   });
 
+  /// Runs timers due in [contextId] and returns the next delay in milliseconds.
+  /// A null result means that the context has no scheduled timer.
+  Future<int?> pumpContextTimers(int contextId);
+
   Future<void> unbindContextCallback(int contextId, int callbackId);
 
   Future<Stream<Object?>> bindContextJsSink(int contextId, String name);
@@ -88,3 +92,7 @@ abstract interface class QuickjsMultiContextRuntimeBase {
 
 /// Marker for a child-context adapter that can accept mounts in place.
 abstract interface class QuickjsInPlaceMountRuntime {}
+
+abstract interface class QuickjsTimerRuntimeBase {
+  Future<int?> pumpTimers();
+}

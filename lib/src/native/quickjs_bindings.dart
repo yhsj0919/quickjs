@@ -80,6 +80,9 @@ typedef QuickjsContextEvalAsyncPollNative =
     Pointer<Utf8> Function(Pointer<QuickjsContext>);
 typedef QuickjsContextEvalAsyncPoll =
     Pointer<Utf8> Function(Pointer<QuickjsContext>);
+typedef QuickjsContextPumpTimersNative =
+    Int64 Function(Pointer<QuickjsContext>);
+typedef QuickjsContextPumpTimers = int Function(Pointer<QuickjsContext>);
 typedef QuickjsContextBindSinkNative =
     Int32 Function(Pointer<QuickjsContext>, Int64, Pointer<Utf8>);
 typedef QuickjsContextBindSink =
@@ -99,6 +102,9 @@ typedef QuickjsRuntimeSetCancelFlagNative =
     Void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
 typedef QuickjsRuntimeSetCancelFlag =
     void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
+typedef QuickjsRuntimePumpTimersNative =
+    Int64 Function(Pointer<QuickjsRuntime>);
+typedef QuickjsRuntimePumpTimers = int Function(Pointer<QuickjsRuntime>);
 
 typedef QuickjsEvalTimeoutNative =
     Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, Int64);
@@ -279,6 +285,11 @@ class QuickjsBindings {
             QuickjsContextEvalAsyncPollNative,
             QuickjsContextEvalAsyncPoll
           >('quickjs_context_eval_async_poll'),
+      contextPumpTimers = lib
+          .lookupFunction<
+            QuickjsContextPumpTimersNative,
+            QuickjsContextPumpTimers
+          >('quickjs_context_pump_timers'),
       contextBindSink = lib
           .lookupFunction<QuickjsContextBindSinkNative, QuickjsContextBindSink>(
             'quickjs_context_bind_sink',
@@ -298,6 +309,11 @@ class QuickjsBindings {
             QuickjsRuntimeSetCancelFlagNative,
             QuickjsRuntimeSetCancelFlag
           >('quickjs_runtime_set_cancel_flag'),
+      runtimePumpTimers = lib
+          .lookupFunction<
+            QuickjsRuntimePumpTimersNative,
+            QuickjsRuntimePumpTimers
+          >('quickjs_runtime_pump_timers'),
       evalTimeout = lib
           .lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
             'quickjs_eval_timeout',
@@ -368,10 +384,12 @@ class QuickjsBindings {
   final QuickjsContextBindCallback contextBindCallback;
   final QuickjsContextEvalAsyncStartNamed contextEvalAsyncStartNamed;
   final QuickjsContextEvalAsyncPoll contextEvalAsyncPoll;
+  final QuickjsContextPumpTimers contextPumpTimers;
   final QuickjsContextBindSink contextBindSink;
   final QuickjsRuntimeSetMemoryLimit runtimeSetMemoryLimit;
   final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
   final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
+  final QuickjsRuntimePumpTimers runtimePumpTimers;
   final QuickjsEvalTimeout evalTimeout;
   final QuickjsEvalTimeoutNamed evalTimeoutNamed;
   final QuickjsEvalModule evalModule;

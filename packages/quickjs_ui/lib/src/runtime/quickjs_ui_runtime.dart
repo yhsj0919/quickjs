@@ -43,6 +43,7 @@ final class QuickjsUiRuntime {
 
   Future<QuickjsUiRuntimeLease> acquire({
     List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    QuickjsPlugin? pagePlugin,
   }) async {
     if (_disposed) throw StateError('QuickjsUiRuntime is disposed');
     if (_active.length >= maxCapacity) {
@@ -56,6 +57,7 @@ final class QuickjsUiRuntime {
           quickjsUiHelperMount,
           ...this.mounts,
           ...mounts,
+          if (pagePlugin != null) pagePlugin.asMount(name: 'quickjs_ui:page'),
         ],
         onConsole: onConsole,
       ),

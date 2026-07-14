@@ -113,6 +113,19 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
   }
 
   Future<bool> _handleJsRouteRequest(QuickjsUiJsRouteRequest request) async {
+    // 页面互通示例当前默认允许已在 allowedPaths 中声明的 JSUI 路由。
+    // 下方保留原授权弹窗实现，后续需要演示逐次授权时可直接恢复。
+    final message =
+        '允许 ${request.action}: ${request.resolvedPath} <- ${request.from}';
+    debugPrint('[quickjs_ui navigation policy] $message');
+    if (mounted) {
+      setState(() {
+        _policyLog = message;
+      });
+    }
+    return true;
+
+    /* 暂停使用：JSUI 内部跳转授权弹窗。
     if (_trustedJsuiPaths.contains(request.resolvedPath)) {
       final message =
           '已记住并允许 ${request.action}: '
@@ -175,10 +188,12 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
       });
     }
     return allowed;
+    */
   }
 }
 
-enum _JsuiRouteDecision { deny, allowOnce, allowPath }
+// 暂停使用：与上方授权弹窗配套的用户决策。
+// enum _JsuiRouteDecision { deny, allowOnce, allowPath }
 
 class _NativeSettingsPage extends StatelessWidget {
   const _NativeSettingsPage({required this.params});

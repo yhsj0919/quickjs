@@ -983,6 +983,32 @@ export function echo(value) {
     expect(await context.eval('beforeMount'), '41');
   });
 
+  test('failed batched context initialization releases the context', () async {
+    final runtime = await QuickjsRuntime.create();
+    addTearDown(runtime.dispose);
+
+    await expectLater(
+      runtime.createContext(
+        options: const QuickjsContextOptions(
+          environmentPatches: <QuickjsHostScript>[
+            QuickjsHostScript.js(
+              name: 'broken-context-bootstrap.js',
+              source: 'throw new Error("bootstrap failed")',
+            ),
+          ],
+        ),
+      ),
+      throwsA(isA<JsException>()),
+    );
+    expect(runtime.activeContextCount, 0);
+
+    final recovered = await runtime.createContext();
+    expect(runtime.activeContextCount, 1);
+    expect(await recovered.eval('1 + 1'), '2');
+    await recovered.dispose();
+    expect(runtime.activeContextCount, 0);
+  });
+
   // crash 后 runtime 进入 closed 状态，后续请求必须立即失败。
   test('native worker crash closes runtime for later evaluations', () async {
     final runtime = await NativeQuickjsWorkerRuntime.create();

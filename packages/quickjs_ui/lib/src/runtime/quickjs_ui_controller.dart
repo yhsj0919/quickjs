@@ -215,6 +215,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _startTimerPump();
       notifyListeners();
     } catch (error) {
       if (_disposed) {
@@ -235,6 +236,7 @@ final class QuickjsUiController extends ChangeNotifier {
     try {
       await _session.dispatchBatch(events);
       if (_disposed) return;
+      _startTimerPump();
       notifyListeners();
     } catch (error) {
       if (_disposed) return;
@@ -251,6 +253,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _startTimerPump();
       notifyListeners();
     } catch (error) {
       if (_disposed) {
@@ -269,6 +272,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _startTimerPump();
       notifyListeners();
     } catch (error) {
       if (_disposed) {
@@ -295,6 +299,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _startTimerPump();
       if (changed) {
         notifyListeners();
       }
@@ -323,6 +328,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      _startTimerPump();
       if (changed) {
         notifyListeners();
       }
@@ -516,10 +522,14 @@ final class QuickjsUiController extends ChangeNotifier {
   }
 
   void _startTimerPump() {
+    _scheduleTimerPump(Duration.zero);
+  }
+
+  void _scheduleTimerPump(Duration? delay) {
     _timerPump?.cancel();
-    _timerPump = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      unawaited(_pumpTimers());
-    });
+    _timerPump = null;
+    if (_disposed || delay == null) return;
+    _timerPump = Timer(delay, () => unawaited(_pumpTimers()));
   }
 
   void _stopTimerPump() {
@@ -534,13 +544,14 @@ final class QuickjsUiController extends ChangeNotifier {
     }
     _timerPumpRunning = true;
     try {
-      final changed = await _session.pumpTimers();
+      final result = await _session.pumpTimers();
       if (_disposed) {
         return;
       }
-      if (changed) {
+      if (result.changed) {
         notifyListeners();
       }
+      _scheduleTimerPump(result.nextDelay);
     } catch (error) {
       if (_disposed) {
         return;

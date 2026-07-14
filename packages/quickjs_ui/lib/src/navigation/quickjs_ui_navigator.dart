@@ -351,6 +351,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     _routes = _QuickjsUiRouteStack(
       root: widget.root,
       initialProps: widget.initialProps,
+      uiPlugins: widget.uiPlugins,
       onConsole: widget.onConsole,
     );
   }
@@ -365,8 +366,11 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
       _routes.reset(
         root: widget.root,
         initialProps: widget.initialProps,
+        uiPlugins: widget.uiPlugins,
         onConsole: widget.onConsole,
       );
+    } else if (oldWidget.uiPlugins != widget.uiPlugins) {
+      _routes.updateUiPlugins(widget.uiPlugins);
     }
   }
 
@@ -425,7 +429,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
             bundleRoot: entry.route.bundleRoot,
             initialProps: entry.params,
             mounts: _mountsFor(entry),
-            uiPlugins: _uiPluginsFor(entry),
+            uiPlugins: entry.uiPlugins,
             controller: entry.controller,
             loadingBuilder: (_) =>
                 const Center(child: CircularProgressIndicator()),
@@ -461,10 +465,6 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
       ...entry.route.mounts,
       _navigationMountFor(entry),
     ];
-  }
-
-  List<QuickjsUiPlugin> _uiPluginsFor(_QuickjsUiRouterEntry entry) {
-    return <QuickjsUiPlugin>[...widget.uiPlugins, ...entry.route.uiPlugins];
   }
 
   QuickjsHostMount _navigationMountFor(_QuickjsUiRouterEntry source) {
@@ -633,6 +633,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     final result = _routes.push(
       route: route,
       params: params,
+      uiPlugins: widget.uiPlugins,
       onConsole: widget.onConsole,
     );
     _startTransition(
@@ -656,6 +657,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     final replaced = _routes.replace(
       route: route,
       params: params,
+      uiPlugins: widget.uiPlugins,
       onConsole: widget.onConsole,
     );
     _startTransition(
@@ -1106,9 +1108,15 @@ final class _QuickjsUiRouteStack {
   _QuickjsUiRouteStack({
     required QuickjsUiAssetRoute root,
     required Map<String, Object?> initialProps,
+    required List<QuickjsUiPlugin> uiPlugins,
     QuickjsConsoleSink? onConsole,
   }) {
-    reset(root: root, initialProps: initialProps, onConsole: onConsole);
+    reset(
+      root: root,
+      initialProps: initialProps,
+      uiPlugins: uiPlugins,
+      onConsole: onConsole,
+    );
   }
 
   final List<_QuickjsUiRouterEntry> _entries = <_QuickjsUiRouterEntry>[];
@@ -1125,6 +1133,7 @@ final class _QuickjsUiRouteStack {
   void reset({
     required QuickjsUiAssetRoute root,
     required Map<String, Object?> initialProps,
+    required List<QuickjsUiPlugin> uiPlugins,
     QuickjsConsoleSink? onConsole,
   }) {
     dispose();
@@ -1132,6 +1141,7 @@ final class _QuickjsUiRouteStack {
       _QuickjsUiRouterEntry(
         route: root,
         params: initialProps,
+        uiPlugins: uiPlugins,
         onConsole: onConsole,
       ),
     );
@@ -1140,6 +1150,7 @@ final class _QuickjsUiRouteStack {
   Future<Object?> push({
     required QuickjsUiAssetRoute route,
     required Map<String, Object?> params,
+    required List<QuickjsUiPlugin> uiPlugins,
     QuickjsConsoleSink? onConsole,
   }) {
     final result = Completer<Object?>();
@@ -1147,6 +1158,7 @@ final class _QuickjsUiRouteStack {
       _QuickjsUiRouterEntry(
         route: route,
         params: params,
+        uiPlugins: uiPlugins,
         result: result,
         onConsole: onConsole,
       ),
@@ -1157,6 +1169,7 @@ final class _QuickjsUiRouteStack {
   _QuickjsUiRouterEntry replace({
     required QuickjsUiAssetRoute route,
     required Map<String, Object?> params,
+    required List<QuickjsUiPlugin> uiPlugins,
     QuickjsConsoleSink? onConsole,
   }) {
     final current = _entries.removeLast();
@@ -1164,6 +1177,7 @@ final class _QuickjsUiRouteStack {
       _QuickjsUiRouterEntry(
         route: route,
         params: params,
+        uiPlugins: uiPlugins,
         result: current.result,
         onConsole: onConsole,
       ),
@@ -1173,6 +1187,12 @@ final class _QuickjsUiRouteStack {
 
   _QuickjsUiRouterEntry removeTop() {
     return _entries.removeLast();
+  }
+
+  void updateUiPlugins(List<QuickjsUiPlugin> uiPlugins) {
+    for (final entry in _entries) {
+      entry.updateUiPlugins(uiPlugins);
+    }
   }
 
   void dispose() {
@@ -1188,10 +1208,15 @@ final class _QuickjsUiRouterEntry {
   _QuickjsUiRouterEntry({
     required this.route,
     required this.params,
+    required List<QuickjsUiPlugin> uiPlugins,
     QuickjsConsoleSink? onConsole,
     this.result,
   }) : id = _nextQuickjsUiRouterEntryId++,
-       controller = QuickjsUiController(onConsole: onConsole);
+       controller = QuickjsUiController(onConsole: onConsole),
+       _uiPlugins = List<QuickjsUiPlugin>.unmodifiable(<QuickjsUiPlugin>[
+         ...uiPlugins,
+         ...route.uiPlugins,
+       ]);
 
   final int id;
   final QuickjsUiAssetRoute route;
@@ -1200,7 +1225,20 @@ final class _QuickjsUiRouterEntry {
   final QuickjsUiController controller;
   final GlobalKey key = GlobalKey();
   List<QuickjsHostMount>? mounts;
+  List<QuickjsUiPlugin> _uiPlugins;
   bool navigationLocked = false;
+
+  List<QuickjsUiPlugin> get uiPlugins => _uiPlugins;
+
+  /// Replaces the effective plugin configuration only when the router itself
+  /// was reconfigured. Ordinary route rebuilds keep the same list identity so
+  /// [QuickjsUiView] does not mistake navigation animation for a page reload.
+  void updateUiPlugins(List<QuickjsUiPlugin> uiPlugins) {
+    _uiPlugins = List<QuickjsUiPlugin>.unmodifiable(<QuickjsUiPlugin>[
+      ...uiPlugins,
+      ...route.uiPlugins,
+    ]);
+  }
 
   void complete(Object? value) {
     if (result == null || result!.isCompleted) {

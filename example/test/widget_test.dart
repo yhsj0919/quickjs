@@ -409,9 +409,6 @@ void main() {
 
     await tester.tap(find.textContaining('打开 JSUI 子页'));
     await tester.pump();
-    await _pumpUntilFound(tester, find.text('允许 JSUI 内部跳转？'));
-    await tester.tap(find.text('始终允许此页面'));
-    await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 子页'));
     await tester.pumpAndSettle();
 

@@ -30,9 +30,13 @@ final class QuickjsUiDialogOverlayIntent extends QuickjsUiOverlayIntent {
   const QuickjsUiDialogOverlayIntent({
     required super.signature,
     required this.dialog,
+    required this.barrierDismissible,
+    required this.onDismissed,
   });
 
   final Widget dialog;
+  final bool barrierDismissible;
+  final VoidCallback onDismissed;
 }
 
 final class QuickjsUiBottomSheetOverlayIntent extends QuickjsUiOverlayIntent {
@@ -53,7 +57,7 @@ List<QuickjsUiOverlayIntent> collectQuickjsUiOverlayIntents(
   QuickjsUiRenderContext context,
 ) {
   final intents = <QuickjsUiOverlayIntent>[];
-  _visitNode(root, (node) {
+  for (final node in root.overlayNodes) {
     final intent = switch (node.type) {
       'SnackBar' => _snackBarIntent(context, node),
       'AlertDialog' => _dialogIntent(context, node),
@@ -63,7 +67,7 @@ List<QuickjsUiOverlayIntent> collectQuickjsUiOverlayIntents(
     if (intent != null) {
       intents.add(intent);
     }
-  });
+  }
   return intents;
 }
 
@@ -103,8 +107,18 @@ QuickjsUiOverlayIntent? _dialogIntent(
   }
   final title = quickjsUiNodeProp(node.props['title']);
   final content = quickjsUiNodeProp(node.props['content']);
+  final onDismissed = QuickjsUiProps.event(
+    node.props['onDismissed'] ?? node.props['onClosing'],
+  );
   return QuickjsUiDialogOverlayIntent(
     signature: jsonEncode(node.toMap()),
+    barrierDismissible:
+        QuickjsUiProps.boolValue(node.props['barrierDismissible']) != false,
+    onDismissed: () {
+      if (onDismissed != null) {
+        context.dispatchEvent(onDismissed);
+      }
+    },
     dialog: AlertDialog(
       title: title == null
           ? quickjsUiOptionalText(
@@ -146,36 +160,6 @@ bool _visible(QuickjsUiNode node) {
   return QuickjsUiProps.boolValue(node.props['visible']) != false;
 }
 
-void _visitNode(QuickjsUiNode node, void Function(QuickjsUiNode node) visitor) {
-  visitor(node);
-  for (final child in node.children) {
-    _visitNode(child, visitor);
-  }
-  for (final value in node.props.values) {
-    _visitNodeValue(value, visitor);
-  }
-}
-
-void _visitNodeValue(Object? value, void Function(QuickjsUiNode node) visitor) {
-  if (value is Map) {
-    final type = value['type'];
-    if (type is String && type.isNotEmpty) {
-      _visitNode(
-        QuickjsUiNode.fromMap(
-          value.map((key, value) => MapEntry<String, Object?>('$key', value)),
-        ),
-        visitor,
-      );
-    }
-    return;
-  }
-  if (value is List) {
-    for (final item in value) {
-      _visitNodeValue(item, visitor);
-    }
-  }
-}
-
 final class QuickjsUiOverlayLayer extends StatefulWidget {
   const QuickjsUiOverlayLayer({
     super.key,
@@ -194,8 +178,7 @@ final class QuickjsUiOverlayLayer extends StatefulWidget {
 
 final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   final Set<String> _shownSnackBars = <String>{};
-  final Set<String> _openDialogs = <String>{};
-  final Set<String> _openSheets = <String>{};
+  final Map<_ModalKey, _ModalEntry> _modals = <_ModalKey, _ModalEntry>{};
   bool _syncScheduled = false;
 
   @override
@@ -224,43 +207,114 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   void _syncOverlays() {
-    final active = <String>{
-      for (final intent in widget.intents) intent.signature,
-    };
-    _dismissInactiveOverlays(active);
-    for (final intent in widget.intents) {
-      switch (intent) {
-        case QuickjsUiSnackBarOverlayIntent():
-          _showSnackBar(intent);
-        case QuickjsUiDialogOverlayIntent():
-          _showDialog(intent);
-        case QuickjsUiBottomSheetOverlayIntent():
-          _showBottomSheet(intent);
-      }
+    final snackBars = <QuickjsUiSnackBarOverlayIntent>[
+      for (final intent in widget.intents)
+        if (intent is QuickjsUiSnackBarOverlayIntent) intent,
+    ];
+    final modals = <QuickjsUiOverlayIntent>[
+      for (final intent in widget.intents)
+        if (intent is QuickjsUiDialogOverlayIntent ||
+            intent is QuickjsUiBottomSheetOverlayIntent)
+          intent,
+    ];
+    _syncSnackBars(snackBars);
+    _syncModals(modals);
+  }
+
+  void _syncSnackBars(List<QuickjsUiSnackBarOverlayIntent> intents) {
+    final active = <String>{for (final intent in intents) intent.signature};
+    final removed = _shownSnackBars.where(
+      (signature) => !active.contains(signature),
+    );
+    if (removed.isNotEmpty) {
+      ScaffoldMessenger.maybeOf(widget.overlayContext)?.hideCurrentSnackBar();
+      _shownSnackBars.removeAll(removed.toList(growable: false));
+    }
+    for (final intent in intents) {
+      _showSnackBar(intent);
     }
   }
 
-  void _dismissInactiveOverlays(Set<String> active) {
-    final removedSnackBars = _shownSnackBars.where(
-      (signature) => !active.contains(signature),
-    );
-    if (removedSnackBars.isNotEmpty) {
-      ScaffoldMessenger.maybeOf(widget.overlayContext)?.hideCurrentSnackBar();
-      _shownSnackBars.removeAll(removedSnackBars.toList(growable: false));
+  /// Reconciles declarative modal intents with imperative Navigator routes.
+  ///
+  /// A dismissed modal remains acknowledged while the same `visible: true`
+  /// declaration is active. The page must observe onClosing/onDismissed and
+  /// render it inactive before a later false -> true transition can reopen it.
+  /// This is the same controlled-component contract for Dialog and BottomSheet.
+  void _syncModals(List<QuickjsUiOverlayIntent> intents) {
+    final active = <_ModalKey, QuickjsUiOverlayIntent>{
+      for (final intent in intents) _modalKey(intent): intent,
+    };
+    for (final key in _modals.keys.toList(growable: false)) {
+      if (active.containsKey(key)) {
+        continue;
+      }
+      final entry = _modals.remove(key);
+      if (entry?.phase == _ModalPhase.open) {
+        entry!.closeRoute();
+      }
     }
+    for (final entry in active.entries) {
+      if (_modals.containsKey(entry.key)) {
+        continue;
+      }
+      _openModal(entry.key, entry.value);
+    }
+  }
 
-    for (final signature in _openDialogs.toList(growable: false)) {
-      if (!active.contains(signature)) {
+  void _openModal(_ModalKey key, QuickjsUiOverlayIntent intent) {
+    late final _ModalEntry entry;
+    entry = _ModalEntry(closeRoute: () => _closeModalRoute(intent));
+    _modals[key] = entry;
+    _showModalRoute(intent).whenComplete(() {
+      final current = _modals[key];
+      final userInitiated = identical(current, entry);
+      if (userInitiated) {
+        entry.phase = _ModalPhase.dismissed;
+      }
+      _notifyModalClosed(intent, userInitiated: userInitiated);
+    });
+  }
+
+  Future<void> _showModalRoute(QuickjsUiOverlayIntent intent) {
+    return switch (intent) {
+      QuickjsUiDialogOverlayIntent() => showDialog<void>(
+        context: widget.overlayContext,
+        barrierDismissible: intent.barrierDismissible,
+        builder: (_) => intent.dialog,
+      ),
+      QuickjsUiBottomSheetOverlayIntent() => showModalBottomSheet<void>(
+        context: widget.overlayContext,
+        backgroundColor: intent.backgroundColor,
+        builder: (_) => intent.child,
+      ),
+      _ => throw StateError('Unsupported modal intent ${intent.runtimeType}'),
+    };
+  }
+
+  void _closeModalRoute(QuickjsUiOverlayIntent intent) {
+    switch (intent) {
+      case QuickjsUiDialogOverlayIntent():
         Navigator.maybeOf(widget.overlayContext, rootNavigator: true)?.pop();
-        _openDialogs.remove(signature);
-      }
-    }
-
-    for (final signature in _openSheets.toList(growable: false)) {
-      if (!active.contains(signature)) {
+      case QuickjsUiBottomSheetOverlayIntent():
         Navigator.maybeOf(widget.overlayContext)?.pop();
-        _openSheets.remove(signature);
-      }
+      default:
+        throw StateError('Unsupported modal intent ${intent.runtimeType}');
+    }
+  }
+
+  void _notifyModalClosed(
+    QuickjsUiOverlayIntent intent, {
+    required bool userInitiated,
+  }) {
+    switch (intent) {
+      case QuickjsUiDialogOverlayIntent():
+        if (userInitiated) intent.onDismissed();
+      case QuickjsUiBottomSheetOverlayIntent():
+        // BottomSheet historically reports both user and schema-driven close.
+        intent.onClosing();
+      default:
+        throw StateError('Unsupported modal intent ${intent.runtimeType}');
     }
   }
 
@@ -282,34 +336,50 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
     );
   }
 
-  void _showDialog(QuickjsUiDialogOverlayIntent intent) {
-    if (_openDialogs.contains(intent.signature)) {
-      return;
-    }
-    _openDialogs.add(intent.signature);
-    showDialog<void>(
-      context: widget.overlayContext,
-      builder: (_) => intent.dialog,
-    ).whenComplete(() => _openDialogs.remove(intent.signature));
-  }
-
-  void _showBottomSheet(QuickjsUiBottomSheetOverlayIntent intent) {
-    if (_openSheets.contains(intent.signature)) {
-      return;
-    }
-    _openSheets.add(intent.signature);
-    showModalBottomSheet<void>(
-      context: widget.overlayContext,
-      backgroundColor: intent.backgroundColor,
-      builder: (_) => intent.child,
-    ).whenComplete(() {
-      _openSheets.remove(intent.signature);
-      intent.onClosing();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return widget.child;
   }
+}
+
+enum _ModalKind { dialog, bottomSheet }
+
+enum _ModalPhase { open, dismissed }
+
+final class _ModalKey {
+  const _ModalKey(this.kind, this.signature);
+
+  final _ModalKind kind;
+  final String signature;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _ModalKey &&
+        other.kind == kind &&
+        other.signature == signature;
+  }
+
+  @override
+  int get hashCode => Object.hash(kind, signature);
+}
+
+final class _ModalEntry {
+  _ModalEntry({required this.closeRoute});
+
+  final VoidCallback closeRoute;
+  _ModalPhase phase = _ModalPhase.open;
+}
+
+_ModalKey _modalKey(QuickjsUiOverlayIntent intent) {
+  return switch (intent) {
+    QuickjsUiDialogOverlayIntent() => _ModalKey(
+      _ModalKind.dialog,
+      intent.signature,
+    ),
+    QuickjsUiBottomSheetOverlayIntent() => _ModalKey(
+      _ModalKind.bottomSheet,
+      intent.signature,
+    ),
+    _ => throw StateError('Unsupported modal intent ${intent.runtimeType}'),
+  };
 }
