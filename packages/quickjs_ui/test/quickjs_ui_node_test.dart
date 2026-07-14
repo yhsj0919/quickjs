@@ -3614,6 +3614,18 @@ export function dispose() { throw new Error('dispose failed'); }
     expect(requests, <QuickjsUiJsRouteRequest>[allowedRequest, allowedRequest]);
   });
 
+  test('exposes prepared navigation timeout configuration', () {
+    const options = QuickjsUiNavigationOptions(
+      preparedNavigationTimeout: Duration(seconds: 3),
+      lifecycleTimeout: Duration(milliseconds: 750),
+      maxJsRouteDepth: 12,
+    );
+
+    expect(options.preparedNavigationTimeout, const Duration(seconds: 3));
+    expect(options.lifecycleTimeout, const Duration(milliseconds: 750));
+    expect(options.maxJsRouteDepth, 12);
+  });
+
   test('controller refresh, restart and reload use distinct paths', () async {
     final engine = await Quickjs.create();
     final controller = QuickjsUiController(engine: engine);

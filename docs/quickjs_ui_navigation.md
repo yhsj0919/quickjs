@@ -143,6 +143,29 @@ final registry = QuickjsUiRouteRegistry(
 When rejected, `quickjsUiNavigation.push()` / `replace()` rejects its Promise.
 The JS page can catch the error and render an application-level message.
 
+Prepared operations expire after 10 seconds by default. This bounds the source
+route lock when an asynchronous `onRouteLeave` or `onHide` hook never settles.
+Expiry removes the prepared token and unlocks the source route; a late commit
+rejects instead of applying stale navigation. Hosts can change the limit on the
+registry:
+
+```dart
+final registry = QuickjsUiRouteRegistry(
+  options: const QuickjsUiNavigationOptions(
+    preparedNavigationTimeout: Duration(seconds: 15),
+    lifecycleTimeout: Duration(seconds: 3),
+    maxJsRouteDepth: 32,
+  ),
+);
+```
+
+`lifecycleTimeout` bounds `onRouteLeave` and `onHide` as one departure phase.
+After timeout the approved navigation continues; the hook Promise is no longer
+allowed to hold the route lock indefinitely, and a state patch returned later
+by that hook is discarded. `maxJsRouteDepth` bounds retained JSUI entries and
+their controllers. It applies only to JSUI-internal `push`; `replace`, `pop`,
+and native Flutter routes do not consume additional depth.
+
 ## Transition Intent
 
 Navigation intents may include a serializable `transition` object. Flutter maps

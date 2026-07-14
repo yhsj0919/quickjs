@@ -142,15 +142,41 @@ final class QuickjsUiRouteRegistry {
     this.nativeRoutes = const <String, QuickjsUiNativeRouteBuilder>{},
     this.jsRoutes = const <String, QuickjsUiAssetRoute>{},
     this.jsRoutePolicy = const QuickjsUiJsRoutePolicy(),
+    this.options = const QuickjsUiNavigationOptions(),
   });
 
   final Map<String, QuickjsUiNativeRouteBuilder> nativeRoutes;
   final Map<String, QuickjsUiAssetRoute> jsRoutes;
   final QuickjsUiJsRoutePolicy jsRoutePolicy;
+  final QuickjsUiNavigationOptions options;
 
   bool contains(String route) {
     return nativeRoutes.containsKey(route) || jsRoutes.containsKey(route);
   }
+}
+
+/// Reliability limits for JSUI-internal navigation.
+final class QuickjsUiNavigationOptions {
+  const QuickjsUiNavigationOptions({
+    this.preparedNavigationTimeout = const Duration(seconds: 10),
+    this.lifecycleTimeout = const Duration(seconds: 3),
+    this.maxJsRouteDepth = 32,
+  });
+
+  /// Maximum time between host policy acceptance and route commit.
+  ///
+  /// During this window the source route is locked while its JS
+  /// `routeLeave`/`hide` hooks run. Expiry removes the token and unlocks the
+  /// source; a late commit is rejected instead of reviving stale navigation.
+  final Duration preparedNavigationTimeout;
+
+  /// Maximum time navigation waits for `routeLeave` and `hide` together.
+  /// Timeout continues the already-approved route commit.
+  final Duration lifecycleTimeout;
+
+  /// Maximum number of retained entries in one JSUI-internal route stack.
+  /// Native Flutter routes do not consume this budget.
+  final int maxJsRouteDepth;
 }
 
 final class QuickjsUiAssetRoute {
@@ -340,8 +366,8 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     with SingleTickerProviderStateMixin {
   late final _QuickjsUiRouteStack _routes;
   late final AnimationController _transitionController;
-  final Map<int, _QuickjsUiPreparedNavigation> _preparedNavigations =
-      <int, _QuickjsUiPreparedNavigation>{};
+  final Map<int, _QuickjsUiPreparedNavigationSlot> _preparedNavigations =
+      <int, _QuickjsUiPreparedNavigationSlot>{};
   _QuickjsUiRouteOperation? _activeOperation;
 
   @override
@@ -365,6 +391,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
         oldWidget.onConsole != widget.onConsole ||
         oldWidget.initialProps != widget.initialProps) {
       _clearRouteOperation();
+      _clearPreparedNavigations();
       _routes.reset(
         root: widget.root,
         initialProps: widget.initialProps,
@@ -379,7 +406,7 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
   @override
   void dispose() {
     _clearRouteOperation();
-    _preparedNavigations.clear();
+    _clearPreparedNavigations();
     _transitionController.dispose();
     _routes.dispose();
     super.dispose();
@@ -498,6 +525,17 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
           },
         ),
         QuickjsHostProvider.dart(
+          name: 'quickjs_ui.navigation.${source.id}.lifecycleDeadline',
+          debugName: 'quickjs_ui navigation lifecycle deadline',
+          callback: (args, _) {
+            final token = args.isEmpty ? null : args[0];
+            if (token is! num) {
+              throw ArgumentError('quickjs_ui navigation token is required');
+            }
+            return _waitForLifecycleDeadline(source, token.toInt());
+          },
+        ),
+        QuickjsHostProvider.dart(
           name: 'quickjs_ui.navigation.${source.id}.commit',
           debugName: 'quickjs_ui navigation commit',
           callback: (args, _) {
@@ -505,7 +543,11 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
             if (token is! num) {
               throw ArgumentError('quickjs_ui navigation token is required');
             }
-            return _commitPreparedNavigation(source, token.toInt());
+            return _commitPreparedNavigation(
+              source,
+              token.toInt(),
+              lifecycleTimedOut: args.length > 1 && args[1] == true,
+            );
           },
         ),
       ],
@@ -518,22 +560,41 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
 (() => {
   const providers = globalThis.__quickjsHostProviders;
   const prepare = providers['quickjs_ui.navigation.${source.id}.prepare'];
+  const lifecycleDeadline = providers['quickjs_ui.navigation.${source.id}.lifecycleDeadline'];
   const commit = providers['quickjs_ui.navigation.${source.id}.commit'];
 
   async function navigate(action, target, params) {
     const prepared = await prepare(action, target, params);
     const lifecycle = globalThis.__quickjsUiPageLifecycle;
     const departure = prepared?.departure;
+    let lifecycleTimedOut = false;
     if (typeof lifecycle === 'function' && departure != null) {
-      try {
-        await lifecycle({ type: 'routeLeave', payload: departure.leave });
-        await lifecycle({ type: 'hide', payload: departure.hide });
-      } catch (_) {
-        // Lifecycle hooks observe navigation. They cannot veto a route after
-        // host policy has accepted and locked the prepared operation.
-      }
+      const cancellation = { cancelled: false };
+      const runDeparture = async () => {
+        try {
+          await lifecycle(
+            { type: 'routeLeave', payload: departure.leave },
+            cancellation
+          );
+          if (!cancellation.cancelled) {
+            await lifecycle(
+              { type: 'hide', payload: departure.hide },
+              cancellation
+            );
+          }
+        } catch (_) {
+          // Lifecycle hooks observe navigation. They cannot veto a route after
+          // host policy has accepted and locked the prepared operation.
+        }
+        return false;
+      };
+      lifecycleTimedOut = await Promise.race([
+        runDeparture(),
+        lifecycleDeadline(prepared.token)
+      ]);
+      cancellation.cancelled = lifecycleTimedOut;
     }
-    return commit(prepared.token);
+    return commit(prepared.token, lifecycleTimedOut);
   }
 
   globalThis.quickjsUiNavigation = Object.freeze({
@@ -599,6 +660,17 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
       if (jsRoute == null) {
         throw StateError('quickjs_ui route "$routeName" is not registered');
       }
+      final maxDepth = widget.registry.options.maxJsRouteDepth;
+      if (maxDepth <= 0) {
+        throw ArgumentError.value(
+          maxDepth,
+          'maxJsRouteDepth',
+          'must be greater than zero',
+        );
+      }
+      if (action == 'push' && _routes.length >= maxDepth) {
+        throw StateError('quickjs_ui JS route stack limit reached ($maxDepth)');
+      }
       await _ensureJsRouteAllowed(
         source: source,
         intent: intent,
@@ -626,19 +698,67 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
     _QuickjsUiPreparedNavigation prepared,
   ) {
     final token = _nextQuickjsUiPreparedNavigationId++;
-    _preparedNavigations[token] = prepared;
+    final timeoutDuration = widget.registry.options.preparedNavigationTimeout;
+    final lifecycleTimeout = widget.registry.options.lifecycleTimeout;
+    if (timeoutDuration <= Duration.zero) {
+      throw ArgumentError.value(
+        timeoutDuration,
+        'preparedNavigationTimeout',
+        'must be greater than zero',
+      );
+    }
+    if (lifecycleTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        lifecycleTimeout,
+        'lifecycleTimeout',
+        'must be greater than zero',
+      );
+    }
+    final lifecycleDeadline = Completer<bool>();
+    late final _QuickjsUiPreparedNavigationSlot slot;
+    slot = _QuickjsUiPreparedNavigationSlot(
+      prepared: prepared,
+      lifecycleDeadline: lifecycleDeadline,
+      lifecycleTimeout: Timer(lifecycleTimeout, () {
+        if (!lifecycleDeadline.isCompleted) {
+          lifecycleDeadline.complete(true);
+        }
+      }),
+      timeout: Timer(timeoutDuration, () {
+        final current = _preparedNavigations[token];
+        if (!identical(current, slot)) {
+          return;
+        }
+        _preparedNavigations.remove(token);
+        slot.finish(lifecycleTimedOut: true);
+        prepared.source.navigationLocked = false;
+        debugPrint(
+          '[quickjs_ui navigation] prepared ${prepared.action} expired '
+          'after ${timeoutDuration.inMilliseconds}ms',
+        );
+      }),
+    );
+    _preparedNavigations[token] = slot;
     return <String, Object?>{'token': token, 'departure': prepared.departure};
   }
 
   Future<Object?> _commitPreparedNavigation(
     _QuickjsUiRouterEntry source,
-    int token,
-  ) async {
-    final prepared = _preparedNavigations.remove(token);
-    if (prepared == null || !identical(prepared.source, source)) {
-      source.navigationLocked = false;
+    int token, {
+    required bool lifecycleTimedOut,
+  }) async {
+    final slot = _preparedNavigations[token];
+    if (slot == null || !identical(slot.prepared.source, source)) {
       throw StateError('quickjs_ui navigation preparation expired');
     }
+    _preparedNavigations.remove(token);
+    slot.finish(lifecycleTimedOut: lifecycleTimedOut);
+    if (lifecycleTimedOut) {
+      debugPrint(
+        '[quickjs_ui navigation] ${slot.prepared.action} lifecycle timed out',
+      );
+    }
+    final prepared = slot.prepared;
     try {
       _ensureCurrentNavigationSource(source, prepared.action);
       if (prepared.action == 'pop') {
@@ -686,6 +806,25 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
       source.navigationLocked = false;
       rethrow;
     }
+  }
+
+  Future<bool> _waitForLifecycleDeadline(
+    _QuickjsUiRouterEntry source,
+    int token,
+  ) {
+    final slot = _preparedNavigations[token];
+    if (slot == null || !identical(slot.prepared.source, source)) {
+      return Future<bool>.value(true);
+    }
+    return slot.lifecycleDeadline.future;
+  }
+
+  void _clearPreparedNavigations() {
+    for (final slot in _preparedNavigations.values) {
+      slot.finish(lifecycleTimedOut: true);
+      slot.prepared.source.navigationLocked = false;
+    }
+    _preparedNavigations.clear();
   }
 
   Future<Object?> _pushJsRoute(
@@ -1053,6 +1192,28 @@ class _QuickjsUiRouterState extends State<_QuickjsUiRouter>
   void _lockNavigationSource(_QuickjsUiRouterEntry source, String action) {
     _ensureNavigationSource(source, action);
     source.navigationLocked = true;
+  }
+}
+
+final class _QuickjsUiPreparedNavigationSlot {
+  const _QuickjsUiPreparedNavigationSlot({
+    required this.prepared,
+    required this.timeout,
+    required this.lifecycleTimeout,
+    required this.lifecycleDeadline,
+  });
+
+  final _QuickjsUiPreparedNavigation prepared;
+  final Timer timeout;
+  final Timer lifecycleTimeout;
+  final Completer<bool> lifecycleDeadline;
+
+  void finish({required bool lifecycleTimedOut}) {
+    timeout.cancel();
+    lifecycleTimeout.cancel();
+    if (!lifecycleDeadline.isCompleted) {
+      lifecycleDeadline.complete(lifecycleTimedOut);
+    }
   }
 }
 
