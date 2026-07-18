@@ -176,6 +176,15 @@ final class QuickjsUiRenderContext {
     ];
   }
 
+  /// Builds one child while preserving its structural path.
+  ///
+  /// Scrollable components use this from their item builders so nodes outside
+  /// the viewport do not need to be converted to widgets eagerly.
+  Widget childAt(QuickjsUiNode node, int index) {
+    RangeError.checkValidIndex(index, node.children, 'index');
+    return _buildChild(node, index);
+  }
+
   Widget _buildChild(QuickjsUiNode node, int index) {
     final child = node.children[index];
     final builder = _buildNodeAtPath;

@@ -10,6 +10,7 @@ import 'quickjs_ui_scrollable.dart';
 final QuickjsUiComponentBuilderMap quickjsUiScrollComponentBuilders =
     <String, QuickjsUiComponentBuilder>{
       'ListView': _buildListView,
+      'ListViewBuilder': _buildListViewBuilder,
       'SingleChildScrollView': _buildSingleChildScrollView,
       'GridView': _buildGridView,
       'PageView': _buildPageView,
@@ -18,40 +19,102 @@ final QuickjsUiComponentBuilderMap quickjsUiScrollComponentBuilders =
 
 Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final axis = QuickjsUiProps.axis(node.props['scrollDirection']);
-  final rawChildren = context.children(node);
   final rawKeys = quickjsUiChildKeys(node);
   final gap = quickjsUiGap(context, node);
-  final children = <Widget>[];
-  final childKeys = <String?>[];
-  for (var index = 0; index < rawChildren.length; index++) {
-    if (index > 0 && gap > 0) {
-      children.add(
-        axis == Axis.horizontal ? SizedBox(width: gap) : SizedBox(height: gap),
-      );
-      childKeys.add(null);
-    }
-    children.add(rawChildren[index]);
-    childKeys.add(rawKeys[index]);
-  }
   final animateItems =
       QuickjsUiProps.boolValue(node.props['animateItems']) ?? false;
-  if (animateItems && childKeys.any((key) => key == null || key.isEmpty)) {
+  if (animateItems && rawKeys.any((key) => key == null || key.isEmpty)) {
     throw const FormatException(
       'quickjs_ui ListView animateItems requires stable string keys on children',
     );
   }
   final listView = QuickjsUiScrollableList(
     axis: axis,
-    shrinkWrap:
-        QuickjsUiProps.boolValue(node.props['shrinkWrap']) ??
-        (node.props['shrinkWrap'] == null),
+    shrinkWrap: QuickjsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
     padding: context.edgeInsets(node.props['padding']),
-    childKeys: childKeys,
+    childCount: node.children.length,
+    childKeys: rawKeys,
+    childBuilder: (index) => context.childAt(node, index),
+    gap: gap,
+    itemExtent: context.spacing(node.props['itemExtent'], name: 'itemExtent'),
+    cacheExtent: context.spacing(
+      node.props['cacheExtent'],
+      name: 'cacheExtent',
+    ),
+    addAutomaticKeepAlives:
+        QuickjsUiProps.boolValue(node.props['addAutomaticKeepAlives']) ?? true,
+    addRepaintBoundaries:
+        QuickjsUiProps.boolValue(node.props['addRepaintBoundaries']) ?? true,
     scroll: QuickjsUiScrollCommand.fromNode(node),
     animateItems: animateItems,
     itemDuration: quickjsUiItemTransitionDuration(node),
     itemCurve: quickjsUiItemTransitionCurve(node),
-    children: children,
+  );
+  final withGestures = withQuickjsUiGestures(context, node, listView);
+  return quickjsUiWrapScrollNotifications(
+    context: context,
+    node: node,
+    child: withGestures,
+  );
+}
+
+Widget _buildListViewBuilder(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  final listKey = QuickjsUiProps.string(node.props['key']);
+  if (listKey == null || listKey.isEmpty) {
+    throw const FormatException(
+      'quickjs_ui ListView.builder requires a stable string key',
+    );
+  }
+  final onLoadMore = QuickjsUiProps.event(node.props['onLoadMore']);
+  final listView = QuickjsUiBuilderList(
+    listKey: listKey,
+    itemCount: QuickjsUiProps.intValue(node.props['itemCount']) ?? 0,
+    batchStart: QuickjsUiProps.intValue(node.props['batchStart']) ?? 0,
+    batchEnd: QuickjsUiProps.intValue(node.props['batchEnd']) ?? 0,
+    prefetchItemCount:
+        QuickjsUiProps.intValue(node.props['prefetchItemCount']) ?? 20,
+    resetToken: node.props['resetToken'],
+    hasMore:
+        onLoadMore != null &&
+        (QuickjsUiProps.boolValue(node.props['hasMore']) ?? false),
+    loading: QuickjsUiProps.boolValue(node.props['loading']) ?? false,
+    loadMoreThreshold:
+        QuickjsUiProps.intValue(node.props['loadMoreThreshold']) ?? 5,
+    loadingText: QuickjsUiProps.string(node.props['loadingText']),
+    axis: QuickjsUiProps.axis(node.props['scrollDirection']),
+    shrinkWrap: QuickjsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
+    padding: context.edgeInsets(node.props['padding']),
+    itemExtent: context.spacing(node.props['itemExtent'], name: 'itemExtent'),
+    estimatedItemExtent: context.spacing(
+      node.props['estimatedItemExtent'],
+      name: 'estimatedItemExtent',
+    ),
+    cacheExtent: context.spacing(
+      node.props['cacheExtent'],
+      name: 'cacheExtent',
+    ),
+    scroll: QuickjsUiScrollCommand.fromNode(node),
+    batchChildren: <Widget>[
+      for (var index = 0; index < node.children.length; index++)
+        context.childAt(node, index),
+    ],
+    requestRange: (start, end) => context.dispatch(<String, Object?>{
+      'method': '__quickjsUiListBuilderRange',
+      'listKey': listKey,
+      'start': start,
+      'end': end,
+    }),
+    loadMore: onLoadMore == null
+        ? null
+        : () {
+            context.dispatchEvent(
+              onLoadMore,
+              defaultCoalesceKey: quickjsUiEventKey(node, 'onLoadMore'),
+            );
+          },
   );
   final withGestures = withQuickjsUiGestures(context, node, listView);
   return quickjsUiWrapScrollNotifications(

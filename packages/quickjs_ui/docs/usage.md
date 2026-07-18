@@ -793,6 +793,74 @@ ListView({
 })
 ```
 
+数组驱动的列表也可以统一使用 `ListView.builder`，数据量较小时同样适用。宿主按
+`prefetchItemCount` 分批请求节点，不会把完整超长列表一次性传过 QuickJS 桥：
+
+```js
+ListView.builder({
+  key: 'message-list',                // 必填，必须稳定
+  itemCount: messages.length,
+  prefetchItemCount: 20,              // 可选，默认 20
+  cacheExtent: 320,
+  itemKey: index => messages[index].id,
+  itemBuilder: index => MessageRow({ message: messages[index] })
+})
+```
+
+`itemExtent` 不是必填项：
+
+- 不设置时按真实内容高度布局，并按条数预加载，适合聊天消息和不等高卡片。
+- `estimatedItemExtent` 只是加载占位的参考值，不会固定业务条目高度。
+- `itemExtent` 会固定每项高度，适合等高列表，布局成本最低。
+
+不提供固定或预估高度时，连续滚动不受影响，但宿主无法在尚未构建条目前准确知道
+完整滚动长度，也不能立即精确跳转到很远的索引。需要精确远距离定位的业务应提供
+`itemExtent`；第一版 builder 模式以连续向后滚动和分批预取为主。
+
+`ListView.builder` 不支持 `animateItems`。动态插入、删除动画继续使用
+`ListView({ children, animateItems: true })`。
+
+接口分页时，`itemCount` 应填写当前已经加载的数据量，而不是服务器总量：
+
+```js
+ListView.builder({
+  key: 'article-list',
+  itemCount: state.items.length,
+  hasMore: state.hasMore,
+  loading: state.loading,
+  loadMoreThreshold: 5,
+  loadingText: '正在加载下一页…',
+  onLoadMore: actions.loadMore(),
+  resetToken: state.queryVersion,
+  itemKey: index => state.items[index].id,
+  itemBuilder: index => ArticleRow({ article: state.items[index] })
+})
+```
+
+| 分页属性 | 说明 |
+|---|---|
+| `hasMore` | 是否还有下一页；为 `false` 时不再触发加载 |
+| `loading` | 当前是否正在请求；为 `true` 时阻止重复触发 |
+| `loadMoreThreshold` | 距离已加载末尾多少项时预取，默认 5 |
+| `onLoadMore` | 请求下一页的事件 |
+| `loadingText` | 底部加载提示；省略时只显示系统进度指示器 |
+| `resetToken` | 筛选、搜索或刷新后递增，用于清空旧列表缓存 |
+
+分页加载默认关闭，只有提供 `onLoadMore` 才会启用；未提供回调时不会预取下一页，
+也不会显示底部加载提示。下拉刷新同样默认关闭，只有使用 `RefreshIndicator` 并提供
+`onRefresh` 时才启用，不需要额外的布尔开关。
+
+下一页数据应追加到原数组，并保持 `key` 和 `resetToken` 不变，此时列表保留滚动位置。
+下拉刷新可以继续使用系统 `RefreshIndicator` 包裹 builder；刷新时替换数据并递增
+`resetToken`：
+
+```js
+RefreshIndicator({
+  onRefresh: actions.refresh(),
+  child: ListView.builder({ /* 分页列表属性 */ })
+})
+```
+
 ### 4.8 SingleChildScrollView
 
 单子滚动视图，属性与 `ListView` 的滚动相关字段类似，适合内容较少的可滚动区域。

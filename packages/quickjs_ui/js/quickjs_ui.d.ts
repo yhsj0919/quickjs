@@ -609,6 +609,25 @@ export type ListViewProps = AccessibilityProps & ScrollableProps & {
   animateItems?: boolean;
   itemTransitionDurationMs?: number;
   itemTransitionCurve?: Curve;
+  itemExtent?: number;
+  cacheExtent?: number;
+  addAutomaticKeepAlives?: boolean;
+  addRepaintBoundaries?: boolean;
+};
+
+export type ListViewBuilderProps = Omit<ListViewProps, 'children' | 'animateItems'> & {
+  key: string;
+  itemCount: number;
+  itemBuilder: (index: number) => QuickjsUiNode;
+  itemKey?: (index: number) => string;
+  prefetchItemCount?: number;
+  estimatedItemExtent?: number;
+  hasMore?: boolean;
+  loading?: boolean;
+  loadMoreThreshold?: number;
+  loadingText?: string;
+  onLoadMore?: QuickjsUiEvent;
+  resetToken?: string | number;
 };
 
 export type GridViewProps = AccessibilityProps & ScrollableProps & {
@@ -971,6 +990,9 @@ export declare function Container(props: ContainerProps): QuickjsUiNode;
 export declare function Image(props: ImageProps): QuickjsUiNode;
 export declare function Svg(props: SvgProps): QuickjsUiNode;
 export declare function ListView(props: ListViewProps): QuickjsUiNode;
+export declare namespace ListView {
+  function builder(props: ListViewBuilderProps): QuickjsUiNode;
+}
 export declare function SingleChildScrollView(
   props: SingleChildScrollViewProps
 ): QuickjsUiNode;

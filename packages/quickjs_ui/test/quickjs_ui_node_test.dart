@@ -1120,7 +1120,7 @@ export default Page({
     );
 
     final listView = tester.widget<ListView>(find.byType(ListView));
-    expect(listView.shrinkWrap, isTrue);
+    expect(listView.shrinkWrap, isFalse);
     expect(listView.padding, const EdgeInsets.all(8));
     expect(
       find.byWidgetPredicate(
@@ -2051,6 +2051,295 @@ export default Page({
     expect(events.last['maxScrollExtent'], greaterThan(0));
     expect(events.last['axis'], 'vertical');
   });
+
+  testWidgets('ListView lazily builds only viewport children', (tester) async {
+    var builtItems = 0;
+    final registry = QuickjsUiComponentRegistry.defaults()
+      ..register('ProbeItem', (context, node) {
+        builtItems++;
+        return Text(node.props['label']! as String);
+      });
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ListView',
+      'itemExtent': 48,
+      'cacheExtent': 0,
+      'children': <Object?>[
+        for (var index = 0; index < 1000; index++)
+          <String, Object?>{
+            'type': 'ProbeItem',
+            'key': 'probe-$index',
+            'label': 'Probe $index',
+          },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          height: 240,
+          child: QuickjsUiRenderer(
+            onEvent: (_) {},
+            registry: registry,
+          ).build(node),
+        ),
+      ),
+    );
+
+    expect(builtItems, lessThan(20));
+    expect(find.text('Probe 999'), findsNothing);
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    expect(listView.itemExtent, 48);
+    expect(listView.scrollCacheExtent?.value, 0);
+  });
+
+  testWidgets('ListView.builder requests the next item batch', (tester) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ListViewBuilder',
+      'key': 'builder-list',
+      'itemCount': 100000,
+      'batchStart': 0,
+      'batchEnd': 5,
+      'prefetchItemCount': 2,
+      'builderRevision': 0,
+      'children': <Object?>[
+        for (var index = 0; index < 5; index++)
+          <String, Object?>{
+            'type': 'SizedBox',
+            'key': 'builder-row-$index',
+            'height': 48,
+            'child': <String, Object?>{
+              'type': 'Text',
+              'data': 'Builder row $index',
+            },
+          },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          height: 240,
+          child: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(events, hasLength(1));
+    expect(events.single['method'], '__quickjsUiListBuilderRange');
+    expect(events.single['listKey'], 'builder-list');
+    expect(events.single['start'], 5);
+    expect(events.single['end'], 7);
+    expect(find.text('Builder row 0'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('ListView.builder enables pagination only with onLoadMore', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+
+    QuickjsUiNode list({required bool withCallback}) {
+      return QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'ListViewBuilder',
+        'key': 'paged-list',
+        'itemCount': 3,
+        'batchStart': 0,
+        'batchEnd': 3,
+        'prefetchItemCount': 2,
+        'hasMore': true,
+        'loading': false,
+        'loadingText': '正在加载下一页…',
+        if (withCallback)
+          'onLoadMore': <String, Object?>{'method': 'loadNextPage'},
+        'children': <Object?>[
+          for (var index = 0; index < 3; index++)
+            <String, Object?>{
+              'type': 'SizedBox',
+              'key': 'page-row-$index',
+              'height': 48,
+              'child': <String, Object?>{
+                'type': 'Text',
+                'data': 'Page row $index',
+              },
+            },
+        ],
+      });
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          height: 240,
+          child: QuickjsUiRenderer(
+            onEvent: events.add,
+          ).build(list(withCallback: false)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(events, isEmpty);
+    expect(find.text('正在加载下一页…'), findsNothing);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          height: 240,
+          child: QuickjsUiRenderer(
+            onEvent: events.add,
+          ).build(list(withCallback: true)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(events.single['method'], 'loadNextPage');
+    expect(find.text('正在加载下一页…'), findsOneWidget);
+  });
+
+  testWidgets('ListView.builder keeps offset while pages append', (
+    tester,
+  ) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+
+    QuickjsUiNode page({
+      required int itemCount,
+      required int batchStart,
+      required int batchEnd,
+      required bool loading,
+    }) {
+      return QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'ListViewBuilder',
+        'key': 'append-list',
+        'itemCount': itemCount,
+        'batchStart': batchStart,
+        'batchEnd': batchEnd,
+        'prefetchItemCount': 30,
+        'resetToken': 0,
+        'hasMore': true,
+        'loading': loading,
+        'onLoadMore': <String, Object?>{'method': 'loadNextPage'},
+        'children': <Object?>[
+          for (var index = batchStart; index < batchEnd; index++)
+            <String, Object?>{
+              'type': 'SizedBox',
+              'key': 'append-row-$index',
+              'height': 48,
+              'child': <String, Object?>{
+                'type': 'Text',
+                'data': 'Append row $index',
+              },
+            },
+        ],
+      });
+    }
+
+    Widget app(QuickjsUiNode node) =>
+        MaterialApp(home: SizedBox(height: 240, child: renderer.build(node)));
+
+    await tester.pumpWidget(
+      app(page(itemCount: 50, batchStart: 0, batchEnd: 50, loading: false)),
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
+    await tester.pumpAndSettle();
+    final before = tester
+        .widget<ListView>(find.byType(ListView))
+        .controller!
+        .offset;
+    expect(before, greaterThan(500));
+
+    await tester.pumpWidget(
+      app(page(itemCount: 50, batchStart: 0, batchEnd: 50, loading: true)),
+    );
+    await tester.pumpWidget(
+      app(page(itemCount: 100, batchStart: 0, batchEnd: 100, loading: false)),
+    );
+    await tester.pumpWidget(
+      app(page(itemCount: 150, batchStart: 0, batchEnd: 60, loading: false)),
+    );
+    await tester.pump();
+
+    final after = tester
+        .widget<ListView>(find.byType(ListView))
+        .controller!
+        .offset;
+    expect(after, closeTo(before, 1));
+    expect(find.text('Append row 0'), findsNothing);
+  });
+
+  testWidgets(
+    'RefreshIndicator does not refresh during upward builder scrolling',
+    (tester) async {
+      final events = <Map<String, Object?>>[];
+      final renderer = QuickjsUiRenderer(onEvent: events.add);
+
+      QuickjsUiNode page(int itemCount) {
+        return QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'RefreshIndicator',
+          'onRefresh': <String, Object?>{'method': 'refreshPage'},
+          'child': <String, Object?>{
+            'type': 'ListViewBuilder',
+            'key': 'refresh-builder-list',
+            'itemCount': itemCount,
+            'batchStart': 0,
+            'batchEnd': itemCount,
+            'prefetchItemCount': 10,
+            'resetToken': 0,
+            'hasMore': true,
+            'loading': false,
+            'onLoadMore': <String, Object?>{'method': 'loadNextPage'},
+            'children': <Object?>[
+              for (var index = 0; index < itemCount; index++)
+                <String, Object?>{
+                  'type': 'SizedBox',
+                  'key': 'refresh-row-$index',
+                  'height': 48,
+                  'child': <String, Object?>{
+                    'type': 'Text',
+                    'data': 'Refresh row $index',
+                  },
+                },
+            ],
+          },
+        });
+      }
+
+      Widget app(QuickjsUiNode node) => MaterialApp(
+        home: Scaffold(
+          body: SizedBox(height: 320, child: renderer.build(node)),
+        ),
+      );
+
+      await tester.pumpWidget(app(page(30)));
+      events.clear();
+      await tester.fling(find.byType(ListView), const Offset(0, -800), 4000);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpWidget(app(page(40)));
+      await tester.pumpAndSettle();
+
+      expect(
+        events.where((event) => event['method'] == 'refreshPage'),
+        isEmpty,
+      );
+      expect(
+        tester.widget<ListView>(find.byType(ListView)).controller!.offset,
+        greaterThan(0),
+      );
+
+      await tester.dragUntilVisible(
+        find.text('Refresh row 0'),
+        find.byType(ListView),
+        const Offset(0, 300),
+      );
+      events.clear();
+      await tester.fling(find.byType(ListView), const Offset(0, 500), 1200);
+      await tester.pumpAndSettle();
+      expect(
+        events.where((event) => event['method'] == 'refreshPage'),
+        hasLength(1),
+      );
+    },
+  );
 
   testWidgets('ListView scrolls by offset and child key tokens', (
     tester,
@@ -3031,6 +3320,59 @@ export default Page({
 
     expect(session.state, <String, Object?>{'count': 9});
     expect(session.node?.children.first.props['data'], 'Count: 9');
+  });
+
+  test('ListView.builder batches a 100,000 item JS list', () async {
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'list_builder_batching',
+        version: '0.1.0',
+        source: '''
+import { ListView, Page, Text } from 'quickjs_ui';
+
+export default Page({
+  createState() { return { value: 0, resetToken: 0 }; },
+  build(state) {
+    return ListView.builder({
+      key: 'huge-list',
+      itemCount: 100000,
+      prefetchItemCount: 10,
+      resetToken: state.resetToken,
+      itemBuilder: index => Text(`Row \${index}`)
+    });
+  },
+  updateValue(state) { return { value: state.value + 1 }; },
+  resetList(state) { return { resetToken: state.resetToken + 1 }; }
+});
+''',
+      ),
+    );
+
+    expect(session.node?.type, 'ListViewBuilder');
+    expect(session.node?.props['itemCount'], 100000);
+    expect(session.node?.children, hasLength(20));
+
+    await session.dispatch(<String, Object?>{
+      'method': '__quickjsUiListBuilderRange',
+      'listKey': 'huge-list',
+      'start': 20,
+      'end': 30,
+    });
+
+    expect(session.node?.props['batchStart'], 20);
+    expect(session.node?.children, hasLength(10));
+    expect(session.node?.children.first.props['data'], 'Row 20');
+
+    await session.dispatch(<String, Object?>{'method': 'updateValue'});
+    expect(session.node?.props['batchStart'], 20);
+
+    await session.dispatch(<String, Object?>{'method': 'resetList'});
+    expect(session.node?.props['batchStart'], 0);
+    expect(session.node?.children, hasLength(20));
   });
 
   test(
