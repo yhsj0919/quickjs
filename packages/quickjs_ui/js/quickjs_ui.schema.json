@@ -51,6 +51,7 @@
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/svg" },
         { "$ref": "#/$defs/listView" },
+        { "$ref": "#/$defs/listViewBuilder" },
         { "$ref": "#/$defs/singleChildScrollView" },
         { "$ref": "#/$defs/gridView" },
         { "$ref": "#/$defs/pageView" },
@@ -528,12 +529,44 @@
           "properties": {
             "type": { "const": "ListView" },
             "scrollDirection": { "type": "string", "enum": ["vertical", "horizontal"] },
+            "itemExtent": { "type": "number", "exclusiveMinimum": 0 },
+            "cacheExtent": { "type": "number", "minimum": 0 },
+            "addAutomaticKeepAlives": { "type": "boolean" },
+            "addRepaintBoundaries": { "type": "boolean" },
             "shrinkWrap": { "type": "boolean" },
             "padding": { "$ref": "#/$defs/edgeInsets" },
             "gap": { "$ref": "#/$defs/space" },
             "animateItems": { "type": "boolean" },
             "itemTransitionDurationMs": { "type": "integer", "minimum": 0 },
             "itemTransitionCurve": { "$ref": "#/$defs/curve" }
+          }
+        }
+      ]
+    },
+    "listViewBuilder": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/scrollable" },
+        {
+          "type": "object",
+          "required": ["key", "itemCount", "batchStart", "batchEnd", "children"],
+          "properties": {
+            "type": { "const": "ListViewBuilder" },
+            "key": { "type": "string", "minLength": 1 },
+            "itemCount": { "type": "integer", "minimum": 0 },
+            "batchStart": { "type": "integer", "minimum": 0 },
+            "batchEnd": { "type": "integer", "minimum": 0 },
+            "prefetchItemCount": { "type": "integer", "minimum": 1 },
+            "resetToken": { "type": ["string", "number"] },
+            "hasMore": { "type": "boolean" },
+            "loading": { "type": "boolean" },
+            "loadMoreThreshold": { "type": "integer", "minimum": 1 },
+            "loadingText": { "type": "string" },
+            "onLoadMore": { "$ref": "#/$defs/event" },
+            "itemExtent": { "type": "number", "exclusiveMinimum": 0 },
+            "estimatedItemExtent": { "type": "number", "exclusiveMinimum": 0 },
+            "cacheExtent": { "type": "number", "minimum": 0 },
+            "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
           }
         }
       ]

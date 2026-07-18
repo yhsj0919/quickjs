@@ -15,6 +15,43 @@ Initial direction:
 - Flutter renders the schema as native widgets.
 - JS does not directly create Flutter widgets or access DOM/CSSOM.
 
+## 定位与市面方案对比
+
+Flutter 动态化方案并不是同一种技术：有的在 Flutter 内实现 Web 运行时，有的把
+Flutter 风格代码转换为动态 DSL，也有的只根据服务端 JSON 构建 Widget。
+`quickjs_ui` 选择的是 **QuickJS 逻辑 + 受控 UI Schema + Flutter 原生 Widget**：
+首次加载可以提交完整 Schema，频繁更新和大数据组件则逐步采用局部更新及专用数据通道。
+
+`quickjs_ui` **不是使用 JavaScript 重新实现 Flutter，也不以 JavaScript 承载整个应用**。
+Flutter 始终是应用、导航、全局状态和原生能力的主体；JSUI 是一种可嵌入的动态页面能力，
+既可以作为独立页面进入 Flutter 导航栈，也可以嵌入现有 Flutter 页面的一块区域，并与宿主
+注册的原生组件混合。它提供类似 Web 页面加载、更新和 Bridge 的使用体验，但最终渲染为
+Flutter 原生 Widget，不实现 HTML、CSS、DOM 或浏览器环境。
+
+| 方案 | 技术路线 | 应用主体与集成粒度 | 优点 | 缺点或代价 | 更适合的场景 |
+| --- | --- | --- | --- | --- | --- |
+| [WebF](https://openwebf.com/en/docs/learn-webf/how-it-works) | 在 Flutter 中实现 DOM、CSSOM、布局和 JavaScript 运行环境 | Flutter 提供宿主；Web 技术栈可以承载整页、较完整的 Web 应用，也能与 Flutter 自定义元素混合 | 可使用 HTML/CSS 及 React、Vue、Svelte 等 Web 生态；前端迁移成本低；支持 Flutter 自定义元素 | Web 标准兼容面和运行时复杂度较大；DOM、CSS、布局、Bridge 都需要持续维护；长列表仍需专用组件 | 在 Flutter 应用中承载已有 Web 应用或 Web 技术栈 |
+| [Fair](https://github.com/wuba/Fair) | 将接近 Flutter 的代码转换为 DSL/JavaScript，再动态构建 Widget Tree | Flutter 应用仍是载体；动态化对象主要是由 Dart 源码转换得到的完整页面、Widget 或局部替换区域 | Flutter 开发者写法熟悉；直接面向 Flutter Widget；动态化能力较完整 | 编译转换链和 Flutter API 映射复杂；Flutter 升级时兼容成本较高；采用前需验证当前 Flutter 版本支持情况 | 希望保持 Flutter/Dart 风格的整页或局部动态化 |
+| [MXFlutter](https://github.com/tencent/mxflutter) | 以 TypeScript/JavaScript 实现 Flutter 的 Widget Tree、State、build 和 setState，目标覆盖完整应用开发模型 | JavaScript/TypeScript 是应用和 Widget Tree 的主体；Flutter 更接近渲染后端 | Flutter 风格直观；JS/TS 可以开发完整应用；前端人员容易理解 | 已基本停止公开演进，公开版本对应 Flutter 1.22；全量模拟 Flutter Widget/API 和双端生命周期的维护成本高 | 完整 JS Flutter 路线的历史架构参考 |
+| [dynamic_widget](https://github.com/dengyin2000/dynamic_widget) | 将服务端 JSON 解析成 Flutter Widget | Flutter 是应用主体；JSON 通常只描述一个页面或局部配置区域 | 简单、受控、容易审核；适合配置化页面和 A/B 测试 | 复杂状态、异步流程和业务逻辑需要另建体系；高频更新能力有限 | 表单、活动页、内容页和 Backend-Driven UI |
+| [flutter_d4rt](https://pub.dev/packages/flutter_d4rt) | 在应用内解释 Dart，并调用 Flutter API | Flutter 提供宿主；解释执行的 Dart 可以动态创建 Widget，边界取决于宿主暴露的 API | 动态代码仍使用 Dart 语义；理论上更贴近 Flutter API | 解释器、API 暴露、安全边界和版本兼容面较大；生态成熟度需要评估 | 动态 Dart/Flutter 的实验性场景 |
+| [Shorebird](https://docs.shorebird.dev/) | 下发已编译 Flutter/Dart 代码补丁 | Flutter 始终是完整应用主体；更新粒度是编译代码补丁，不是嵌入式动态页面 | 可以修复现有 Flutter 代码；业务仍按正常 Flutter 工程开发 | 属于应用补丁而非服务端驱动 UI；不提供受控 Schema 和页面能力模型 | 线上代码修复和应用补丁发布 |
+| **quickjs_ui** | QuickJS 页面逻辑生成受控 Schema，再映射为原生 Widget | **Flutter 始终是应用、导航和原生能力主体；JSUI 只作为独立页面或局部区域嵌入，并可与原生页面、原生组件混合** | 故障和权限可限制在页面 Session；运行时及协议较轻；便于校验、快照和回放；体验类似 Web 页面接入 | 需要维护自己的组件协议和开发工具；不能直接复用 HTML/CSS 或完整 Flutter API；不适合用 JS 承载整个应用 | Flutter 应用中的业务动态页面、局部动态区域和插件页面 |
+
+`quickjs_ui` 不以复刻 WebF、MXFlutter 或完整映射 Flutter API 为目标。WebF 更像“Flutter
+中的 Web Runtime”，MXFlutter 更像“用 JS 实现 Flutter 应用”，Fair 更像“Flutter 代码
+动态化”，而 `quickjs_ui` 的目标是“为 Flutter 应用补充可嵌入、受控的 JS 动态页面”。
+如果需求只是静态服务端布局，JSON SDUI 会更简单；
+如果需求是直接运行既有 React/Vue 页面，应优先评估 WebF；如果需求是二进制代码修复，
+Shorebird 属于另一条技术路线。
+
+因此，`quickjs_ui` 与 MXFlutter 虽然都包含“JS 生成 Flutter UI”，产品目标并不相同：
+MXFlutter 试图让 JS/TS 接管完整 Flutter 应用开发模型；`quickjs_ui` 则类似 Flutter 应用中的
+动态 Web 页面能力，按页面或区域接入，宿主可以随时选择原生实现、JSUI 实现或两者混合。
+
+详细的架构阶段、优先级和非目标见
+[`docs/quickjs_ui_evolution.md`](../../docs/quickjs_ui_evolution.md)。
+
 ## 0.1 protocol
 
 Pages should be authored as plain JavaScript objects. `QuickjsUiView.asset(path: ...)`

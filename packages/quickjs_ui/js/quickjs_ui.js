@@ -8,6 +8,8 @@ export const quickjsUiSchemaVersion = 1;
 export const quickjsUiHelperVersion = 1;
 let pageRenderDepth = 0;
 let componentRenderDepth = 0;
+let activeListBuilderContext = null;
+const LIST_BUILDER_RANGE_METHOD = '__quickjsUiListBuilderRange';
 
 export function Page(page) {
   if (page == null || typeof page !== 'object') {
@@ -29,6 +31,8 @@ export function Page(page) {
   let dispatchDepth = 0;
   const eventQueue = [];
   let drainingEvents = false;
+  const listBuilderRanges = new Map();
+  const listBuilderResetTokens = new Map();
 
   const runtime = {
     name: page.name,
@@ -62,6 +66,9 @@ export function Page(page) {
     },
     handleEvent(event) {
       requireMounted(mounted);
+      if (event?.method === LIST_BUILDER_RANGE_METHOD) {
+        return updateListBuilderRange(event);
+      }
       const queued = {
         event
       };
@@ -89,7 +96,17 @@ export function Page(page) {
       pageRenderDepth += 1;
       try {
         assertPlainState(state);
-        const node = page.build(state, props, actions);
+        const previousListBuilderContext = activeListBuilderContext;
+        activeListBuilderContext = {
+          ranges: listBuilderRanges,
+          resetTokens: listBuilderResetTokens
+        };
+        let node;
+        try {
+          node = page.build(state, props, actions);
+        } finally {
+          activeListBuilderContext = previousListBuilderContext;
+        }
         dirty = false;
         return {
           changed: true,
@@ -109,6 +126,8 @@ export function Page(page) {
       state = undefined;
       props = {};
       dirty = false;
+      listBuilderRanges.clear();
+      listBuilderResetTokens.clear();
       if (globalThis.__quickjsUiPageLifecycle === invokeLifecycle) {
         delete globalThis.__quickjsUiPageLifecycle;
       }
@@ -161,6 +180,19 @@ export function Page(page) {
       return commitResult(false);
     }
     state = nextState;
+    dirty = true;
+    version += 1;
+    return commitResult(true);
+  }
+
+  function updateListBuilderRange(event) {
+    const listKey = event?.listKey;
+    const start = Number.isInteger(event?.start) ? event.start : 0;
+    const end = Number.isInteger(event?.end) ? event.end : 0;
+    if (typeof listKey !== 'string' || listKey.length === 0 || start < 0 || end <= start) {
+      return commitResult(false);
+    }
+    listBuilderRanges.set(listKey, { start, end });
     dirty = true;
     version += 1;
     return commitResult(true);
@@ -598,6 +630,67 @@ export function Svg(props) {
 export function ListView(props) {
   return node('ListView', props);
 }
+
+ListView.builder = function builder(props = {}) {
+  const {
+    itemCount,
+    itemBuilder,
+    itemKey,
+    prefetchItemCount = 20,
+    resetToken = 0,
+    key,
+    ...listProps
+  } = props;
+  if (!Number.isInteger(itemCount) || itemCount < 0) {
+    throw new TypeError('quickjs_ui ListView.builder itemCount must be a non-negative integer');
+  }
+  if (typeof itemBuilder !== 'function') {
+    throw new TypeError('quickjs_ui ListView.builder requires itemBuilder(index)');
+  }
+  if (itemKey != null && typeof itemKey !== 'function') {
+    throw new TypeError('quickjs_ui ListView.builder itemKey must be a function');
+  }
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new TypeError('quickjs_ui ListView.builder requires a stable string key');
+  }
+  const batchSize = Number.isInteger(prefetchItemCount) && prefetchItemCount > 0
+    ? prefetchItemCount
+    : 20;
+  const initialEnd = itemCount <= 100 ? itemCount : Math.min(itemCount, batchSize * 2);
+  const context = activeListBuilderContext;
+  if (context != null && !Object.is(context.resetTokens.get(key), resetToken)) {
+    context.resetTokens.set(key, resetToken);
+    context.ranges.delete(key);
+  }
+  const range = context?.ranges.get(key) ?? { start: 0, end: initialEnd };
+  const start = Math.max(0, Math.min(range.start, itemCount));
+  const end = Math.max(start, Math.min(range.end, itemCount));
+  const children = [];
+  for (let index = start; index < end; index += 1) {
+    const child = itemBuilder(index);
+    if (child == null || typeof child !== 'object' || typeof child.type !== 'string') {
+      throw new TypeError('quickjs_ui ListView.builder itemBuilder must return a UI node');
+    }
+    if (itemKey != null && (typeof child.key !== 'string' || child.key.length === 0)) {
+      const resolvedKey = itemKey(index);
+      if (typeof resolvedKey !== 'string' || resolvedKey.length === 0) {
+        throw new TypeError('quickjs_ui ListView.builder itemKey must return a non-empty string');
+      }
+      child.key = resolvedKey;
+    }
+    children.push(child);
+  }
+  return node('ListViewBuilder', {
+    ...listProps,
+    key,
+    itemCount,
+    batchStart: start,
+    batchEnd: end,
+    prefetchItemCount: batchSize,
+    resetToken,
+    children
+  });
+};
 
 export function SingleChildScrollView(props) {
   return node('SingleChildScrollView', props);

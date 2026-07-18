@@ -80,6 +80,9 @@ flutter:
     - assets/quickjs_ui/permission_page.mjs
     - assets/quickjs_ui/profile_form_page.mjs
     - assets/quickjs_ui/scroll_transition_page.mjs
+    - assets/quickjs_ui/large_list_page.mjs
+    - assets/quickjs_ui/huge_list_page.mjs
+    - assets/quickjs_ui/infinite_list_page.mjs
     - assets/quickjs_ui/dev_panel_page.mjs
     - assets/quickjs_ui/todo_page.mjs
     - assets/quickjs_ui/quickjs_ui.schema.json

@@ -8,6 +8,8 @@ import 'pages/quickjs_ui/ui/quickjs_ui_dev_panel_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_diff_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_error_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_host_capabilities_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_huge_list_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_infinite_list_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_navigation_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_network_capability_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_network_counter_page.dart';
@@ -17,6 +19,7 @@ import 'pages/quickjs_ui/ui/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_profile_form_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_schema_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_scroll_transition_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_large_list_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_todo_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_video_player_plugin_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_widgets_demo_page.dart';
@@ -141,6 +144,21 @@ final List<ExamplePageSpec> quickjsUiWidgetExamplePages = [
     title: 'QuickJS UI 网络调试',
     description: '演示 bundle 网络加载请求列表、缓存命中、耗时和 Inspector 网络面板。',
     builder: (_) => const QuickjsUiNetworkInspectorPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 大列表测试',
+    description: '独立测试 2,000 个列表项的按需构建和滚动性能。',
+    builder: (_) => const QuickjsUiLargeListPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 超长列表测试',
+    description: '使用 ListView.builder 分批渲染并连续滚动 100,000 个列表项。',
+    builder: (_) => const QuickjsUiHugeListPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 无限加载测试',
+    description: '专门测试列表分页追加、加载提示、防重复请求和系统下拉刷新。',
+    builder: (_) => const QuickjsUiInfiniteListPage(),
   ),
 ];
 
