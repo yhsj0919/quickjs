@@ -111,6 +111,20 @@ Patch 必须满足以下约束：
 其他复杂组件通过 `QuickjsUiComponentRegistry` 接入；JS 只持有可序列化 props、事件描述和资源
 标识，不持有 Dart Widget、Controller 或原生对象。
 
+### Canvas 2D（后期能力）
+
+Canvas 按专用高性能组件设计：JS 侧记录受控的 2D 绘制命令，通过显式 `commit()` 批量提交；
+Flutter 侧持有 `CustomPainter`、Canvas、图片资源和绘制缓存并完成最终渲染。不能把 Dart Canvas
+对象代理给 JS，也不能让每一条绘制指令单独跨 Bridge。
+
+首版候选范围包括基础形状、Path、fill/stroke、save/restore、变换、裁剪、文本、图片和局部坐标
+手势。图片使用 resource id，手势由 Flutter 命中，高频事件需要节流；动画优先交给 Flutter 帧
+调度。运行时需要限制命令数量、Path 复杂度、图片尺寸、内存和绘制时间，并在 Inspector 中暴露
+批次大小、重绘次数和耗时。
+
+Canvas 只先列入计划，具体 API 由第一个真实业务页面决定。首版不追求完整 HTML Canvas 兼容，
+不做 WebGL、任意 shader、完整滤镜或高频像素回读，避免在没有使用约束时提前固化错误协议。
+
 ## 7. 开发工具和类型系统
 
 - 从 Schema、组件注册信息和 host capability 生成 TypeScript 定义。
@@ -151,7 +165,8 @@ Patch 必须满足以下约束：
 3. 完善列表/网格专用通道和 Inspector 可观测性。
 4. 只有通用性能数据需要时，再设计最小 Patch 协议及帧内批处理，不追求虚拟 DOM。
 5. 生成组件及 host API 类型，建立第三方组件一致性测试。
-6. 最后补生产签名、灰度、回滚和平台治理集成。
+6. 出现真实绘图业务后，按业务需要实现最小 Canvas 2D 命令集和性能基线。
+7. 最后补生产签名、灰度、回滚和平台治理集成。
 
 这条路线保留了 Schema 驱动方案的可控性，同时吸收 WebF 的批量更新、脏区思想和专用列表能力，
 但避免承担完整 Web 平台兼容成本。

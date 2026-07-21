@@ -669,6 +669,26 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 - [ ] 向 `quickjs` core 申请：`debugPause` / `debugStep` / 自动 source map 挂载。
 - [ ] 评估 CDP/DAP 或 VS Code 调试适配，不阻塞 0.5/0.6。
 
+### 后期：Canvas 2D（按真实业务推进）
+
+Canvas 作为 Flutter 宿主提供的高性能原生组件接入，不在 JS 中模拟 Flutter `Canvas`，也不让
+JS 持有 `CustomPainter`、`Paint`、`Path` 或其他 Dart 对象。JS 侧提供接近 Canvas 2D 的受控
+绘制 API，将一批可序列化绘制命令通过显式 `commit()` 提交给 Flutter，再由
+`CustomPainter` / Flutter Canvas 完成绘制。
+
+- [ ] 根据第一个真实 Canvas 页面确定首版能力边界，不先追求完整 HTML Canvas 兼容。
+- [ ] 定义 `Canvas` schema 组件、稳定 canvas key、尺寸、像素比、重绘和销毁生命周期。
+- [ ] 定义 JS 侧 2D command recorder 与批量 `commit()` 协议，禁止每条绘制命令单独跨 Bridge。
+- [ ] 首版候选：矩形、圆、线段、Path、fill/stroke、线宽、透明度、save/restore、基础变换和裁剪。
+- [ ] 文本绘制和测量统一使用 Flutter 字体与资源解析，明确不同平台字体度量差异。
+- [ ] 图片通过 resource id 引用并由 Flutter 缓存、解码和释放，不在命令列表中重复传输二进制。
+- [ ] 点击、拖动等手势由 Flutter 命中并回传局部坐标；高频移动事件采用节流、合并和背压。
+- [ ] 动画优先由 Flutter 帧调度和原生动画参数驱动；不把逐帧 JS Bridge 作为默认动画方式。
+- [ ] 设置单次命令数、Path 复杂度、资源尺寸、内存和执行时间限制，错误进入页面级 error boundary。
+- [ ] Inspector 记录 command batch 大小、绘制耗时、重绘次数、图片缓存和被拒绝的超限命令。
+- [ ] 首个真实业务落地后补对应 Demo、golden/交互测试和性能基线。
+- [ ] 首版不做 WebGL、任意 shader、完整滤镜体系和高频 `getImageData()` 像素回传。
+
 ### 0.9+：可选 DSL
 
 等 `init/render/dispatch + UiNode schema` 稳定后，再考虑 `.ux` 或 template 语法。DSL 必须编译成
