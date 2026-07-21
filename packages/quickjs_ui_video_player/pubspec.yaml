@@ -14,7 +14,7 @@ dependencies:
     path: ../../
   quickjs_ui:
     path: ../quickjs_ui
-  video_player: ^2.11.1
+  video_player: ^2.13.0
 
 dev_dependencies:
   flutter_test:
