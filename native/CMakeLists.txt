@@ -6,8 +6,8 @@ set(QUICKJS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../third_party/quickjs")
 if(NOT EXISTS "${QUICKJS_ROOT}/CMakeLists.txt")
   message(FATAL_ERROR
     "QuickJS sources not found at ${QUICKJS_ROOT}. "
-    "Run: git submodule update --init --recursive "
-    "or: .\\tool\\update_quickjs.ps1")
+    "The package is incomplete; third_party/quickjs must be included in the "
+    "published plugin archive.")
 endif()
 
 set(QJS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
