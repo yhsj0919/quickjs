@@ -1423,10 +1423,6 @@ try {
     if (depth > budget.maxDepth) {
       return unsupported('object graph is too deep');
     }
-    budget.nodes += 1;
-    if (budget.nodes > budget.maxNodes) {
-      return unsupported('object graph is too large');
-    }
     if (value === undefined) {
       return { type: 'undefined' };
     }
@@ -1451,6 +1447,13 @@ try {
     }
     if (valueType !== 'object') {
       return unsupported(valueType);
+    }
+    // The node budget protects recursive containers. Primitive leaves are
+    // bounded by their owning arrays/objects and should not make a flat scene
+    // description fail merely because its commands have many numeric fields.
+    budget.nodes += 1;
+    if (budget.nodes > budget.maxNodes) {
+      return unsupported('object graph is too large');
     }
     if (seen.has(value)) {
       return unsupported('circular reference');
@@ -3082,10 +3085,6 @@ String _jsValueConvertFunctionSource() {
   if (depth > budget.maxDepth) {
     return unsupported('object graph is too deep');
   }
-  budget.nodes += 1;
-  if (budget.nodes > budget.maxNodes) {
-    return unsupported('object graph is too large');
-  }
   if (value === undefined) {
     return { type: 'undefined' };
   }
@@ -3110,6 +3109,12 @@ String _jsValueConvertFunctionSource() {
   }
   if (valueType !== 'object') {
     return unsupported(valueType);
+  }
+  // Count recursive containers, not primitive leaves. This keeps the guard
+  // meaningful while allowing large flat display lists and numeric datasets.
+  budget.nodes += 1;
+  if (budget.nodes > budget.maxNodes) {
+    return unsupported('object graph is too large');
   }
   if (seen.has(value)) {
     return unsupported('circular reference');

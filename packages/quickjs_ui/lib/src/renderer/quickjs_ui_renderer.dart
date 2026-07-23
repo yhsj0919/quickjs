@@ -5,8 +5,11 @@ import '../diagnostics/quickjs_ui_diff_stats.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_registry.dart';
+import 'quickjs_ui_canvas_scene.dart';
+import 'quickjs_ui_effects.dart';
 import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
+import 'quickjs_ui_snapshot.dart';
 
 typedef QuickjsUiDiffStatsListener = void Function(QuickjsUiDiffStats stats);
 
@@ -24,6 +27,10 @@ final class QuickjsUiRenderer {
   final QuickjsUiEventEnvelopeHandler? onUiEvent;
   final QuickjsUiDiffStatsListener? onDiffStats;
   final QuickjsUiComponentRegistry registry;
+  final QuickjsUiSnapshotRegistry snapshotRegistry =
+      QuickjsUiSnapshotRegistry();
+  final QuickjsUiCanvasSceneRegistry canvasSceneRegistry =
+      QuickjsUiCanvasSceneRegistry();
   late final QuickjsUiEventDispatcher _eventDispatcher =
       QuickjsUiEventDispatcher(_dispatchEnvelope);
   final Map<String, _RenderedNode> _cache = <String, _RenderedNode>{};
@@ -86,6 +93,8 @@ final class QuickjsUiRenderer {
       onEvent: onEvent,
       eventDispatcher: _eventDispatcher,
       buildContext: buildContext,
+      canvasSceneRegistry: canvasSceneRegistry,
+      snapshotRegistry: snapshotRegistry,
     );
     final widget = buildNode(node);
     _cache
@@ -126,7 +135,8 @@ final class QuickjsUiRenderer {
     final key = _nodeKey(node);
     if (key == null) {
       onDiff(null, false);
-      return _withAccessibility(
+      return _decorateNode(
+        nodeContext,
         node,
         registry.build(nodeContext, node, controller: controller),
       );
@@ -141,7 +151,8 @@ final class QuickjsUiRenderer {
     onDiff(key, false);
     final widget = KeyedSubtree(
       key: ValueKey<String>(key),
-      child: _withAccessibility(
+      child: _decorateNode(
+        nodeContext,
         node,
         registry.build(nodeContext, node, controller: controller),
       ),
@@ -199,6 +210,8 @@ final class QuickjsUiRenderer {
     }
     _lifecycleComponents.clear();
     _eventDispatcher.dispose();
+    canvasSceneRegistry.clear();
+    snapshotRegistry.dispose();
     _cache.clear();
     _shown = false;
     _paused = false;
@@ -282,6 +295,14 @@ final class QuickjsUiRenderer {
       seen[key] = '$path/$index';
     }
   }
+}
+
+Widget _decorateNode(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+  Widget child,
+) {
+  return withQuickjsUiEffects(context, node, _withAccessibility(node, child));
 }
 
 Widget _withAccessibility(QuickjsUiNode node, Widget child) {

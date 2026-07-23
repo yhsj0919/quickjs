@@ -1,6 +1,7 @@
 import 'example_page_spec.dart';
 import 'pages/quickjs_ui/integrated/quickjs_ui_weather_demo_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_bundle_counter_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_canvas_clock_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_controls_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_counter_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_custom_components_page.dart';
@@ -15,6 +16,7 @@ import 'pages/quickjs_ui/ui/quickjs_ui_network_capability_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_network_counter_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_network_inspector_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_package_demo_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_particle_demo_pages.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_permission_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_profile_form_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_schema_page.dart';
@@ -28,6 +30,7 @@ final List<ExamplePageSpec> quickjsUiExamplePages = [
   ...quickjsUiCoreExamplePages,
   ...quickjsUiWidgetExamplePages,
   ...quickjsUiIntegratedExamplePages,
+  ...quickjsUiParticleExamplePages,
 ];
 
 final List<ExamplePageSpec> quickjsUiCoreExamplePages =
@@ -167,5 +170,62 @@ final List<ExamplePageSpec> quickjsUiIntegratedExamplePages = [
     title: 'QuickJS UI 天气综合 Demo',
     description: '实际天气卡片场景：IP 定位、刷新、当前天气、小时预报和生活提示。',
     builder: (_) => const QuickjsUiWeatherDemoPage(),
+  ),
+];
+
+// Repository rule: newly created demos are appended to the final example
+// group so they always appear after every existing demo.
+final List<ExamplePageSpec> quickjsUiParticleExamplePages = [
+  ExamplePageSpec(
+    title: 'QuickJS UI Canvas 模拟时钟',
+    description: '由 JS Canvas 2D 风格生成绘图场景，并由 Flutter VSync 本地驱动。',
+    builder: (_) => const QuickjsUiCanvasClockPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Particle FX · 星际穿梭',
+    description: '520 条带景深和加色混合的高速星轨，本地 VSync 动画。',
+    builder: (_) => const QuickjsUiStarfieldPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Particle FX · 霓虹星系',
+    description: '300 个粒子组成多旋臂星系，静态轨道缓存并在宿主本地旋转。',
+    builder: (_) => const QuickjsUiNeonGalaxyPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Particle FX · 萤火虫花园',
+    description: '260 个独立缓动粒子，以不同周期漂移、呼吸和发光。',
+    builder: (_) => const QuickjsUiFirefliesPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Particle FX · 能量爆发',
+    description: '360 个径向粒子和脉冲核心组成循环能量爆发。',
+    builder: (_) => const QuickjsUiEnergyBurstPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Canvas 控件 · 弧形功率仪表盘',
+    description: '可拖动调节的分段渐变进度弧，包含刻度、指针、数值和语义信息。',
+    builder: (_) => const QuickjsUiArcGaugePage(),
+  ),
+  ExamplePageSpec(
+    title: 'Canvas 特效 · Snappable 灰飞烟灭',
+    description: '参考 Snappable 的 16 层错峰消散算法，点击卡片触发粒子化并可再次点击恢复。',
+    builder: (_) => const QuickjsUiSnappableDustPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Universal FX · 任意控件本地动画',
+    description:
+        '任意 Flutter/JS 节点统一使用 opacity、transform、clip、blur 和 colorFilter，并由 VSync 本地驱动。',
+    builder: (_) => const QuickjsUiUniversalEffectsPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Control System · 状态与结构插槽',
+    description: '统一控件状态模型，并演示 Button、Switch、Slider 和输入框的内部结构插槽。',
+    builder: (_) => const QuickjsUiControlStatesSlotsPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Control Motion · 状态过渡动画',
+    description:
+        'Button、Switch、Slider 和输入框共享 Flutter VSync 本地状态插值，支持颜色、边框、尺寸、透明度与缩放。',
+    builder: (_) => const QuickjsUiControlStateTransitionsPage(),
   ),
 ];

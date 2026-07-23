@@ -11,7 +11,7 @@ class ExampleIndexPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('quickjs 示例'),
@@ -20,6 +20,7 @@ class ExampleIndexPage extends StatelessWidget {
               Tab(text: 'Core'),
               Tab(text: 'UI'),
               Tab(text: '综合'),
+              Tab(text: 'Particle FX'),
             ],
           ),
         ),
@@ -33,6 +34,7 @@ class ExampleIndexPage extends StatelessWidget {
             ),
             _ExamplePageList(pages: quickjsUiWidgetExamplePages),
             _ExamplePageList(pages: quickjsUiIntegratedExamplePages),
+            _ExamplePageList(pages: quickjsUiParticleExamplePages),
           ],
         ),
       ),

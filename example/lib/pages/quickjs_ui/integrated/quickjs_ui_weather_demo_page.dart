@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:quickjs/quickjs.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 import 'package:quickjs_ui_video_player/quickjs_ui_video_player.dart';
@@ -38,7 +38,7 @@ class _QuickjsUiWeatherDemoPageState extends State<QuickjsUiWeatherDemoPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // appBar: AppBar(title: const Text('QuickJS UI 天气综合 Demo')),
+      appBar: AppBar(title: const Text('QuickJS UI 天气综合 Demo')),
       body: QuickjsUiView.asset(
         path: QuickjsUiWeatherDemoPage.path,
         controller: _controller,

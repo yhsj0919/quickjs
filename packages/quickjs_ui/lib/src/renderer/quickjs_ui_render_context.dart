@@ -6,6 +6,8 @@ import '../resource/quickjs_ui_resource.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import '../theme/quickjs_ui_design_tokens.dart';
+import 'quickjs_ui_canvas_scene.dart';
+import 'quickjs_ui_snapshot.dart';
 
 // Keep the public constructor parameter named `buildNode`.
 // ignore_for_file: prefer_initializing_formals
@@ -65,9 +67,14 @@ final class QuickjsUiRenderContext {
     QuickjsUiPathNodeBuilder? buildNodeAtPath,
     String path = '0',
     this.buildContext,
+    QuickjsUiCanvasSceneRegistry? canvasSceneRegistry,
+    QuickjsUiSnapshotRegistry? snapshotRegistry,
   }) : _buildNode = buildNode,
        _buildNodeAtPath = buildNodeAtPath,
        _onUiEvent = onUiEvent,
+       canvasSceneRegistry =
+           canvasSceneRegistry ?? QuickjsUiCanvasSceneRegistry(),
+       snapshotRegistry = snapshotRegistry ?? QuickjsUiSnapshotRegistry(),
        onEvent =
            onEvent ??
            ((event) => onUiEvent(QuickjsUiEventEnvelope.command(event))),
@@ -81,6 +88,8 @@ final class QuickjsUiRenderContext {
   final QuickjsUiEventDispatcher? _eventDispatcher;
   final String _path;
   final BuildContext? buildContext;
+  final QuickjsUiCanvasSceneRegistry canvasSceneRegistry;
+  final QuickjsUiSnapshotRegistry snapshotRegistry;
 
   QuickjsUiRenderContext withPath(String path) {
     return QuickjsUiRenderContext(
@@ -90,6 +99,8 @@ final class QuickjsUiRenderContext {
       onEvent: onEvent,
       eventDispatcher: _eventDispatcher,
       buildContext: buildContext,
+      canvasSceneRegistry: canvasSceneRegistry,
+      snapshotRegistry: snapshotRegistry,
       path: path,
     );
   }
@@ -174,6 +185,25 @@ final class QuickjsUiRenderContext {
       for (var index = 0; index < node.children.length; index += 1)
         _buildChild(node, index),
     ];
+  }
+
+  /// Builds a named structural slot stored in [node.props].
+  ///
+  /// Slots use the same JSON node shape as `child`, while keeping independent
+  /// structural paths so retained rendering and keyed state continue to work.
+  Widget? slot(QuickjsUiNode node, String name) {
+    final value = node.props[name];
+    if (value == null) {
+      return null;
+    }
+    final slotNode = QuickjsUiNode.fromMap(
+      QuickjsUiProps.map(value, name: '$name slot'),
+    );
+    final builder = _buildNodeAtPath;
+    if (builder == null) {
+      return build(slotNode);
+    }
+    return builder(slotNode, '$_path/@$name');
   }
 
   /// Builds one child while preserving its structural path.

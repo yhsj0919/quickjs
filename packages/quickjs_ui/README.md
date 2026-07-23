@@ -169,6 +169,7 @@ Supported widgets:
 - `Switch`
 - `Radio`
 - `DropdownButton`
+- `Canvas`
 
 `TextField` supports controlled `value`, `onChanged`, `onSubmitted`, `onFocus`,
 and `onBlur` event descriptors. Flutter dispatches the current string value
@@ -210,6 +211,188 @@ for editor hints and CI checks against plain object UI schema.
 `lib/src/runtime/quickjs_ui_helpers.g.dart` is generated from
 `packages/quickjs_ui/js/quickjs_ui.js`. After editing the JS helper, run
 `dart run tool/generate_quickjs_ui_helpers.dart` from `packages/quickjs_ui`.
+
+## Canvas 2D authoring style
+
+Use the familiar browser Canvas 2D style. The callback runs once in QuickJS
+and records a display list; Flutter then renders and animates that list locally.
+
+```js
+import { animate, Canvas } from 'quickjs_ui';
+
+Canvas({
+  width: 320,
+  height: 320,
+  staticDraw(ctx) {
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, 320, 320);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 2;
+    ctx.strokeCircle(160, 160, 130);
+  },
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(160, 160);
+    ctx.rotate(animate(0, Math.PI * 2, {
+      durationMs: 1000,
+      repeat: true
+    }));
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.drawLine(0, 15, 0, -120);
+    ctx.restore();
+  }
+});
+```
+
+Familiar operations include `save`, `restore`, `translate`, `rotate`, `scale`,
+`beginPath`, `moveTo`, `lineTo`, `quadraticCurveTo`, `bezierCurveTo`, `arc`,
+`fill`, `stroke`, `fillRect`, `strokeRect`, `clearRect`, and `fillText`.
+`fillCircle`, `strokeCircle`, and `drawLine` are convenience methods.
+`staticDraw` is cached as a Flutter `ui.Picture`; `draw` may contain local
+`animate()` values and repaints directly from VSync without a per-frame
+QuickJS bridge call.
+
+For a large scene that must start immediately after input, register it once
+with `sceneKey`, then reuse it without resending `draw` or `commands`.
+`playToken` restarts local time, `paused` preserves the scene without ticking,
+and `reverse` plays a finite scene backwards.
+
+```js
+Canvas({
+  key: 'retained-burst',
+  sceneKey: 'burst',
+  resources: {
+    source: state.sourceSnapshot,
+    target: state.targetSnapshot
+  },
+  paused: state.mode === 'idle',
+  playToken: state.run,
+  reverse: state.mode === 'restoring',
+  ...(publishScene ? { draw: drawBurst } : {})
+});
+```
+
+Retained scenes are page-scoped, bounded, and released with the renderer.
+`ctx.drawImage({ slot: 'source' }, ...)` keeps snapshot ids out of the retained
+display list, so a transition can replace source and target images without
+rebuilding or resending its particle commands.
+
+## Control states and structural slots
+
+`ElevatedButton`, `TextButton`, `OutlinedButton`, `Switch`, `Slider`,
+`TextField`, and `TextFormField` share one state model. `normal` is the base
+style; active states override it with this priority:
+`disabled > pressed > selected > focused > hovered > normal`.
+
+```js
+ElevatedButton({
+  leading: Icon({ icon: 'bolt' }),
+  child: Text('Run'),
+  trailing: Icon({ icon: 'arrow_forward' }),
+  gap: 8,
+  stateStyles: {
+    normal: { backgroundColor: '#172554', foregroundColor: '#dbeafe' },
+    hovered: { backgroundColor: '#1e3a8a' },
+    focused: { borderColor: '#22d3ee', borderWidth: 2 },
+    pressed: { backgroundColor: '#0891b2' },
+    disabled: { backgroundColor: '#1e293b' }
+  },
+  onPressed: actions.run()
+});
+```
+
+Buttons expose `leading / content / child / trailing`. Text inputs expose
+`leading / prefix / suffix / trailing`. Switch and Slider expose their native
+visual structure through `thumbStyle / trackStyle / overlayStyle`; each part
+uses the same state names. The Button and input slots accept ordinary JSUI
+nodes, so adding a new composition does not require a host release.
+
+State changes can be interpolated locally on Flutter's VSync without sending
+per-frame updates through QuickJS:
+
+```js
+ElevatedButton({
+  stateTransition: { durationMs: 160, curve: 'easeOutCubic' },
+  stateStyles: {
+    normal: { backgroundColor: '#155e75', scale: 1, opacity: 1 },
+    hovered: { backgroundColor: '#0e7490', scale: 1.02 },
+    pressed: { backgroundColor: '#0891b2', scale: 0.96 },
+    disabled: { opacity: 0.6 }
+  },
+  onPressed: actions.run()
+});
+```
+
+The same `stateTransition` declaration works on Button, Switch, Slider,
+TextField, and TextFormField. Colors, numbers, padding, text style, border
+radius, `scale`, and `opacity` share one interpolation pipeline. The default
+transition is 140 ms with `easeOutCubic`; set `durationMs: 0` or
+`stateTransition: false` for an immediate change. Flutter's reduced-motion
+setting also disables these transitions automatically.
+
+## Universal widget effects
+
+Every rendered node, including native or custom registered widgets, accepts
+the same Flutter-style effect properties. Numeric properties use the same
+`animate()` descriptor as Canvas and run locally from Flutter VSync.
+
+```js
+Container({
+  key: 'effect-card',
+  playToken: state.run,
+  opacity: animate(0, 1, { durationMs: 500, curve: 'easeOut' }),
+  transform: {
+    translate: {
+      x: animate(-48, 0, { durationMs: 500, curve: 'easeOut' })
+    },
+    scale: animate(0.8, 1, { durationMs: 500 })
+  },
+  clipRadius: animate(48, 20, { durationMs: 500 }),
+  blur: animate(10, 0, { durationMs: 400 }),
+  onAnimationEnd: actions.finished(),
+  child: Text('Flutter widget')
+});
+```
+
+Static `colorFilter` and animated `backdropBlur` are also supported.
+`paused`, `playToken`, and `reverse` have the same playback meaning as a
+retained Canvas scene.
+
+## Capturing Flutter widgets for Canvas
+
+`SnapshotBoundary` captures any rendered child subtree—including registered
+native plugin widgets—without copying RGBA bytes through QuickJS. The capture
+event returns an opaque page-scoped handle that `ctx.drawImage()` can draw or
+crop with the familiar browser signatures.
+
+```js
+import { Canvas, SnapshotBoundary } from 'quickjs_ui';
+
+SnapshotBoundary({
+  key: 'profile-card',
+  captureToken: state.captureToken,
+  onCaptured: actions.captured(),
+  child: ProfileCard()
+});
+
+Canvas({
+  width: 320,
+  height: 200,
+  draw(ctx) {
+    if (state.snapshotId) {
+      ctx.drawImage(state.snapshotId, 0, 0, 320, 200);
+    }
+  }
+});
+```
+
+Capture ahead of an interaction when zero-delay playback matters. Every
+capture receives a versioned immutable handle, allowing old and new widget
+images to coexist during a transition. Handles are isolated to one renderer,
+bounded by count and pixel limits, evict oldest unused entries, and are
+disposed with the renderer.
 
 中文使用指南（控件、第三方模块注入、宿主互操作）见
 [`docs/usage.md`](docs/usage.md)。编辑器代码提示配置见

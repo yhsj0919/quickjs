@@ -142,6 +142,30 @@ value;
     },
   );
 
+  test('evaluateValue budgets containers rather than primitive leaves', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
+
+    final flat = await engine.evaluateValue(
+      'Array.from({ length: 15000 }, (_, index) => index)',
+    );
+    expect(flat, isA<List<Object?>>());
+    expect((flat! as List<Object?>).length, 15000);
+
+    await expectLater(
+      engine.evaluateValue(
+        'Array.from({ length: 10001 }, () => ({}))',
+      ),
+      throwsA(
+        isA<JsValueConversionException>().having(
+          (error) => error.message,
+          'message',
+          contains('object graph is too large'),
+        ),
+      ),
+    );
+  });
+
   test(
     'callPlugin rejects overly deep return values before JS stack overflow',
     () async {

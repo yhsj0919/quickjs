@@ -627,6 +627,212 @@ export function Svg(props) {
   return node('Svg', props);
 }
 
+export function animate(from, to, options = {}) {
+  return { from, to, ...options };
+}
+
+export function canvasCommands(draw) {
+  if (typeof draw !== 'function') {
+    throw new TypeError('quickjs_ui canvasCommands requires draw(ctx)');
+  }
+  const context = new Canvas2DContext();
+  draw(context);
+  return context.commands;
+}
+
+export function Canvas(props = {}) {
+  const { draw, staticDraw, commands, staticCommands, ...canvasProps } = props;
+  const retained = canvasProps.sceneKey != null;
+  const result = { ...canvasProps };
+  if (!retained || draw != null || commands != null) {
+    result.commands = draw == null ? (commands ?? []) : canvasCommands(draw);
+  }
+  if (staticDraw != null || staticCommands != null) {
+    result.staticCommands =
+      staticDraw == null ? staticCommands : canvasCommands(staticDraw);
+  }
+  return node('Canvas', result);
+}
+
+export function SnapshotBoundary(props = {}) {
+  return node('SnapshotBoundary', props);
+}
+
+export class Canvas2DContext {
+  constructor() {
+    this.commands = [];
+    this.fillStyle = '#000000';
+    this.strokeStyle = '#000000';
+    this.lineWidth = 1;
+    this.lineCap = 'butt';
+    this.lineJoin = 'miter';
+    this.globalAlpha = 1;
+    this.globalCompositeOperation = 'srcOver';
+    this.font = '14px sans-serif';
+    this.textAlign = 'left';
+    this.textBaseline = 'alphabetic';
+    this._path = [];
+    this._stateStack = [];
+  }
+
+  save() {
+    this._stateStack.push({
+      fillStyle: this.fillStyle,
+      strokeStyle: this.strokeStyle,
+      lineWidth: this.lineWidth,
+      lineCap: this.lineCap,
+      lineJoin: this.lineJoin,
+      globalAlpha: this.globalAlpha,
+      globalCompositeOperation: this.globalCompositeOperation,
+      font: this.font,
+      textAlign: this.textAlign,
+      textBaseline: this.textBaseline
+    });
+    this.commands.push({ op: 'save' });
+  }
+  restore() {
+    const state = this._stateStack.pop();
+    if (state == null) {
+      throw new RangeError('quickjs_ui Canvas2D restore has no matching save');
+    }
+    Object.assign(this, state);
+    this.commands.push({ op: 'restore' });
+  }
+  translate(x, y) { this.commands.push({ op: 'translate', x, y }); }
+  rotate(radians) { this.commands.push({ op: 'rotate', radians }); }
+  scale(x, y = x) { this.commands.push({ op: 'scale', x, y }); }
+  clear(color = '#00000000') { this.commands.push({ op: 'clear', color }); }
+  clearRect(x, y, width, height) {
+    this.commands.push({
+      op: 'rect', x, y, width, height,
+      fill: '#00000000', blendMode: 'clear'
+    });
+  }
+  clipRect(x, y, width, height) {
+    this.commands.push({ op: 'clipRect', x, y, width, height });
+  }
+  fillRect(x, y, width, height, radius = 0) {
+    this.commands.push({
+      op: 'rect', x, y, width, height, radius,
+      ...this._fillPaint()
+    });
+  }
+  strokeRect(x, y, width, height, radius = 0) {
+    this.commands.push({
+      op: 'rect', x, y, width, height, radius,
+      ...this._strokePaint()
+    });
+  }
+  fillCircle(cx, cy, radius) {
+    this.commands.push({ op: 'circle', cx, cy, radius, ...this._fillPaint() });
+  }
+  strokeCircle(cx, cy, radius) {
+    this.commands.push({ op: 'circle', cx, cy, radius, ...this._strokePaint() });
+  }
+  drawLine(x1, y1, x2, y2) {
+    this.commands.push({
+      op: 'line', x1, y1, x2, y2, ...this._strokePaint()
+    });
+  }
+  drawImage(image, ...args) {
+    const snapshotId = typeof image === 'string'
+      ? image
+      : image?.snapshotId ?? image?.id;
+    const imageSlot = image?.slot;
+    if (
+      (typeof snapshotId !== 'string' || snapshotId.length === 0) &&
+      (typeof imageSlot !== 'string' || imageSlot.length === 0)
+    ) {
+      throw new TypeError(
+        'quickjs_ui drawImage requires a snapshot id or image slot'
+      );
+    }
+    let command;
+    if (args.length === 2) {
+      command = { dx: args[0], dy: args[1] };
+    } else if (args.length === 4) {
+      command = {
+        dx: args[0], dy: args[1], dWidth: args[2], dHeight: args[3]
+      };
+    } else if (args.length === 8) {
+      command = {
+        sx: args[0], sy: args[1], sWidth: args[2], sHeight: args[3],
+        dx: args[4], dy: args[5], dWidth: args[6], dHeight: args[7]
+      };
+    } else {
+      throw new TypeError(
+        'quickjs_ui drawImage expects 3, 5 or 9 total arguments'
+      );
+    }
+    this.commands.push({
+      op: 'image',
+      ...(snapshotId == null ? { imageSlot } : { snapshotId }),
+      ...command,
+      globalAlpha: this.globalAlpha,
+      blendMode: this.globalCompositeOperation
+    });
+  }
+  beginPath() { this._path = []; }
+  moveTo(x, y) { this._path.push({ op: 'moveTo', x, y }); }
+  lineTo(x, y) { this._path.push({ op: 'lineTo', x, y }); }
+  quadraticCurveTo(cx, cy, x, y) {
+    this._path.push({ op: 'quadraticTo', cx, cy, x, y });
+  }
+  bezierCurveTo(cx1, cy1, cx2, cy2, x, y) {
+    this._path.push({ op: 'cubicTo', cx1, cy1, cx2, cy2, x, y });
+  }
+  arc(cx, cy, radius, start, end, counterclockwise = false) {
+    this._path.push({
+      op: 'arc', cx, cy, radius, start, end, counterclockwise
+    });
+  }
+  closePath() { this._path.push({ op: 'close' }); }
+  fill() {
+    this.commands.push({
+      op: 'path', segments: this._path.map((item) => ({ ...item })),
+      ...this._fillPaint()
+    });
+  }
+  stroke() {
+    this.commands.push({
+      op: 'path', segments: this._path.map((item) => ({ ...item })),
+      ...this._strokePaint()
+    });
+  }
+  fillText(text, x, y, maxWidth) {
+    const font = /^(\d+(?:\.\d+)?)px(?:\s+(.+))?$/.exec(this.font);
+    this.commands.push({
+      op: 'text', text: String(text), x, y,
+      color: this.fillStyle,
+      globalAlpha: this.globalAlpha,
+      blendMode: this.globalCompositeOperation,
+      fontSize: font == null ? 14 : Number(font[1]),
+      fontFamily: font?.[2],
+      align: this.textAlign,
+      baseline: this.textBaseline,
+      ...(maxWidth == null ? {} : { maxWidth })
+    });
+  }
+
+  _fillPaint() {
+    return {
+      fill: this.fillStyle,
+      globalAlpha: this.globalAlpha,
+      blendMode: this.globalCompositeOperation
+    };
+  }
+  _strokePaint() {
+    return {
+      stroke: this.strokeStyle,
+      strokeWidth: this.lineWidth,
+      strokeCap: this.lineCap,
+      strokeJoin: this.lineJoin,
+      globalAlpha: this.globalAlpha,
+      blendMode: this.globalCompositeOperation
+    };
+  }
+}
+
 export function ListView(props) {
   return node('ListView', props);
 }
@@ -939,6 +1145,11 @@ export const ui = {
   Container,
   Image,
   Svg,
+  Canvas,
+  SnapshotBoundary,
+  animate,
+  canvasCommands,
+  Canvas2DContext,
   ListView,
   SingleChildScrollView,
   GridView,

@@ -299,6 +299,8 @@ export default Page({
         '#/\$defs/column',
         '#/\$defs/container',
         '#/\$defs/image',
+        '#/\$defs/canvas',
+        '#/\$defs/snapshotBoundary',
         '#/\$defs/listView',
         '#/\$defs/singleChildScrollView',
         '#/\$defs/textField',
@@ -1480,7 +1482,7 @@ export default Page({
     expect(find.byType(TextFormField), findsOneWidget);
     expect(find.byType(Tooltip), findsOneWidget);
     expect(find.byType(AnimatedContainer), findsOneWidget);
-    expect(find.byType(AnimatedOpacity), findsOneWidget);
+    expect(find.byType(Opacity), findsOneWidget);
     expect(find.byType(AnimatedPadding), findsOneWidget);
     expect(find.byType(Hero), findsOneWidget);
 
@@ -1697,7 +1699,7 @@ export default Page({
     );
     expect(animatedContainer.duration, const Duration(milliseconds: 180));
     expect(animatedContainer.curve, Curves.easeOut);
-    expect(find.byType(AnimatedOpacity), findsOneWidget);
+    expect(find.byType(Opacity), findsOneWidget);
 
     final animatedPadding = tester.widget<AnimatedPadding>(
       find.byType(AnimatedPadding),
