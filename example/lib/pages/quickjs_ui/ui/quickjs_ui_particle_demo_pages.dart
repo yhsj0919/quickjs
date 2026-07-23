@@ -91,6 +91,26 @@ class QuickjsUiControlStateTransitionsPage extends StatelessWidget {
   );
 }
 
+class QuickjsUiControlMotionStressPage extends StatelessWidget {
+  const QuickjsUiControlMotionStressPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _ParticleDemoPage(
+    title: 'Control Motion Stress',
+    path: 'assets/quickjs_ui/control_motion_stress_page.mjs',
+  );
+}
+
+class QuickjsUiOverlaySystemPage extends StatelessWidget {
+  const QuickjsUiOverlaySystemPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _ParticleDemoPage(
+    title: 'Overlay System Lab',
+    path: 'assets/quickjs_ui/overlay_system_page.mjs',
+  );
+}
+
 class _ParticleDemoPage extends StatelessWidget {
   const _ParticleDemoPage({required this.title, required this.path});
 

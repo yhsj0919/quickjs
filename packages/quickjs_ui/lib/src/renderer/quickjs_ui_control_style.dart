@@ -30,6 +30,8 @@ final class QuickjsUiControlStyle {
   final Map<String, Map<String, Object?>> _states;
   final Set<String> _keys;
 
+  bool has(String key) => _keys.contains(key);
+
   Object? value(String key, Set<WidgetState> states) {
     Object? result = _states['normal']?[key];
     for (final entry in _stateOrder) {
@@ -47,6 +49,69 @@ final class QuickjsUiControlStyle {
     return QuickjsUiResolvedControlStyle(<String, Object?>{
       for (final key in _keys) key: _resolveValue(key, value(key, states)),
     });
+  }
+
+  WidgetStateProperty<Color?>? color(String key) {
+    if (!has(key)) return null;
+    return WidgetStateProperty.resolveWith(
+      (states) => context.color(value(key, states)),
+    );
+  }
+
+  WidgetStateProperty<double?>? number(String key) {
+    if (!has(key)) return null;
+    return WidgetStateProperty.resolveWith(
+      (states) => QuickjsUiProps.doubleValue(value(key, states), name: key),
+    );
+  }
+
+  WidgetStateProperty<EdgeInsetsGeometry?>? padding(String key) {
+    if (!has(key)) return null;
+    return WidgetStateProperty.resolveWith(
+      (states) => context.edgeInsets(value(key, states)),
+    );
+  }
+
+  WidgetStateProperty<TextStyle?>? textStyle(String key) {
+    if (!has(key)) return null;
+    return WidgetStateProperty.resolveWith(
+      (states) => context.textStyle(value(key, states)),
+    );
+  }
+
+  ButtonStyle buttonStyle(QuickjsUiControlTransition transition) {
+    final borderColor = color('borderColor');
+    final borderWidth = number('borderWidth');
+    final radius = has('borderRadius')
+        ? WidgetStateProperty.resolveWith<OutlinedBorder?>((states) {
+            return RoundedRectangleBorder(
+              borderRadius:
+                  context.borderRadius(value('borderRadius', states)) ??
+                  BorderRadius.zero,
+            );
+          })
+        : null;
+    final side = borderColor == null && borderWidth == null
+        ? null
+        : WidgetStateProperty.resolveWith<BorderSide?>((states) {
+            return BorderSide(
+              color: borderColor?.resolve(states) ?? Colors.transparent,
+              width: borderWidth?.resolve(states) ?? 1,
+            );
+          });
+    return ButtonStyle(
+      animationDuration: transition.duration,
+      backgroundColor: color('backgroundColor'),
+      foregroundColor: color('foregroundColor'),
+      overlayColor: color('overlayColor'),
+      shadowColor: color('shadowColor'),
+      surfaceTintColor: color('surfaceTintColor'),
+      elevation: number('elevation'),
+      padding: padding('padding'),
+      textStyle: textStyle('textStyle'),
+      shape: radius,
+      side: side,
+    );
   }
 
   Object? _resolveValue(String key, Object? value) {
@@ -103,36 +168,6 @@ final class QuickjsUiResolvedControlStyle {
 
   BorderRadiusGeometry? borderRadius(String key) =>
       _values[key] as BorderRadiusGeometry?;
-
-  ButtonStyle buttonStyle() {
-    final borderColor = color('borderColor');
-    final borderWidth = number('borderWidth');
-    final radius = borderRadius('borderRadius');
-    return ButtonStyle(
-      animationDuration: Duration.zero,
-      backgroundColor: _all(color('backgroundColor')),
-      foregroundColor: _all(color('foregroundColor')),
-      overlayColor: _all(color('overlayColor')),
-      shadowColor: _all(color('shadowColor')),
-      surfaceTintColor: _all(color('surfaceTintColor')),
-      elevation: _all(number('elevation')),
-      padding: _all(padding('padding')),
-      textStyle: _all(textStyle('textStyle')),
-      shape: radius == null
-          ? null
-          : WidgetStatePropertyAll<OutlinedBorder>(
-              RoundedRectangleBorder(borderRadius: radius),
-            ),
-      side: borderColor == null && borderWidth == null
-          ? null
-          : WidgetStatePropertyAll<BorderSide>(
-              BorderSide(
-                color: borderColor ?? Colors.transparent,
-                width: borderWidth ?? 1,
-              ),
-            ),
-    );
-  }
 
   Widget decorate(Widget child) {
     final opacity = (number('opacity') ?? 1).clamp(0.0, 1.0);
@@ -224,6 +259,7 @@ typedef QuickjsUiControlTransitionWidgetBuilder =
     Widget Function(
       BuildContext context,
       List<QuickjsUiResolvedControlStyle> styles,
+      Widget? child,
     );
 
 /// Animates one or more related visual styles as a single state transaction.
@@ -236,6 +272,7 @@ final class QuickjsUiControlTransitionBuilder extends StatelessWidget {
     required this.states,
     required this.transition,
     required this.builder,
+    this.child,
     super.key,
   });
 
@@ -243,6 +280,7 @@ final class QuickjsUiControlTransitionBuilder extends StatelessWidget {
   final Set<WidgetState> states;
   final QuickjsUiControlTransition transition;
   final QuickjsUiControlTransitionWidgetBuilder builder;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
@@ -255,31 +293,48 @@ final class QuickjsUiControlTransitionBuilder extends StatelessWidget {
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final duration = disableAnimations ? Duration.zero : transition.duration;
     if (duration == Duration.zero) {
-      return builder(context, target.values);
+      return builder(context, target.values, child);
     }
     return TweenAnimationBuilder<_QuickjsUiResolvedControlStyles>(
       tween: _QuickjsUiControlStylesTween(end: target),
       duration: duration,
       curve: transition.curve,
-      builder: (context, value, _) => builder(context, value.values),
+      child: child,
+      builder: (context, value, child) => builder(context, value.values, child),
     );
   }
 }
 
-typedef QuickjsUiControlStateWidgetBuilder =
+typedef QuickjsUiControlInteractionWidgetBuilder =
     Widget Function(
       BuildContext context,
-      List<QuickjsUiResolvedControlStyle> styles,
+      Set<WidgetState> states,
       FocusNode focusNode,
     );
 
-/// Supplies native hover, focus, press, selected and disabled states to every
-/// control through one lifecycle-safe interaction boundary.
-final class QuickjsUiControlStateBuilder extends StatefulWidget {
-  const QuickjsUiControlStateBuilder({
+typedef QuickjsUiControlInteractionScopeWidgetBuilder =
+    Widget Function(
+      BuildContext context,
+      QuickjsUiControlInteraction interaction,
+    );
+
+final class QuickjsUiControlInteraction {
+  const QuickjsUiControlInteraction({
+    required this.states,
+    required this.focusNode,
+    required this.setHovered,
+    required this.setPressed,
+  });
+
+  final Set<WidgetState> states;
+  final FocusNode focusNode;
+  final ValueChanged<bool> setHovered;
+  final ValueChanged<bool> setPressed;
+}
+
+final class QuickjsUiControlInteractionScope extends StatefulWidget {
+  const QuickjsUiControlInteractionScope({
     required this.enabled,
-    required this.styles,
-    required this.transition,
     required this.builder,
     this.selected = false,
     super.key,
@@ -287,17 +342,15 @@ final class QuickjsUiControlStateBuilder extends StatefulWidget {
 
   final bool enabled;
   final bool selected;
-  final List<QuickjsUiControlStyle> styles;
-  final QuickjsUiControlTransition transition;
-  final QuickjsUiControlStateWidgetBuilder builder;
+  final QuickjsUiControlInteractionScopeWidgetBuilder builder;
 
   @override
-  State<QuickjsUiControlStateBuilder> createState() =>
-      _QuickjsUiControlStateBuilderState();
+  State<QuickjsUiControlInteractionScope> createState() =>
+      _QuickjsUiControlInteractionScopeState();
 }
 
-final class _QuickjsUiControlStateBuilderState
-    extends State<QuickjsUiControlStateBuilder> {
+final class _QuickjsUiControlInteractionScopeState
+    extends State<QuickjsUiControlInteractionScope> {
   final FocusNode _focusNode = FocusNode();
   bool _hovered = false;
   bool _focused = false;
@@ -310,7 +363,7 @@ final class _QuickjsUiControlStateBuilderState
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiControlStateBuilder oldWidget) {
+  void didUpdateWidget(covariant QuickjsUiControlInteractionScope oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.enabled && (_hovered || _focused || _pressed)) {
       _hovered = false;
@@ -335,23 +388,13 @@ final class _QuickjsUiControlStateBuilderState
       if (_focused) WidgetState.focused,
       if (_pressed) WidgetState.pressed,
     };
-    return MouseRegion(
-      onEnter: widget.enabled ? (_) => _setState(hovered: true) : null,
-      onExit: widget.enabled ? (_) => _setState(hovered: false) : null,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: widget.enabled ? (_) => _setState(pressed: true) : null,
-        onPointerUp: widget.enabled ? (_) => _setState(pressed: false) : null,
-        onPointerCancel: widget.enabled
-            ? (_) => _setState(pressed: false)
-            : null,
-        child: QuickjsUiControlTransitionBuilder(
-          styles: widget.styles,
-          states: states,
-          transition: widget.transition,
-          builder: (context, styles) =>
-              widget.builder(context, styles, _focusNode),
-        ),
+    return widget.builder(
+      context,
+      QuickjsUiControlInteraction(
+        states: states,
+        focusNode: _focusNode,
+        setHovered: (value) => _setState(hovered: value),
+        setPressed: (value) => _setState(pressed: value),
       ),
     );
   }
@@ -361,9 +404,9 @@ final class _QuickjsUiControlStateBuilderState
   }
 
   void _setState({bool? hovered, bool? focused, bool? pressed}) {
-    final nextHovered = hovered ?? _hovered;
-    final nextFocused = focused ?? _focused;
-    final nextPressed = pressed ?? _pressed;
+    final nextHovered = widget.enabled && (hovered ?? _hovered);
+    final nextFocused = widget.enabled && (focused ?? _focused);
+    final nextPressed = widget.enabled && (pressed ?? _pressed);
     if (nextHovered == _hovered &&
         nextFocused == _focused &&
         nextPressed == _pressed) {
@@ -374,6 +417,86 @@ final class _QuickjsUiControlStateBuilderState
       _focused = nextFocused;
       _pressed = nextPressed;
     });
+  }
+}
+
+/// Publishes interaction state only when it changes. Animation frames are
+/// deliberately handled by descendants so stable control subtrees can be
+/// passed through [TweenAnimationBuilder.child].
+final class QuickjsUiControlInteractionBuilder extends StatelessWidget {
+  const QuickjsUiControlInteractionBuilder({
+    required this.enabled,
+    required this.builder,
+    this.selected = false,
+    super.key,
+  });
+
+  final bool enabled;
+  final bool selected;
+  final QuickjsUiControlInteractionWidgetBuilder builder;
+
+  @override
+  Widget build(BuildContext context) {
+    return QuickjsUiControlInteractionScope(
+      enabled: enabled,
+      selected: selected,
+      builder: (context, interaction) => MouseRegion(
+        opaque: false,
+        onEnter: enabled ? (_) => interaction.setHovered(true) : null,
+        onExit: enabled ? (_) => interaction.setHovered(false) : null,
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: enabled ? (_) => interaction.setPressed(true) : null,
+          onPointerUp: enabled ? (_) => interaction.setPressed(false) : null,
+          onPointerCancel: enabled
+              ? (_) => interaction.setPressed(false)
+              : null,
+          child: builder(context, interaction.states, interaction.focusNode),
+        ),
+      ),
+    );
+  }
+}
+
+typedef QuickjsUiControlStateWidgetBuilder =
+    Widget Function(
+      BuildContext context,
+      List<QuickjsUiResolvedControlStyle> styles,
+      FocusNode focusNode,
+    );
+
+/// Supplies native hover, focus, press, selected and disabled states to every
+/// control through one lifecycle-safe interaction boundary.
+final class QuickjsUiControlStateBuilder extends StatelessWidget {
+  const QuickjsUiControlStateBuilder({
+    required this.enabled,
+    required this.styles,
+    required this.transition,
+    required this.builder,
+    this.selected = false,
+    super.key,
+  });
+
+  final bool enabled;
+  final bool selected;
+  final List<QuickjsUiControlStyle> styles;
+  final QuickjsUiControlTransition transition;
+  final QuickjsUiControlStateWidgetBuilder builder;
+
+  @override
+  Widget build(BuildContext context) {
+    return QuickjsUiControlInteractionBuilder(
+      enabled: enabled,
+      selected: selected,
+      builder: (context, states, focusNode) {
+        return QuickjsUiControlTransitionBuilder(
+          styles: styles,
+          states: states,
+          transition: transition,
+          builder: (context, styles, _) => builder(context, styles, focusNode),
+        );
+      },
+    );
   }
 }
 
@@ -414,9 +537,6 @@ final class _QuickjsUiControlStylesTween
     return _QuickjsUiResolvedControlStyles.lerp(begin!, end!, t);
   }
 }
-
-WidgetStateProperty<T>? _all<T>(T? value) =>
-    value == null ? null : WidgetStatePropertyAll<T>(value);
 
 const _stateNames = <String>[
   'normal',

@@ -228,4 +228,14 @@ final List<ExamplePageSpec> quickjsUiParticleExamplePages = [
         'Button、Switch、Slider 和输入框共享 Flutter VSync 本地状态插值，支持颜色、边框、尺寸、透明度与缩放。',
     builder: (_) => const QuickjsUiControlStateTransitionsPage(),
   ),
+  ExamplePageSpec(
+    title: 'Control Motion · 性能压力测试',
+    description: '同时驱动 1、10 或 40 个控件状态动画，测试 120Hz 与 60Hz 流畅度。',
+    builder: (_) => const QuickjsUiControlMotionStressPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Overlay System · 任意浮层',
+    description: '统一测试任意 JSUI 内容、遮罩、定位、进出动画和关闭生命周期。',
+    builder: (_) => const QuickjsUiOverlaySystemPage(),
+  ),
 ];

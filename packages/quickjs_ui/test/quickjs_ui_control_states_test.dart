@@ -24,7 +24,10 @@ void main() {
           'foregroundColor': '#ffffff',
           'scale': 1,
         },
-        'hovered': <String, Object?>{'backgroundColor': '#224466'},
+        'hovered': <String, Object?>{
+          'backgroundColor': '#224466',
+          'scale': 1.025,
+        },
         'focused': <String, Object?>{'backgroundColor': '#336699'},
         'pressed': <String, Object?>{
           'backgroundColor': '#00aacc',
@@ -43,26 +46,40 @@ void main() {
     expect(find.text('L'), findsOneWidget);
     expect(find.text('Content'), findsOneWidget);
     expect(find.text('R'), findsOneWidget);
-    Color background() {
-      final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
-      return button.style!.backgroundColor!.resolve(<WidgetState>{})!;
+    Color surfaceColor() {
+      return tester
+          .widget<ElevatedButton>(find.byType(ElevatedButton))
+          .style!
+          .backgroundColor!
+          .resolve(<WidgetState>{})!;
     }
 
-    expect(background(), const Color(0xFF112233));
+    double surfaceScale() {
+      for (final transform in tester.widgetList<Transform>(
+        find.byType(Transform),
+      )) {
+        if (transform.transform.storage[0] != 1) {
+          return transform.transform.storage[0];
+        }
+      }
+      return 1;
+    }
+
+    expect(surfaceColor(), const Color(0xFF112233));
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: Offset.zero);
+    await mouse.addPointer(location: const Offset(799, 599));
+    await tester.pump();
     await mouse.moveTo(tester.getCenter(find.byType(ElevatedButton)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(background(), isNot(const Color(0xFF112233)));
-    expect(background(), isNot(const Color(0xFF224466)));
-    final interruptedFrame = background();
+    expect(surfaceScale(), closeTo(1.0125, 0.001));
+    final interruptedFrame = surfaceScale();
 
     await mouse.down(tester.getCenter(find.byType(ElevatedButton)));
     await tester.pump();
-    expect(background(), interruptedFrame);
+    expect(surfaceScale(), closeTo(interruptedFrame, 0.0001));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(background(), const Color(0xFF00AACC));
+    expect(surfaceScale(), closeTo(0.96, 0.0001));
     await mouse.up();
     await mouse.moveTo(const Offset(799, 599));
     await mouse.removePointer();
@@ -226,8 +243,11 @@ void main() {
       'child': <String, Object?>{'type': 'Text', 'data': 'Motion'},
       'stateTransition': <String, Object?>{'durationMs': 1000},
       'stateStyles': <String, Object?>{
-        'normal': <String, Object?>{'backgroundColor': '#112233'},
-        'hovered': <String, Object?>{'backgroundColor': '#00ffff'},
+        'normal': <String, Object?>{'backgroundColor': '#112233', 'scale': 1},
+        'hovered': <String, Object?>{
+          'backgroundColor': '#00ffff',
+          'scale': 1.1,
+        },
       },
     });
     await tester.pumpWidget(
@@ -240,14 +260,21 @@ void main() {
     );
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: Offset.zero);
+    await mouse.addPointer(location: const Offset(799, 599));
+    await tester.pump();
     await mouse.moveTo(tester.getCenter(find.byType(ElevatedButton)));
     await tester.pump();
     final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
     expect(
-      button.style!.backgroundColor!.resolve(<WidgetState>{}),
+      button.style!.backgroundColor!.resolve(<WidgetState>{
+        WidgetState.hovered,
+      }),
       const Color(0xFF00FFFF),
     );
+    final surface = tester
+        .widgetList<Transform>(find.byType(Transform))
+        .firstWhere((transform) => transform.transform.storage[0] != 1);
+    expect(surface.transform.storage[0], closeTo(1.1, 0.0001));
     await mouse.moveTo(const Offset(799, 599));
     await mouse.removePointer();
     await tester.pump();

@@ -332,6 +332,35 @@ transition is 140 ms with `easeOutCubic`; set `durationMs: 0` or
 `stateTransition: false` for an immediate change. Flutter's reduced-motion
 setting also disables these transitions automatically.
 
+## Overlay system
+
+`Overlay` renders any JSUI node above the current page. It is controlled with
+`visible` and supports modal barriers, nine-point alignment, safe-area
+padding, dismissal events, and local Flutter transitions:
+
+```js
+Overlay({
+  visible: state.open,
+  alignment: 'bottomCenter',
+  padding: 20,
+  barrierDismissible: true,
+  barrierColor: '#99000000',
+  transition: 'slideUp',
+  durationMs: 180,
+  curve: 'easeOutCubic',
+  onDismissed: actions.close(),
+  child: Container({
+    padding: 20,
+    child: Text('Any JSUI content')
+  })
+});
+```
+
+Available transitions are `fade`, `scale`, `fadeScale`, `slideDown`,
+`slideUp`, and `none`. `SnackBar`, `AlertDialog`, and `BottomSheet` use the same declarative
+overlay reconciliation layer, so schema-driven close and user dismissal have
+one lifecycle.
+
 ## Universal widget effects
 
 Every rendered node, including native or custom registered widgets, accepts

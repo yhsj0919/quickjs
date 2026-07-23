@@ -1248,6 +1248,20 @@ export type SnackBarProps = AccessibilityProps & {
   backgroundColor?: ColorValue;
 };
 
+export type OverlayProps = AccessibilityProps & {
+  visible?: boolean;
+  child?: QuickjsUiNode;
+  alignment?: Alignment;
+  padding?: EdgeInsetsValue;
+  barrierDismissible?: boolean;
+  barrierColor?: ColorValue;
+  transition?: "fade" | "scale" | "fadeScale" | "slideDown" | "slideUp" | "none";
+  durationMs?: number;
+  curve?: Curve;
+  onDismissed?: QuickjsUiEvent;
+  onClosing?: QuickjsUiEvent;
+};
+
 export type AlertDialogProps = AccessibilityProps & {
   visible?: boolean;
   title?: QuickjsUiNode;
@@ -1389,6 +1403,7 @@ export declare function LinearProgressIndicator(
   props?: ProgressIndicatorProps
 ): QuickjsUiNode;
 export declare function SnackBar(props: SnackBarProps): QuickjsUiNode;
+export declare function Overlay(props: OverlayProps): QuickjsUiNode;
 export declare function AlertDialog(props: AlertDialogProps): QuickjsUiNode;
 export declare function BottomSheet(props: BottomSheetProps): QuickjsUiNode;
 export declare function AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
@@ -1465,6 +1480,7 @@ export declare const ui: {
   CircularProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
   LinearProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
   SnackBar(props: SnackBarProps): QuickjsUiNode;
+  Overlay(props: OverlayProps): QuickjsUiNode;
   AlertDialog(props: AlertDialogProps): QuickjsUiNode;
   BottomSheet(props: BottomSheetProps): QuickjsUiNode;
   AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;

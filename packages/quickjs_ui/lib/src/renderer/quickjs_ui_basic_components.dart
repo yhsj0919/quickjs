@@ -73,34 +73,73 @@ Widget _buildButton(
   );
   final onPressed = event == null ? null : () => context.dispatch(event);
   final child = _buttonChild(context, node);
-  return QuickjsUiControlStateBuilder(
+  return QuickjsUiControlInteractionScope(
     enabled: event != null,
-    styles: <QuickjsUiControlStyle>[style],
-    transition: transition,
-    builder: (context, styles, focusNode) {
-      final resolved = styles.single;
-      final buttonStyle = resolved.buttonStyle();
+    builder: (buildContext, interaction) {
+      final effectiveTransition =
+          MediaQuery.maybeOf(buildContext)?.disableAnimations ?? false
+          ? QuickjsUiControlTransition(
+              duration: Duration.zero,
+              curve: transition.curve,
+            )
+          : transition;
+      final resolved = style.resolve(interaction.states);
+      final buttonStyle = style
+          .buttonStyle(effectiveTransition)
+          .copyWith(
+            padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+              EdgeInsets.zero,
+            ),
+          );
+      final interactiveChild = MouseRegion(
+        onEnter: event != null ? (_) => interaction.setHovered(true) : null,
+        onExit: event != null ? (_) => interaction.setHovered(false) : null,
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: event != null
+              ? (_) => interaction.setPressed(true)
+              : null,
+          onPointerUp: event != null
+              ? (_) => interaction.setPressed(false)
+              : null,
+          onPointerCancel: event != null
+              ? (_) => interaction.setPressed(false)
+              : null,
+          child: Padding(
+            padding:
+                resolved.padding('padding') ??
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            child: child,
+          ),
+        ),
+      );
       final button = switch (kind) {
         _QuickjsUiButtonKind.elevated => ElevatedButton(
-          focusNode: focusNode,
+          focusNode: interaction.focusNode,
           onPressed: onPressed,
           style: buttonStyle,
-          child: child,
+          child: interactiveChild,
         ),
         _QuickjsUiButtonKind.text => TextButton(
-          focusNode: focusNode,
+          focusNode: interaction.focusNode,
           onPressed: onPressed,
           style: buttonStyle,
-          child: child,
+          child: interactiveChild,
         ),
         _QuickjsUiButtonKind.outlined => OutlinedButton(
-          focusNode: focusNode,
+          focusNode: interaction.focusNode,
           onPressed: onPressed,
           style: buttonStyle,
-          child: child,
+          child: interactiveChild,
         ),
       };
-      return resolved.decorate(button);
+      return QuickjsUiControlTransitionBuilder(
+        styles: <QuickjsUiControlStyle>[style],
+        states: interaction.states,
+        transition: transition,
+        child: RepaintBoundary(child: button),
+        builder: (context, styles, child) => styles.single.decorate(child!),
+      );
     },
   );
 }
