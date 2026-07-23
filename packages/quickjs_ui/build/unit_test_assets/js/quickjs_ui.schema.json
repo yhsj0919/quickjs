@@ -50,7 +50,10 @@
         { "$ref": "#/$defs/container" },
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/svg" },
+        { "$ref": "#/$defs/canvas" },
+        { "$ref": "#/$defs/snapshotBoundary" },
         { "$ref": "#/$defs/listView" },
+        { "$ref": "#/$defs/listViewBuilder" },
         { "$ref": "#/$defs/singleChildScrollView" },
         { "$ref": "#/$defs/gridView" },
         { "$ref": "#/$defs/pageView" },
@@ -123,6 +126,27 @@
         },
         "enabled": { "type": "boolean" },
         "focusOrder": { "type": "number" },
+        "opacity": { "$ref": "#/$defs/animatedNumber" },
+        "transform": { "$ref": "#/$defs/nodeTransform" },
+        "clipRadius": { "$ref": "#/$defs/animatedNumber" },
+        "clipBehavior": {
+          "type": "string",
+          "enum": ["none", "hardEdge", "antiAlias", "antiAliasWithSaveLayer"]
+        },
+        "blur": { "$ref": "#/$defs/blurEffect" },
+        "backdropBlur": { "$ref": "#/$defs/blurEffect" },
+        "colorFilter": {
+          "type": "object",
+          "required": ["color"],
+          "properties": {
+            "color": { "$ref": "#/$defs/color" },
+            "blendMode": { "type": "string" }
+          }
+        },
+        "paused": { "type": "boolean" },
+        "playToken": { "$ref": "#/$defs/jsonValue" },
+        "reverse": { "type": "boolean" },
+        "onAnimationEnd": { "$ref": "#/$defs/event" },
         "onTap": { "$ref": "#/$defs/event" },
         "onLongPress": { "$ref": "#/$defs/event" },
         "onDoubleTap": { "$ref": "#/$defs/event" },
@@ -139,6 +163,135 @@
       "not": {
         "required": ["child", "children"]
       }
+    },
+    "animatedNumber": {
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "object",
+          "required": ["from", "to", "durationMs"],
+          "properties": {
+            "from": { "type": "number" },
+            "to": { "type": "number" },
+            "durationMs": { "type": "number", "exclusiveMinimum": 0 },
+            "delayMs": { "type": "number" },
+            "phaseMs": { "type": "number" },
+            "repeat": { "type": "boolean" },
+            "autoreverse": { "type": "boolean" },
+            "timeSource": { "type": "string", "enum": ["elapsed", "epoch"] },
+            "curve": {
+              "type": "string",
+              "enum": ["linear", "easeIn", "easeOut", "easeInOut"]
+            }
+          }
+        }
+      ]
+    },
+    "controlVisualStyle": {
+      "type": "object",
+      "properties": {
+        "backgroundColor": { "$ref": "#/$defs/color" },
+        "foregroundColor": { "$ref": "#/$defs/color" },
+        "overlayColor": { "$ref": "#/$defs/color" },
+        "shadowColor": { "$ref": "#/$defs/color" },
+        "surfaceTintColor": { "$ref": "#/$defs/color" },
+        "borderColor": { "$ref": "#/$defs/color" },
+        "borderWidth": { "type": "number", "minimum": 0 },
+        "borderRadius": { "$ref": "#/$defs/borderRadius" },
+        "elevation": { "type": "number" },
+        "padding": { "$ref": "#/$defs/edgeInsets" },
+        "textStyle": { "$ref": "#/$defs/textStyle" },
+        "fillColor": { "$ref": "#/$defs/color" },
+        "thumbColor": { "$ref": "#/$defs/color" },
+        "trackColor": { "$ref": "#/$defs/color" },
+        "activeTrackColor": { "$ref": "#/$defs/color" },
+        "inactiveTrackColor": { "$ref": "#/$defs/color" },
+        "trackOutlineColor": { "$ref": "#/$defs/color" },
+        "trackOutlineWidth": { "type": "number", "minimum": 0 },
+        "valueIndicatorColor": { "$ref": "#/$defs/color" },
+        "trackHeight": { "type": "number", "exclusiveMinimum": 0 },
+        "thumbRadius": { "type": "number", "minimum": 0 },
+        "overlayRadius": { "type": "number", "minimum": 0 },
+        "color": { "$ref": "#/$defs/color" },
+        "activeColor": { "$ref": "#/$defs/color" },
+        "inactiveColor": { "$ref": "#/$defs/color" },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "radius": { "type": "number", "minimum": 0 },
+        "scale": { "type": "number", "minimum": 0 },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "controlStateTransition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "durationMs": { "type": "number", "minimum": 0 },
+            "curve": { "$ref": "#/$defs/curve" }
+          }
+        },
+        { "const": false }
+      ]
+    },
+    "controlStateStyles": {
+      "type": "object",
+      "properties": {
+        "normal": { "$ref": "#/$defs/controlVisualStyle" },
+        "hovered": { "$ref": "#/$defs/controlVisualStyle" },
+        "focused": { "$ref": "#/$defs/controlVisualStyle" },
+        "selected": { "$ref": "#/$defs/controlVisualStyle" },
+        "pressed": { "$ref": "#/$defs/controlVisualStyle" },
+        "disabled": { "$ref": "#/$defs/controlVisualStyle" }
+      }
+    },
+    "controlSlots": {
+      "type": "object",
+      "properties": {
+        "stateStyles": { "$ref": "#/$defs/controlStateStyles" },
+        "stateTransition": { "$ref": "#/$defs/controlStateTransition" },
+        "thumbStyle": { "$ref": "#/$defs/controlStateStyles" },
+        "trackStyle": { "$ref": "#/$defs/controlStateStyles" },
+        "overlayStyle": { "$ref": "#/$defs/controlStateStyles" }
+      }
+    },
+    "nodeTransform": {
+      "type": "object",
+      "properties": {
+        "translate": {
+          "type": "object",
+          "properties": {
+            "x": { "$ref": "#/$defs/animatedNumber" },
+            "y": { "$ref": "#/$defs/animatedNumber" }
+          }
+        },
+        "scale": {
+          "oneOf": [
+            { "$ref": "#/$defs/animatedNumber" },
+            {
+              "type": "object",
+              "properties": {
+                "x": { "$ref": "#/$defs/animatedNumber" },
+                "y": { "$ref": "#/$defs/animatedNumber" }
+              }
+            }
+          ]
+        },
+        "rotate": { "$ref": "#/$defs/animatedNumber" },
+        "alignment": { "type": "string" }
+      }
+    },
+    "blurEffect": {
+      "oneOf": [
+        { "$ref": "#/$defs/animatedNumber" },
+        {
+          "type": "object",
+          "properties": {
+            "sigma": { "$ref": "#/$defs/animatedNumber" },
+            "sigmaX": { "$ref": "#/$defs/animatedNumber" },
+            "sigmaY": { "$ref": "#/$defs/animatedNumber" }
+          }
+        }
+      ]
     },
     "edgeInsets": {
       "oneOf": [
@@ -368,6 +521,13 @@
           "type": "object",
           "properties": {
             "type": { "const": "ElevatedButton" },
+            "label": { "type": "string" },
+            "leading": { "$ref": "#/$defs/node" },
+            "content": { "$ref": "#/$defs/node" },
+            "trailing": { "$ref": "#/$defs/node" },
+            "gap": { "$ref": "#/$defs/space" },
+            "stateStyles": { "$ref": "#/$defs/controlStateStyles" },
+            "stateTransition": { "$ref": "#/$defs/controlStateTransition" },
             "onPressed": { "$ref": "#/$defs/event" }
           }
         }
@@ -518,6 +678,78 @@
         }
       ]
     },
+    "canvas": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "Canvas" },
+            "width": { "type": "number", "minimum": 0 },
+            "height": { "type": "number", "minimum": 0 },
+            "backgroundColor": { "$ref": "#/$defs/color" },
+            "sceneKey": { "type": "string", "minLength": 1 },
+            "resources": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "paused": { "type": "boolean" },
+            "playToken": { "$ref": "#/$defs/jsonValue" },
+            "reverse": { "type": "boolean" },
+            "willChange": { "type": "boolean" },
+            "frameIntervalMs": { "type": "integer", "minimum": 16, "maximum": 60000 },
+            "commands": {
+              "type": "array",
+              "maxItems": 10000,
+              "items": {
+                "type": "object",
+                "required": ["op"],
+                "properties": { "op": { "type": "string" } },
+                "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+              }
+            },
+            "staticCommands": {
+              "type": "array",
+              "maxItems": 10000,
+              "items": {
+                "type": "object",
+                "required": ["op"],
+                "properties": { "op": { "type": "string" } },
+                "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+              }
+            },
+            "onTap": { "$ref": "#/$defs/event" },
+            "onFrame": { "$ref": "#/$defs/event" },
+            "onAnimationEnd": { "$ref": "#/$defs/event" },
+            "onDoubleTap": { "$ref": "#/$defs/event" },
+            "onLongPress": { "$ref": "#/$defs/event" }
+            ,"onPointerDown": { "$ref": "#/$defs/event" }
+            ,"onPointerMove": { "$ref": "#/$defs/event" }
+            ,"onPointerUp": { "$ref": "#/$defs/event" }
+            ,"onPointerCancel": { "$ref": "#/$defs/event" }
+          }
+        }
+      ]
+    },
+    "snapshotBoundary": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/singleChild" },
+        {
+          "type": "object",
+          "required": ["type", "key"],
+          "properties": {
+            "type": { "const": "SnapshotBoundary" },
+            "snapshotKey": { "type": "string", "minLength": 1 },
+            "captureToken": { "$ref": "#/$defs/jsonValue" },
+            "pixelRatio": { "type": "number", "minimum": 0.25, "maximum": 4 },
+            "onCaptured": { "$ref": "#/$defs/event" },
+            "onCaptureError": { "$ref": "#/$defs/event" }
+          }
+        }
+      ]
+    },
     "listView": {
       "allOf": [
         { "$ref": "#/$defs/baseNode" },
@@ -528,12 +760,44 @@
           "properties": {
             "type": { "const": "ListView" },
             "scrollDirection": { "type": "string", "enum": ["vertical", "horizontal"] },
+            "itemExtent": { "type": "number", "exclusiveMinimum": 0 },
+            "cacheExtent": { "type": "number", "minimum": 0 },
+            "addAutomaticKeepAlives": { "type": "boolean" },
+            "addRepaintBoundaries": { "type": "boolean" },
             "shrinkWrap": { "type": "boolean" },
             "padding": { "$ref": "#/$defs/edgeInsets" },
             "gap": { "$ref": "#/$defs/space" },
             "animateItems": { "type": "boolean" },
             "itemTransitionDurationMs": { "type": "integer", "minimum": 0 },
             "itemTransitionCurve": { "$ref": "#/$defs/curve" }
+          }
+        }
+      ]
+    },
+    "listViewBuilder": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/scrollable" },
+        {
+          "type": "object",
+          "required": ["key", "itemCount", "batchStart", "batchEnd", "children"],
+          "properties": {
+            "type": { "const": "ListViewBuilder" },
+            "key": { "type": "string", "minLength": 1 },
+            "itemCount": { "type": "integer", "minimum": 0 },
+            "batchStart": { "type": "integer", "minimum": 0 },
+            "batchEnd": { "type": "integer", "minimum": 0 },
+            "prefetchItemCount": { "type": "integer", "minimum": 1 },
+            "resetToken": { "type": ["string", "number"] },
+            "hasMore": { "type": "boolean" },
+            "loading": { "type": "boolean" },
+            "loadMoreThreshold": { "type": "integer", "minimum": 1 },
+            "loadingText": { "type": "string" },
+            "onLoadMore": { "$ref": "#/$defs/event" },
+            "itemExtent": { "type": "number", "exclusiveMinimum": 0 },
+            "estimatedItemExtent": { "type": "number", "exclusiveMinimum": 0 },
+            "cacheExtent": { "type": "number", "minimum": 0 },
+            "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
           }
         }
       ]
@@ -567,6 +831,12 @@
             "hintText": { "type": "string" },
             "helperText": { "type": "string" },
             "errorText": { "type": "string" },
+            "leading": { "$ref": "#/$defs/node" },
+            "prefix": { "$ref": "#/$defs/node" },
+            "suffix": { "$ref": "#/$defs/node" },
+            "trailing": { "$ref": "#/$defs/node" },
+            "stateStyles": { "$ref": "#/$defs/controlStateStyles" },
+            "stateTransition": { "$ref": "#/$defs/controlStateTransition" },
             "enabled": { "type": "boolean" },
             "autofocus": { "type": "boolean" },
             "focusOnMount": { "type": "boolean" },
@@ -680,8 +950,8 @@
     "safeArea": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "SafeArea" } } }] },
     "form": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Form" } } }] },
     "checkbox": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Checkbox" } } }] },
-    "switch": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Switch" } } }] },
-    "slider": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Slider" } } }] },
+    "switch": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/controlSlots" }, { "type": "object", "properties": { "type": { "const": "Switch" }, "value": { "type": "boolean" }, "onChanged": { "$ref": "#/$defs/event" } } }] },
+    "slider": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/controlSlots" }, { "type": "object", "properties": { "type": { "const": "Slider" }, "value": { "type": "number" }, "min": { "type": "number" }, "max": { "type": "number" }, "divisions": { "type": "integer", "minimum": 1 }, "label": { "type": "string" }, "onChanged": { "$ref": "#/$defs/event" }, "onChangeStart": { "$ref": "#/$defs/event" }, "onChangeEnd": { "$ref": "#/$defs/event" } } }] },
     "radio": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Radio" } } }] },
     "dropdownButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "DropdownButton" } } }] },
     "icon": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "Icon" } } }] },
@@ -712,8 +982,8 @@
     "animatedSwitcher": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "AnimatedSwitcher" } } }] },
     "hero": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "required": ["tag", "child"], "properties": { "type": { "const": "Hero" }, "tag": { "type": ["string", "number", "boolean"] }, "transitionOnUserGestures": { "type": "boolean" } } }] },
     "gestureDetector": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "GestureDetector" } } }] },
-    "textButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "TextButton" } } }] },
-    "outlinedButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "OutlinedButton" } } }] },
+    "textButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "TextButton" }, "label": { "type": "string" }, "leading": { "$ref": "#/$defs/node" }, "content": { "$ref": "#/$defs/node" }, "trailing": { "$ref": "#/$defs/node" }, "gap": { "$ref": "#/$defs/space" }, "stateStyles": { "$ref": "#/$defs/controlStateStyles" }, "stateTransition": { "$ref": "#/$defs/controlStateTransition" }, "onPressed": { "$ref": "#/$defs/event" } } }] },
+    "outlinedButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "OutlinedButton" }, "label": { "type": "string" }, "leading": { "$ref": "#/$defs/node" }, "content": { "$ref": "#/$defs/node" }, "trailing": { "$ref": "#/$defs/node" }, "gap": { "$ref": "#/$defs/space" }, "stateStyles": { "$ref": "#/$defs/controlStateStyles" }, "stateTransition": { "$ref": "#/$defs/controlStateTransition" }, "onPressed": { "$ref": "#/$defs/event" } } }] },
     "iconButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "IconButton" } } }] },
     "inkWell": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "InkWell" } } }] },
     "floatingActionButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "FloatingActionButton" } } }] },

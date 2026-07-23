@@ -443,7 +443,38 @@ export type Curve =
   | 'elasticIn'
   | 'elasticOut';
 
-export type AccessibilityProps = {
+export type NodeEffectProps = {
+  opacity?: CanvasNumber;
+  transform?: {
+    translate?: { x?: CanvasNumber; y?: CanvasNumber };
+    scale?: CanvasNumber | { x?: CanvasNumber; y?: CanvasNumber };
+    /** Rotation in radians, matching Flutter Transform.rotate. */
+    rotate?: CanvasNumber;
+    alignment?: Alignment;
+  };
+  clipRadius?: CanvasNumber;
+  clipBehavior?: 'none' | 'hardEdge' | 'antiAlias' | 'antiAliasWithSaveLayer';
+  blur?: CanvasNumber | {
+    sigma?: CanvasNumber;
+    sigmaX?: CanvasNumber;
+    sigmaY?: CanvasNumber;
+  };
+  backdropBlur?: CanvasNumber | {
+    sigma?: CanvasNumber;
+    sigmaX?: CanvasNumber;
+    sigmaY?: CanvasNumber;
+  };
+  colorFilter?: {
+    color: string | number;
+    blendMode?: CanvasBlendMode;
+  };
+  paused?: boolean;
+  playToken?: JsonValue;
+  reverse?: boolean;
+  onAnimationEnd?: QuickjsUiEvent;
+};
+
+export type AccessibilityProps = NodeEffectProps & {
   semanticLabel?: string;
   semanticsLabel?: string;
   semanticHint?: string;
@@ -478,9 +509,65 @@ export type TextProps = AccessibilityProps & {
   style?: TextStyle | ThemeTextStyleToken;
 };
 
+export type ControlVisualStyle = {
+  backgroundColor?: ColorValue;
+  foregroundColor?: ColorValue;
+  overlayColor?: ColorValue;
+  shadowColor?: ColorValue;
+  surfaceTintColor?: ColorValue;
+  borderColor?: ColorValue;
+  borderWidth?: number;
+  borderRadius?: BorderRadius;
+  elevation?: number;
+  padding?: EdgeInsets;
+  textStyle?: TextStyle | ThemeTextStyleToken;
+  fillColor?: ColorValue;
+  thumbColor?: ColorValue;
+  trackColor?: ColorValue;
+  activeTrackColor?: ColorValue;
+  inactiveTrackColor?: ColorValue;
+  trackOutlineColor?: ColorValue;
+  trackOutlineWidth?: number;
+  valueIndicatorColor?: ColorValue;
+  trackHeight?: number;
+  thumbRadius?: number;
+  overlayRadius?: number;
+  scale?: number;
+  opacity?: number;
+};
+
+export type ControlStateTransition = {
+  durationMs?: number;
+  curve?: Curve;
+} | false;
+
+export type ControlStateStyles = {
+  normal?: ControlVisualStyle;
+  hovered?: ControlVisualStyle;
+  focused?: ControlVisualStyle;
+  selected?: ControlVisualStyle;
+  pressed?: ControlVisualStyle;
+  disabled?: ControlVisualStyle;
+};
+
+export type ControlPartStyle = {
+  normal?: ControlVisualStyle;
+  hovered?: ControlVisualStyle;
+  focused?: ControlVisualStyle;
+  selected?: ControlVisualStyle;
+  pressed?: ControlVisualStyle;
+  disabled?: ControlVisualStyle;
+};
+
 export type ButtonProps = AccessibilityProps & {
   child?: QuickjsUiNode;
+  content?: QuickjsUiNode;
+  leading?: QuickjsUiNode;
+  trailing?: QuickjsUiNode;
   label?: string;
+  gap?: SpaceValue;
+  stateStyles?: ControlStateStyles;
+  stateTransition?: ControlStateTransition;
   onPressed?: QuickjsUiEvent;
 };
 
@@ -600,6 +687,223 @@ export type SvgProps = AccessibilityProps & {
   excludeFromSemantics?: boolean;
 };
 
+export type CanvasPathSegment =
+  | { op: 'moveTo' | 'lineTo'; x: CanvasNumber; y: CanvasNumber }
+  | { op: 'quadraticTo'; cx: CanvasNumber; cy: CanvasNumber; x: CanvasNumber; y: CanvasNumber }
+  | {
+      op: 'cubicTo';
+      cx1: CanvasNumber;
+      cy1: CanvasNumber;
+      cx2: CanvasNumber;
+      cy2: CanvasNumber;
+      x: CanvasNumber;
+      y: CanvasNumber;
+    }
+  | {
+      op: 'arc';
+      cx: CanvasNumber;
+      cy: CanvasNumber;
+      radius: CanvasNumber;
+      start: CanvasNumber;
+      end: CanvasNumber;
+      counterclockwise?: boolean;
+    }
+  | { op: 'close' };
+
+export type CanvasPaint = {
+  fill?: string | number;
+  stroke?: string | number;
+  strokeWidth?: number;
+  strokeCap?: 'butt' | 'round' | 'square';
+  strokeJoin?: 'miter' | 'round' | 'bevel';
+  antiAlias?: boolean;
+  globalAlpha?: number;
+  blendMode?: 'srcOver' | 'clear' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'plus' | 'add' | 'difference';
+};
+
+export type CanvasAnimation = {
+  from: number;
+  to: number;
+  durationMs: number;
+  delayMs?: number;
+  phaseMs?: number;
+  repeat?: boolean;
+  autoreverse?: boolean;
+  timeSource?: 'elapsed' | 'epoch';
+  curve?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
+};
+
+export type CanvasNumber = number | CanvasAnimation;
+
+export declare class Canvas2DContext {
+  readonly commands: CanvasCommand[];
+  fillStyle: string | number;
+  strokeStyle: string | number;
+  lineWidth: number;
+  lineCap: 'butt' | 'round' | 'square';
+  lineJoin: 'miter' | 'round' | 'bevel';
+  globalAlpha: CanvasNumber;
+  globalCompositeOperation: CanvasPaint['blendMode'];
+  font: string;
+  textAlign: 'left' | 'center' | 'right';
+  textBaseline: 'top' | 'hanging' | 'middle' | 'alphabetic' | 'ideographic' | 'bottom';
+  save(): void;
+  restore(): void;
+  translate(x: CanvasNumber, y: CanvasNumber): void;
+  rotate(radians: CanvasNumber): void;
+  scale(x: CanvasNumber, y?: CanvasNumber): void;
+  clear(color?: string | number): void;
+  clearRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber): void;
+  clipRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber): void;
+  fillRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber, radius?: CanvasNumber): void;
+  strokeRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber, radius?: CanvasNumber): void;
+  fillCircle(cx: CanvasNumber, cy: CanvasNumber, radius: CanvasNumber): void;
+  strokeCircle(cx: CanvasNumber, cy: CanvasNumber, radius: CanvasNumber): void;
+  drawLine(x1: CanvasNumber, y1: CanvasNumber, x2: CanvasNumber, y2: CanvasNumber): void;
+  drawImage(image: CanvasImageSource, dx: CanvasNumber, dy: CanvasNumber): void;
+  drawImage(
+    image: CanvasImageSource,
+    dx: CanvasNumber,
+    dy: CanvasNumber,
+    dWidth: CanvasNumber,
+    dHeight: CanvasNumber
+  ): void;
+  drawImage(
+    image: CanvasImageSource,
+    sx: CanvasNumber,
+    sy: CanvasNumber,
+    sWidth: CanvasNumber,
+    sHeight: CanvasNumber,
+    dx: CanvasNumber,
+    dy: CanvasNumber,
+    dWidth: CanvasNumber,
+    dHeight: CanvasNumber
+  ): void;
+  beginPath(): void;
+  moveTo(x: CanvasNumber, y: CanvasNumber): void;
+  lineTo(x: CanvasNumber, y: CanvasNumber): void;
+  quadraticCurveTo(cx: CanvasNumber, cy: CanvasNumber, x: CanvasNumber, y: CanvasNumber): void;
+  bezierCurveTo(cx1: CanvasNumber, cy1: CanvasNumber, cx2: CanvasNumber, cy2: CanvasNumber, x: CanvasNumber, y: CanvasNumber): void;
+  arc(cx: CanvasNumber, cy: CanvasNumber, radius: CanvasNumber, start: CanvasNumber, end: CanvasNumber, counterclockwise?: boolean): void;
+  closePath(): void;
+  fill(): void;
+  stroke(): void;
+  fillText(text: unknown, x: CanvasNumber, y: CanvasNumber, maxWidth?: CanvasNumber): void;
+}
+
+export declare function animate(
+  from: number,
+  to: number,
+  options: Omit<CanvasAnimation, 'from' | 'to'>
+): CanvasAnimation;
+
+export declare function canvasCommands(
+  draw: (context: Canvas2DContext) => void
+): CanvasCommand[];
+
+export type CanvasCommand =
+  | { op: 'clear'; color?: string | number }
+  | { op: 'save' | 'restore' }
+  | { op: 'translate'; x: CanvasNumber; y: CanvasNumber }
+  | { op: 'rotate'; radians: CanvasNumber }
+  | { op: 'scale'; x: CanvasNumber; y?: CanvasNumber }
+  | { op: 'clipRect'; x: CanvasNumber; y: CanvasNumber; width: CanvasNumber; height: CanvasNumber }
+  | ({ op: 'line'; x1: CanvasNumber; y1: CanvasNumber; x2: CanvasNumber; y2: CanvasNumber } & CanvasPaint)
+  | ({ op: 'rect'; x: CanvasNumber; y: CanvasNumber; width: CanvasNumber; height: CanvasNumber; radius?: CanvasNumber } & CanvasPaint)
+  | ({ op: 'circle'; cx: CanvasNumber; cy: CanvasNumber; radius: CanvasNumber } & CanvasPaint)
+  | ({ op: 'arc'; cx: CanvasNumber; cy: CanvasNumber; radius: CanvasNumber; start: CanvasNumber; sweep: CanvasNumber; useCenter?: boolean } & CanvasPaint)
+  | ({ op: 'path'; segments: CanvasPathSegment[] } & CanvasPaint)
+  | ({
+      op: 'image';
+      snapshotId: string;
+      sx?: CanvasNumber;
+      sy?: CanvasNumber;
+      sWidth?: CanvasNumber;
+      sHeight?: CanvasNumber;
+      dx: CanvasNumber;
+      dy: CanvasNumber;
+      dWidth?: CanvasNumber;
+      dHeight?: CanvasNumber;
+      filterQuality?: 'none' | 'low' | 'medium' | 'high';
+    } & Pick<CanvasPaint, 'globalAlpha' | 'blendMode'>)
+  | {
+      op: 'text';
+      text: string;
+      x: CanvasNumber;
+      y: CanvasNumber;
+      color?: string | number;
+      globalAlpha?: CanvasNumber;
+      blendMode?: CanvasBlendMode;
+      fontSize?: number;
+      fontWeight?: 'normal' | 'bold';
+      fontFamily?: string;
+      align?: 'left' | 'center' | 'right';
+      baseline?: 'top' | 'hanging' | 'middle' | 'alphabetic' | 'ideographic' | 'bottom';
+      maxWidth?: number;
+    };
+
+export type CanvasProps = AccessibilityProps & {
+  width?: number;
+  height?: number;
+  backgroundColor?: string | number;
+  /** Registers or reuses a page-scoped retained command scene. */
+  sceneKey?: string;
+  /** Binds retained image slots to versioned snapshot handles. */
+  resources?: Record<string, string>;
+  commands?: CanvasCommand[];
+  /** Recorded once into a ui.Picture and reused on every animation frame. */
+  staticCommands?: CanvasCommand[];
+  /** Familiar Canvas 2D-style callback compiled into commands once in JS. */
+  draw?: (context: Canvas2DContext) => void;
+  /** Canvas 2D-style callback recorded into the cached static picture. */
+  staticDraw?: (context: Canvas2DContext) => void;
+  /** Stops local time without discarding the retained scene. */
+  paused?: boolean;
+  /** Restarts local time whenever this value changes. */
+  playToken?: JsonValue;
+  /** Plays a finite retained scene from its end back to its beginning. */
+  reverse?: boolean;
+  willChange?: boolean;
+  /** Requests sampled frame events. Minimum interval is 16ms. */
+  onFrame?: QuickjsUiEvent;
+  /** Dispatched after the final frame of all finite local animations paints. */
+  onAnimationEnd?: QuickjsUiEvent;
+  frameIntervalMs?: number;
+  onTap?: QuickjsUiEvent;
+  onDoubleTap?: QuickjsUiEvent;
+  onLongPress?: QuickjsUiEvent;
+  onPointerDown?: QuickjsUiEvent;
+  onPointerMove?: QuickjsUiEvent;
+  onPointerUp?: QuickjsUiEvent;
+  onPointerCancel?: QuickjsUiEvent;
+};
+
+export type SnapshotReference = {
+  snapshotId: string;
+  width: number;
+  height: number;
+  pixelWidth: number;
+  pixelHeight: number;
+  pixelRatio: number;
+};
+
+export type CanvasImageSource =
+  | string
+  | SnapshotReference
+  | { snapshotId: string }
+  | { id: string }
+  | { slot: string };
+
+export type SnapshotBoundaryProps = AccessibilityProps & {
+  key: string;
+  snapshotKey?: string;
+  captureToken?: JsonValue;
+  pixelRatio?: number;
+  onCaptured?: QuickjsUiEvent;
+  onCaptureError?: QuickjsUiEvent;
+  child?: QuickjsUiNode;
+};
+
 export type ListViewProps = AccessibilityProps & ScrollableProps & {
   children?: QuickjsUiNode[];
   scrollDirection?: Axis;
@@ -660,6 +964,10 @@ export type SingleChildScrollViewProps = AccessibilityProps & ScrollableProps & 
 };
 
 export type TextFieldProps = AccessibilityProps & {
+  leading?: QuickjsUiNode;
+  prefix?: QuickjsUiNode;
+  suffix?: QuickjsUiNode;
+  trailing?: QuickjsUiNode;
   focusId?: string;
   value?: string;
   initialValue?: string;
@@ -677,6 +985,9 @@ export type TextFieldProps = AccessibilityProps & {
   keyboardType?: TextInputType;
   textInputAction?: TextInputAction;
   submitFocusAction?: SubmitFocusAction;
+  style?: TextStyle | ThemeTextStyleToken;
+  stateStyles?: ControlStateStyles;
+  stateTransition?: ControlStateTransition;
   onChanged?: QuickjsUiEvent;
   onSubmitted?: QuickjsUiEvent;
   onEditingComplete?: QuickjsUiEvent;
@@ -732,22 +1043,44 @@ export type CheckboxProps = {
   [key: string]: JsonValue | QuickjsUiEvent | undefined;
 };
 
-export type SwitchProps = {
+export type SwitchProps = AccessibilityProps & {
   value?: boolean;
+  stateStyles?: ControlStateStyles;
+  stateTransition?: ControlStateTransition;
+  thumbStyle?: ControlPartStyle;
+  trackStyle?: ControlPartStyle;
+  overlayStyle?: ControlPartStyle;
   onChanged?: QuickjsUiEvent;
-  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+  [key: string]:
+    | JsonValue
+    | QuickjsUiEvent
+    | ControlStateStyles
+    | ControlStateTransition
+    | ControlPartStyle
+    | undefined;
 };
 
-export type SliderProps = {
+export type SliderProps = AccessibilityProps & {
   value?: number;
   min?: number;
   max?: number;
   divisions?: number;
   label?: string;
+  stateStyles?: ControlStateStyles;
+  stateTransition?: ControlStateTransition;
+  thumbStyle?: ControlPartStyle;
+  trackStyle?: ControlPartStyle;
+  overlayStyle?: ControlPartStyle;
   onChanged?: QuickjsUiEvent;
   onChangeStart?: QuickjsUiEvent;
   onChangeEnd?: QuickjsUiEvent;
-  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+  [key: string]:
+    | JsonValue
+    | QuickjsUiEvent
+    | ControlStateStyles
+    | ControlStateTransition
+    | ControlPartStyle
+    | undefined;
 };
 
 export type RadioProps = {
@@ -989,6 +1322,10 @@ export declare function Column(props: FlexProps): QuickjsUiNode;
 export declare function Container(props: ContainerProps): QuickjsUiNode;
 export declare function Image(props: ImageProps): QuickjsUiNode;
 export declare function Svg(props: SvgProps): QuickjsUiNode;
+export declare function Canvas(props: CanvasProps): QuickjsUiNode;
+export declare function SnapshotBoundary(
+  props: SnapshotBoundaryProps
+): QuickjsUiNode;
 export declare function ListView(props: ListViewProps): QuickjsUiNode;
 export declare namespace ListView {
   function builder(props: ListViewBuilderProps): QuickjsUiNode;
@@ -1077,6 +1414,11 @@ export declare const ui: {
   Container(props: ContainerProps): QuickjsUiNode;
   Image(props: ImageProps): QuickjsUiNode;
   Svg(props: SvgProps): QuickjsUiNode;
+  Canvas(props: CanvasProps): QuickjsUiNode;
+  SnapshotBoundary(props: SnapshotBoundaryProps): QuickjsUiNode;
+  animate: typeof animate;
+  canvasCommands: typeof canvasCommands;
+  Canvas2DContext: typeof Canvas2DContext;
   ListView(props: ListViewProps): QuickjsUiNode;
   SingleChildScrollView(props: SingleChildScrollViewProps): QuickjsUiNode;
   GridView(props: GridViewProps): QuickjsUiNode;

@@ -61,7 +61,6 @@ Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
 
 Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final decoration = context.boxDecoration(node.props);
-  final opacity = QuickjsUiProps.opacity(node.props['opacity']);
   final animationDuration = quickjsUiAnimationDuration(node);
   final curve = QuickjsUiProps.curve(node.props['animationCurve']);
   final width = QuickjsUiProps.doubleValue(node.props['width']);
@@ -97,16 +96,6 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
           color: color,
           child: nodeChild,
         );
-  if (opacity != 1) {
-    child = animationDuration == null
-        ? Opacity(opacity: opacity, child: child)
-        : AnimatedOpacity(
-            opacity: opacity,
-            duration: animationDuration,
-            curve: curve,
-            child: child,
-          );
-  }
   if (elevation != null && elevation > 0) {
     child = Material(
       elevation: elevation,

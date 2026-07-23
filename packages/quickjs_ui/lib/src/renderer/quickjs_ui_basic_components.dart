@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_helpers.dart';
+import 'quickjs_ui_control_style.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 
@@ -46,31 +47,65 @@ Widget _buildElevatedButton(
   QuickjsUiRenderContext context,
   QuickjsUiNode node,
 ) {
-  final event = QuickjsUiProps.event(node.props['onPressed']);
-  return ElevatedButton(
-    onPressed: event == null ? null : () => context.dispatch(event),
-    child: _buttonChild(context, node),
-  );
+  return _buildButton(context, node, _QuickjsUiButtonKind.elevated);
 }
 
 Widget _buildTextButton(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final event = QuickjsUiProps.event(node.props['onPressed']);
-  return TextButton(
-    onPressed: event == null ? null : () => context.dispatch(event),
-    child: _buttonChild(context, node),
-  );
+  return _buildButton(context, node, _QuickjsUiButtonKind.text);
 }
 
 Widget _buildOutlinedButton(
   QuickjsUiRenderContext context,
   QuickjsUiNode node,
 ) {
+  return _buildButton(context, node, _QuickjsUiButtonKind.outlined);
+}
+
+Widget _buildButton(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+  _QuickjsUiButtonKind kind,
+) {
   final event = QuickjsUiProps.event(node.props['onPressed']);
-  return OutlinedButton(
-    onPressed: event == null ? null : () => context.dispatch(event),
-    child: _buttonChild(context, node),
+  final style = QuickjsUiControlStyle.from(context, node.props['stateStyles']);
+  final transition = QuickjsUiControlTransition.from(
+    node.props['stateTransition'],
+  );
+  final onPressed = event == null ? null : () => context.dispatch(event);
+  final child = _buttonChild(context, node);
+  return QuickjsUiControlStateBuilder(
+    enabled: event != null,
+    styles: <QuickjsUiControlStyle>[style],
+    transition: transition,
+    builder: (context, styles, focusNode) {
+      final resolved = styles.single;
+      final buttonStyle = resolved.buttonStyle();
+      final button = switch (kind) {
+        _QuickjsUiButtonKind.elevated => ElevatedButton(
+          focusNode: focusNode,
+          onPressed: onPressed,
+          style: buttonStyle,
+          child: child,
+        ),
+        _QuickjsUiButtonKind.text => TextButton(
+          focusNode: focusNode,
+          onPressed: onPressed,
+          style: buttonStyle,
+          child: child,
+        ),
+        _QuickjsUiButtonKind.outlined => OutlinedButton(
+          focusNode: focusNode,
+          onPressed: onPressed,
+          style: buttonStyle,
+          child: child,
+        ),
+      };
+      return resolved.decorate(button);
+    },
   );
 }
+
+enum _QuickjsUiButtonKind { elevated, text, outlined }
 
 Widget _buildIconButton(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final event = QuickjsUiProps.event(node.props['onPressed']);
@@ -117,8 +152,26 @@ Widget _buildFloatingActionButton(
 }
 
 Widget _buttonChild(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  return context.child(node) ??
+  final leading = context.slot(node, 'leading');
+  final content =
+      context.child(node) ??
+      context.slot(node, 'content') ??
       Text(QuickjsUiProps.string(node.props['label']) ?? '');
+  final trailing = context.slot(node, 'trailing');
+  if (leading == null && trailing == null) {
+    return content;
+  }
+  final gap = context.spacing(node.props['gap'], name: 'button gap') ?? 8;
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      ?leading,
+      if (leading != null) SizedBox(width: gap),
+      content,
+      if (trailing != null) SizedBox(width: gap),
+      ?trailing,
+    ],
+  );
 }
 
 Widget _buildIcon(QuickjsUiRenderContext context, QuickjsUiNode node) {

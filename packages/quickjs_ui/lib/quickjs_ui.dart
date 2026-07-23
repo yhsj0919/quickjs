@@ -14,6 +14,8 @@ export 'src/navigation/quickjs_ui_navigator.dart';
 export 'src/renderer/quickjs_ui_component_registry.dart';
 export 'src/renderer/quickjs_ui_render_context.dart';
 export 'src/renderer/quickjs_ui_renderer.dart';
+export 'src/renderer/quickjs_ui_snapshot.dart';
+export 'src/renderer/quickjs_ui_snapshot_component.dart';
 export 'src/resource/quickjs_ui_bundle.dart';
 export 'src/resource/quickjs_ui_manifest.dart';
 export 'src/resource/quickjs_ui_network_cache_store.dart';
