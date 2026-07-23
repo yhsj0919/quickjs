@@ -315,7 +315,10 @@ List<QuickjsUiNode>? _propOverlayNodes(Object? value) {
 }
 
 bool _isOverlayType(String type) {
-  return type == 'SnackBar' || type == 'AlertDialog' || type == 'BottomSheet';
+  return type == 'Overlay' ||
+      type == 'SnackBar' ||
+      type == 'AlertDialog' ||
+      type == 'BottomSheet';
 }
 
 String _token(String type, String value) => '$type${value.length}:$value';

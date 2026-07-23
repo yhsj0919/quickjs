@@ -301,6 +301,7 @@ export default Page({
         '#/\$defs/image',
         '#/\$defs/canvas',
         '#/\$defs/snapshotBoundary',
+        '#/\$defs/overlay',
         '#/\$defs/listView',
         '#/\$defs/singleChildScrollView',
         '#/\$defs/textField',

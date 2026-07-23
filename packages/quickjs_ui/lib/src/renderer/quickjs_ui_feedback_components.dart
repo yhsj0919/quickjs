@@ -7,12 +7,24 @@ import 'quickjs_ui_render_context.dart';
 
 final QuickjsUiComponentBuilderMap quickjsUiFeedbackComponentBuilders =
     <String, QuickjsUiComponentBuilder>{
+      'Overlay': _buildOverlay,
       'SnackBar': _buildSnackBar,
       'AlertDialog': _buildAlertDialog,
       'BottomSheet': _buildBottomSheet,
     };
 
+Widget _buildOverlay(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  if (context.buildContext != null ||
+      QuickjsUiProps.boolValue(node.props['visible']) == false) {
+    return const SizedBox.shrink();
+  }
+  return context.child(node) ?? const SizedBox.shrink();
+}
+
 Widget _buildSnackBar(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  if (context.buildContext != null) {
+    return const SizedBox.shrink();
+  }
   if (QuickjsUiProps.boolValue(node.props['visible']) == false) {
     return const SizedBox.shrink();
   }
@@ -33,6 +45,9 @@ Widget _buildSnackBar(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildAlertDialog(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  if (context.buildContext != null) {
+    return const SizedBox.shrink();
+  }
   if (QuickjsUiProps.boolValue(node.props['visible']) == false) {
     return const SizedBox.shrink();
   }
@@ -53,6 +68,9 @@ Widget _buildAlertDialog(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildBottomSheet(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  if (context.buildContext != null) {
+    return const SizedBox.shrink();
+  }
   if (QuickjsUiProps.boolValue(node.props['visible']) == false) {
     return const SizedBox.shrink();
   }

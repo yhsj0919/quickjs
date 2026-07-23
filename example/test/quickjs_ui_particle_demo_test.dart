@@ -131,6 +131,33 @@ void main() {
     );
   });
 
+  test('overlay system demo opens and closes on the first command', () async {
+    final source = await rootBundle.loadString(
+      'assets/quickjs_ui/overlay_system_page.mjs',
+    );
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'overlay_system',
+        version: '1.0.0',
+        source: source,
+      ),
+    );
+
+    expect(_findNode(session.node!, 'Overlay')!.props['visible'], isFalse);
+    await session.dispatch(<String, Object?>{
+      'method': 'open',
+      'alignment': 'center',
+      'transition': 'fadeScale',
+    });
+    expect(_findNode(session.node!, 'Overlay')!.props['visible'], isTrue);
+
+    await session.dispatch(<String, Object?>{'method': 'close'});
+    expect(_findNode(session.node!, 'Overlay')!.props['visible'], isFalse);
+  });
+
   test('Canvas 2D-style API records familiar operations', () async {
     final engine = await Quickjs.create();
     final session = QuickjsUiSession(engine: engine);
