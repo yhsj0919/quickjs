@@ -676,17 +676,17 @@ JS 持有 `CustomPainter`、`Paint`、`Path` 或其他 Dart 对象。JS 侧提�
 绘制 API，将一批可序列化绘制命令通过显式 `commit()` 提交给 Flutter，再由
 `CustomPainter` / Flutter Canvas 完成绘制。
 
-- [ ] 根据第一个真实 Canvas 页面确定首版能力边界，不先追求完整 HTML Canvas 兼容。
-- [ ] 定义 `Canvas` schema 组件、稳定 canvas key、尺寸、像素比、重绘和销毁生命周期。
-- [ ] 定义 JS 侧 2D command recorder 与批量 `commit()` 协议，禁止每条绘制命令单独跨 Bridge。
-- [ ] 首版候选：矩形、圆、线段、Path、fill/stroke、线宽、透明度、save/restore、基础变换和裁剪。
-- [ ] 文本绘制和测量统一使用 Flutter 字体与资源解析，明确不同平台字体度量差异。
-- [ ] 图片通过 resource id 引用并由 Flutter 缓存、解码和释放，不在命令列表中重复传输二进制。
-- [ ] 点击、拖动等手势由 Flutter 命中并回传局部坐标；高频移动事件采用节流、合并和背压。
-- [ ] 动画优先由 Flutter 帧调度和原生动画参数驱动；不把逐帧 JS Bridge 作为默认动画方式。
-- [ ] 设置单次命令数、Path 复杂度、资源尺寸、内存和执行时间限制，错误进入页面级 error boundary。
+- [x] 已用时钟、弧形仪表盘、粒子和控件快照页面确定首版受控能力边界，不追求完整 HTML Canvas 兼容。
+- [x] 定义 `Canvas` schema、稳定 node/scene key、逻辑像素尺寸、重绘和 renderer 级销毁生命周期。
+- [x] JS 侧 2D recorder 在 build 阶段生成批量 display list，不逐条或逐帧跨 Bridge。
+- [x] 支持矩形、圆、弧、线段、Path、fill/stroke、透明度、save/restore、基础变换和矩形裁剪。
+- [~] 文本由 Flutter 绘制；字体测量 API 和跨平台字体度量说明尚未提供。
+- [x] 图片和控件快照使用 page-scoped resource id，由 Flutter 缓存、淘汰和释放。
+- [x] 手势由 Flutter 命中并回传局部坐标；可选 `onFrame` 采用间隔限制和事件合并，不作为动画驱动。
+- [x] 动画由 Flutter VSync 和本地参数驱动，不使用逐帧 JS Bridge。
+- [~] 已限制命令数、Path 复杂度、save 深度、场景数、快照数量/像素和帧事件间隔；Inspector 绘制耗时和生产设备内存预算待补。
 - [ ] Inspector 记录 command batch 大小、绘制耗时、重绘次数、图片缓存和被拒绝的超限命令。
-- [ ] 首个真实业务落地后补对应 Demo、golden/交互测试和性能基线。
+- [~] 已有时钟、仪表盘、粒子、快照和通用控件动画 Demo、交互测试及 widget benchmark；真机 profile/golden 基线待补。
 - [ ] 首版不做 WebGL、任意 shader、完整滤镜体系和高频 `getImageData()` 像素回传。
 
 ### 0.9+：可选 DSL
