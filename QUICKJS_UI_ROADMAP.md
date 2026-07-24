@@ -687,8 +687,9 @@ JS 持有 `CustomPainter`、`Paint`、`Path` 或其他 Dart 对象。JS 侧提�
 - [x] 手势由 Flutter 命中并回传局部坐标；可选 `onFrame` 采用间隔限制和事件合并，不作为动画驱动。
 - [x] 动画由 Flutter VSync 和本地参数驱动，不使用逐帧 JS Bridge。
 - [~] 已限制命令数、Path 复杂度、save 深度、场景数、快照数量/像素和帧事件间隔；Inspector 绘制耗时和生产设备内存预算待补。
-- [~] Inspector 已记录刷新率、帧预算、质量等级、降级原因及 build/raster P50/P90/P99；
-  command batch 大小、Canvas 绘制耗时、重绘次数、图片缓存和被拒绝的超限命令待补。
+- [x] Inspector 记录刷新率、帧预算、质量等级、降级原因、build/raster P50/P90/P99、
+  command/Path 数量、Canvas painter CPU 耗时、重绘次数、scene/snapshot 资源、粒子实际数量、
+  效果降级数量和被拒绝的命令原因；GPU 成本继续以 Flutter raster timing 为准。
 - [~] 已有时钟、仪表盘、粒子、快照和通用控件动画 Demo、交互测试及 widget benchmark；真机 profile/golden 基线待补。
 - [ ] 首版不做 WebGL、任意 shader、完整滤镜体系和高频 `getImageData()` 像素回传。
 

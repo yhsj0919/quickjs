@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -31,8 +33,23 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   bool _reduceMotion = false;
   double? _refreshRate;
   String? _lastTransitionReason;
-  final List<double> _buildSamplesMs = <double>[];
-  final List<double> _rasterSamplesMs = <double>[];
+  final ListQueue<double> _buildSamplesMs = ListQueue<double>();
+  final ListQueue<double> _rasterSamplesMs = ListQueue<double>();
+  final ListQueue<double> _canvasPaintSamplesMs = ListQueue<double>();
+  int _canvasCount = 0;
+  int _animatedCanvasCount = 0;
+  int _canvasCommandCount = 0;
+  int _canvasPathSegmentCount = 0;
+  int _snapshotParticleFragments = 0;
+  int _blurEffectCount = 0;
+  int _backdropBlurEffectCount = 0;
+  int _colorFilterEffectCount = 0;
+  int _retainedSceneCount = 0;
+  int _snapshotCount = 0;
+  int _snapshotPixels = 0;
+  int _canvasRepaintCount = 0;
+  int _rejectedCanvasCommandCount = 0;
+  String? _lastCanvasRejection;
   int _slowFrames = 0;
   int _stableFrames = 0;
   bool _started = false;
@@ -78,7 +95,94 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     consecutiveSlowFrames: _slowFrames,
     consecutiveStableFrames: _stableFrames,
     lastTransitionReason: _lastTransitionReason,
+    canvasCount: _canvasCount,
+    animatedCanvasCount: _animatedCanvasCount,
+    canvasCommandCount: _canvasCommandCount,
+    canvasPathSegmentCount: _canvasPathSegmentCount,
+    requestedParticleFragments: _snapshotParticleFragments,
+    effectiveParticleFragments: _effectiveParticleFragments(
+      _snapshotParticleFragments,
+      quality,
+    ),
+    blurEffectCount: _blurEffectCount,
+    clampedBlurEffectCount: quality == QuickjsUiEffectQuality.high
+        ? 0
+        : _blurEffectCount,
+    backdropBlurEffectCount: _backdropBlurEffectCount,
+    disabledBackdropBlurCount: quality.index >= QuickjsUiEffectQuality.low.index
+        ? _backdropBlurEffectCount
+        : 0,
+    colorFilterEffectCount: _colorFilterEffectCount,
+    disabledColorFilterCount: quality.index >= QuickjsUiEffectQuality.low.index
+        ? _colorFilterEffectCount
+        : 0,
+    stoppedCanvasTickerCount: quality == QuickjsUiEffectQuality.off
+        ? _animatedCanvasCount
+        : 0,
+    retainedSceneCount: _retainedSceneCount,
+    snapshotCount: _snapshotCount,
+    snapshotPixels: _snapshotPixels,
+    canvasRepaintCount: _canvasRepaintCount,
+    canvasPaintP50Ms: _percentile(_canvasPaintSamplesMs, 0.50),
+    canvasPaintP90Ms: _percentile(_canvasPaintSamplesMs, 0.90),
+    canvasPaintP99Ms: _percentile(_canvasPaintSamplesMs, 0.99),
+    rejectedCanvasCommandCount: _rejectedCanvasCommandCount,
+    lastCanvasRejection: _lastCanvasRejection,
   );
+
+  void beginRenderPass() {
+    _canvasCount = 0;
+    _animatedCanvasCount = 0;
+    _canvasCommandCount = 0;
+    _canvasPathSegmentCount = 0;
+    _snapshotParticleFragments = 0;
+    _blurEffectCount = 0;
+    _backdropBlurEffectCount = 0;
+    _colorFilterEffectCount = 0;
+  }
+
+  void recordCanvasSchema({
+    required int commandCount,
+    required int pathSegmentCount,
+    required int particleFragments,
+    required bool animated,
+  }) {
+    _canvasCount += 1;
+    if (animated) _animatedCanvasCount += 1;
+    _canvasCommandCount += commandCount;
+    _canvasPathSegmentCount += pathSegmentCount;
+    _snapshotParticleFragments += particleFragments;
+  }
+
+  void recordEffectSchema({
+    required bool blur,
+    required bool backdropBlur,
+    required bool colorFilter,
+  }) {
+    if (blur) _blurEffectCount += 1;
+    if (backdropBlur) _backdropBlurEffectCount += 1;
+    if (colorFilter) _colorFilterEffectCount += 1;
+  }
+
+  void updateResourceMetrics({
+    required int retainedSceneCount,
+    required int snapshotCount,
+    required int snapshotPixels,
+  }) {
+    _retainedSceneCount = retainedSceneCount;
+    _snapshotCount = snapshotCount;
+    _snapshotPixels = snapshotPixels;
+  }
+
+  void recordCanvasPaint(Duration elapsed) {
+    _canvasRepaintCount += 1;
+    _appendSample(_canvasPaintSamplesMs, elapsed.inMicroseconds / 1000);
+  }
+
+  void recordCanvasRejection(Object error) {
+    _rejectedCanvasCommandCount += 1;
+    _lastCanvasRejection = '$error';
+  }
 
   void start() {
     if (_started || mode != QuickjsUiPerformanceMode.auto) return;
@@ -166,6 +270,28 @@ final class QuickjsUiPerformanceSnapshot {
     required this.consecutiveSlowFrames,
     required this.consecutiveStableFrames,
     required this.lastTransitionReason,
+    required this.canvasCount,
+    required this.animatedCanvasCount,
+    required this.canvasCommandCount,
+    required this.canvasPathSegmentCount,
+    required this.requestedParticleFragments,
+    required this.effectiveParticleFragments,
+    required this.blurEffectCount,
+    required this.clampedBlurEffectCount,
+    required this.backdropBlurEffectCount,
+    required this.disabledBackdropBlurCount,
+    required this.colorFilterEffectCount,
+    required this.disabledColorFilterCount,
+    required this.stoppedCanvasTickerCount,
+    required this.retainedSceneCount,
+    required this.snapshotCount,
+    required this.snapshotPixels,
+    required this.canvasRepaintCount,
+    required this.canvasPaintP50Ms,
+    required this.canvasPaintP90Ms,
+    required this.canvasPaintP99Ms,
+    required this.rejectedCanvasCommandCount,
+    required this.lastCanvasRejection,
   });
 
   final QuickjsUiPerformanceMode mode;
@@ -182,6 +308,28 @@ final class QuickjsUiPerformanceSnapshot {
   final int consecutiveSlowFrames;
   final int consecutiveStableFrames;
   final String? lastTransitionReason;
+  final int canvasCount;
+  final int animatedCanvasCount;
+  final int canvasCommandCount;
+  final int canvasPathSegmentCount;
+  final int requestedParticleFragments;
+  final int effectiveParticleFragments;
+  final int blurEffectCount;
+  final int clampedBlurEffectCount;
+  final int backdropBlurEffectCount;
+  final int disabledBackdropBlurCount;
+  final int colorFilterEffectCount;
+  final int disabledColorFilterCount;
+  final int stoppedCanvasTickerCount;
+  final int retainedSceneCount;
+  final int snapshotCount;
+  final int snapshotPixels;
+  final int canvasRepaintCount;
+  final double? canvasPaintP50Ms;
+  final double? canvasPaintP90Ms;
+  final double? canvasPaintP99Ms;
+  final int rejectedCanvasCommandCount;
+  final String? lastCanvasRejection;
 
   Map<String, Object?> toMap() => <String, Object?>{
     'mode': mode.name,
@@ -199,17 +347,49 @@ final class QuickjsUiPerformanceSnapshot {
     'consecutiveStableFrames': consecutiveStableFrames,
     if (lastTransitionReason != null)
       'lastTransitionReason': lastTransitionReason,
+    'canvasCount': canvasCount,
+    'animatedCanvasCount': animatedCanvasCount,
+    'canvasCommandCount': canvasCommandCount,
+    'canvasPathSegmentCount': canvasPathSegmentCount,
+    'requestedParticleFragments': requestedParticleFragments,
+    'effectiveParticleFragments': effectiveParticleFragments,
+    'blurEffectCount': blurEffectCount,
+    'clampedBlurEffectCount': clampedBlurEffectCount,
+    'backdropBlurEffectCount': backdropBlurEffectCount,
+    'disabledBackdropBlurCount': disabledBackdropBlurCount,
+    'colorFilterEffectCount': colorFilterEffectCount,
+    'disabledColorFilterCount': disabledColorFilterCount,
+    'stoppedCanvasTickerCount': stoppedCanvasTickerCount,
+    'retainedSceneCount': retainedSceneCount,
+    'snapshotCount': snapshotCount,
+    'snapshotPixels': snapshotPixels,
+    'canvasRepaintCount': canvasRepaintCount,
+    if (canvasPaintP50Ms != null) 'canvasPaintP50Ms': canvasPaintP50Ms,
+    if (canvasPaintP90Ms != null) 'canvasPaintP90Ms': canvasPaintP90Ms,
+    if (canvasPaintP99Ms != null) 'canvasPaintP99Ms': canvasPaintP99Ms,
+    'rejectedCanvasCommandCount': rejectedCanvasCommandCount,
+    if (lastCanvasRejection != null) 'lastCanvasRejection': lastCanvasRejection,
   };
 }
 
-void _appendSample(List<double> samples, double value) {
+int _effectiveParticleFragments(
+  int requested,
+  QuickjsUiEffectQuality quality,
+) => switch (quality) {
+  QuickjsUiEffectQuality.high => requested,
+  QuickjsUiEffectQuality.balanced => requested.clamp(0, 1024),
+  QuickjsUiEffectQuality.low => requested.clamp(0, 256),
+  QuickjsUiEffectQuality.off => 0,
+};
+
+void _appendSample(ListQueue<double> samples, double value) {
   samples.add(value);
-  if (samples.length > 240) samples.removeAt(0);
+  if (samples.length > 240) samples.removeFirst();
 }
 
-double? _percentile(List<double> samples, double percentile) {
+double? _percentile(Iterable<double> samples, double percentile) {
   if (samples.isEmpty) return null;
-  final sorted = List<double>.of(samples)..sort();
+  final sorted = samples.toList()..sort();
   final index = ((sorted.length - 1) * percentile).round();
   return sorted[index];
 }

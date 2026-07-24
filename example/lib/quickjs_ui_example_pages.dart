@@ -1,6 +1,7 @@
 import 'example_page_spec.dart';
 import 'pages/quickjs_ui/integrated/quickjs_ui_weather_demo_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_bundle_counter_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_adaptive_performance_lab_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_canvas_clock_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_controls_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_counter_page.dart';
@@ -237,5 +238,11 @@ final List<ExamplePageSpec> quickjsUiParticleExamplePages = [
     title: 'Overlay System · 任意浮层',
     description: '统一测试任意 JSUI 内容、遮罩、定位、进出动画和关闭生命周期。',
     builder: (_) => const QuickjsUiOverlaySystemPage(),
+  ),
+  ExamplePageSpec(
+    title: 'Performance Lab · 自适应效果质量',
+    description:
+        '综合测试 1k/5k/10k Canvas 图元、Snapshot 粒子、滤镜与组件动画，并实时展示刷新率、帧耗和自动降级指标。',
+    builder: (_) => const QuickjsUiAdaptivePerformanceLabPage(),
   ),
 ];

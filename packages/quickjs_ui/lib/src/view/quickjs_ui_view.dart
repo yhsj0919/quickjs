@@ -611,8 +611,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       _performanceController.updateReduceMotion(
         MediaQuery.maybeOf(context)?.disableAnimations ?? false,
       );
-      _controller.inspector.recordPerformance(_performanceController.snapshot);
       final rendered = _renderer.build(node, buildContext: context);
+      _controller.inspector.recordPerformance(_performanceController.snapshot);
       if (_devOptions.logSchema) {
         QuickjsUiDiag.log('schema', node.toMap().toString());
       }
