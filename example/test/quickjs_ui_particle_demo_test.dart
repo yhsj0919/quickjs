@@ -259,19 +259,15 @@ export default Page({
       ),
     );
 
+    expect(_findNode(session.node!, 'SnapshotBoundary'), isNull);
+    final initialCanvas = _findCanvas(session.node!)!;
+    expect(initialCanvas.props['sceneKey'], isNull);
+    expect(initialCanvas.props['commands'], isEmpty);
+    expect(initialCanvas.props['staticCommands'], isNotEmpty);
+
+    await session.dispatch(<String, Object?>{'method': 'startTransition'});
+    expect(session.state, containsPair('mode', 'preparing'));
     expect(_findNode(session.node!, 'SnapshotBoundary'), isNotNull);
-    final retainedScene = _findCanvas(session.node!)!;
-    final retainedCommands = retainedScene.props['commands']! as List<Object?>;
-    expect(retainedCommands.length, greaterThan(2000));
-    final retainedImages = retainedCommands
-        .cast<Map<Object?, Object?>>()
-        .where((command) => command['op'] == 'image')
-        .toList();
-    expect(retainedImages, hasLength(864));
-    expect(
-      retainedImages.map((command) => command['imageSlot']).toSet(),
-      <Object?>{'source', 'target'},
-    );
 
     await session.dispatch(<String, Object?>{
       'method': 'captured',
@@ -285,11 +281,26 @@ export default Page({
       'variant': 0,
       'snapshotId': 'snapshot:transition-target:2',
     });
-    await session.dispatch(<String, Object?>{'method': 'startTransition'});
 
     var canvas = _findCanvas(session.node!)!;
-    expect(canvas.props['commands'], isNull);
     expect(canvas.props['sceneKey'], 'snapshot-particle-transition');
+    final retainedCommands = canvas.props['commands']! as List<Object?>;
+    expect(retainedCommands, hasLength(1));
+    expect(retainedCommands.single, <String, Object?>{
+      'op': 'snapshotParticleGrid',
+      'sourceSlot': 'source',
+      'targetSlot': 'target',
+      'x': 38,
+      'y': 120,
+      'width': 284,
+      'height': 220,
+      'columns': 24,
+      'rows': 18,
+      'bucketCount': 16,
+      'staggerMs': 16,
+      'travelMs': 920,
+      'fadeMs': 760,
+    });
     expect(canvas.props['paused'], isFalse);
     expect(canvas.props['resources'], <String, Object?>{
       'source': 'snapshot:transition-source:1',
@@ -302,7 +313,6 @@ export default Page({
         'run': (session.state! as Map<Object?, Object?>)['run'],
       },
     });
-
     var transitionState = session.state! as Map<Object?, Object?>;
     await session.dispatch(<String, Object?>{
       'method': 'finishTransition',
@@ -311,7 +321,10 @@ export default Page({
     expect(session.state, containsPair('mode', 'visible'));
     expect(session.state, containsPair('currentVariant', 0));
     expect(session.state, containsPair('transitionType', 'different'));
+    expect(_findNode(session.node!, 'SnapshotBoundary'), isNull);
 
+    await session.dispatch(<String, Object?>{'method': 'startTransition'});
+    expect(session.state, containsPair('mode', 'preparing'));
     await session.dispatch(<String, Object?>{
       'method': 'captured',
       'role': 'source',
@@ -324,14 +337,13 @@ export default Page({
       'variant': 1,
       'snapshotId': 'snapshot:transition-target:4',
     });
-    await session.dispatch(<String, Object?>{'method': 'startTransition'});
     transitionState = session.state! as Map<Object?, Object?>;
     await session.dispatch(<String, Object?>{
       'method': 'finishTransition',
       'run': transitionState['run'],
     });
     expect(session.state, containsPair('currentVariant', 1));
-    expect(_findNode(session.node!, 'SnapshotBoundary'), isNotNull);
+    expect(_findNode(session.node!, 'SnapshotBoundary'), isNull);
   });
 }
 

@@ -153,7 +153,16 @@ void main() {
       tester.getCenter(find.byType(Switch)),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    final switchAtAnimationStart = tester.widget<Switch>(find.byType(Switch));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      identical(
+        tester.widget<Switch>(find.byType(Switch)),
+        switchAtAnimationStart,
+      ),
+      isTrue,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
     final pressedToggle = tester.widget<Switch>(find.byType(Switch));
     expect(
       pressedToggle.thumbColor!.resolve(<WidgetState>{}),
@@ -175,7 +184,16 @@ void main() {
       tester.getCenter(find.byType(Slider)),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    final sliderAtAnimationStart = tester.widget<Slider>(find.byType(Slider));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      identical(
+        tester.widget<Slider>(find.byType(Slider)),
+        sliderAtAnimationStart,
+      ),
+      isTrue,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
     final pressedTheme = tester.widget<SliderTheme>(find.byType(SliderTheme));
     expect(pressedTheme.data.activeTrackColor, const Color(0xFFFF0000));
     await gesture.up();
@@ -225,13 +243,391 @@ void main() {
 
     await tester.tap(find.byType(TextField));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    final fieldAtAnimationStart = tester.widget<TextField>(
+      find.byType(TextField),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      identical(
+        tester.widget<TextField>(find.byType(TextField)),
+        fieldAtAnimationStart,
+      ),
+      isTrue,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
     final focusedField = tester.widget<TextField>(find.byType(TextField));
     expect(focusedField.decoration!.fillColor, const Color(0xFF102A3A));
     final focused =
         focusedField.decoration!.focusedBorder! as OutlineInputBorder;
     expect(focused.borderSide.color, const Color(0xFF00FFFF));
     expect(focused.borderSide.width, 2);
+  });
+
+  testWidgets('Slider keeps its first touch drag across a pressed animation', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Slider',
+      'key': 'first-drag',
+      'value': 0.5,
+      'onChanged': <String, Object?>{'method': 'slide'},
+      'stateTransition': <String, Object?>{
+        'durationMs': 120,
+        'curve': 'easeOut',
+      },
+      'stateStyles': <String, Object?>{
+        'normal': <String, Object?>{'scale': 1, 'opacity': 1},
+        'pressed': <String, Object?>{'scale': 0.985, 'opacity': 0.96},
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    final slider = find.byType(Slider);
+    expect(
+      find.ancestor(of: slider, matching: find.byType(Transform)),
+      findsWidgets,
+    );
+    expect(
+      find.ancestor(of: slider, matching: find.byType(Opacity)),
+      findsWidgets,
+    );
+    final gesture = await tester.startGesture(
+      tester.getCenter(slider),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(60, 0));
+    await tester.pump();
+    await gesture.up();
+
+    expect(events, isNotEmpty);
+    expect(events.last['method'], 'slide');
+    expect(events.last['value'], greaterThan(0.5));
+  });
+
+  testWidgets('Button keeps its first touch tap across a scale animation', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ElevatedButton',
+      'onPressed': <String, Object?>{'method': 'press'},
+      'stateTransition': <String, Object?>{'durationMs': 120},
+      'stateStyles': <String, Object?>{
+        'normal': <String, Object?>{'scale': 1},
+        'pressed': <String, Object?>{'scale': 0.94},
+      },
+      'child': <String, Object?>{'type': 'Text', 'data': 'Touch once'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    final button = find.byType(ElevatedButton);
+    expect(
+      find.ancestor(of: button, matching: find.byType(Transform)),
+      findsWidgets,
+    );
+    final gesture = await tester.startGesture(
+      tester.getCenter(button),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pump();
+
+    expect(events, hasLength(1));
+    expect(events.single['method'], 'press');
+  });
+
+  testWidgets('Button holds and reverses scale across an event rebuild', (
+    tester,
+  ) async {
+    var pressedCount = 0;
+    late StateSetter rebuild;
+    late final QuickjsUiRenderer renderer;
+    renderer = QuickjsUiRenderer(
+      onEvent: (event) {
+        if (event['method'] == 'press') {
+          rebuild(() => pressedCount += 1);
+        }
+      },
+    );
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode node() => QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ElevatedButton',
+      'key': 'rebuilding-button',
+      'onPressed': <String, Object?>{'method': 'press'},
+      'stateTransition': <String, Object?>{
+        'durationMs': 120,
+        'curve': 'linear',
+      },
+      'stateStyles': <String, Object?>{
+        'normal': <String, Object?>{'scale': 1},
+        'pressed': <String, Object?>{'scale': 0.9},
+      },
+      'child': <String, Object?>{
+        'type': 'Text',
+        'data': 'Pressed $pressedCount',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Scaffold(body: renderer.build(node()));
+          },
+        ),
+      ),
+    );
+
+    double scale() {
+      final transforms = tester.widgetList<Transform>(
+        find.ancestor(
+          of: find.byType(ElevatedButton),
+          matching: find.byType(Transform),
+        ),
+      );
+      return transforms
+          .map((transform) => transform.transform.storage[0])
+          .firstWhere((value) => value != 1, orElse: () => 1);
+    }
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ElevatedButton)),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(scale(), closeTo(0.95, 0.01));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(scale(), closeTo(0.9, 0.001));
+    expect(pressedCount, 0);
+
+    await gesture.up();
+    await tester.pump();
+    expect(pressedCount, 1);
+    expect(scale(), closeTo(0.9, 0.001));
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(scale(), closeTo(0.95, 0.01));
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(scale(), closeTo(1, 0.001));
+  });
+
+  testWidgets(
+    'Button animates pressed scale back to an implicit normal scale',
+    (tester) async {
+      final events = <Map<String, Object?>>[];
+      final node = QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'ElevatedButton',
+        'onPressed': <String, Object?>{'method': 'press'},
+        'stateTransition': <String, Object?>{
+          'durationMs': 180,
+          'curve': 'linear',
+        },
+        'stateStyles': <String, Object?>{
+          'normal': <String, Object?>{'backgroundColor': '#1e293b'},
+          'pressed': <String, Object?>{'scale': 0.94},
+        },
+        'child': <String, Object?>{'type': 'Text', 'data': 'Implicit scale'},
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: QuickjsUiRenderer(onEvent: events.add).build(node),
+          ),
+        ),
+      );
+
+      double scale() => tester
+          .widgetList<Transform>(
+            find.ancestor(
+              of: find.byType(ElevatedButton),
+              matching: find.byType(Transform),
+            ),
+          )
+          .map((transform) => transform.transform.storage[0])
+          .firstWhere((value) => value != 1, orElse: () => 1);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(ElevatedButton)),
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(scale(), closeTo(0.94, 0.001));
+
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 90));
+      expect(scale(), closeTo(0.97, 0.002));
+      await tester.pump(const Duration(milliseconds: 90));
+      expect(scale(), closeTo(1, 0.001));
+      expect(events, hasLength(1));
+    },
+  );
+
+  testWidgets('Button animates a bulk enabled to disabled state change', (
+    tester,
+  ) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode controls(
+      bool enabled,
+    ) => QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'SingleChildScrollView',
+      'child': <String, Object?>{
+        'type': 'Column',
+        'children': <Object?>[
+          for (var index = 0; index < 40; index += 1)
+            <String, Object?>{
+              'type': 'ElevatedButton',
+              'key': 'stress-control-$index',
+              if (enabled) 'onPressed': <String, Object?>{'method': 'disable'},
+              'stateTransition': <String, Object?>{
+                'durationMs': 180,
+                'curve': 'linear',
+              },
+              'stateStyles': <String, Object?>{
+                'normal': <String, Object?>{'scale': 1, 'opacity': 1},
+                'disabled': <String, Object?>{'scale': 0.96, 'opacity': 0.6},
+              },
+              'child': <String, Object?>{
+                'type': 'Text',
+                'data': 'Control $index',
+              },
+            },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(controls(true))));
+    await tester.pump();
+    await tester.pumpWidget(MaterialApp(home: renderer.build(controls(false))));
+    await tester.pump();
+
+    double firstAnimatedScale() => tester
+        .widgetList<Transform>(
+          find.ancestor(
+            of: find.byType(ElevatedButton).first,
+            matching: find.byType(Transform),
+          ),
+        )
+        .map((transform) => transform.transform.storage[0])
+        .firstWhere((value) => value != 1, orElse: () => 1);
+
+    expect(firstAnimatedScale(), closeTo(1, 0.001));
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(firstAnimatedScale(), closeTo(0.98, 0.002));
+    final opacity = tester
+        .widgetList<Opacity>(
+          find.ancestor(
+            of: find.byType(ElevatedButton).first,
+            matching: find.byType(Opacity),
+          ),
+        )
+        .map((widget) => widget.opacity)
+        .firstWhere((value) => value != 1, orElse: () => 1);
+    expect(opacity, closeTo(0.8, 0.02));
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(firstAnimatedScale(), closeTo(0.96, 0.001));
+  });
+
+  testWidgets('Button keeps animating when long press release disables it', (
+    tester,
+  ) async {
+    var enabled = true;
+    late StateSetter rebuild;
+    late final QuickjsUiRenderer renderer;
+    renderer = QuickjsUiRenderer(
+      onEvent: (_) => rebuild(() => enabled = false),
+    );
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode button() => QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ElevatedButton',
+      'key': 'long-press-disable',
+      if (enabled) 'onPressed': <String, Object?>{'method': 'disable'},
+      'stateTransition': <String, Object?>{
+        'durationMs': 180,
+        'curve': 'linear',
+      },
+      'stateStyles': <String, Object?>{
+        'normal': <String, Object?>{'scale': 1, 'opacity': 1},
+        'pressed': <String, Object?>{'scale': 0.9},
+        'disabled': <String, Object?>{'scale': 0.96, 'opacity': 0.6},
+      },
+      'child': <String, Object?>{'type': 'Text', 'data': 'Disable'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Scaffold(body: renderer.build(button()));
+          },
+        ),
+      ),
+    );
+
+    ({double scale, double opacity}) visual() {
+      final ancestor = find.ancestor(
+        of: find.byType(ElevatedButton),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Transform || widget is Opacity,
+        ),
+      );
+      final widgets = tester.widgetList<Widget>(ancestor);
+      return (
+        scale: widgets
+            .whereType<Transform>()
+            .map((widget) => widget.transform.storage[0])
+            .firstWhere((value) => value != 1, orElse: () => 1),
+        opacity: widgets
+            .whereType<Opacity>()
+            .map((widget) => widget.opacity)
+            .firstWhere((value) => value != 1, orElse: () => 1),
+      );
+    }
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ElevatedButton)),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(visual().scale, closeTo(0.9, 0.001));
+
+    await gesture.up();
+    await tester.pump();
+    expect(enabled, isFalse);
+    expect(visual().scale, closeTo(0.9, 0.001));
+    expect(visual().opacity, closeTo(1, 0.001));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(visual().scale, closeTo(0.934, 0.003));
+    expect(visual().opacity, closeTo(0.764, 0.01));
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(visual().scale, closeTo(0.96, 0.001));
+    expect(visual().opacity, closeTo(0.6, 0.001));
   });
 
   testWidgets('reduced motion resolves control states immediately', (

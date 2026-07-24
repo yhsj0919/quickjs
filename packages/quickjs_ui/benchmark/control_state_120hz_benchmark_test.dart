@@ -53,7 +53,9 @@ void _benchmark({
 }
 
 void _mixedControlBenchmark() {
-  testWidgets('40 mixed controls retain the measured baseline', (tester) async {
+  testWidgets('40 mixed controls stay within the 60Hz frame budget', (
+    tester,
+  ) async {
     final renderer = QuickjsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
@@ -82,10 +84,7 @@ void _mixedControlBenchmark() {
       '40 mixed Button/Switch/Slider/Input controls at 60Hz: '
       '${averageMs.toStringAsFixed(3)} ms/frame',
     );
-    // This gate records the pre-refactor mixed-control ceiling. The target is
-    // still 16.667ms and this threshold must be tightened as input controls
-    // move to stable per-frame render subtrees.
-    expect(averageMs, lessThan(40));
+    expect(averageMs, lessThan(16.667));
   });
 }
 

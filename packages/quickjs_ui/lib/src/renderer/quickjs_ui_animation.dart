@@ -21,6 +21,19 @@ final class QuickjsUiAnimationTimeline {
       }
       if (current is! Map) return;
 
+      if (current['op'] == 'snapshotParticleGrid') {
+        final bucketCount = quickjsUiRawNumber(current['bucketCount']);
+        final staggerMs = quickjsUiRawNumber(current['staggerMs']);
+        final travelMs = quickjsUiRawNumber(current['travelMs']);
+        final fadeMs = quickjsUiRawNumber(current['fadeMs']);
+        hasAnimations = true;
+        endMs = math.max(
+          endMs,
+          math.max(0, bucketCount - 4) * staggerMs + math.max(travelMs, fadeMs),
+        );
+        return;
+      }
+
       final from = current['from'];
       final to = current['to'];
       final duration = current['durationMs'];

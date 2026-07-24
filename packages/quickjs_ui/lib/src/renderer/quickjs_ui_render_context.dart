@@ -262,7 +262,6 @@ final class QuickjsUiEventDispatcher {
   final Map<String, _PendingUiEvent> _pendingEvents =
       <String, _PendingUiEvent>{};
   final Map<String, DateTime> _lastDispatchAt = <String, DateTime>{};
-
   void dispatch(
     Map<String, Object?> event, {
     Map<String, Object?>? payload,

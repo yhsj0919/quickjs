@@ -32,7 +32,6 @@ export default Page({
       child: GestureDetector({
         onTap: actions.replay(),
         child: Container({
-          width: 330,
           padding: 24,
           decoration: {
             color: '#07111f',
@@ -40,6 +39,7 @@ export default Page({
             border: { color: '#1e3a5f', width: 1 }
           },
           child: Column({
+            mainAxisSize: 'min',
             gap: 18,
             children: [
               Text('UNIVERSAL NODE EFFECTS', {
@@ -51,8 +51,6 @@ export default Page({
               }),
               Container({
                 key: 'animated-effect-card',
-                width: 270,
-                height: 190,
                 padding: 24,
                 playToken: state.run,
                 opacity: entrance(0.08, 1, 620),
@@ -73,6 +71,7 @@ export default Page({
                   border: { color: '#818cf8', width: 1 }
                 },
                 child: Column({
+                  mainAxisSize: 'min',
                   crossAxisAlignment: 'start',
                   gap: 12,
                   children: [

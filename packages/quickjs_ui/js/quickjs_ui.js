@@ -772,6 +772,47 @@ export class Canvas2DContext {
       blendMode: this.globalCompositeOperation
     });
   }
+  drawSnapshotParticleGrid(options = {}) {
+    const {
+      sourceSlot,
+      targetSlot,
+      x = 0,
+      y = 0,
+      width,
+      height,
+      columns = 24,
+      rows = 18,
+      bucketCount = 16,
+      staggerMs = 16,
+      travelMs = 920,
+      fadeMs = 760
+    } = options;
+    if (typeof sourceSlot !== 'string' || sourceSlot.length === 0) {
+      throw new TypeError(
+        'quickjs_ui drawSnapshotParticleGrid requires sourceSlot'
+      );
+    }
+    if (typeof targetSlot !== 'string' || targetSlot.length === 0) {
+      throw new TypeError(
+        'quickjs_ui drawSnapshotParticleGrid requires targetSlot'
+      );
+    }
+    this.commands.push({
+      op: 'snapshotParticleGrid',
+      sourceSlot,
+      targetSlot,
+      x,
+      y,
+      width,
+      height,
+      columns,
+      rows,
+      bucketCount,
+      staggerMs,
+      travelMs,
+      fadeMs
+    });
+  }
   beginPath() { this._path = []; }
   moveTo(x, y) { this._path.push({ op: 'moveTo', x, y }); }
   lineTo(x, y) { this._path.push({ op: 'lineTo', x, y }); }

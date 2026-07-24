@@ -11,7 +11,6 @@ import {
 
 function overlayCard(state, actions) {
   return Container({
-    width: 320,
     padding: 20,
     decoration: {
       color: '#0f172a',
@@ -20,7 +19,7 @@ function overlayCard(state, actions) {
     },
     child: Column({
       mainAxisSize: 'min',
-      crossAxisAlignment: 'stretch',
+      crossAxisAlignment: 'start',
       gap: 12,
       children: [
         Text('ARBITRARY OVERLAY', {

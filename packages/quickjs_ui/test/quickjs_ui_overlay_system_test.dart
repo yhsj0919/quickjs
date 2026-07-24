@@ -51,6 +51,13 @@ void main() {
 
     expect(find.text('Arbitrary overlay content'), findsOneWidget);
     expect(
+      find.ancestor(
+        of: find.text('Arbitrary overlay content'),
+        matching: find.byType(Material),
+      ),
+      findsWidgets,
+    );
+    expect(
       tester.getBottomLeft(find.text('Arbitrary overlay content')).dy,
       greaterThan(500),
     );

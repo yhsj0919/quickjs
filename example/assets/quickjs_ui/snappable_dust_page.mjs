@@ -1,5 +1,4 @@
 import {
-  animate,
   Canvas,
   Center,
   Column,
@@ -29,10 +28,6 @@ function hash(value) {
   return result - Math.floor(result);
 }
 
-function tween(from, to, delayMs, durationMs, curve = 'easeOut') {
-  return animate(from, to, { delayMs, durationMs, curve });
-}
-
 function drawBackdrop(ctx) {
   ctx.clear('#020617');
   for (let index = 0; index < 52; index += 1) {
@@ -55,110 +50,21 @@ function drawBackdrop(ctx) {
   ctx.fillText('One retained scene · two Flutter snapshots', width / 2, 76);
 }
 
-function drawFragment(
-  ctx,
-  image,
-  sourceX,
-  sourceY,
-  cellWidth,
-  cellHeight,
-  centerX,
-  centerY,
-  driftX,
-  driftY,
-  rotation,
-  delay,
-  incoming
-) {
-  ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.translate(
-    incoming
-      ? tween(-driftX * 0.78, 0, delay, travelMs)
-      : tween(0, driftX, delay, travelMs),
-    incoming
-      ? tween(-driftY * 0.65, 0, delay, travelMs)
-      : tween(0, driftY, delay, travelMs)
-  );
-  ctx.rotate(
-    incoming
-      ? tween(-rotation * 0.8, 0, delay, travelMs)
-      : tween(0, rotation, delay, travelMs)
-  );
-  ctx.globalAlpha = incoming
-    ? tween(0, 1, delay, fadeMs, 'easeOut')
-    : tween(1, 0, delay, fadeMs, 'easeIn');
-  ctx.drawImage(
-    image,
-    sourceX,
-    sourceY,
-    cellWidth,
-    cellHeight,
-    -cellWidth / 2,
-    -cellHeight / 2,
-    cellWidth + 0.5,
-    cellHeight + 0.5
-  );
-  ctx.restore();
-}
-
 function drawParticleTransition(ctx) {
-  const cellWidth = card.width / columns;
-  const cellHeight = card.height / rows;
-
-  for (let row = 0; row < rows; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const index = row * columns + column;
-      const randomA = hash(index + 1);
-      const randomB = hash(index + 701);
-      const randomC = hash(index + 1409);
-      const bucket = Math.round(Math.max(0, Math.min(
-        bucketCount - 1,
-        row / (rows - 1) * (bucketCount - 1) + (randomA - 0.5) * 7
-      )));
-      const outgoingDelay = Math.max(0, bucket - 3) * staggerMs;
-      const incomingDelay =
-        Math.max(0, bucketCount - 1 - bucket - 3) * staggerMs;
-      const sourceX = column * cellWidth;
-      const sourceY = row * cellHeight;
-      const centerX = card.x + sourceX + cellWidth / 2;
-      const centerY = card.y + sourceY + cellHeight / 2;
-      const driftX = 72 + randomB * 104;
-      const driftY = -26 - randomC * 88 + (randomA - 0.5) * 28;
-      const rotation = (randomB - 0.5) * 1.45;
-
-      drawFragment(
-        ctx,
-        { slot: 'source' },
-        sourceX,
-        sourceY,
-        cellWidth,
-        cellHeight,
-        centerX,
-        centerY,
-        driftX,
-        driftY,
-        rotation,
-        outgoingDelay,
-        false
-      );
-      drawFragment(
-        ctx,
-        { slot: 'target' },
-        sourceX,
-        sourceY,
-        cellWidth,
-        cellHeight,
-        centerX,
-        centerY,
-        driftX,
-        driftY,
-        rotation,
-        incomingDelay,
-        true
-      );
-    }
-  }
+  ctx.drawSnapshotParticleGrid({
+    sourceSlot: 'source',
+    targetSlot: 'target',
+    x: card.x,
+    y: card.y,
+    width: card.width,
+    height: card.height,
+    columns,
+    rows,
+    bucketCount,
+    staggerMs,
+    travelMs,
+    fadeMs
+  });
 }
 
 function cardView(variant) {
@@ -272,50 +178,75 @@ export default Page({
       targetVariant: null,
       activeSource: null,
       activeTarget: null,
-      captureToken: 0,
+      captureToken: null,
       run: 0,
       error: null
     };
   },
 
   captured(state, data) {
+    let patch;
     if (data.role === 'source' && data.variant === state.currentVariant) {
-      return {
+      patch = {
         sourceSnapshot: data.snapshotId,
         sourceVariant: data.variant,
         error: null
       };
-    }
-    if (data.role === 'target' && data.variant === desiredTarget(state)) {
-      return {
+    } else if (
+      data.role === 'target' &&
+      data.variant === desiredTarget(state)
+    ) {
+      patch = {
         targetSnapshot: data.snapshotId,
         targetVariant: data.variant,
         error: null
       };
+    } else {
+      return null;
     }
-    return null;
+
+    const sourceSnapshot = patch.sourceSnapshot ?? state.sourceSnapshot;
+    const sourceVariant = patch.sourceVariant ?? state.sourceVariant;
+    const targetSnapshot = patch.targetSnapshot ?? state.targetSnapshot;
+    const targetVariant = patch.targetVariant ?? state.targetVariant;
+    if (
+      state.mode === 'preparing' &&
+      sourceSnapshot != null &&
+      targetSnapshot != null &&
+      sourceVariant === state.currentVariant &&
+      targetVariant === desiredTarget(state)
+    ) {
+      return {
+        ...patch,
+        mode: 'transitioning',
+        activeSource: sourceSnapshot,
+        activeTarget: targetSnapshot,
+        run: state.run + 1
+      };
+    }
+    return patch;
   },
 
   captureFailed(state, data) {
-    return { error: `${data.role}: ${data.message ?? 'Snapshot failed'}` };
+    return {
+      mode: 'visible',
+      captureToken: null,
+      error: `${data.role}: ${data.message ?? 'Snapshot failed'}`
+    };
   },
 
   startTransition(state) {
-    const targetVariant = desiredTarget(state);
-    if (
-      state.mode !== 'visible' ||
-      state.sourceSnapshot == null ||
-      state.targetSnapshot == null ||
-      state.sourceVariant !== state.currentVariant ||
-      state.targetVariant !== targetVariant
-    ) {
-      return null;
-    }
+    if (state.mode !== 'visible') return null;
     return {
-      mode: 'transitioning',
-      activeSource: state.sourceSnapshot,
-      activeTarget: state.targetSnapshot,
-      run: state.run + 1
+      mode: 'preparing',
+      sourceSnapshot: null,
+      sourceVariant: null,
+      targetSnapshot: null,
+      targetVariant: null,
+      activeSource: null,
+      activeTarget: null,
+      captureToken: state.captureToken == null ? 0 : state.captureToken + 1,
+      error: null
     };
   },
 
@@ -333,19 +264,15 @@ export default Page({
       targetVariant: null,
       activeSource: null,
       activeTarget: null,
-      captureToken: state.captureToken + 1
+      captureToken: state.captureToken
     };
   },
 
   build(state, props, actions) {
-    const publishScene = !scenePublished;
-    scenePublished = true;
+    const publishScene = state.mode === 'transitioning' && !scenePublished;
+    if (publishScene) scenePublished = true;
     const targetVariant = desiredTarget(state);
-    const ready =
-      state.sourceSnapshot != null &&
-      state.targetSnapshot != null &&
-      state.sourceVariant === state.currentVariant &&
-      state.targetVariant === targetVariant;
+    const ready = state.mode !== 'preparing';
     const resources = {};
     if (state.activeSource != null) resources.source = state.activeSource;
     if (state.activeTarget != null) resources.target = state.activeTarget;
@@ -353,19 +280,26 @@ export default Page({
     const children = [
       Canvas({
         key: 'snapshot-particle-canvas',
-        sceneKey,
         width,
         height,
         backgroundColor: '#020617',
         resources,
         paused: state.mode !== 'transitioning',
         playToken: state.run,
-        ...(publishScene
+        ...(scenePublished
           ? {
-              staticDraw: drawBackdrop,
-              draw: drawParticleTransition
+              sceneKey,
+              ...(publishScene
+                  ? {
+                    staticDraw: drawBackdrop,
+                    draw: drawParticleTransition
+                  }
+                : {})
             }
-          : {}),
+          : {
+              commands: [],
+              staticDraw: drawBackdrop
+            }),
         ...(state.mode === 'transitioning'
           ? {
               onAnimationEnd: actions.finishTransition({ run: state.run })
@@ -375,7 +309,7 @@ export default Page({
       })
     ];
 
-    if (state.mode === 'visible') {
+    if (state.mode === 'preparing') {
       children.push(Positioned({
         left: card.x,
         top: card.y,
@@ -399,6 +333,14 @@ export default Page({
           state.captureToken,
           actions
         )
+      }));
+    } else if (state.mode === 'visible') {
+      children.push(Positioned({
+        left: card.x,
+        top: card.y,
+        width: card.width,
+        height: card.height,
+        child: cardView(state.currentVariant)
       }));
     }
 
