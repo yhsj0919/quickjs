@@ -302,6 +302,41 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
 
+    final particleCanvas = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'width': 80,
+      'height': 50,
+      'resources': <String, Object?>{
+        'source': snapshotId,
+        'target': snapshotId,
+      },
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'snapshotParticleGrid',
+          'sourceSlot': 'source',
+          'targetSlot': 'target',
+          'x': 0,
+          'y': 0,
+          'width': 80,
+          'height': 50,
+          'columns': 8,
+          'rows': 5,
+          'bucketCount': 4,
+          'staggerMs': 4,
+          'travelMs': 60,
+          'fadeMs': 40,
+        },
+      ],
+      'onAnimationEnd': <String, Object?>{'method': 'particlesEnded'},
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: Center(child: renderer.build(particleCanvas))),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(events.last['method'], 'particlesEnded');
+
     await tester.pumpWidget(const SizedBox.shrink());
     renderer.dispose();
     expect(renderer.snapshotRegistry.length, 0);
@@ -315,6 +350,31 @@ void main() {
         <String, Object?>{'op': 'restore'},
       ],
     });
+    expect(() => renderer.build(node), throwsFormatException);
+  });
+
+  test('Canvas validates native snapshot particle grid bounds', () {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'snapshotParticleGrid',
+          'sourceSlot': 'source',
+          'targetSlot': 'target',
+          'width': 80,
+          'height': 50,
+          'columns': 4097,
+          'rows': 1,
+          'bucketCount': 4,
+          'staggerMs': 4,
+          'travelMs': 60,
+          'fadeMs': 40,
+        },
+      ],
+    });
+
     expect(() => renderer.build(node), throwsFormatException);
   });
 }

@@ -54,82 +54,75 @@ Widget _buildTextInput(
     transition: QuickjsUiControlTransition.from(node.props['stateTransition']),
     builder: (buildContext, styles, focusNode) {
       final resolved = styles.single;
-      return resolved.decorate(
-        _QuickjsUiTextField(
-          formField: formField,
-          value:
-              QuickjsUiProps.string(
-                node.props['value'] ?? node.props['initialValue'],
-                name: 'TextField value',
-              ) ??
-              '',
-          focusId: focusId,
-          enabled: enabled,
-          autofocus:
-              QuickjsUiProps.boolValue(
-                node.props['autofocus'] ?? node.props['focusOnMount'],
-              ) ??
-              false,
-          requestFocus:
-              QuickjsUiProps.boolValue(node.props['requestFocus']) ?? false,
-          clearFocus:
-              QuickjsUiProps.boolValue(node.props['clearFocus']) ?? false,
-          obscureText:
-              QuickjsUiProps.boolValue(node.props['obscureText']) ?? false,
-          maxLines: QuickjsUiProps.intValue(node.props['maxLines']),
-          keyboardType: QuickjsUiProps.textInputType(
-            node.props['keyboardType'],
-          ),
-          textInputAction: QuickjsUiProps.textInputAction(
-            node.props['textInputAction'],
-          ),
-          submitFocusAction: _submitFocusAction(
-            node.props['submitFocusAction'],
-            node.props['textInputAction'],
-          ),
-          style: context.textStyle(node.props['style']),
-          decoration: _inputDecoration(context, node, resolved),
-          focusNode: focusNode,
-          onChanged: onChanged == null
-              ? null
-              : (value) => context.dispatchEvent(
-                  onChanged,
-                  defaultCoalesceKey: quickjsUiEventKey(node, 'onChanged'),
-                  kind: QuickjsUiEventKind.sample,
-                  payload: value,
-                ),
-          onSubmitted: onSubmitted == null
-              ? null
-              : (value) => context.dispatch(<String, Object?>{
-                  ...onSubmitted,
-                  ...value,
-                }),
-          onEditingComplete: onEditingComplete == null
-              ? null
-              : (value) => context.dispatch(<String, Object?>{
-                  ...onEditingComplete,
-                  ...value,
-                }),
-          onFocus: onFocus == null
-              ? null
-              : (value) =>
-                    context.dispatch(<String, Object?>{...onFocus, ...value}),
-          onBlur: onBlur == null
-              ? null
-              : (value) =>
-                    context.dispatch(<String, Object?>{...onBlur, ...value}),
-          onSelectionChanged: onSelectionChanged == null
-              ? null
-              : (value) => context.dispatchEvent(
-                  onSelectionChanged,
-                  defaultCoalesceKey: quickjsUiEventKey(
-                    node,
-                    'onSelectionChanged',
-                  ),
-                  kind: QuickjsUiEventKind.sample,
-                  payload: value,
-                ),
+      return _QuickjsUiTextField(
+        formField: formField,
+        value:
+            QuickjsUiProps.string(
+              node.props['value'] ?? node.props['initialValue'],
+              name: 'TextField value',
+            ) ??
+            '',
+        focusId: focusId,
+        enabled: enabled,
+        autofocus:
+            QuickjsUiProps.boolValue(
+              node.props['autofocus'] ?? node.props['focusOnMount'],
+            ) ??
+            false,
+        requestFocus:
+            QuickjsUiProps.boolValue(node.props['requestFocus']) ?? false,
+        clearFocus: QuickjsUiProps.boolValue(node.props['clearFocus']) ?? false,
+        obscureText:
+            QuickjsUiProps.boolValue(node.props['obscureText']) ?? false,
+        maxLines: QuickjsUiProps.intValue(node.props['maxLines']),
+        keyboardType: QuickjsUiProps.textInputType(node.props['keyboardType']),
+        textInputAction: QuickjsUiProps.textInputAction(
+          node.props['textInputAction'],
         ),
+        submitFocusAction: _submitFocusAction(
+          node.props['submitFocusAction'],
+          node.props['textInputAction'],
+        ),
+        style: context.textStyle(node.props['style']),
+        decoration: _inputDecoration(context, node, resolved),
+        focusNode: focusNode,
+        onChanged: onChanged == null
+            ? null
+            : (value) => context.dispatchEvent(
+                onChanged,
+                defaultCoalesceKey: quickjsUiEventKey(node, 'onChanged'),
+                kind: QuickjsUiEventKind.sample,
+                payload: value,
+              ),
+        onSubmitted: onSubmitted == null
+            ? null
+            : (value) =>
+                  context.dispatch(<String, Object?>{...onSubmitted, ...value}),
+        onEditingComplete: onEditingComplete == null
+            ? null
+            : (value) => context.dispatch(<String, Object?>{
+                ...onEditingComplete,
+                ...value,
+              }),
+        onFocus: onFocus == null
+            ? null
+            : (value) =>
+                  context.dispatch(<String, Object?>{...onFocus, ...value}),
+        onBlur: onBlur == null
+            ? null
+            : (value) =>
+                  context.dispatch(<String, Object?>{...onBlur, ...value}),
+        onSelectionChanged: onSelectionChanged == null
+            ? null
+            : (value) => context.dispatchEvent(
+                onSelectionChanged,
+                defaultCoalesceKey: quickjsUiEventKey(
+                  node,
+                  'onSelectionChanged',
+                ),
+                kind: QuickjsUiEventKind.sample,
+                payload: value,
+              ),
       );
     },
   );
@@ -207,34 +200,32 @@ Widget _buildSwitch(QuickjsUiRenderContext context, QuickjsUiNode node) {
       final thumb = styles[1];
       final track = styles[2];
       final overlay = styles[3];
-      return control.decorate(
-        Switch(
-          value: value,
-          focusNode: focusNode,
-          thumbColor: _allColor(
-            thumb.color('color') ?? control.color('thumbColor'),
-          ),
-          trackColor: _allColor(
-            track.color('color') ?? control.color('trackColor'),
-          ),
-          overlayColor: _allColor(
-            overlay.color('color') ?? control.color('overlayColor'),
-          ),
-          trackOutlineColor: _allColor(
-            track.color('borderColor') ?? control.color('trackOutlineColor'),
-          ),
-          trackOutlineWidth: _allDouble(
-            track.number('borderWidth') ?? control.number('trackOutlineWidth'),
-          ),
-          onChanged: onChanged == null
-              ? null
-              : (value) => context.dispatchEvent(
-                  onChanged,
-                  defaultCoalesceKey: quickjsUiEventKey(node, 'onChanged'),
-                  kind: QuickjsUiEventKind.sample,
-                  payload: <String, Object?>{'value': value},
-                ),
+      return Switch(
+        value: value,
+        focusNode: focusNode,
+        thumbColor: _allColor(
+          thumb.color('color') ?? control.color('thumbColor'),
         ),
+        trackColor: _allColor(
+          track.color('color') ?? control.color('trackColor'),
+        ),
+        overlayColor: _allColor(
+          overlay.color('color') ?? control.color('overlayColor'),
+        ),
+        trackOutlineColor: _allColor(
+          track.color('borderColor') ?? control.color('trackOutlineColor'),
+        ),
+        trackOutlineWidth: _allDouble(
+          track.number('borderWidth') ?? control.number('trackOutlineWidth'),
+        ),
+        onChanged: onChanged == null
+            ? null
+            : (value) => context.dispatchEvent(
+                onChanged,
+                defaultCoalesceKey: quickjsUiEventKey(node, 'onChanged'),
+                kind: QuickjsUiEventKind.sample,
+                payload: <String, Object?>{'value': value},
+              ),
       );
     },
   );
@@ -281,63 +272,56 @@ Widget _buildSlider(QuickjsUiRenderContext context, QuickjsUiNode node) {
       final track = styles[2];
       final overlay = styles[3];
       final baseTheme = SliderTheme.of(buildContext);
-      return control.decorate(
-        SliderTheme(
-          data: baseTheme.copyWith(
-            activeTrackColor:
-                track.color('activeColor') ?? control.color('activeTrackColor'),
-            inactiveTrackColor:
-                track.color('inactiveColor') ??
-                control.color('inactiveTrackColor'),
-            disabledActiveTrackColor:
-                track.color('activeColor') ?? control.color('activeTrackColor'),
-            disabledInactiveTrackColor:
-                track.color('inactiveColor') ??
-                control.color('inactiveTrackColor'),
-            thumbColor: thumb.color('color') ?? control.color('thumbColor'),
-            disabledThumbColor:
-                thumb.color('color') ?? control.color('thumbColor'),
-            overlayColor:
-                overlay.color('color') ?? control.color('overlayColor'),
-            valueIndicatorColor: control.color('valueIndicatorColor'),
-            trackHeight:
-                track.number('height') ?? control.number('trackHeight'),
-            thumbShape: _sliderThumbShape(thumb, control),
-            overlayShape: _sliderOverlayShape(overlay, control),
-          ),
-          child: Slider(
-            focusNode: focusNode,
-            min: min,
-            max: max,
-            value: value,
-            divisions: QuickjsUiProps.intValue(node.props['divisions']),
-            label: QuickjsUiProps.string(node.props['label']),
-            onChanged: onChanged == null
-                ? null
-                : (next) => context.dispatchEvent(
-                    onChanged,
-                    defaultCoalesceKey: quickjsUiEventKey(node, 'onChanged'),
-                    kind: QuickjsUiEventKind.sample,
-                    payload: <String, Object?>{'value': next},
-                  ),
-            onChangeStart: onChangeStart == null
-                ? null
-                : (next) => context.dispatchEvent(
-                    onChangeStart,
-                    defaultCoalesceKey: quickjsUiEventKey(
-                      node,
-                      'onChangeStart',
-                    ),
-                    payload: <String, Object?>{'value': next},
-                  ),
-            onChangeEnd: onChangeEnd == null
-                ? null
-                : (next) => context.dispatchEvent(
-                    onChangeEnd,
-                    defaultCoalesceKey: quickjsUiEventKey(node, 'onChangeEnd'),
-                    payload: <String, Object?>{'value': next},
-                  ),
-          ),
+      return SliderTheme(
+        data: baseTheme.copyWith(
+          activeTrackColor:
+              track.color('activeColor') ?? control.color('activeTrackColor'),
+          inactiveTrackColor:
+              track.color('inactiveColor') ??
+              control.color('inactiveTrackColor'),
+          disabledActiveTrackColor:
+              track.color('activeColor') ?? control.color('activeTrackColor'),
+          disabledInactiveTrackColor:
+              track.color('inactiveColor') ??
+              control.color('inactiveTrackColor'),
+          thumbColor: thumb.color('color') ?? control.color('thumbColor'),
+          disabledThumbColor:
+              thumb.color('color') ?? control.color('thumbColor'),
+          overlayColor: overlay.color('color') ?? control.color('overlayColor'),
+          valueIndicatorColor: control.color('valueIndicatorColor'),
+          trackHeight: track.number('height') ?? control.number('trackHeight'),
+          thumbShape: _sliderThumbShape(thumb, control),
+          overlayShape: _sliderOverlayShape(overlay, control),
+        ),
+        child: Slider(
+          focusNode: focusNode,
+          min: min,
+          max: max,
+          value: value,
+          divisions: QuickjsUiProps.intValue(node.props['divisions']),
+          label: QuickjsUiProps.string(node.props['label']),
+          onChanged: onChanged == null
+              ? null
+              : (next) => context.dispatchEvent(
+                  onChanged,
+                  defaultCoalesceKey: quickjsUiEventKey(node, 'onChanged'),
+                  kind: QuickjsUiEventKind.sample,
+                  payload: <String, Object?>{'value': next},
+                ),
+          onChangeStart: onChangeStart == null
+              ? null
+              : (next) => context.dispatchEvent(
+                  onChangeStart,
+                  defaultCoalesceKey: quickjsUiEventKey(node, 'onChangeStart'),
+                  payload: <String, Object?>{'value': next},
+                ),
+          onChangeEnd: onChangeEnd == null
+              ? null
+              : (next) => context.dispatchEvent(
+                  onChangeEnd,
+                  defaultCoalesceKey: quickjsUiEventKey(node, 'onChangeEnd'),
+                  payload: <String, Object?>{'value': next},
+                ),
         ),
       );
     },

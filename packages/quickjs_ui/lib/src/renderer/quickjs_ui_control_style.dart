@@ -32,6 +32,12 @@ final class QuickjsUiControlStyle {
 
   bool has(String key) => _keys.contains(key);
 
+  bool get requiresStablePointerScale =>
+      _states['pressed']?.containsKey('scale') == true;
+
+  bool get requiresStablePointerOpacity =>
+      _states['pressed']?.containsKey('opacity') == true;
+
   Object? value(String key, Set<WidgetState> states) {
     Object? result = _states['normal']?[key];
     for (final entry in _stateOrder) {
@@ -47,8 +53,20 @@ final class QuickjsUiControlStyle {
 
   QuickjsUiResolvedControlStyle resolve(Set<WidgetState> states) {
     return QuickjsUiResolvedControlStyle(<String, Object?>{
-      for (final key in _keys) key: _resolveValue(key, value(key, states)),
+      for (final key in _keys)
+        key: _resolveValue(key, _valueOrVisualDefault(key, states)),
     });
+  }
+
+  Object? _valueOrVisualDefault(String key, Set<WidgetState> states) {
+    final resolved = value(key, states);
+    if (resolved != null) {
+      return resolved;
+    }
+    return switch (key) {
+      'scale' || 'opacity' => 1.0,
+      _ => null,
+    };
   }
 
   WidgetStateProperty<Color?>? color(String key) {
@@ -169,14 +187,18 @@ final class QuickjsUiResolvedControlStyle {
   BorderRadiusGeometry? borderRadius(String key) =>
       _values[key] as BorderRadiusGeometry?;
 
-  Widget decorate(Widget child) {
+  Widget decorate(
+    Widget child, {
+    bool stableScaleTopology = false,
+    bool stableOpacityTopology = false,
+  }) {
     final opacity = (number('opacity') ?? 1).clamp(0.0, 1.0);
     final scale = number('scale') ?? 1;
     Widget result = child;
-    if (scale != 1) {
+    if (stableScaleTopology || scale != 1) {
       result = Transform.scale(scale: scale, child: result);
     }
-    if (opacity != 1) {
+    if (stableOpacityTopology || opacity != 1) {
       result = Opacity(opacity: opacity, child: result);
     }
     return result;
@@ -321,12 +343,14 @@ typedef QuickjsUiControlInteractionScopeWidgetBuilder =
 final class QuickjsUiControlInteraction {
   const QuickjsUiControlInteraction({
     required this.states,
+    required this.statesController,
     required this.focusNode,
     required this.setHovered,
     required this.setPressed,
   });
 
   final Set<WidgetState> states;
+  final WidgetStatesController statesController;
   final FocusNode focusNode;
   final ValueChanged<bool> setHovered;
   final ValueChanged<bool> setPressed;
@@ -352,6 +376,7 @@ final class QuickjsUiControlInteractionScope extends StatefulWidget {
 final class _QuickjsUiControlInteractionScopeState
     extends State<QuickjsUiControlInteractionScope> {
   final FocusNode _focusNode = FocusNode();
+  late final WidgetStatesController _statesController;
   bool _hovered = false;
   bool _focused = false;
   bool _pressed = false;
@@ -359,6 +384,10 @@ final class _QuickjsUiControlInteractionScopeState
   @override
   void initState() {
     super.initState();
+    _statesController = WidgetStatesController(<WidgetState>{
+      if (!widget.enabled) WidgetState.disabled,
+    });
+    _statesController.addListener(_handleNativeStates);
     _focusNode.addListener(_handleFocus);
   }
 
@@ -370,10 +399,13 @@ final class _QuickjsUiControlInteractionScopeState
       _focused = false;
       _pressed = false;
     }
+    _statesController.update(WidgetState.disabled, !widget.enabled);
   }
 
   @override
   void dispose() {
+    _statesController.removeListener(_handleNativeStates);
+    _statesController.dispose();
     _focusNode.removeListener(_handleFocus);
     _focusNode.dispose();
     super.dispose();
@@ -392,6 +424,7 @@ final class _QuickjsUiControlInteractionScopeState
       context,
       QuickjsUiControlInteraction(
         states: states,
+        statesController: _statesController,
         focusNode: _focusNode,
         setHovered: (value) => _setState(hovered: value),
         setPressed: (value) => _setState(pressed: value),
@@ -401,6 +434,15 @@ final class _QuickjsUiControlInteractionScopeState
 
   void _handleFocus() {
     _setState(focused: _focusNode.hasFocus);
+  }
+
+  void _handleNativeStates() {
+    final states = _statesController.value;
+    _setState(
+      hovered: states.contains(WidgetState.hovered),
+      focused: states.contains(WidgetState.focused),
+      pressed: states.contains(WidgetState.pressed),
+    );
   }
 
   void _setState({bool? hovered, bool? focused, bool? pressed}) {
@@ -467,6 +509,11 @@ typedef QuickjsUiControlStateWidgetBuilder =
 
 /// Supplies native hover, focus, press, selected and disabled states to every
 /// control through one lifecycle-safe interaction boundary.
+///
+/// The native control is rebuilt once when interaction state changes, then
+/// passed through [TweenAnimationBuilder.child]. Animation ticks rebuild only
+/// the lightweight visual decorators, never the Switch, Slider or TextField
+/// subtree.
 final class QuickjsUiControlStateBuilder extends StatelessWidget {
   const QuickjsUiControlStateBuilder({
     required this.enabled,
@@ -489,11 +536,22 @@ final class QuickjsUiControlStateBuilder extends StatelessWidget {
       enabled: enabled,
       selected: selected,
       builder: (context, states, focusNode) {
+        final resolvedStyles = <QuickjsUiResolvedControlStyle>[
+          for (final style in styles) style.resolve(states),
+        ];
         return QuickjsUiControlTransitionBuilder(
           styles: styles,
           states: states,
           transition: transition,
-          builder: (context, styles, _) => builder(context, styles, focusNode),
+          child: RepaintBoundary(
+            child: builder(context, resolvedStyles, focusNode),
+          ),
+          builder: (context, styles, child) => styles.first.decorate(
+            child!,
+            stableScaleTopology: this.styles.first.requiresStablePointerScale,
+            stableOpacityTopology:
+                this.styles.first.requiresStablePointerOpacity,
+          ),
         );
       },
     );

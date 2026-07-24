@@ -91,43 +91,30 @@ Widget _buildButton(
               EdgeInsets.zero,
             ),
           );
-      final interactiveChild = MouseRegion(
-        onEnter: event != null ? (_) => interaction.setHovered(true) : null,
-        onExit: event != null ? (_) => interaction.setHovered(false) : null,
-        child: Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: event != null
-              ? (_) => interaction.setPressed(true)
-              : null,
-          onPointerUp: event != null
-              ? (_) => interaction.setPressed(false)
-              : null,
-          onPointerCancel: event != null
-              ? (_) => interaction.setPressed(false)
-              : null,
-          child: Padding(
-            padding:
-                resolved.padding('padding') ??
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-            child: child,
-          ),
-        ),
+      final interactiveChild = Padding(
+        padding:
+            resolved.padding('padding') ??
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        child: child,
       );
       final button = switch (kind) {
         _QuickjsUiButtonKind.elevated => ElevatedButton(
           focusNode: interaction.focusNode,
+          statesController: interaction.statesController,
           onPressed: onPressed,
           style: buttonStyle,
           child: interactiveChild,
         ),
         _QuickjsUiButtonKind.text => TextButton(
           focusNode: interaction.focusNode,
+          statesController: interaction.statesController,
           onPressed: onPressed,
           style: buttonStyle,
           child: interactiveChild,
         ),
         _QuickjsUiButtonKind.outlined => OutlinedButton(
           focusNode: interaction.focusNode,
+          statesController: interaction.statesController,
           onPressed: onPressed,
           style: buttonStyle,
           child: interactiveChild,
@@ -138,7 +125,11 @@ Widget _buildButton(
         states: interaction.states,
         transition: transition,
         child: RepaintBoundary(child: button),
-        builder: (context, styles, child) => styles.single.decorate(child!),
+        builder: (context, styles, child) => styles.single.decorate(
+          child!,
+          stableScaleTopology: style.requiresStablePointerScale,
+          stableOpacityTopology: style.requiresStablePointerOpacity,
+        ),
       );
     },
   );

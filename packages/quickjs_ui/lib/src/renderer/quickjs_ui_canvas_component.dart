@@ -15,10 +15,12 @@ import 'quickjs_ui_snapshot.dart';
 
 part 'quickjs_ui_canvas_animation.dart';
 part 'quickjs_ui_canvas_image.dart';
+part 'quickjs_ui_canvas_particles.dart';
 
 const int _maxCanvasCommands = 10000;
 const int _maxPathSegments = 20000;
 const int _maxSaveDepth = 128;
+const int _maxSnapshotParticleFragments = 4096;
 
 final QuickjsUiComponentBuilderMap quickjsUiCanvasComponentBuilders =
     <String, QuickjsUiComponentBuilder>{'Canvas': _buildCanvas};
@@ -173,6 +175,7 @@ void _validateCommands(List<Map<String, Object?>> commands) {
     'path',
     'text',
     'image',
+    'snapshotParticleGrid',
   };
   var saveDepth = 0;
   var pathSegments = 0;
@@ -204,6 +207,9 @@ void _validateCommands(List<Map<String, Object?>> commands) {
           'quickjs_ui Canvas path segment limit exceeded',
         );
       }
+    }
+    if (op == 'snapshotParticleGrid') {
+      _validateSnapshotParticleGrid(commands[index]);
     }
   }
   if (saveDepth != 0) {
@@ -643,6 +649,14 @@ void _paintCommands(
         _drawText(canvas, command, clock);
       case 'image':
         _drawSnapshotImage(canvas, command, clock, snapshotRegistry, resources);
+      case 'snapshotParticleGrid':
+        _drawSnapshotParticleGrid(
+          canvas,
+          command,
+          clock,
+          snapshotRegistry,
+          resources,
+        );
     }
   }
   assert(saveDepth == 0);

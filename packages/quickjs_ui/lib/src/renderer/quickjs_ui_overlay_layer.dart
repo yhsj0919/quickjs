@@ -373,7 +373,13 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
         pageBuilder: (context, _, _) => SafeArea(
           child: Align(
             alignment: intent.alignment,
-            child: Padding(padding: intent.padding, child: intent.child),
+            child: Padding(
+              padding: intent.padding,
+              child: Material(
+                type: MaterialType.transparency,
+                child: intent.child,
+              ),
+            ),
           ),
         ),
         transitionBuilder: (context, animation, _, child) =>

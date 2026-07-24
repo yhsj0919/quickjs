@@ -111,7 +111,12 @@ final class _QuickjsUiSnapshotBoundaryState
       if (renderObject is! RenderRepaintBoundary) {
         throw StateError('SnapshotBoundary is not attached');
       }
-      if (renderObject.debugNeedsPaint) {
+      var debugNeedsPaint = false;
+      assert(() {
+        debugNeedsPaint = renderObject.debugNeedsPaint;
+        return true;
+      }());
+      if (debugNeedsPaint) {
         _scheduleCapture();
         return;
       }

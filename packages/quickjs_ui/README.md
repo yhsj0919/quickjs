@@ -279,6 +279,26 @@ Retained scenes are page-scoped, bounded, and released with the renderer.
 display list, so a transition can replace source and target images without
 rebuilding or resending its particle commands.
 
+For snapshot dissolution effects, `ctx.drawSnapshotParticleGrid()` keeps the
+entire grid as one native command instead of expanding every fragment into
+generic transform and image commands:
+
+```js
+ctx.drawSnapshotParticleGrid({
+  sourceSlot: 'source',
+  targetSlot: 'target',
+  x: 38,
+  y: 120,
+  width: 284,
+  height: 220,
+  columns: 24,
+  rows: 18
+});
+```
+
+The optional `bucketCount`, `staggerMs`, `travelMs`, and `fadeMs` parameters
+control the locally rendered finite animation.
+
 ## Control states and structural slots
 
 `ElevatedButton`, `TextButton`, `OutlinedButton`, `Switch`, `Slider`,
