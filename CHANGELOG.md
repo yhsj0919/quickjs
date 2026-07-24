@@ -8,6 +8,10 @@
   JavaScript rebuild 或逐帧 Bridge。
 * `QuickjsUiView` 自动按显示器刷新率计算帧预算并合并系统 reduced motion；Inspector 新增
   性能页及 build/raster P50/P90/P99、质量等级和降级原因快照。
+* Inspector 性能快照增加 Canvas command/Path、scene/snapshot、粒子、重绘、painter CPU
+  分位数、命令拒绝原因，以及 blur/filter/ticker 降级计数。
+* example 末尾新增自适应性能实验室，集中验证 1k/5k/10k Canvas 图元、Snapshot 粒子、
+  通用滤镜、质量手动切换和实时性能指标。
 * 新增受控 Canvas 2D display list、静态 Picture 缓存、保留场景和 Flutter VSync 本地动画。
 * 新增页面级快照资源、粒子网格绘制，以及 Canvas 手势和可选帧采样事件。
 * 新增任意组件通用特效、控件状态样式/过渡、结构化 slot 和统一 Overlay 动画层。

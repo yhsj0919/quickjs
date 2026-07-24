@@ -17,6 +17,10 @@ final class QuickjsUiSnapshotRegistry {
   int _nextSnapshotId = 0;
 
   int get length => _snapshots.length;
+  int get pixelCount => _snapshots.values.fold<int>(
+    0,
+    (total, snapshot) => total + snapshot.image.width * snapshot.image.height,
+  );
 
   QuickjsUiSnapshot? resolve(String id) => _snapshots[id];
 

@@ -129,6 +129,77 @@ void main() {
     expect(find.byType(BackdropFilter), findsNothing);
     expect(find.byType(ColorFiltered), findsNothing);
     expect(find.byType(ImageFiltered), findsOneWidget);
+    final metrics = performance.snapshot.toMap();
+    expect(metrics['blurEffectCount'], 1);
+    expect(metrics['clampedBlurEffectCount'], 1);
+    expect(metrics['disabledBackdropBlurCount'], 1);
+    expect(metrics['disabledColorFilterCount'], 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    renderer.dispose();
+    performance.dispose();
+  });
+
+  testWidgets('Canvas metrics include schema resources paint and rejection', (
+    tester,
+  ) async {
+    final performance = QuickjsUiPerformanceController(
+      mode: QuickjsUiPerformanceMode.low,
+    );
+    final renderer = QuickjsUiRenderer(
+      onEvent: (_) {},
+      performanceController: performance,
+    );
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'sceneKey': 'metrics-scene',
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'path',
+          'segments': <Object?>[
+            <String, Object?>{'op': 'moveTo', 'x': 0, 'y': 0},
+            <String, Object?>{'op': 'lineTo', 'x': 10, 'y': 10},
+          ],
+          'stroke': '#000000',
+        },
+        <String, Object?>{
+          'op': 'snapshotParticleGrid',
+          'sourceSlot': 'source',
+          'targetSlot': 'target',
+          'width': 80,
+          'height': 50,
+          'columns': 24,
+          'rows': 18,
+          'bucketCount': 4,
+          'staggerMs': 4,
+          'travelMs': 60,
+          'fadeMs': 40,
+        },
+      ],
+    });
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(node)));
+    await tester.pump();
+    var metrics = performance.snapshot.toMap();
+    expect(metrics['canvasCount'], 1);
+    expect(metrics['canvasCommandCount'], 2);
+    expect(metrics['canvasPathSegmentCount'], 2);
+    expect(metrics['requestedParticleFragments'], 432);
+    expect(metrics['effectiveParticleFragments'], 256);
+    expect(metrics['retainedSceneCount'], 1);
+    expect(metrics['canvasRepaintCount'], greaterThan(0));
+    expect(metrics['canvasPaintP90Ms'], isA<double>());
+
+    final invalid = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'commands': <Object?>[
+        <String, Object?>{'op': 'restore'},
+      ],
+    });
+    expect(() => renderer.build(invalid), throwsFormatException);
+    metrics = performance.snapshot.toMap();
+    expect(metrics['rejectedCanvasCommandCount'], 1);
+    expect(metrics['lastCanvasRejection'], contains('restore'));
 
     await tester.pumpWidget(const SizedBox.shrink());
     renderer.dispose();

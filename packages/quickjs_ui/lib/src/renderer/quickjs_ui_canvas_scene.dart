@@ -6,6 +6,7 @@ final class QuickjsUiCanvasSceneRegistry {
       <String, QuickjsUiCanvasScene>{};
 
   QuickjsUiCanvasScene? resolve(String key) => _scenes[key];
+  int get length => _scenes.length;
 
   void register(String key, QuickjsUiCanvasScene scene) {
     _scenes.remove(key);

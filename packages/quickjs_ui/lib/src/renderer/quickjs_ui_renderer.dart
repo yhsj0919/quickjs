@@ -49,6 +49,7 @@ final class QuickjsUiRenderer {
   bool _paused = false;
 
   Widget build(QuickjsUiNode node, {BuildContext? buildContext}) {
+    performanceController.beginRenderPass();
     late final QuickjsUiRenderContext context;
     final nextCache = <String, _RenderedNode>{};
     final activeLifecycleKeys = <String>{};
@@ -107,6 +108,11 @@ final class QuickjsUiRenderer {
       performanceController: performanceController,
     );
     final widget = buildNode(node);
+    performanceController.updateResourceMetrics(
+      retainedSceneCount: canvasSceneRegistry.length,
+      snapshotCount: snapshotRegistry.length,
+      snapshotPixels: snapshotRegistry.pixelCount,
+    );
     _cache
       ..clear()
       ..addAll(nextCache);

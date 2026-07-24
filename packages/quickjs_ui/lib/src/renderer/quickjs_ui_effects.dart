@@ -24,6 +24,11 @@ Widget withQuickjsUiEffects(
       props.containsKey('backdropBlur') ||
       props.containsKey('colorFilter');
   if (!hasEffects) return child;
+  context.performanceController.recordEffectSchema(
+    blur: props.containsKey('blur'),
+    backdropBlur: props.containsKey('backdropBlur'),
+    colorFilter: props.containsKey('colorFilter'),
+  );
 
   final onAnimationEnd = QuickjsUiProps.event(props['onAnimationEnd']);
   return _QuickjsUiEffects(

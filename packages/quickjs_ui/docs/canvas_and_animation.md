@@ -146,6 +146,13 @@ quality. When the system setting is removed, playback returns to that quality.
 The Inspector performance tab and exported page snapshot expose refresh rate,
 budget, current mode/quality, reduced-motion state, build/raster P50/P90/P99,
 consecutive slow/stable frame counts, and the latest transition reason.
+They also expose current Canvas/animated-Canvas counts, command and Path
+segment counts, retained scenes, snapshot count/pixels, requested versus
+effective particle fragments, repaint count, Dart painter CPU P50/P90/P99,
+rejected command count/reason, and the number of clamped or disabled blur,
+backdrop-blur, color-filter, and ticker effects. Painter CPU duration measures
+display-list processing on the Dart/UI side; use Flutter's raster timing for
+GPU cost.
 
 The repository widget benchmarks are regression indicators, not GPU or device
 benchmarks. Before declaring a release production-ready, run the example in
@@ -163,6 +170,13 @@ Acceptance requires no sustained frame budget misses (16.67 ms at 60 Hz or
 scene/snapshot memory growth after repeated navigation. Use DevTools' Frame
 Analysis and Memory views; widget-test stopwatch results must not be reported
 as device raster performance.
+
+The example app's final Particle FX entry, **Performance Lab · 自适应效果质量**,
+combines 1,000/5,000/10,000 locally animated Canvas primitives, universal
+filters, widget animation, and a Snapshot particle transition. Its Flutter
+host owns the performance controller, offers manual `auto/high/balanced/low/off`
+selection, and displays the live serialized performance snapshot without
+sending frame statistics through JavaScript.
 
 Useful local regression commands:
 

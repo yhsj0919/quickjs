@@ -31,5 +31,11 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('Control System · 状态与结构插槽'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Performance Lab · 自适应效果质量'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Performance Lab · 自适应效果质量'), findsOneWidget);
   });
 }

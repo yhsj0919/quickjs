@@ -41,6 +41,27 @@ void main() {
     });
   }
 
+  test('adaptive performance lab builds bounded local stress scenes', () async {
+    const path = 'assets/quickjs_ui/adaptive_performance_lab_page.mjs';
+    final source = await rootBundle.loadString(path);
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'adaptive_performance_lab',
+        version: '1.0.0',
+        source: source,
+      ),
+    );
+
+    final loadCanvas = _findNodeByKey(session.node!, 'adaptive-load-canvas');
+    expect(loadCanvas, isNotNull);
+    expect(loadCanvas!.type, 'Canvas');
+    expect(loadCanvas.props['onFrame'], isNull);
+    expect(loadCanvas.props['commands'], hasLength(1000));
+  });
+
   test('universal effects demo animates a regular Flutter node', () async {
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/universal_effects_page.mjs',

@@ -27,6 +27,18 @@ final QuickjsUiComponentBuilderMap quickjsUiCanvasComponentBuilders =
     <String, QuickjsUiComponentBuilder>{'Canvas': _buildCanvas};
 
 Widget _buildCanvas(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  try {
+    return _buildCanvasValidated(context, node);
+  } catch (error) {
+    context.performanceController.recordCanvasRejection(error);
+    rethrow;
+  }
+}
+
+Widget _buildCanvasValidated(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
   final scene = _resolveScene(context, node);
   final staticCommands = scene.staticCommands;
   final commands = scene.commands;
@@ -35,6 +47,25 @@ Widget _buildCanvas(QuickjsUiRenderContext context, QuickjsUiNode node) {
       'quickjs_ui Canvas staticCommands cannot contain animations',
     );
   }
+  context.performanceController.recordCanvasSchema(
+    commandCount: staticCommands.length + commands.length,
+    pathSegmentCount: <Map<String, Object?>>[...staticCommands, ...commands]
+        .fold<int>(
+          0,
+          (total, command) =>
+              total +
+              (command['segments'] is List
+                  ? (command['segments']! as List).length
+                  : 0),
+        ),
+    particleFragments: commands.fold<int>(0, (total, command) {
+      if (command['op'] != 'snapshotParticleGrid') return total;
+      final columns = command['columns'];
+      final rows = command['rows'];
+      return total + (columns is int && rows is int ? columns * rows : 0);
+    }),
+    animated: QuickjsUiAnimationTimeline.from(commands).hasAnimations,
+  );
   final onFrame = QuickjsUiProps.event(node.props['onFrame']);
   final onAnimationEnd = QuickjsUiProps.event(node.props['onAnimationEnd']);
   final surface = _QuickjsUiCanvasSurface(
@@ -375,6 +406,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
     resources: widget.resources,
     elapsedMs: _animationTimeMs,
     quality: () => widget.performanceController.quality,
+    onPaint: widget.performanceController.recordCanvasPaint,
     repaint: _repaint,
   );
 
@@ -459,6 +491,7 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
     required this.resources,
     required this.elapsedMs,
     required this.quality,
+    required this.onPaint,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -469,44 +502,51 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
   final Map<String, String> resources;
   final double Function() elapsedMs;
   final QuickjsUiEffectQuality Function() quality;
+  final ValueChanged<Duration> onPaint;
   ui.Picture? _staticPicture;
   Size? _staticPictureSize;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (backgroundColor case final color?) {
-      canvas.drawRect(Offset.zero & size, Paint()..color = color);
-    }
-    if (staticCommands.isNotEmpty) {
-      if (_staticPicture == null || _staticPictureSize != size) {
-        _staticPicture?.dispose();
-        final recorder = ui.PictureRecorder();
-        _paintCommands(
-          Canvas(recorder),
-          size,
-          staticCommands,
-          const _CanvasClock(elapsedMs: 0, epochMs: 0),
-          snapshotRegistry,
-          resources,
-          QuickjsUiEffectQuality.high,
-        );
-        _staticPicture = recorder.endRecording();
-        _staticPictureSize = size;
+    final stopwatch = Stopwatch()..start();
+    try {
+      if (backgroundColor case final color?) {
+        canvas.drawRect(Offset.zero & size, Paint()..color = color);
       }
-      canvas.drawPicture(_staticPicture!);
+      if (staticCommands.isNotEmpty) {
+        if (_staticPicture == null || _staticPictureSize != size) {
+          _staticPicture?.dispose();
+          final recorder = ui.PictureRecorder();
+          _paintCommands(
+            Canvas(recorder),
+            size,
+            staticCommands,
+            const _CanvasClock(elapsedMs: 0, epochMs: 0),
+            snapshotRegistry,
+            resources,
+            QuickjsUiEffectQuality.high,
+          );
+          _staticPicture = recorder.endRecording();
+          _staticPictureSize = size;
+        }
+        canvas.drawPicture(_staticPicture!);
+      }
+      _paintCommands(
+        canvas,
+        size,
+        commands,
+        _CanvasClock(
+          elapsedMs: elapsedMs(),
+          epochMs: DateTime.now().microsecondsSinceEpoch / 1000,
+        ),
+        snapshotRegistry,
+        resources,
+        quality(),
+      );
+    } finally {
+      stopwatch.stop();
+      onPaint(stopwatch.elapsed);
     }
-    _paintCommands(
-      canvas,
-      size,
-      commands,
-      _CanvasClock(
-        elapsedMs: elapsedMs(),
-        epochMs: DateTime.now().microsecondsSinceEpoch / 1000,
-      ),
-      snapshotRegistry,
-      resources,
-      quality(),
-    );
   }
 
   void disposePicture() {
