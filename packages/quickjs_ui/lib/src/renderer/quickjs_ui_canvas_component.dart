@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_component_types.dart';
 import 'quickjs_ui_canvas_scene.dart';
 import 'quickjs_ui_animation.dart';
@@ -48,6 +49,7 @@ Widget _buildCanvas(QuickjsUiRenderContext context, QuickjsUiNode node) {
     reverse: node.props['reverse'] == true,
     forceWillChange: node.props['willChange'] == true,
     snapshotRegistry: context.snapshotRegistry,
+    performanceController: context.performanceController,
     onAnimationEnd: onAnimationEnd == null
         ? null
         : () => context.dispatchEvent(
@@ -287,6 +289,7 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
     required this.reverse,
     required this.forceWillChange,
     required this.snapshotRegistry,
+    required this.performanceController,
     required this.onAnimationEnd,
   }) : timeline = QuickjsUiAnimationTimeline.from(commands),
        commandsHash = quickjsUiValueHash(commands);
@@ -302,6 +305,7 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
   final bool reverse;
   final bool forceWillChange;
   final QuickjsUiSnapshotRegistry snapshotRegistry;
+  final QuickjsUiPerformanceController performanceController;
   final VoidCallback? onAnimationEnd;
   final QuickjsUiAnimationTimeline timeline;
   final int commandsHash;
@@ -324,6 +328,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   @override
   void initState() {
     super.initState();
+    widget.performanceController.addListener(_qualityChanged);
     _painter = _createPainter();
     _ticker = createTicker((elapsed) {
       _elapsedMs = _playbackOffsetMs + elapsed.inMicroseconds / 1000;
@@ -340,6 +345,10 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   @override
   void didUpdateWidget(covariant _QuickjsUiCanvasSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.performanceController != widget.performanceController) {
+      oldWidget.performanceController.removeListener(_qualityChanged);
+      widget.performanceController.addListener(_qualityChanged);
+    }
     final restart =
         oldWidget.commandsHash != widget.commandsHash ||
         oldWidget.playToken != widget.playToken ||
@@ -365,18 +374,30 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
     snapshotRegistry: widget.snapshotRegistry,
     resources: widget.resources,
     elapsedMs: _animationTimeMs,
+    quality: () => widget.performanceController.quality,
     repaint: _repaint,
   );
 
   void _syncTicker() {
-    if (widget.timeline.hasAnimations && !widget.paused) {
+    if (widget.timeline.hasAnimations &&
+        !widget.paused &&
+        widget.performanceController.quality != QuickjsUiEffectQuality.off) {
       if (!_ticker.isActive) _ticker.start();
     } else {
       if (_ticker.isActive) _ticker.stop();
     }
   }
 
+  void _qualityChanged() {
+    _syncTicker();
+    _repaint.repaint();
+    if (mounted) setState(() {});
+  }
+
   double _animationTimeMs() {
+    if (widget.performanceController.quality == QuickjsUiEffectQuality.off) {
+      return widget.timeline.endMs.isFinite ? widget.timeline.endMs : 0;
+    }
     if (!widget.reverse) return _elapsedMs;
     final endMs = widget.timeline.endMs;
     if (!endMs.isFinite) {
@@ -399,6 +420,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
 
   @override
   void dispose() {
+    widget.performanceController.removeListener(_qualityChanged);
     _ticker.dispose();
     _painter.disposePicture();
     _repaint.dispose();
@@ -415,7 +437,10 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
         isComplex: widget.staticCommands.length + widget.commands.length > 20,
         willChange:
             widget.forceWillChange ||
-            (widget.timeline.hasAnimations && !widget.paused),
+            (widget.timeline.hasAnimations &&
+                !widget.paused &&
+                widget.performanceController.quality !=
+                    QuickjsUiEffectQuality.off),
       ),
     );
   }
@@ -433,6 +458,7 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
     required this.snapshotRegistry,
     required this.resources,
     required this.elapsedMs,
+    required this.quality,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -442,6 +468,7 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
   final QuickjsUiSnapshotRegistry snapshotRegistry;
   final Map<String, String> resources;
   final double Function() elapsedMs;
+  final QuickjsUiEffectQuality Function() quality;
   ui.Picture? _staticPicture;
   Size? _staticPictureSize;
 
@@ -461,6 +488,7 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
           const _CanvasClock(elapsedMs: 0, epochMs: 0),
           snapshotRegistry,
           resources,
+          QuickjsUiEffectQuality.high,
         );
         _staticPicture = recorder.endRecording();
         _staticPictureSize = size;
@@ -477,6 +505,7 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
       ),
       snapshotRegistry,
       resources,
+      quality(),
     );
   }
 
@@ -553,6 +582,7 @@ void _paintCommands(
   _CanvasClock clock,
   QuickjsUiSnapshotRegistry snapshotRegistry,
   Map<String, String> resources,
+  QuickjsUiEffectQuality quality,
 ) {
   var saveDepth = 0;
   for (final command in commands) {
@@ -658,6 +688,7 @@ void _paintCommands(
           clock,
           snapshotRegistry,
           resources,
+          quality,
         );
     }
   }

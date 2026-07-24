@@ -260,7 +260,9 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 - [x] 支持列表 item enter/exit/reorder 的基础过渡，依赖 stable key 判断节点身份。
 - [ ] 支持页面转场配置：JSUI -> JSUI、原生 -> JSUI 可声明 transition intent，由 Flutter adapter 决定是否执行。
 - [ ] 支持交互状态动画：pressed、focused、loading、error 状态变化可映射为 Flutter 原生动画。
-- [ ] 支持动画开关和无障碍降级：宿主可关闭动画或启用 reduced motion。
+- [~] 控件状态动画已响应 reduced motion；宿主可通过 `QuickjsUiPerformanceController`
+  强制 high/balanced/low/off 或根据 Flutter build/raster FrameTiming 自动降级 Canvas、粒子和
+  通用 Effect。Canvas/Effect 自动合并系统 reduced motion 待补。
 - [ ] 第一版不做 JS `requestAnimationFrame`、逐帧 canvas 动画、自定义物理引擎和任意 timeline 脚本。
 
 ### 原生页面与 JSUI 导航
@@ -685,7 +687,8 @@ JS 持有 `CustomPainter`、`Paint`、`Path` 或其他 Dart 对象。JS 侧提�
 - [x] 手势由 Flutter 命中并回传局部坐标；可选 `onFrame` 采用间隔限制和事件合并，不作为动画驱动。
 - [x] 动画由 Flutter VSync 和本地参数驱动，不使用逐帧 JS Bridge。
 - [~] 已限制命令数、Path 复杂度、save 深度、场景数、快照数量/像素和帧事件间隔；Inspector 绘制耗时和生产设备内存预算待补。
-- [ ] Inspector 记录 command batch 大小、绘制耗时、重绘次数、图片缓存和被拒绝的超限命令。
+- [~] Inspector 已记录刷新率、帧预算、质量等级、降级原因及 build/raster P50/P90/P99；
+  command batch 大小、Canvas 绘制耗时、重绘次数、图片缓存和被拒绝的超限命令待补。
 - [~] 已有时钟、仪表盘、粒子、快照和通用控件动画 Demo、交互测试及 widget benchmark；真机 profile/golden 基线待补。
 - [ ] 首版不做 WebGL、任意 shader、完整滤镜体系和高频 `getImageData()` 像素回传。
 

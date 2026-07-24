@@ -11,6 +11,7 @@ export 'src/diagnostics/quickjs_ui_network_record.dart';
 export 'src/host/quickjs_ui_host_capabilities.dart';
 export 'src/host/quickjs_ui_permission_policy.dart';
 export 'src/navigation/quickjs_ui_navigator.dart';
+export 'src/performance/quickjs_ui_effect_quality.dart';
 export 'src/renderer/quickjs_ui_component_registry.dart';
 export 'src/renderer/quickjs_ui_render_context.dart';
 export 'src/renderer/quickjs_ui_renderer.dart';

@@ -65,6 +65,7 @@ void _drawSnapshotParticleGrid(
   _CanvasClock clock,
   QuickjsUiSnapshotRegistry registry,
   Map<String, String> resources,
+  QuickjsUiEffectQuality quality,
 ) {
   final source = _resolveSnapshotSlot(
     command['sourceSlot'],
@@ -82,8 +83,35 @@ void _drawSnapshotParticleGrid(
   final y = _rawFiniteNumber(command['y'], fallback: 0);
   final width = _rawFiniteNumber(command['width']);
   final height = _rawFiniteNumber(command['height']);
-  final columns = command['columns'] as int;
-  final rows = command['rows'] as int;
+  final requestedColumns = command['columns'] as int;
+  final requestedRows = command['rows'] as int;
+  if (quality == QuickjsUiEffectQuality.off) {
+    canvas.drawImageRect(
+      target.image,
+      Rect.fromLTWH(
+        0,
+        0,
+        target.image.width.toDouble(),
+        target.image.height.toDouble(),
+      ),
+      Rect.fromLTWH(x, y, width, height),
+      Paint()..filterQuality = FilterQuality.low,
+    );
+    return;
+  }
+  final fragmentBudget = switch (quality) {
+    QuickjsUiEffectQuality.high => _maxSnapshotParticleFragments,
+    QuickjsUiEffectQuality.balanced => 1024,
+    QuickjsUiEffectQuality.low => 256,
+    QuickjsUiEffectQuality.off => 1,
+  };
+  final requestedFragments = requestedColumns * requestedRows;
+  final samplingStep = math.max(
+    1,
+    math.sqrt(requestedFragments / fragmentBudget).ceil(),
+  );
+  final columns = (requestedColumns / samplingStep).ceil();
+  final rows = (requestedRows / samplingStep).ceil();
   final bucketCount = command['bucketCount'] as int;
   final staggerMs = _rawFiniteNumber(command['staggerMs']);
   final travelMs = _rawFiniteNumber(command['travelMs']);

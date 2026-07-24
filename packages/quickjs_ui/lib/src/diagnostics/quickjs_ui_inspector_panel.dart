@@ -31,7 +31,7 @@ final class QuickjsUiInspectorPanel extends StatelessWidget {
           error: controller.error,
         );
         return DefaultTabController(
-          length: 6,
+          length: 7,
           child: Material(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
             child: Column(
@@ -46,6 +46,7 @@ final class QuickjsUiInspectorPanel extends StatelessWidget {
                     Tab(text: 'Diff'),
                     Tab(text: '网络'),
                     Tab(text: '资源'),
+                    Tab(text: '性能'),
                   ],
                 ),
                 Expanded(
@@ -75,6 +76,11 @@ final class QuickjsUiInspectorPanel extends StatelessWidget {
                           'hostApis': snapshot.hostApis,
                           'resources': snapshot.resources,
                         },
+                      ),
+                      _JsonPane(
+                        data:
+                            snapshot.performance?.toMap() ??
+                            const <String, Object?>{},
                       ),
                     ],
                   ),
