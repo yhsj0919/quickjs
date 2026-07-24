@@ -394,7 +394,16 @@ binding、调试基础能力和宿主能力挂载。下一阶段按 `ROADMAP.md`
 .\tool\verify.cmd -TestPath test\quickjs_consistency_test.dart -PlainName "test name"
 .\tool\verify.cmd -TestPath test\quickjs_consistency_test.dart -PlainName "test name" -Web
 .\tool\verify.cmd -Mode full
+.\tool\verify.cmd -Mode ui
+.\tool\verify.cmd -Mode ui -Benchmark
 ```
+
+`-Mode ui` 会先使用 `QUICKJS_DLL_PATH` 指定的 DLL，否则在
+`example/build/windows` 中查找已有 `quickjs.dll`；未找到时自动执行一次
+`flutter build windows --debug`。随后运行 `packages/quickjs_ui` 的静态分析和
+完整测试。`-Benchmark` 额外执行 Canvas 及控件动画回归 benchmark；这些数据只用于
+本机回归比较，不能替代 profile 模式真机 GPU/raster 验收。若只想验证已有 DLL、禁止
+脚本触发构建，可传入 `-SkipNativeBuild`。
 
 Windows FFI 相关代码变更后，需要重建 example，确保测试进程加载的是最新
 `quickjs.dll`：

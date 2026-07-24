@@ -288,7 +288,8 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
     required this.forceWillChange,
     required this.snapshotRegistry,
     required this.onAnimationEnd,
-  }) : timeline = QuickjsUiAnimationTimeline.from(commands);
+  }) : timeline = QuickjsUiAnimationTimeline.from(commands),
+       commandsHash = quickjsUiValueHash(commands);
 
   final double? width;
   final double? height;
@@ -303,6 +304,7 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
   final QuickjsUiSnapshotRegistry snapshotRegistry;
   final VoidCallback? onAnimationEnd;
   final QuickjsUiAnimationTimeline timeline;
+  final int commandsHash;
 
   @override
   State<_QuickjsUiCanvasSurface> createState() =>
@@ -339,7 +341,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   void didUpdateWidget(covariant _QuickjsUiCanvasSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     final restart =
-        !identical(oldWidget.commands, widget.commands) ||
+        oldWidget.commandsHash != widget.commandsHash ||
         oldWidget.playToken != widget.playToken ||
         oldWidget.reverse != widget.reverse;
     if (restart) {

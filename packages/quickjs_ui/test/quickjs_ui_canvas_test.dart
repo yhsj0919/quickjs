@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
@@ -212,6 +214,199 @@ void main() {
     renderer.dispose();
     expect(() => renderer.build(reference), throwsFormatException);
   });
+
+  testWidgets(
+    'Canvas pause preserves progress and playToken starts a new generation',
+    (tester) async {
+      final events = <Map<String, Object?>>[];
+      final renderer = QuickjsUiRenderer(onEvent: events.add);
+
+      QuickjsUiNode node({required bool paused, required int playToken}) =>
+          QuickjsUiNode.fromMap(<String, Object?>{
+            'type': 'Canvas',
+            'key': 'generation-canvas',
+            'width': 40,
+            'height': 40,
+            'paused': paused,
+            'playToken': playToken,
+            'onAnimationEnd': <String, Object?>{'method': 'ended'},
+            'commands': <Object?>[
+              <String, Object?>{
+                'op': 'circle',
+                'cx': 20,
+                'cy': 20,
+                'radius': <String, Object?>{
+                  'from': 2,
+                  'to': 18,
+                  'durationMs': 100,
+                },
+                'fill': '#22d3ee',
+              },
+            ],
+          });
+
+      await tester.pumpWidget(
+        MaterialApp(home: renderer.build(node(paused: false, playToken: 0))),
+      );
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpWidget(
+        MaterialApp(home: renderer.build(node(paused: true, playToken: 0))),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(events, isEmpty);
+
+      await tester.pumpWidget(
+        MaterialApp(home: renderer.build(node(paused: false, playToken: 0))),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(events, hasLength(1));
+
+      await tester.pumpWidget(
+        MaterialApp(home: renderer.build(node(paused: false, playToken: 1))),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 110));
+      expect(events, hasLength(2));
+      renderer.dispose();
+    },
+  );
+
+  testWidgets('Canvas continuous animation neither completes nor reverses', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+
+    QuickjsUiNode node({bool reverse = false}) =>
+        QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Canvas',
+          'key': 'continuous-canvas',
+          'reverse': reverse,
+          'onAnimationEnd': <String, Object?>{'method': 'ended'},
+          'commands': <Object?>[
+            <String, Object?>{
+              'op': 'circle',
+              'cx': <String, Object?>{
+                'from': 0,
+                'to': 40,
+                'durationMs': 100,
+                'repeat': true,
+              },
+              'cy': 20,
+              'radius': 4,
+              'fill': '#22d3ee',
+            },
+          ],
+        });
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(node())));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(events, isEmpty);
+
+    await tester.pumpWidget(
+      MaterialApp(home: renderer.build(node(reverse: true))),
+    );
+    expect(tester.takeException(), isA<FormatException>());
+    renderer.dispose();
+  });
+
+  testWidgets('Canvas removal cancels pending animation completion', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'key': 'removed-canvas',
+      'onAnimationEnd': <String, Object?>{'method': 'ended'},
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'circle',
+          'cx': 20,
+          'cy': 20,
+          'radius': <String, Object?>{'from': 2, 'to': 18, 'durationMs': 100},
+          'fill': '#22d3ee',
+        },
+      ],
+    });
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(node)));
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(events, isEmpty);
+    renderer.dispose();
+  });
+
+  test(
+    'Canvas retained scene registry evicts oldest and clears on dispose',
+    () {
+      final renderer = QuickjsUiRenderer(onEvent: (_) {});
+      for (var index = 0; index < 33; index += 1) {
+        renderer.build(
+          QuickjsUiNode.fromMap(<String, Object?>{
+            'type': 'Canvas',
+            'sceneKey': 'scene-$index',
+            'commands': <Object?>[
+              <String, Object?>{
+                'op': 'circle',
+                'cx': index,
+                'cy': 1,
+                'radius': 1,
+                'fill': '#000000',
+              },
+            ],
+          }),
+        );
+      }
+
+      expect(renderer.canvasSceneRegistry.resolve('scene-0'), isNull);
+      expect(renderer.canvasSceneRegistry.resolve('scene-1'), isNotNull);
+      expect(renderer.canvasSceneRegistry.resolve('scene-32'), isNotNull);
+      renderer.dispose();
+      expect(renderer.canvasSceneRegistry.resolve('scene-32'), isNull);
+    },
+  );
+
+  test(
+    'Snapshot registry evicts oldest capture and clears on dispose',
+    () async {
+      final registry = QuickjsUiSnapshotRegistry(maxSnapshots: 2);
+      final images = <ui.Image>[];
+      for (var index = 0; index < 3; index += 1) {
+        final recorder = ui.PictureRecorder();
+        final canvas = ui.Canvas(recorder);
+        canvas.drawColor(const Color(0xff000000), BlendMode.src);
+        final picture = recorder.endRecording();
+        images.add(await picture.toImage(2, 2));
+        picture.dispose();
+      }
+
+      final first = registry.register(
+        boundaryId: 'first',
+        image: images[0],
+        pixelRatio: 1,
+      );
+      final second = registry.register(
+        boundaryId: 'second',
+        image: images[1],
+        pixelRatio: 1,
+      );
+      final third = registry.register(
+        boundaryId: 'third',
+        image: images[2],
+        pixelRatio: 1,
+      );
+
+      expect(registry.length, 2);
+      expect(registry.resolve(first.id), isNull);
+      expect(registry.resolve(second.id), isNotNull);
+      expect(registry.resolve(third.id), isNotNull);
+      registry.dispose();
+      expect(registry.length, 0);
+    },
+  );
 
   testWidgets('Canvas exposes local pointer coordinates', (tester) async {
     final events = <Map<String, Object?>>[];

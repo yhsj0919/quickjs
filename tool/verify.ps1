@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('targeted', 'full')]
+    [ValidateSet('targeted', 'full', 'ui')]
     [string]$Mode = 'targeted',
 
     [string]$TestPath = 'test/quickjs_consistency_test.dart',
@@ -8,6 +8,10 @@ param(
     [string]$PlainName,
 
     [switch]$Web,
+
+    [switch]$Benchmark,
+
+    [switch]$SkipNativeBuild,
 
     [int]$FailureTailLines = 80
 )
@@ -94,6 +98,62 @@ function Invoke-FlutterTest {
         -Arguments (@('test', '--reporter', 'compact') + $ExtraArguments)
 }
 
+function Find-QuickjsWindowsDll {
+    $configuredPath = $env:QUICKJS_DLL_PATH
+    if ($configuredPath) {
+        $resolvedConfiguredPath = Resolve-Path -LiteralPath $configuredPath -ErrorAction SilentlyContinue
+        if ($resolvedConfiguredPath) {
+            return $resolvedConfiguredPath.Path
+        }
+        throw "QUICKJS_DLL_PATH does not exist: $configuredPath"
+    }
+
+    $exampleBuild = Join-Path $Root 'example/build/windows'
+    if (-not (Test-Path $exampleBuild)) {
+        return $null
+    }
+
+    $configurationPriority = @('Debug', 'Profile', 'Release', 'RelWithDebInfo')
+    $candidates = Get-ChildItem -LiteralPath $exampleBuild -Recurse -Filter 'quickjs.dll' -File |
+        Where-Object { $_.FullName -match '[\\/]runner[\\/]' }
+    foreach ($configuration in $configurationPriority) {
+        $candidate = $candidates |
+            Where-Object { $_.Directory.Name -eq $configuration } |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+        if ($candidate) {
+            return $candidate.FullName
+        }
+    }
+    return ($candidates | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).FullName
+}
+
+function Initialize-QuickjsWindowsDll {
+    if (-not $IsWindows -and $env:OS -ne 'Windows_NT') {
+        return
+    }
+
+    $dllPath = Find-QuickjsWindowsDll
+    if (-not $dllPath) {
+        if ($SkipNativeBuild) {
+            throw 'quickjs.dll was not found and -SkipNativeBuild was specified.'
+        }
+        $flutterCommand = Get-Command flutter -ErrorAction Stop
+        Invoke-LoggedCommand `
+            -Name 'build-windows-native' `
+            -WorkingDirectory (Join-Path $Root 'example') `
+            -Executable $flutterCommand.Source `
+            -Arguments @('build', 'windows', '--debug')
+        $dllPath = Find-QuickjsWindowsDll
+    }
+
+    if (-not $dllPath) {
+        throw 'Windows build completed but quickjs.dll could not be located.'
+    }
+    $env:QUICKJS_DLL_PATH = $dllPath
+    Write-Host "Using QUICKJS_DLL_PATH=$dllPath"
+}
+
 if ($Mode -eq 'targeted') {
     $testArguments = @($TestPath)
     if ($PlainName) {
@@ -103,6 +163,29 @@ if ($Mode -eq 'targeted') {
         $testArguments += @('-d', 'chrome')
     }
     Invoke-FlutterTest -Name 'targeted-test' -WorkingDirectory $Root -ExtraArguments $testArguments
+    exit 0
+}
+
+if ($Mode -eq 'ui') {
+    $quickjsUiRoot = Join-Path $Root 'packages/quickjs_ui'
+    $flutterCommand = Get-Command flutter -ErrorAction Stop
+    Initialize-QuickjsWindowsDll
+    Invoke-LoggedCommand `
+        -Name 'quickjs-ui-analyze' `
+        -WorkingDirectory $quickjsUiRoot `
+        -Executable $flutterCommand.Source `
+        -Arguments @('analyze')
+    Invoke-FlutterTest -Name 'quickjs-ui-tests' -WorkingDirectory $quickjsUiRoot
+    if ($Benchmark) {
+        Invoke-FlutterTest `
+            -Name 'quickjs-ui-benchmarks' `
+            -WorkingDirectory $quickjsUiRoot `
+            -ExtraArguments @(
+                'benchmark/canvas_120hz_benchmark_test.dart',
+                'benchmark/control_state_120hz_benchmark_test.dart'
+            )
+    }
+    Write-Host "quickjs_ui verification passed. Logs: $LogDirectory"
     exit 0
 }
 
