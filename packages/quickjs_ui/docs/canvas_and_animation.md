@@ -112,11 +112,11 @@ as device raster performance.
 Useful local regression commands:
 
 ```bash
-flutter analyze
-flutter test test/quickjs_ui_canvas_test.dart test/quickjs_ui_effects_test.dart test/quickjs_ui_control_states_test.dart test/quickjs_ui_overlay_system_test.dart
-flutter test benchmark/canvas_120hz_benchmark_test.dart benchmark/control_state_120hz_benchmark_test.dart
+.\tool\verify.cmd -Mode ui
+.\tool\verify.cmd -Mode ui -Benchmark
 ```
 
-The complete test suite additionally requires the platform QuickJS native
-library. On Windows, build `quickjs.dll` or set `QUICKJS_DLL_PATH` to its full
-path before running `flutter test`.
+Run these commands from the repository root. The script uses
+`QUICKJS_DLL_PATH` when configured, otherwise it locates an existing Windows
+example build and builds the debug example when necessary. Pass
+`-SkipNativeBuild` to fail instead of triggering that build.

@@ -82,4 +82,66 @@ void main() {
     expect(find.byType(Transform), findsNWidgets(2));
     expect(find.byType(ImageFiltered), findsOneWidget);
   });
+
+  testWidgets('universal effects preserve pause and restart by playToken', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+
+    QuickjsUiNode node({required bool paused, required int playToken}) =>
+        QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Container',
+          'key': 'effect-generation',
+          'paused': paused,
+          'playToken': playToken,
+          'opacity': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 100},
+          'onAnimationEnd': <String, Object?>{'method': 'ended'},
+        });
+
+    await tester.pumpWidget(
+      MaterialApp(home: renderer.build(node(paused: false, playToken: 0))),
+    );
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pumpWidget(
+      MaterialApp(home: renderer.build(node(paused: true, playToken: 0))),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(events, isEmpty);
+
+    await tester.pumpWidget(
+      MaterialApp(home: renderer.build(node(paused: false, playToken: 0))),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(events, hasLength(1));
+
+    await tester.pumpWidget(
+      MaterialApp(home: renderer.build(node(paused: false, playToken: 1))),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 110));
+    expect(events, hasLength(2));
+    renderer.dispose();
+  });
+
+  testWidgets('removing a universal effect cancels pending completion', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'key': 'removed-effect',
+      'opacity': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 100},
+      'onAnimationEnd': <String, Object?>{'method': 'ended'},
+    });
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(node)));
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(events, isEmpty);
+    renderer.dispose();
+  });
 }
