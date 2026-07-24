@@ -214,6 +214,10 @@ for editor hints and CI checks against plain object UI schema.
 
 ## Canvas 2D authoring style
 
+The lifecycle, limits, compatibility boundary, and device performance
+acceptance criteria are specified in
+[`docs/canvas_and_animation.md`](docs/canvas_and_animation.md).
+
 Use the familiar browser Canvas 2D style. The callback runs once in QuickJS
 and records a display list; Flutter then renders and animates that list locally.
 
@@ -408,6 +412,10 @@ Container({
 Static `colorFilter` and animated `backdropBlur` are also supported.
 `paused`, `playToken`, and `reverse` have the same playback meaning as a
 retained Canvas scene.
+
+These APIs are currently experimental under the package's `0.1.x` version.
+Do not make application correctness depend on animation completion or motion;
+always provide the same meaningful static end state.
 
 ## Capturing Flutter widgets for Canvas
 
