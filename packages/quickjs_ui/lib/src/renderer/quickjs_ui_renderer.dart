@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import '../diagnostics/quickjs_ui_diff_stats.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_component_registry.dart';
 import 'quickjs_ui_canvas_scene.dart';
 import 'quickjs_ui_effects.dart';
@@ -21,12 +22,20 @@ final class QuickjsUiRenderer {
     this.onUiEvent,
     this.onDiffStats,
     QuickjsUiComponentRegistry? registry,
-  }) : registry = registry ?? QuickjsUiComponentRegistry.defaults();
+    QuickjsUiPerformanceController? performanceController,
+  }) : registry = registry ?? QuickjsUiComponentRegistry.defaults(),
+       performanceController =
+           performanceController ?? QuickjsUiPerformanceController(),
+       _ownsPerformanceController = performanceController == null {
+    this.performanceController.start();
+  }
 
   final QuickjsUiEventHandler onEvent;
   final QuickjsUiEventEnvelopeHandler? onUiEvent;
   final QuickjsUiDiffStatsListener? onDiffStats;
   final QuickjsUiComponentRegistry registry;
+  final QuickjsUiPerformanceController performanceController;
+  final bool _ownsPerformanceController;
   final QuickjsUiSnapshotRegistry snapshotRegistry =
       QuickjsUiSnapshotRegistry();
   final QuickjsUiCanvasSceneRegistry canvasSceneRegistry =
@@ -95,6 +104,7 @@ final class QuickjsUiRenderer {
       buildContext: buildContext,
       canvasSceneRegistry: canvasSceneRegistry,
       snapshotRegistry: snapshotRegistry,
+      performanceController: performanceController,
     );
     final widget = buildNode(node);
     _cache
@@ -212,6 +222,7 @@ final class QuickjsUiRenderer {
     _eventDispatcher.dispose();
     canvasSceneRegistry.clear();
     snapshotRegistry.dispose();
+    if (_ownsPerformanceController) performanceController.dispose();
     _cache.clear();
     _shown = false;
     _paused = false;

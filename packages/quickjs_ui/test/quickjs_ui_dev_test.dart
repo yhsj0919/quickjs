@@ -49,6 +49,11 @@ export default Page({
       );
 
       await controller.dispatch(const <String, Object?>{'method': 'increment'});
+      final performance = QuickjsUiPerformanceController(
+        mode: QuickjsUiPerformanceMode.low,
+      );
+      inspector.recordPerformance(performance.snapshot);
+      performance.dispose();
 
       final snapshot = controller.exportPageSnapshotMap();
       expect(snapshot['props'], const <String, Object?>{'title': 'dev'});
@@ -59,6 +64,10 @@ export default Page({
       expect(snapshot['lifecycle'], isA<List>());
       expect((snapshot['lifecycle'] as List).isNotEmpty, isTrue);
       expect(snapshot['resources'], isA<List>());
+      expect(
+        snapshot['performance'],
+        containsPair('quality', QuickjsUiEffectQuality.low.name),
+      );
     });
 
     test('records renderer diff stats for keyed nodes', () async {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../resource/quickjs_ui_resource.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import '../theme/quickjs_ui_design_tokens.dart';
@@ -69,12 +70,15 @@ final class QuickjsUiRenderContext {
     this.buildContext,
     QuickjsUiCanvasSceneRegistry? canvasSceneRegistry,
     QuickjsUiSnapshotRegistry? snapshotRegistry,
+    QuickjsUiPerformanceController? performanceController,
   }) : _buildNode = buildNode,
        _buildNodeAtPath = buildNodeAtPath,
        _onUiEvent = onUiEvent,
        canvasSceneRegistry =
            canvasSceneRegistry ?? QuickjsUiCanvasSceneRegistry(),
        snapshotRegistry = snapshotRegistry ?? QuickjsUiSnapshotRegistry(),
+       performanceController =
+           performanceController ?? QuickjsUiPerformanceController(),
        onEvent =
            onEvent ??
            ((event) => onUiEvent(QuickjsUiEventEnvelope.command(event))),
@@ -90,6 +94,7 @@ final class QuickjsUiRenderContext {
   final BuildContext? buildContext;
   final QuickjsUiCanvasSceneRegistry canvasSceneRegistry;
   final QuickjsUiSnapshotRegistry snapshotRegistry;
+  final QuickjsUiPerformanceController performanceController;
 
   QuickjsUiRenderContext withPath(String path) {
     return QuickjsUiRenderContext(
@@ -101,6 +106,7 @@ final class QuickjsUiRenderContext {
       buildContext: buildContext,
       canvasSceneRegistry: canvasSceneRegistry,
       snapshotRegistry: snapshotRegistry,
+      performanceController: performanceController,
       path: path,
     );
   }

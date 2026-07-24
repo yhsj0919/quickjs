@@ -3,6 +3,7 @@ import 'package:quickjs/quickjs.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_diff_stats.dart';
 import 'quickjs_ui_lifecycle_event.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 
 /// Serializable page snapshot for debugging and issue reproduction.
 final class QuickjsUiPageSnapshot {
@@ -21,6 +22,7 @@ final class QuickjsUiPageSnapshot {
     this.resources = const <String>[],
     this.network = const <Map<String, Object?>>[],
     this.diff,
+    this.performance,
     this.error,
   });
 
@@ -38,6 +40,7 @@ final class QuickjsUiPageSnapshot {
   final List<String> resources;
   final List<Map<String, Object?>> network;
   final QuickjsUiDiffStats? diff;
+  final QuickjsUiPerformanceSnapshot? performance;
   final Object? error;
 
   Map<String, Object?> toMap() {
@@ -58,6 +61,7 @@ final class QuickjsUiPageSnapshot {
       if (resources.isNotEmpty) 'resources': resources,
       if (network.isNotEmpty) 'network': network,
       if (diff != null) 'diff': diff!.toMap(),
+      if (performance != null) 'performance': performance!.toMap(),
       if (error != null) 'error': '$error',
     };
   }

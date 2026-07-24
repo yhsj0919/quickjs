@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_animation.dart';
 import 'quickjs_ui_render_context.dart';
 
@@ -36,6 +37,7 @@ Widget withQuickjsUiEffects(
     paused: props['paused'] == true,
     playToken: props['playToken'],
     reverse: props['reverse'] == true,
+    performanceController: context.performanceController,
     resolveColor: context.color,
     onAnimationEnd: onAnimationEnd == null
         ? null
@@ -60,6 +62,7 @@ final class _QuickjsUiEffects extends StatefulWidget {
     required this.paused,
     required this.playToken,
     required this.reverse,
+    required this.performanceController,
     required this.resolveColor,
     required this.onAnimationEnd,
     required this.child,
@@ -90,6 +93,7 @@ final class _QuickjsUiEffects extends StatefulWidget {
   final bool paused;
   final Object? playToken;
   final bool reverse;
+  final QuickjsUiPerformanceController performanceController;
   final Color? Function(Object? value) resolveColor;
   final VoidCallback? onAnimationEnd;
   final Widget child;
@@ -112,6 +116,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   @override
   void initState() {
     super.initState();
+    widget.performanceController.addListener(_qualityChanged);
     _ticker = createTicker(_tick);
     _syncTicker();
   }
@@ -119,6 +124,10 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   @override
   void didUpdateWidget(covariant _QuickjsUiEffects oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.performanceController != widget.performanceController) {
+      oldWidget.performanceController.removeListener(_qualityChanged);
+      widget.performanceController.addListener(_qualityChanged);
+    }
     final restart =
         oldWidget.valueHash != widget.valueHash ||
         oldWidget.playToken != widget.playToken ||
@@ -146,11 +155,19 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   }
 
   void _syncTicker() {
-    if (widget.timeline.hasAnimations && !widget.paused) {
+    if (widget.timeline.hasAnimations &&
+        !widget.paused &&
+        widget.performanceController.quality != QuickjsUiEffectQuality.off) {
       if (!_ticker.isActive) _ticker.start();
     } else if (_ticker.isActive) {
       _ticker.stop();
     }
+  }
+
+  void _qualityChanged() {
+    if (!mounted) return;
+    _syncTicker();
+    setState(() {});
   }
 
   void _notifyAnimationEndAfterPaint() {
@@ -176,20 +193,26 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
 
   @override
   void dispose() {
+    widget.performanceController.removeListener(_qualityChanged);
     _ticker.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final quality = widget.performanceController.quality;
+    final resolvedElapsed = quality == QuickjsUiEffectQuality.off
+        ? (widget.timeline.endMs.isFinite ? widget.timeline.endMs : 1e12)
+        : _animationTimeMs();
     final clock = QuickjsUiAnimationClock(
-      elapsedMs: _animationTimeMs(),
+      elapsedMs: resolvedElapsed,
       epochMs: DateTime.now().microsecondsSinceEpoch / 1000,
     );
     Widget result = widget.child;
 
     final colorFilter = widget.colorFilter;
-    if (colorFilter is Map) {
+    if (colorFilter is Map &&
+        quality.index <= QuickjsUiEffectQuality.balanced.index) {
       final color = widget.resolveColor(colorFilter['color']);
       if (color != null) {
         result = RepaintBoundary(
@@ -207,16 +230,20 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
       }
     }
 
-    final blur = _blur(widget.blur, clock);
-    if (widget.blur != null) {
+    final blur = _qualityBlur(_blur(widget.blur, clock), quality);
+    if (widget.blur != null && quality != QuickjsUiEffectQuality.off) {
       result = ImageFiltered(
         imageFilter: ui.ImageFilter.blur(sigmaX: blur.$1, sigmaY: blur.$2),
         child: result,
       );
     }
 
-    final backdropBlur = _blur(widget.backdropBlur, clock);
-    if (widget.backdropBlur != null) {
+    final backdropBlur = _qualityBlur(
+      _blur(widget.backdropBlur, clock),
+      quality,
+    );
+    if (widget.backdropBlur != null &&
+        quality.index <= QuickjsUiEffectQuality.balanced.index) {
       result = BackdropFilter(
         filter: ui.ImageFilter.blur(
           sigmaX: backdropBlur.$1,
@@ -280,6 +307,19 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
     }
     return result;
   }
+}
+
+(double, double) _qualityBlur(
+  (double, double) blur,
+  QuickjsUiEffectQuality quality,
+) {
+  final maximum = switch (quality) {
+    QuickjsUiEffectQuality.high => 100.0,
+    QuickjsUiEffectQuality.balanced => 12.0,
+    QuickjsUiEffectQuality.low => 4.0,
+    QuickjsUiEffectQuality.off => 0.0,
+  };
+  return (blur.$1.clamp(0, maximum), blur.$2.clamp(0, maximum));
 }
 
 (double, double) _blur(Object? raw, QuickjsUiAnimationClock clock) {

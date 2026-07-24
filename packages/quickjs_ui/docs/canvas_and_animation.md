@@ -92,6 +92,61 @@ end state and must not make meaning depend on motion alone.
 
 ## Performance acceptance
 
+### Adaptive effect quality
+
+The host can keep the existing full-quality behavior or opt into local,
+frame-timing-driven degradation without rebuilding the JavaScript page:
+
+```dart
+final performance = QuickjsUiPerformanceController(
+  mode: QuickjsUiPerformanceMode.auto,
+);
+final renderer = QuickjsUiRenderer(
+  onEvent: handleEvent,
+  performanceController: performance,
+);
+
+// Dispose both when the owning page/session ends.
+renderer.dispose();
+performance.dispose();
+```
+
+`QuickjsUiView` creates an auto controller by default, reads
+`View.of(context).display.refreshRate`, and derives the budget as one refresh
+interval (8.33 ms at 120 Hz, 11.11 ms at 90 Hz, or 16.67 ms at 60 Hz). Passing
+`targetFrameBudget` explicitly overrides this derivation. Direct
+`QuickjsUiRenderer` usage keeps the compatibility default of `high`; inject a
+controller to opt into automatic sampling.
+
+The default mode is `high`, which preserves compatibility and performs no
+global frame sampling. `auto` starts at `high`, degrades after 24 consecutive
+slow frames, and upgrades only after 240 stable frames. The asymmetric windows
+avoid quality oscillation. Hosts may instead force `high`, `balanced`, `low`,
+or `off`.
+
+Quality changes stay inside Flutter:
+
+- `high`: complete effects and up to 4,096 snapshot particle fragments;
+- `balanced`: blur is capped at 12 and particle grids at about 1,024 fragments;
+- `low`: backdrop blur and color filters are removed, blur is capped at 4,
+  and particle grids are aggregated to about 256 fragments;
+- `off`: effect animations resolve to their finite end state, filters are
+  removed, Canvas tickers stop, and snapshot particle transitions draw the
+  target image directly.
+
+The controller compares the larger of Flutter's build and raster durations
+with the configured budget. Device-name heuristics are intentionally not the
+primary signal: thermal throttling and page complexity can change during a
+session. The host owns an injected controller and must dispose it after all
+renderers using it have been disposed.
+
+`MediaQuery.disableAnimations` temporarily forces the effective quality to
+`off` for Canvas and universal effects, without discarding the prior adaptive
+quality. When the system setting is removed, playback returns to that quality.
+The Inspector performance tab and exported page snapshot expose refresh rate,
+budget, current mode/quality, reduced-motion state, build/raster P50/P90/P99,
+consecutive slow/stable frame counts, and the latest transition reason.
+
 The repository widget benchmarks are regression indicators, not GPU or device
 benchmarks. Before declaring a release production-ready, run the example in
 Flutter profile mode on a representative low-end 60 Hz Android device and a

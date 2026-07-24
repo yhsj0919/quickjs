@@ -2,6 +2,12 @@
 
 ### quickjs_ui
 
+* 新增 `QuickjsUiPerformanceController`，支持 high/balanced/low/off 和基于 Flutter
+  build/raster FrameTiming、带迟滞窗口的自动效果质量回退。
+* Canvas 粒子、blur、backdrop blur、color filter 和本地动画可随质量等级降级，过程不触发
+  JavaScript rebuild 或逐帧 Bridge。
+* `QuickjsUiView` 自动按显示器刷新率计算帧预算并合并系统 reduced motion；Inspector 新增
+  性能页及 build/raster P50/P90/P99、质量等级和降级原因快照。
 * 新增受控 Canvas 2D display list、静态 Picture 缓存、保留场景和 Flutter VSync 本地动画。
 * 新增页面级快照资源、粒子网格绘制，以及 Canvas 手势和可选帧采样事件。
 * 新增任意组件通用特效、控件状态样式/过渡、结构化 slot 和统一 Overlay 动画层。

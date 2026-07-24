@@ -7,6 +7,7 @@ import '../diagnostics/quickjs_ui_dev_options.dart';
 import '../diagnostics/quickjs_ui_error.dart';
 import '../diagnostics/quickjs_ui_diag.dart';
 import '../host/quickjs_ui_permission_policy.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import '../renderer/quickjs_ui_component_registry.dart';
 import '../renderer/quickjs_ui_event_ingress.dart';
 import '../renderer/quickjs_ui_renderer.dart';
@@ -60,6 +61,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.emptyBuilder,
     this.onFirstRender,
     this.resourceCache,
+    this.performanceController,
   }) : _source = plugin != null
            ? _QuickjsUiViewSource.plugin
            : _QuickjsUiViewSource.asset,
@@ -103,6 +105,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     QuickjsUiResourceCache? resourceCache,
+    QuickjsUiPerformanceController? performanceController,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -122,6 +125,7 @@ final class QuickjsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      performanceController: performanceController,
     );
   }
 
@@ -148,6 +152,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     QuickjsUiResourceCache? resourceCache,
+    QuickjsUiPerformanceController? performanceController,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -168,6 +173,7 @@ final class QuickjsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      performanceController: performanceController,
     );
   }
 
@@ -194,6 +200,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     QuickjsUiResourceCache? resourceCache,
+    QuickjsUiPerformanceController? performanceController,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -214,6 +221,7 @@ final class QuickjsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      performanceController: performanceController,
     );
   }
 
@@ -244,6 +252,7 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     QuickjsUiResourceCache? resourceCache,
+    QuickjsUiPerformanceController? performanceController,
   }) {
     return QuickjsUiView._(
       key: key,
@@ -267,6 +276,7 @@ final class QuickjsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      performanceController: performanceController,
     );
   }
 
@@ -294,6 +304,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.emptyBuilder,
     this.onFirstRender,
     this.resourceCache,
+    this.performanceController,
   }) : assert(runtime == null || controller == null);
 
   final QuickjsPlugin? plugin;
@@ -362,6 +373,7 @@ final class QuickjsUiView extends StatefulWidget {
   /// process-wide [QuickjsUiResourceCache.shared] by default. Pass a dedicated
   /// cache for isolation, or one with `maxAge: Duration.zero` to disable it.
   final QuickjsUiResourceCache? resourceCache;
+  final QuickjsUiPerformanceController? performanceController;
   final _QuickjsUiViewSource _source;
 
   @override
@@ -374,6 +386,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   late bool _ownsController;
   late QuickjsUiRenderer _renderer;
   late QuickjsUiEventIngress _eventIngress;
+  late QuickjsUiPerformanceController _performanceController;
+  late bool _ownsPerformanceController;
   late final _QuickjsUiLoadCoordinator _loadCoordinator;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
@@ -392,6 +406,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           onConsole: widget.onConsole,
         );
     _ownsController = widget.controller == null;
+    _performanceController =
+        widget.performanceController ??
+        QuickjsUiPerformanceController(mode: QuickjsUiPerformanceMode.auto);
+    _ownsPerformanceController = widget.performanceController == null;
+    _performanceController.addListener(_recordPerformance);
     _controller.addListener(_handleControllerChanged);
     _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
@@ -405,6 +424,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       onEvent: _eventIngress.submit,
       onUiEvent: _eventIngress.submitEnvelope,
       onDiffStats: devOptions.logDiff ? _controller.inspector.recordDiff : null,
+      performanceController: _performanceController,
     );
   }
 
@@ -431,9 +451,24 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
 
   QuickjsUiDevOptions get _devOptions => _controller.devOptions;
 
+  void _recordPerformance() {
+    _controller.inspector.recordPerformance(_performanceController.snapshot);
+  }
+
   @override
   void didUpdateWidget(covariant QuickjsUiView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.performanceController != widget.performanceController) {
+      _performanceController.removeListener(_recordPerformance);
+      if (_ownsPerformanceController) _performanceController.dispose();
+      _performanceController =
+          widget.performanceController ??
+          QuickjsUiPerformanceController(mode: QuickjsUiPerformanceMode.auto);
+      _ownsPerformanceController = widget.performanceController == null;
+      _performanceController.addListener(_recordPerformance);
+      _renderer.dispose();
+      _renderer = _createRenderer();
+    }
     if (oldWidget.controller != widget.controller ||
         oldWidget.runtime != widget.runtime) {
       _controller.removeListener(_handleControllerChanged);
@@ -488,6 +523,8 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _loadCoordinator.dispose();
     _advanceGeneration();
     _controller.removeListener(_handleControllerChanged);
+    _performanceController.removeListener(_recordPerformance);
+    if (_ownsPerformanceController) _performanceController.dispose();
     if (_ownsController) {
       _controller.dispose();
     }
@@ -568,6 +605,13 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
 
     try {
+      _performanceController.updateDisplayRefreshRate(
+        View.of(context).display.refreshRate,
+      );
+      _performanceController.updateReduceMotion(
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false,
+      );
+      _controller.inspector.recordPerformance(_performanceController.snapshot);
       final rendered = _renderer.build(node, buildContext: context);
       if (_devOptions.logSchema) {
         QuickjsUiDiag.log('schema', node.toMap().toString());

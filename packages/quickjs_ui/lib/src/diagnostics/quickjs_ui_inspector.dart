@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:quickjs/quickjs.dart';
 
 import '../schema/quickjs_ui_node.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_diff_stats.dart';
 import 'quickjs_ui_lifecycle_event.dart';
 import 'quickjs_ui_network_journal.dart';
@@ -24,6 +25,7 @@ final class QuickjsUiInspector extends ChangeNotifier {
   final List<String> _resourceLog = <String>[];
   final QuickjsUiNetworkJournal networkJournal = QuickjsUiNetworkJournal();
   Object? _lastError;
+  QuickjsUiPerformanceSnapshot? _performance;
   bool _notifyScheduled = false;
   bool _disposed = false;
 
@@ -41,6 +43,12 @@ final class QuickjsUiInspector extends ChangeNotifier {
   List<QuickjsUiNetworkRecord> get networkRecords => networkJournal.records;
 
   Object? get lastError => _lastError;
+  QuickjsUiPerformanceSnapshot? get performance => _performance;
+
+  void recordPerformance(QuickjsUiPerformanceSnapshot snapshot) {
+    _performance = snapshot;
+    _scheduleNotify();
+  }
 
   void recordLifecycle(String phase, String type, {Object? payload}) {
     _lifecycle.add(
@@ -109,6 +117,7 @@ final class QuickjsUiInspector extends ChangeNotifier {
     _resourceLog.clear();
     networkJournal.clear();
     _lastError = null;
+    _performance = null;
     _scheduleNotify();
   }
 
@@ -157,6 +166,7 @@ final class QuickjsUiInspector extends ChangeNotifier {
       resources: QuickjsUiPageSnapshot.resourcesFor(plugin),
       network: networkRecords.map((record) => record.toMap()).toList(),
       diff: _lastDiff,
+      performance: _performance,
       error: error ?? _lastError,
     );
   }

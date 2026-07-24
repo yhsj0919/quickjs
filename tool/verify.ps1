@@ -182,7 +182,8 @@ if ($Mode -eq 'ui') {
             -WorkingDirectory $quickjsUiRoot `
             -ExtraArguments @(
                 'benchmark/canvas_120hz_benchmark_test.dart',
-                'benchmark/control_state_120hz_benchmark_test.dart'
+                'benchmark/control_state_120hz_benchmark_test.dart',
+                'benchmark/adaptive_quality_benchmark_test.dart'
             )
     }
     Write-Host "quickjs_ui verification passed. Logs: $LogDirectory"
