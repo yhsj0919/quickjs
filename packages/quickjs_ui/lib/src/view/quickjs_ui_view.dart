@@ -584,17 +584,15 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       return QuickjsUiErrorOverlay(error: error);
     }
 
-    if (_loadCoordinator.isPending || _controller.isLoading) {
+    if ((_loadCoordinator.isPending || _controller.isLoading) &&
+        _controller.node == null) {
       final loadingBuilder = widget.loadingBuilder;
       if (loadingBuilder != null) {
         return loadingBuilder(context);
       }
-      if (_controller.node == null) {
-        return widget.emptyBuilder?.call(context) ??
-            widget.placeholder ??
-            const SizedBox.shrink();
-      }
-      return widget.placeholder ?? const SizedBox.shrink();
+      return widget.emptyBuilder?.call(context) ??
+          widget.placeholder ??
+          const SizedBox.shrink();
     }
 
     final node = _controller.node;
