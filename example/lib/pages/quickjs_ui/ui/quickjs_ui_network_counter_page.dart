@@ -6,9 +6,9 @@ import 'package:quickjs_ui/quickjs_ui.dart';
 class QuickjsUiNetworkCounterPage extends StatefulWidget {
   const QuickjsUiNetworkCounterPage({super.key});
 
-  /// 远程入口脚本的 URL（需先启动本地静态文件服务器）。
-  static final Uri url = Uri.parse(
-    'http://127.0.0.1:8765/bundle_counter/pages/main.mjs',
+  /// 远程发布包根目录，目录内包含 manifest.json 和清单声明的模块。
+  static final Uri packageRoot = Uri.parse(
+    'https://ad.palsmon.com/plugin/wather/',
   );
 
   @override
@@ -20,7 +20,17 @@ class _QuickjsUiNetworkCounterPageState
     extends State<QuickjsUiNetworkCounterPage> {
   final QuickjsUiController _controller = QuickjsUiController();
   final Stopwatch _stopwatch = Stopwatch()..start();
+  QuickjsUiBundle? _bundle;
+  Widget? _view;
+  Object? _loadError;
   Duration? _firstRenderElapsed;
+  int _loadRequest = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPackage();
+  }
 
   @override
   void dispose() {
@@ -36,20 +46,7 @@ class _QuickjsUiNetworkCounterPageState
         children: <Widget>[
           DecoratedBox(
             decoration: const BoxDecoration(color: Color(0xfff4f7fb)),
-            child: SizedBox.expand(
-              child: QuickjsUiView.network(
-                url: QuickjsUiNetworkCounterPage.url,
-                controller: _controller,
-                initialProps: const <String, Object?>{
-                  'title': 'Network QuickJS UI',
-                  'initialCount': 10,
-                },
-                loadingBuilder: (_) => const _DelayedLoadingIndicator(),
-                errorBuilder: (_, error) => _NetworkErrorMessage(error: error),
-                onNetworkLog: _handleNetworkLog,
-                onFirstRender: _handleFirstRender,
-              ),
-            ),
+            child: SizedBox.expand(child: _buildContent()),
           ),
           Positioned(
             left: 12,
@@ -60,7 +57,7 @@ class _QuickjsUiNetworkCounterPageState
               children: <Widget>[
                 _NetworkActions(
                   onRefresh: _controller.refresh,
-                  onReload: _controller.reload,
+                  onReload: () => _loadPackage(force: true),
                 ),
                 const SizedBox(height: 8),
                 _RenderTimingBanner(elapsed: _firstRenderElapsed),
@@ -72,6 +69,68 @@ class _QuickjsUiNetworkCounterPageState
     );
   }
 
+  Widget _buildContent() {
+    final error = _loadError;
+    if (error != null) {
+      return _NetworkErrorMessage(error: error);
+    }
+    return _view ?? const _DelayedLoadingIndicator();
+  }
+
+  Widget _createView(QuickjsUiBundle bundle) {
+    return QuickjsUiView.plugin(
+      bundle.toPlugin(),
+      controller: _controller,
+      initialProps: <String, Object?>{
+        'packageId': bundle.id,
+        'packageVersion': bundle.version,
+        'moduleCount': bundle.modules.length,
+        'resourceCount': bundle.resources.length,
+      },
+      loadingBuilder: (_) => const _DelayedLoadingIndicator(),
+      errorBuilder: (_, error) => _NetworkErrorMessage(error: error),
+      onFirstRender: _handleFirstRender,
+    );
+  }
+
+  Future<void> _loadPackage({bool force = false}) async {
+    final request = ++_loadRequest;
+    if (_bundle == null) {
+      _stopwatch
+        ..reset()
+        ..start();
+    }
+    setState(() {
+      _loadError = null;
+      if (_bundle == null) {
+        _firstRenderElapsed = null;
+      }
+    });
+    try {
+      final bundle = await QuickjsUiBundle.networkPackage(
+        root: QuickjsUiNetworkCounterPage.packageRoot,
+        refreshMode: force
+            ? QuickjsUiNetworkRefreshMode.force
+            : QuickjsUiNetworkRefreshMode.conditional,
+        onLog: _handleNetworkLog,
+      );
+      if (!mounted || request != _loadRequest) {
+        return;
+      }
+      setState(() {
+        _bundle = bundle;
+        _view = _createView(bundle);
+      });
+    } catch (error) {
+      if (!mounted || request != _loadRequest) {
+        return;
+      }
+      setState(() {
+        _loadError = error;
+      });
+    }
+  }
+
   void _handleFirstRender() {
     if (_firstRenderElapsed != null) {
       return;
@@ -80,7 +139,7 @@ class _QuickjsUiNetworkCounterPageState
     final elapsed = _stopwatch.elapsed;
     debugPrint(
       'QuickJS UI network first render: ${elapsed.inMilliseconds}ms '
-      '(${QuickjsUiNetworkCounterPage.url})',
+      '(${QuickjsUiNetworkCounterPage.packageRoot})',
     );
     setState(() {
       _firstRenderElapsed = elapsed;
@@ -187,14 +246,11 @@ class _NetworkErrorMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hint = kIsWeb
-        ? '请在本机终端运行：dart run tool/quickjs_ui_dev_server.dart\n'
-            '并确保浏览器能访问 http://127.0.0.1:8765/（注意 CORS / 混合内容限制）。'
-        : '请在本机终端运行：dart run tool/quickjs_ui_dev_server.dart';
+        ? '请确认发布包允许浏览器跨域访问，并且 manifest.json 与模块文件均可访问。'
+        : '请确认网络连接以及远程发布包的 manifest.json。';
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: SelectableText(
-        'QuickJS UI network error: $error\n\n$hint',
-      ),
+      child: SelectableText('QuickJS UI network error: $error\n\n$hint'),
     );
   }
 }
