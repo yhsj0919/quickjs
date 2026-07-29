@@ -186,7 +186,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
   Widget build(BuildContext context) {
     final hasRuntime = _quickjs != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Zip Plugin')),
+      appBar: AppBar(title: const Text('ZIP 插件包')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -236,7 +236,7 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('JsCallDart 插件')),
+      appBar: AppBar(title: const Text('JS 调用 Dart 插件')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

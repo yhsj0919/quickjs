@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quickjs_example/pages/quickjs_ui/integrated/quickjs_ui_weather_background_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/integrated/quickjs_ui_weather_demo_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/scenario/quickjs_ui_weather_background_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/scenario/quickjs_ui_weather_demo_page.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 200 && finder.evaluate().isEmpty; attempt++) {
@@ -35,7 +35,7 @@ void main() {
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(800, 600);
+    tester.view.physicalSize = const Size(1280, 1100);
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -44,15 +44,43 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(home: QuickjsUiWeatherBackgroundPage()),
     );
-    await _pumpUntilFound(tester, find.text('晴天'));
-    expect(find.text('晴天'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('真实天气背景'));
+    expect(find.text('真实天气背景'), findsOneWidget);
 
-    tester.view.physicalSize = const Size(1100, 720);
+    tester.view.physicalSize = const Size(1400, 1200);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('晴天'), findsOneWidget);
-    expect(find.text('下一种'), findsOneWidget);
+    expect(find.text('真实天气背景'), findsOneWidget);
+  });
+
+  testWidgets('weather background renders every precipitation density', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 1100);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: QuickjsUiWeatherBackgroundPage()),
+    );
+    await _pumpUntilFound(tester, find.text('真实天气背景'));
+
+    for (var index = 0; index < 14; index += 1) {
+      await tester.tap(find.byType(ElevatedButton).first);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    }
+
+    expect(find.textContaining('QuickJS UI demo error'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 }

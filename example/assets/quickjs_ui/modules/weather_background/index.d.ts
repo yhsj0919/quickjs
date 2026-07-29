@@ -26,7 +26,12 @@ export type WeatherBackgroundProps = {
   weather?: WeatherType;
   width?: number;
   height?: number;
+  responsive?: boolean;
+  viewportFit?: 'fill' | 'contain' | 'cover' | 'fitWidth' | 'fitHeight' | 'none' | 'scaleDown';
+  viewportAlignment?: string;
   intensity?: number;
+  /** Limits every animated layer to this frame rate. Omit to follow VSync. */
+  fps?: number;
   paused?: boolean;
   playToken?: JsonValue;
   borderRadius?: number;

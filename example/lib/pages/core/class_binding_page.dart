@@ -203,7 +203,7 @@ return await leakedUser.name;
     final canCheckDisposed = _quickjs != null && _userClass == null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Class Binding')),
+      appBar: AppBar(title: const Text('类绑定')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

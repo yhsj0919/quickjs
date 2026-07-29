@@ -19,6 +19,7 @@ final QuickjsUiComponentBuilderMap quickjsUiLayoutComponentBuilders =
       'Align': _buildAlign,
       'Center': _buildCenter,
       'SizedBox': _buildSizedBox,
+      'ResponsiveViewport': _buildResponsiveViewport,
       'Expanded': _buildExpanded,
       'Flexible': _buildFlexible,
       'Spacer': _buildSpacer,
@@ -230,6 +231,46 @@ Widget _buildSizedBox(QuickjsUiRenderContext context, QuickjsUiNode node) {
       height: QuickjsUiProps.doubleValue(node.props['height']),
       child: context.child(node),
     ),
+  );
+}
+
+Widget _buildResponsiveViewport(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  final designWidth = QuickjsUiProps.doubleValue(node.props['designWidth']);
+  final designHeight = QuickjsUiProps.doubleValue(node.props['designHeight']);
+  if (designWidth == null ||
+      designWidth <= 0 ||
+      designHeight == null ||
+      designHeight <= 0) {
+    throw const FormatException(
+      'quickjs_ui ResponsiveViewport requires positive designWidth and designHeight',
+    );
+  }
+  final fit = QuickjsUiProps.boxFit(node.props['fit']) ?? BoxFit.cover;
+  final alignment =
+      QuickjsUiProps.alignment(node.props['alignment']) ?? Alignment.center;
+  final child = SizedBox(
+    width: designWidth,
+    height: designHeight,
+    child: context.child(node) ?? const SizedBox.shrink(),
+  );
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+        throw FlutterError(
+          'quickjs_ui ResponsiveViewport requires bounded constraints',
+        );
+      }
+      return SizedBox(
+        width: constraints.maxWidth,
+        height: constraints.maxHeight,
+        child: ClipRect(
+          child: FittedBox(fit: fit, alignment: alignment, child: child),
+        ),
+      );
+    },
   );
 }
 

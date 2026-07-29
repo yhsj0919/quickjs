@@ -205,6 +205,26 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 
 计数器页面 Renderer 约 0.1ms，因此该项不应早于调用边界和资源缓存优化。
 
+## P1：统一混合动画管线的帧提交（未来计划）
+
+问题来源：同一动态场景同时包含 Canvas/CustomPainter、Image/Transform 和普通 Widget 动画时，当前各管线分别触发 repaint、setState 与合成提交。即使平均 CPU/GPU 占用不高，也可能因为单帧工作分布不均产生 P95/P99 尖峰和可见掉帧。雪景的 Canvas 远景与 Image 近景混用已经暴露该问题；当前天气模块暂时统一为 Image 管线规避，但底层仍需架构修复。
+
+计划方向：
+
+- 建立 renderer 级统一 frame transaction，同一帧内合并 Effects、Canvas、Image 与自定义 painter 的脏标记和提交。
+- 同一 FPS/时间源共享动画时钟、时间快照和 frame id，禁止各渲染通道独立请求相邻帧。
+- 支持批量图片精灵绘制或 retained image scene，使大量相同素材实例共享解码、paint state 与合成层。
+- 明确跨管线 RepaintBoundary、raster cache、blend mode 和 saveLayer 策略，避免透明混合导致隐式离屏层。
+- Inspector 增加按 frame id 的 build、paint、raster、composite 分项耗时和管线唤醒次数。
+
+验收标准：
+
+- 构造 Canvas + Image + Widget 同帧动画基准，30/60 FPS 下均不得出现重复 frame request。
+- 混合场景与等量单管线场景的 P95/P99 帧耗时差距不超过 10%。
+- 在平均负载未超预算时，不允许出现连续可见掉帧；Profile 模式记录 missed frame 数量为 0。
+- 暂停、恢复、切换质量、窗口缩放和组件销毁后不得残留 ticker、timer 或 repaint listener。
+- 天气雪景恢复混合素材实现后，应达到暴雨场景相同等级的帧稳定性。
+
 ## 推荐实施顺序
 
 1. quickjs_ui mutation 合并返回 snapshot 与 commit。
@@ -213,6 +233,7 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 4. 批量 Context 初始化。
 5. 事件驱动 timer/job pump。
 6. Node 结构 hash 与树遍历合并。
+7. 混合动画管线统一 frame transaction 与批量图片合成。
 
 前两项应作为同一阶段设计：目标是系统性减少 Dart isolate、worker 与 QuickJS 之间的调用边界，而不是继续针对单个页面增加特殊预热逻辑。
 

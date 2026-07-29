@@ -151,7 +151,7 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Callback Bridge')),
+      appBar: AppBar(title: const Text('回调桥接')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

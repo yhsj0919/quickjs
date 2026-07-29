@@ -3,6 +3,57 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 
 void main() {
+  testWidgets('effects follow VSync unless JS supplies a frame interval', (
+    tester,
+  ) async {
+    QuickjsUiNode animatedNode({int? interval}) =>
+        QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Container',
+          'width': 40,
+          'height': 40,
+          'opacity': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 1000},
+          if (interval != null) 'animationFrameIntervalMs': interval,
+        });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuickjsUiRenderer(
+          onEvent: (_) {},
+        ).build(animatedNode(interval: 100)),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    final firstLimitedFrame = tester
+        .widget<Opacity>(find.byType(Opacity))
+        .opacity;
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(
+      tester.widget<Opacity>(find.byType(Opacity)).opacity,
+      firstLimitedFrame,
+    );
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(
+      tester.widget<Opacity>(find.byType(Opacity)).opacity,
+      greaterThan(firstLimitedFrame),
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuickjsUiRenderer(onEvent: (_) {}).build(animatedNode()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    final firstVsyncFrame = tester
+        .widget<Opacity>(find.byType(Opacity))
+        .opacity;
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(
+      tester.widget<Opacity>(find.byType(Opacity)).opacity,
+      greaterThan(firstVsyncFrame),
+    );
+  });
+
   testWidgets('universal effects wrap any registered node', (tester) async {
     final node = QuickjsUiNode.fromMap(<String, Object?>{
       'type': 'Text',
@@ -26,7 +77,7 @@ void main() {
     );
 
     expect(find.byType(Opacity), findsOneWidget);
-    expect(find.byType(Transform), findsNWidgets(3));
+    expect(find.byType(Transform), findsOneWidget);
     expect(find.byType(ClipRRect), findsOneWidget);
     expect(find.byType(ImageFiltered), findsOneWidget);
     expect(find.byType(ColorFiltered), findsOneWidget);
@@ -108,14 +159,14 @@ void main() {
       MaterialApp(home: QuickjsUiRenderer(onEvent: events.add).build(node)),
     );
     expect(find.byType(Opacity), findsOneWidget);
-    expect(find.byType(Transform), findsNWidgets(2));
+    expect(find.byType(Transform), findsOneWidget);
     expect(find.byType(ImageFiltered), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 30));
     expect(events, isEmpty);
     await tester.pump(const Duration(milliseconds: 40));
     expect(events.single['method'], 'effectsEnded');
     expect(find.byType(Opacity), findsOneWidget);
-    expect(find.byType(Transform), findsNWidgets(2));
+    expect(find.byType(Transform), findsOneWidget);
     expect(find.byType(ImageFiltered), findsOneWidget);
   });
 

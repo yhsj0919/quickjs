@@ -11,17 +11,20 @@ final class QuickjsUiDesignTokens
     Map<String, double> spacing = const <String, double>{},
     Map<String, double> radius = const <String, double>{},
     Map<String, double> elevation = const <String, double>{},
+    Map<String, double> fontSizes = const <String, double>{},
   }) : colors = _normalizeColorMap(colors),
        textStyles = _normalizeTextStyleMap(textStyles),
        spacing = _normalizeNumberMap(spacing),
        radius = _normalizeNumberMap(radius),
-       elevation = _normalizeNumberMap(elevation);
+       elevation = _normalizeNumberMap(elevation),
+       fontSizes = _normalizeNumberMap(fontSizes);
 
   final Map<String, Color> colors;
   final Map<String, TextStyle> textStyles;
   final Map<String, double> spacing;
   final Map<String, double> radius;
   final Map<String, double> elevation;
+  final Map<String, double> fontSizes;
 
   Color? color(Object? value) {
     final token = tokenKey(value);
@@ -46,6 +49,8 @@ final class QuickjsUiDesignTokens
         radius[token] ?? radius[stripped] ?? _defaultRadius[stripped],
       QuickjsUiTokenCategory.elevation =>
         elevation[token] ?? elevation[stripped] ?? _defaultElevation[stripped],
+      QuickjsUiTokenCategory.fontSize =>
+        fontSizes[token] ?? fontSizes[stripped] ?? _defaultFontSizes[stripped],
     };
   }
 
@@ -56,6 +61,7 @@ final class QuickjsUiDesignTokens
     Map<String, double>? spacing,
     Map<String, double>? radius,
     Map<String, double>? elevation,
+    Map<String, double>? fontSizes,
   }) {
     return QuickjsUiDesignTokens(
       colors: colors ?? this.colors,
@@ -63,6 +69,7 @@ final class QuickjsUiDesignTokens
       spacing: spacing ?? this.spacing,
       radius: radius ?? this.radius,
       elevation: elevation ?? this.elevation,
+      fontSizes: fontSizes ?? this.fontSizes,
     );
   }
 
@@ -80,6 +87,7 @@ final class QuickjsUiDesignTokens
       spacing: _lerpNumbers(spacing, other.spacing, t),
       radius: _lerpNumbers(radius, other.radius, t),
       elevation: _lerpNumbers(elevation, other.elevation, t),
+      fontSizes: _lerpNumbers(fontSizes, other.fontSizes, t),
     );
   }
 
@@ -108,7 +116,8 @@ final class QuickjsUiDesignTokens
 enum QuickjsUiTokenCategory {
   spacing(<String>['space', 'spacing']),
   radius(<String>['radius', 'radii']),
-  elevation(<String>['elevation', 'shadow']);
+  elevation(<String>['elevation', 'shadow']),
+  fontSize(<String>['font', 'fontsize', 'type', 'typography']);
 
   const QuickjsUiTokenCategory(this.prefixes);
 
@@ -143,6 +152,15 @@ const Map<String, double> _defaultElevation = <String, double>{
   'md': 4,
   'lg': 8,
   'xl': 12,
+};
+
+const Map<String, double> _defaultFontSizes = <String, double>{
+  'xs': 12,
+  'sm': 14,
+  'md': 16,
+  'lg': 20,
+  'xl': 24,
+  'xxl': 32,
 };
 
 Map<String, Color> _normalizeColorMap(Map<String, Color> values) {

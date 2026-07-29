@@ -214,7 +214,7 @@ globalThis.commonJsSecondCount = counter.count;
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Module')),
+      appBar: AppBar(title: const Text('模块加载')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

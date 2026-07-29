@@ -649,6 +649,51 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 - [x] 动画补齐：`AnimatedAlign`、`AnimatedSwitcher`；已有 `Container/Padding` 隐式动画继续收敛 schema。
 - [x] Demo 驱动验证：已有表单页、导航页、网络资源页、控件页和视频插件页覆盖真实页面场景。
 
+### 后续：Material 3 AppBar 与最小 Sliver 体系（暂不实现）
+
+该阶段先列入开发计划，不纳入当前 Demo 整理范围。Medium / Large AppBar 的正确滚动、折叠语义
+依赖 Flutter Sliver 协议，不能通过给现有固定 `AppBar` 增加尺寸参数来模拟。普通 Widget 与
+Sliver 必须保持明确的 schema 类型边界。
+
+第一阶段：固定 AppBar 样式补全。
+
+- [ ] 现有 `AppBar` 保持 `Scaffold.appBar` 的固定小型标题栏语义，不承担可折叠布局。
+- [ ] 补充 `toolbarHeight`、`leadingWidth`、`titleSpacing`、`actionsPadding`、`centerTitle`。
+- [ ] 补充 `backgroundColor`、`foregroundColor`、`surfaceTintColor`、`shadowColor`、`elevation`、
+  `scrolledUnderElevation`、`shape` 和 `systemOverlayStyle`。
+- [ ] 标题、toolbar 和 icon 样式接入 Material `ThemeData` / `TextTheme` / `ColorScheme` token。
+
+第二阶段：最小 Sliver 闭环。
+
+- [ ] `CustomScrollView`：只接受 Sliver 子节点，并支持轴向、反向、padding、scroll controller、
+  offset 定位和滚动事件。
+- [ ] `SliverAppBar`：支持 `variant: small | medium | large`，以及 `pinned`、`floating`、`snap`、
+  `stretch` 和折叠高度配置。
+- [ ] `SliverList`：支持静态 children、builder/分页模式、stable key、按需构建和分片传输。
+- [ ] `SliverGrid`：支持列数、间距、宽高比、builder/分页模式和 stable key。
+- [ ] `SliverToBoxAdapter`：作为普通 Widget 进入 Sliver 树的唯一显式适配边界。
+- [ ] `SliverPadding`：包装单个 Sliver，不接受普通 Widget。
+- [ ] `SliverFillRemaining`：支持填充剩余空间和可选滚动 body。
+
+架构与行为约束：
+
+- [ ] schema、JS helper SDK、TypeScript declaration 和 JSON Schema 同步定义 Widget/Sliver 类型边界；
+  错误混用必须返回包含具体 schema path 的结构化错误。
+- [ ] `snap: true` 必须要求 `floating: true`，无效组合在 schema 校验阶段失败。
+- [ ] diff 更新保留 `CustomScrollView` 的滚动位置；key 不变的 Sliver 不重建 controller。
+- [ ] 嵌套滚动、鼠标滚轮、触控拖动、窗口尺寸变化、SafeArea 和顶部系统栏行为跨平台一致。
+- [ ] 大列表沿用现有 builder、超量分片传输和性能质量控制，不新增逐项 JS Bridge 调用。
+- [ ] 第一阶段不实现 `SliverPersistentHeader`、`NestedScrollView`、任意自定义
+  `SliverGeometry`、复杂吸顶分组或宿主持有的 Sliver 对象。
+
+验收 Demo 与测试：
+
+- [ ] 独立 Demo：固定 AppBar 样式。
+- [ ] 独立 Demo：Small / Medium / Large `SliverAppBar` 折叠对比。
+- [ ] 独立 Demo：`pinned` / `floating` / `snap` / `stretch` 行为。
+- [ ] 独立 Demo：SliverList、SliverGrid、普通内容适配和剩余空间混排。
+- [ ] 测试覆盖类型边界、参数组合、滚动位置保留、stable key、窗口缩放、滚轮事件和大列表性能。
+
 ### 0.7：页面包保护评估（可放弃）
 
 在 manifest、checksum、缓存和权限模型稳定后，再重新评估页面包加密/混淆是否值得做。该能力只作为发布保护候选项：

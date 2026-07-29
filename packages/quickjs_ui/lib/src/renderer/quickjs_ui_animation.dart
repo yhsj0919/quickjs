@@ -108,7 +108,50 @@ double? quickjsUiAnimatedNumber(Object? raw, QuickjsUiAnimationClock clock) {
     }
   }
   progress = quickjsUiAnimationCurve(progress, raw['curve']);
+  final keyframes = raw['keyframes'];
+  if (keyframes != null) {
+    return _sampleKeyframes(keyframes, progress);
+  }
   return from + (to - from) * progress;
+}
+
+double _sampleKeyframes(Object? raw, double progress) {
+  if (raw is! List || raw.length < 2) {
+    throw const FormatException(
+      'quickjs_ui animation keyframes requires at least two frames',
+    );
+  }
+  var previousOffset = -1.0;
+  final frames = <(double, double)>[];
+  for (final frame in raw) {
+    if (frame is! Map || frame['offset'] is! num || frame['value'] is! num) {
+      throw const FormatException(
+        'quickjs_ui animation keyframe requires numeric offset and value',
+      );
+    }
+    final offset = (frame['offset'] as num).toDouble();
+    final value = (frame['value'] as num).toDouble();
+    if (offset < 0 || offset > 1 || offset <= previousOffset) {
+      throw const FormatException(
+        'quickjs_ui animation keyframe offsets must increase from 0 to 1',
+      );
+    }
+    frames.add((offset, value));
+    previousOffset = offset;
+  }
+  if (frames.first.$1 != 0 || frames.last.$1 != 1) {
+    throw const FormatException(
+      'quickjs_ui animation keyframes must start at 0 and end at 1',
+    );
+  }
+  for (var index = 1; index < frames.length; index += 1) {
+    final next = frames[index];
+    if (progress > next.$1) continue;
+    final previous = frames[index - 1];
+    final local = (progress - previous.$1) / (next.$1 - previous.$1);
+    return previous.$2 + (next.$2 - previous.$2) * local;
+  }
+  return frames.last.$2;
 }
 
 double quickjsUiRawNumber(Object? value) => value is num ? value.toDouble() : 0;

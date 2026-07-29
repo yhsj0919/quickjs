@@ -1,42 +1,98 @@
-import { Canvas, Positioned, animate } from 'quickjs_ui';
-import { clamp } from './scene_helpers.mjs';
+import { Image, Positioned, Stack, animate } from 'quickjs_ui';
+import { animationProps } from './scene_helpers.mjs';
+
+const SNOW_PROFILES = Object.freeze({
+  lightSnow: Object.freeze({ farCount: 18, nearCount: 6 }),
+  moderateSnow: Object.freeze({ farCount: 32, nearCount: 10 }),
+  largeSnow: Object.freeze({ farCount: 51, nearCount: 17 }),
+  heavySnow: Object.freeze({ farCount: 90, nearCount: 30 })
+});
 
 export function SnowLayer(props) {
-  const count = Math.round(55 + clamp(props.intensity, 0, 1) * 65);
+  const profile = SNOW_PROFILES[props.weather] ?? SNOW_PROFILES.largeSnow;
   return Positioned({
     left: 0,
+    right: 0,
     top: 0,
-    child: Canvas({
-      key: 'weather-snow',
-      width: props.width,
-      height: props.height,
-      paused: props.paused,
-      playToken: props.playToken,
-      willChange: true,
-      draw(ctx) {
-        ctx.globalCompositeOperation = 'plus';
-        for (let index = 0; index < count; index += 1) {
-          const x = 8 + ((index * 67) % Math.max(16, props.width - 16));
-          const durationMs = 2800 + (index % 17) * 130;
-          ctx.fillStyle = index % 4 === 0 ? '#ffffff' : '#dbeafe';
-          ctx.globalAlpha = 0.45 + (index % 5) * 0.1;
-          ctx.fillCircle(
-            animate(x - 12, x + 12, {
-              durationMs: 1800 + (index % 11) * 150,
-              phaseMs: index * 51,
-              repeat: true,
-              autoreverse: true,
-              curve: 'easeInOut'
-            }),
-            animate(-16, props.height + 18, {
-              durationMs,
-              phaseMs: index * 67,
-              repeat: true
-            }),
-            1.4 + (index % 5) * 0.52
-          );
+    bottom: 0,
+    child: Stack({
+      clipBehavior: 'none',
+      children: [
+        ...Array.from(
+          { length: profile.farCount },
+          (_, index) => farSnowflake(props, index)
+        ),
+        ...Array.from(
+          { length: profile.nearCount },
+          (_, index) => nearSnowflake(props, index)
+        )
+      ]
+    })
+  });
+}
+
+function farSnowflake(props, index) {
+  const size = 3 + random(index, 71) * 4;
+  const durationMs = Math.round(9000 + random(index, 29) * 7000);
+  const x = 8 + random(index, 11) * Math.max(16, props.width - 16);
+  return Positioned({
+    key: `weather-snow-far-${index}`,
+    left: x - size / 2,
+    top: -size * 2,
+    child: Image({
+      src: props.theme.asset('heavy_snow/snowflake.png'),
+      width: size,
+      height: size,
+      fit: 'contain',
+      opacity: 0.18 + random(index, 107) * 0.26,
+      ...animationProps(props),
+      transform: {
+        translate: {
+          y: animate(0, props.height + size * 4, {
+            durationMs,
+            phaseMs: Math.round(random(index, 47) * durationMs),
+            repeat: true,
+            curve: 'linear'
+          })
         }
-      }
+      },
+      filterQuality: 'low'
+    })
+  });
+}
+
+function random(index, salt) {
+  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function nearSnowflake(props, index) {
+  const depth = random(index, 131);
+  const size = 12 + depth * 12;
+  const durationMs = Math.round(9000 + random(index, 149) * 5000);
+  const x = random(index, 167) * props.width;
+  return Positioned({
+    key: `weather-snowflake-${index}`,
+    left: x - size / 2,
+    top: -size * 2,
+    child: Image({
+      src: props.theme.asset('heavy_snow/snowflake.png'),
+      width: size,
+      height: size,
+      fit: 'contain',
+      opacity: 0.58 + depth * 0.36,
+      ...animationProps(props),
+      transform: {
+        translate: {
+          y: animate(0, props.height + size * 4, {
+            durationMs,
+            phaseMs: Math.round(random(index, 181) * durationMs),
+            repeat: true,
+            curve: 'linear'
+          })
+        }
+      },
+      filterQuality: 'low'
     })
   });
 }

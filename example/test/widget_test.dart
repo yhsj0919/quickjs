@@ -5,23 +5,23 @@ import 'package:quickjs_example/app.dart';
 import 'package:quickjs_example/example_page_spec.dart';
 import 'package:quickjs_example/example_pages.dart';
 import 'package:quickjs_example/pages/core/js_call_dart_plugin_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_bundle_counter_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_controls_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_counter_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_custom_components_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_dev_panel_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_diff_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_error_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_host_capabilities_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_navigation_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_network_counter_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_network_inspector_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_permission_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_profile_form_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_schema_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_scroll_transition_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_todo_page.dart';
-import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_video_player_plugin_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/foundation/quickjs_ui_controls_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/foundation/quickjs_ui_scroll_transition_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/getting_started/quickjs_ui_bundle_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/getting_started/quickjs_ui_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/getting_started/quickjs_ui_network_counter_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/getting_started/quickjs_ui_schema_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_custom_components_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_dev_panel_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_diff_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_error_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_host_capabilities_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_navigation_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_network_inspector_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/platform/quickjs_ui_permission_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/scenario/quickjs_ui_profile_form_page.dart';
+import 'package:quickjs_example/pages/quickjs_ui/scenario/quickjs_ui_todo_page.dart';
 import 'package:quickjs_example/pages/core/zip_plugin_page.dart';
 import 'package:quickjs_example/quickjs_ui_example_pages.dart';
 
@@ -117,7 +117,7 @@ void main() {
   testWidgets('registers quickjs_ui counter page', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiCounterPage()));
 
-    expect(find.text('QuickJS UI Counter'), findsOneWidget);
+    expect(find.text('单文件计数器'), findsOneWidget);
     expect(find.byTooltip('Refresh render'), findsOneWidget);
     expect(find.byTooltip('Restart page'), findsOneWidget);
     expect(find.byTooltip('Reload source'), findsOneWidget);
@@ -130,7 +130,7 @@ void main() {
       const MaterialApp(home: QuickjsUiBundleCounterPage()),
     );
 
-    expect(find.text('QuickJS UI Bundle Counter'), findsOneWidget);
+    expect(find.text('多文件模块计数器'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
@@ -141,7 +141,7 @@ void main() {
       const MaterialApp(home: QuickjsUiNetworkCounterPage()),
     );
 
-    expect(find.text('QuickJS UI Network Counter'), findsOneWidget);
+    expect(find.text('网络加载计数器'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
     expect(find.text('Reload source'), findsOneWidget);
   });
@@ -151,29 +151,13 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiControlsPage()));
 
-    expect(find.text('QuickJS UI Controls'), findsOneWidget);
-    await _pumpUntilFound(tester, find.text('ThemeData tokens from JS'));
-    expect(find.text('ThemeData tokens from JS'), findsOneWidget);
-    await _scrollUntilFound(tester, find.text('Third-party image resource'));
-    expect(find.text('Third-party image resource'), findsOneWidget);
-    await _scrollUntilFound(tester, find.text('Planned controls'));
-    expect(find.text('Planned controls'), findsOneWidget);
-    await _scrollUntilFound(tester, find.text('GestureDetector taps: 0'));
-    await tester.ensureVisible(find.text('GestureDetector taps: 0'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('GestureDetector taps: 0'));
-    await _pumpUntilFound(tester, find.text('GestureDetector taps: 1'));
-    expect(find.text('GestureDetector taps: 1'), findsOneWidget);
-    await _scrollUntilFound(tester, find.text('Run animation'));
-    await tester.ensureVisible(find.text('Run animation'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Run animation'));
-    await _pumpUntilFound(tester, find.text('Reset animation'));
-    expect(find.text('Reset animation'), findsOneWidget);
-    await _scrollUntilFound(tester, find.text('Hero tag: controls-page-hero'));
-    await tester.ensureVisible(find.text('Hero tag: controls-page-hero'));
-    await tester.pumpAndSettle();
-    expect(find.byType(Hero), findsOneWidget);
+    expect(find.text('布局与媒体基础'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('网络图片'));
+    expect(find.text('网络图片'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('本地图片与 Stack'));
+    expect(find.text('本地图片与 Stack'), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Placeholder 与 VerticalDivider'));
+    expect(find.text('Placeholder 与 VerticalDivider'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui custom components page', (
@@ -183,7 +167,7 @@ void main() {
       const MaterialApp(home: QuickjsUiCustomComponentsPage()),
     );
 
-    expect(find.text('QuickJS UI Custom Components'), findsOneWidget);
+    expect(find.text('自定义组件'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Size: medium'));
     expect(
       find.textContaining('QuickJS UI custom components error'),
@@ -234,7 +218,7 @@ void main() {
       const MaterialApp(home: QuickjsUiVideoPlayerPluginPage()),
     );
 
-    expect(find.text('QuickJS UI VideoPlayer Plugin'), findsOneWidget);
+    expect(find.text('视频播放器插件'), findsOneWidget);
     await _pumpUntilFound(
       tester,
       find.textContaining('VideoPlayer plugin demo'),
@@ -256,12 +240,14 @@ void main() {
       const MaterialApp(home: QuickjsUiScrollTransitionPage()),
     );
 
-    expect(find.text('QuickJS UI 0.4.2'), findsOneWidget);
-    await _pumpUntilFound(tester, find.text('QuickJS UI 0.4.2 滚动与列表过渡'));
+    expect(find.text('滚动控制与嵌套滚动'), findsOneWidget);
+    await _pumpUntilFound(
+      tester,
+      find.text('验证滚动位置事件、按 stable key 定位和独立嵌套滚动区域。'),
+    );
     expect(find.textContaining('QuickJS UI 0.4.2 error'), findsNothing);
-    expect(find.text('滑动手势卡片'), findsOneWidget);
-    expect(find.text('滚动到最后一项'), findsOneWidget);
-    expect(find.text('反转动画列表'), findsOneWidget);
+    expect(find.text('定位到 epsilon'), findsOneWidget);
+    expect(find.text('嵌套 SingleChildScrollView'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui 0.4.3 dev panel page', (
@@ -269,13 +255,13 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiDevPanelPage()));
 
-    expect(find.text('QuickJS UI 0.4.3 开发调试'), findsOneWidget);
+    expect(find.text('开发调试面板'), findsWidgets);
     expect(find.text('状态'), findsOneWidget);
     expect(find.text('Schema'), findsOneWidget);
     expect(find.text('生命周期'), findsOneWidget);
     expect(find.text('网络'), findsOneWidget);
-    await _pumpUntilFound(tester, find.text('开发调试面板'));
-    expect(find.text('开发调试面板'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('计数: 0'));
+    expect(find.text('开发调试面板'), findsWidgets);
     expect(find.text('增加'), findsOneWidget);
   });
 
@@ -286,7 +272,7 @@ void main() {
       const MaterialApp(home: QuickjsUiNetworkInspectorPage()),
     );
 
-    expect(find.text('QuickJS UI 网络调试'), findsOneWidget);
+    expect(find.text('网络请求调试'), findsOneWidget);
     expect(find.text('状态'), findsOneWidget);
     expect(find.text('Schema'), findsOneWidget);
     expect(find.text('网络'), findsOneWidget);
@@ -296,7 +282,7 @@ void main() {
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiTodoPage()));
 
-    expect(find.text('QuickJS UI Todo List'), findsOneWidget);
+    expect(find.text('待办列表'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Add todo'));
     expect(find.textContaining('QuickJS UI todo error'), findsNothing);
     expect(find.text('Add todo'), findsOneWidget);
@@ -313,7 +299,7 @@ void main() {
       const MaterialApp(home: QuickjsUiProfileFormPage()),
     );
 
-    expect(find.text('QuickJS UI Profile Form'), findsOneWidget);
+    expect(find.text('个人资料表单'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Save profile'));
     expect(find.textContaining('QuickJS UI profile form error'), findsNothing);
     expect(find.text('Ada Lovelace'), findsWidgets);
@@ -343,7 +329,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiDiffPage()));
 
-    expect(find.text('QuickJS UI 局部刷新'), findsOneWidget);
+    expect(find.text('局部刷新诊断'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Refresh changed node'));
     expect(find.textContaining('QuickJS UI diff error'), findsNothing);
     expect(find.text('Stable builds: 1'), findsOneWidget);
@@ -362,7 +348,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiSchemaPage()));
 
-    expect(find.text('QuickJS UI JSON Schema'), findsOneWidget);
+    expect(find.text('JSON Schema 页面'), findsOneWidget);
     await _pumpUntilFound(tester, find.textContaining('quickjs_ui UI schema'));
     expect(find.textContaining('node variants'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Pure JSON UI schema'));
@@ -374,7 +360,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiErrorPage()));
 
-    expect(find.text('QuickJS UI Error Overlay'), findsOneWidget);
+    expect(find.text('错误诊断浮层'), findsOneWidget);
     expect(
       find.textContaining('schema path: root.children[2]'),
       findsOneWidget,
@@ -393,7 +379,7 @@ void main() {
       const MaterialApp(home: QuickjsUiHostCapabilitiesPage()),
     );
 
-    expect(find.text('QuickJS UI 宿主能力'), findsOneWidget);
+    expect(find.text('宿主能力调用'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('调用 toast'));
     expect(find.text('调用 toast'), findsOneWidget);
     expect(find.text('调用 navigationIntent'), findsOneWidget);
@@ -414,7 +400,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiPermissionPage()));
 
-    expect(find.text('QuickJS UI 权限策略'), findsOneWidget);
+    expect(find.text('页面权限策略'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('结果：不限制策略 已加载'));
     expect(find.text('权限测试 JS 页面'), findsWidgets);
     expect(find.text('结果：不限制策略 已加载'), findsOneWidget);
@@ -452,7 +438,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: QuickjsUiNavigationPage()));
 
-    expect(find.text('QuickJS UI 页面互通'), findsOneWidget);
+    expect(find.text('原生与 JS 页面互通'), findsOneWidget);
     expect(find.text('打开 JSUI 详情页'), findsOneWidget);
 
     await tester.tap(find.text('打开 JSUI 详情页'));
@@ -551,7 +537,7 @@ void main() {
     await tester.pump();
     await _pumpUntilFound(tester, find.textContaining('from'));
 
-    expect(find.text('QuickJS UI 页面互通'), findsOneWidget);
+    expect(find.text('原生与 JS 页面互通'), findsOneWidget);
     expect(find.textContaining('from: jsui-detail'), findsOneWidget);
     expect(find.textContaining('itemId: 42'), findsWidgets);
     final childEnter = navigationLogs.indexWhere(
@@ -589,7 +575,7 @@ void main() {
   testWidgets('registers zip plugin example page', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: ZipPluginPage()));
 
-    expect(find.text('Zip Plugin'), findsOneWidget);
+    expect(find.text('ZIP 插件包'), findsOneWidget);
     expect(find.textContaining('QuickjsZipPlugin.asset()'), findsOneWidget);
     expect(find.text('hello'), findsOneWidget);
     expect(find.text('profile'), findsOneWidget);
@@ -601,7 +587,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: JsCallDartPluginPage()));
 
-    expect(find.textContaining('JsCallDart'), findsOneWidget);
+    expect(find.text('JS 调用 Dart 插件'), findsOneWidget);
     for (var attempt = 0; attempt < 200; attempt++) {
       final button = tester.widget<FilledButton>(
         find.byType(FilledButton).first,

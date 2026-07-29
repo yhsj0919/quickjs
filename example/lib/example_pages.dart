@@ -38,6 +38,12 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const BasicEvalPage(),
   ),
   ExamplePageSpec(
+    title: '结构化值返回',
+    description:
+        '使用 evaluateValue 获取 number、boolean、string、null 和 undefined 的 Dart 值。',
+    builder: (_) => const StructuredValuesPage(),
+  ),
+  ExamplePageSpec(
     title: '异步 API',
     description: '提交排队 eval 请求，并验证 runtime 销毁后的错误行为。',
     builder: (_) => const AsyncApiPage(),
@@ -48,12 +54,12 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const QueueReentryPage(),
   ),
   ExamplePageSpec(
-    title: '运行时 Worker',
+    title: '运行时后台 Worker',
     description: '执行长耗时 JS 忙循环，验证 UI 不阻塞、timeout 和 stop。',
     builder: (_) => const NativeWorkerPage(),
   ),
   ExamplePageSpec(
-    title: 'Runtime 隔离',
+    title: '运行时隔离',
     description: '验证多个 Quickjs 实例的 globals 隔离，以及 dispose 一个不影响另一个。',
     builder: (_) => const RuntimeIsolationPage(),
   ),
@@ -69,29 +75,23 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const MemoryLimitPage(),
   ),
   ExamplePageSpec(
-    title: '结构化返回',
-    description:
-        '使用 evaluateValue 获取 number、boolean、string、null 和 undefined 的 Dart 值。',
-    builder: (_) => const StructuredValuesPage(),
-  ),
-  ExamplePageSpec(
-    title: 'Callback Bridge',
+    title: '回调桥接',
     description: '绑定 Dart 函数，JS 通过 Promise await 调用并接收返回值或错误。',
     builder: (_) => const CallbackBridgePage(),
   ),
   ExamplePageSpec(
-    title: 'Timer 与事件循环',
+    title: '定时器与事件循环',
     description: '使用 setTimeout / clearTimeout / setInterval 驱动 Promise 与事件循环。',
     builder: (_) => const TimerEventLoopPage(),
   ),
   ExamplePageSpec(
-    title: '流式 Callback',
+    title: '流式回调',
     description:
         'Dart Stream 映射为 JS async iterable（for-await），JS sink 分片推送到 Dart Stream。',
     builder: (_) => const StreamCallbackPage(),
   ),
   ExamplePageSpec(
-    title: 'Module',
+    title: '模块加载',
     description: '执行 ES module、CommonJS、相对路径解析与 runtime module cache。',
     builder: (_) => const ModuleEvalPage(),
   ),
@@ -108,7 +108,7 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const WebHostEnvironmentPage(),
   ),
   ExamplePageSpec(
-    title: 'Function Handle',
+    title: '函数句柄',
     description:
         '使用 evaluateHandle 获取 JS function，并通过 handle.call / callAsync / dispose 管理。',
     builder: (_) => const FunctionHandlePage(),
@@ -119,19 +119,19 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const ObjectProxyPage(),
   ),
   ExamplePageSpec(
-    title: 'Class Binding',
+    title: '类绑定',
     description:
         '使用 bindClass 注册 Dart class，展示 new User、await getter/method 和显式释放。',
     builder: (_) => const ClassBindingPage(),
   ),
   ExamplePageSpec(
-    title: 'Console',
+    title: '控制台输出',
     description:
         '使用 Quickjs.create(onConsole:) 接收 console.log / warn / error 事件。',
     builder: (_) => const ConsolePage(),
   ),
   ExamplePageSpec(
-    title: 'Web Crypto',
+    title: 'Web 加密能力',
     description:
         '通过 QuickjsWebCryptoMount() 安装 randomUUID、getRandomValues、Flutter 原生 subtle.digest 和 HMAC-SHA-256 crypto.subtle.sign/verify。',
     builder: (_) => const CryptoRandomUuidPage(),
@@ -143,13 +143,13 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const HostMountsPage(),
   ),
   ExamplePageSpec(
-    title: 'NPM Bundle',
+    title: 'NPM 打包模块',
     description:
         '加载 esbuild 生成的单文件 asset，注册为 ES module，并只调用 compareValues() 导出方法。',
     builder: (_) => const NpmBundlePage(),
   ),
   ExamplePageSpec(
-    title: 'Fetch',
+    title: '网络请求 · Fetch 与 XHR',
     description:
         '验证 QuickjsFetchMount 的 Fetch、Request、Response、重定向、自定义配置与 Axios/XHR 兼容协议。',
     builder: (_) => const FetchPage(),
@@ -161,18 +161,17 @@ final List<ExamplePageSpec> examplePages = [
     builder: (_) => const PluginPage(),
   ),
   ExamplePageSpec(
-    title: 'Zip Plugin',
-    description:
-        'Load a zipped plugin asset with QuickjsZipPlugin.asset(), validate it, run init(), and call exported methods.',
+    title: 'ZIP 插件包',
+    description: '使用 QuickjsZipPlugin.asset() 加载 ZIP 插件资源，完成校验、初始化并调用导出方法。',
     builder: (_) => const ZipPluginPage(),
   ),
   ExamplePageSpec(
-    title: 'JsCallDart 插件',
+    title: 'JS 调用 Dart 插件',
     description: '按 flutter_js main2.dart 的方式加载 asset 插件、注册 Dart 方法并运行 test2。',
     builder: (_) => const JsCallDartPluginPage(),
   ),
   ExamplePageSpec(
-    title: 'WebSocket',
+    title: 'WebSocket 通信',
     description:
         '安装 QuickjsWebSocketMount，验证 open/message/close 事件和 Origin 白名单。',
     builder: (_) => const WebSocketPage(),

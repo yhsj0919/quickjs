@@ -631,6 +631,18 @@ export function animate(from, to, options = {}) {
   return { from, to, ...options };
 }
 
+export function keyframes(frames, options = {}) {
+  if (!Array.isArray(frames) || frames.length < 2) {
+    throw new TypeError('quickjs_ui keyframes requires at least two frames');
+  }
+  return {
+    from: frames[0]?.value,
+    to: frames[frames.length - 1]?.value,
+    ...options,
+    keyframes: frames
+  };
+}
+
 export function canvasCommands(draw) {
   if (typeof draw !== 'function') {
     throw new TypeError('quickjs_ui canvasCommands requires draw(ctx)');
@@ -666,6 +678,8 @@ export class Canvas2DContext {
     this.lineWidth = 1;
     this.lineCap = 'butt';
     this.lineJoin = 'miter';
+    this.lineDashOffset = 0;
+    this._lineDash = [];
     this.globalAlpha = 1;
     this.globalCompositeOperation = 'srcOver';
     this.font = '14px sans-serif';
@@ -682,6 +696,8 @@ export class Canvas2DContext {
       lineWidth: this.lineWidth,
       lineCap: this.lineCap,
       lineJoin: this.lineJoin,
+      lineDashOffset: this.lineDashOffset,
+      _lineDash: [...this._lineDash],
       globalAlpha: this.globalAlpha,
       globalCompositeOperation: this.globalCompositeOperation,
       font: this.font,
@@ -711,6 +727,24 @@ export class Canvas2DContext {
   clipRect(x, y, width, height) {
     this.commands.push({ op: 'clipRect', x, y, width, height });
   }
+  clipProgress(progress) {
+    this.commands.push({ op: 'clipProgress', progress });
+  }
+  createLinearGradient(x0, y0, x1, y1) {
+    return createCanvasGradient({ type: 'linear', x0, y0, x1, y1 });
+  }
+  createRadialGradient(x0, y0, r0, x1, y1, r1) {
+    return createCanvasGradient({ type: 'radial', x0, y0, r0, x1, y1, r1 });
+  }
+  setLineDash(segments) {
+    if (!Array.isArray(segments) || segments.some((value) => !Number.isFinite(value) || value < 0)) {
+      throw new TypeError('quickjs_ui setLineDash requires non-negative numbers');
+    }
+    this._lineDash = segments.length % 2 === 0
+      ? [...segments]
+      : [...segments, ...segments];
+  }
+  getLineDash() { return [...this._lineDash]; }
   fillRect(x, y, width, height, radius = 0) {
     this.commands.push({
       op: 'rect', x, y, width, height, radius,
@@ -862,6 +896,22 @@ export class Canvas2DContext {
       ...(maxWidth == null ? {} : { maxWidth })
     });
   }
+  measureText(text) {
+    const font = /^(\d+(?:\.\d+)?)px/.exec(this.font);
+    const fontSize = font == null ? 14 : Number(font[1]);
+    let units = 0;
+    for (const character of String(text)) {
+      if (/\s/u.test(character)) units += 0.33;
+      else if (/[^\u0000-\u00ff]/u.test(character)) units += 1;
+      else units += 0.6;
+    }
+    return {
+      width: units * fontSize,
+      actualBoundingBoxAscent: fontSize * 0.8,
+      actualBoundingBoxDescent: fontSize * 0.2,
+      estimated: true
+    };
+  }
 
   _fillPaint() {
     return {
@@ -876,10 +926,27 @@ export class Canvas2DContext {
       strokeWidth: this.lineWidth,
       strokeCap: this.lineCap,
       strokeJoin: this.lineJoin,
+      lineDash: [...this._lineDash],
+      lineDashOffset: this.lineDashOffset,
       globalAlpha: this.globalAlpha,
       blendMode: this.globalCompositeOperation
     };
   }
+}
+
+function createCanvasGradient(definition) {
+  const gradient = { ...definition, stops: [] };
+  Object.defineProperty(gradient, 'addColorStop', {
+    enumerable: false,
+    value(offset, color) {
+      if (!Number.isFinite(offset) || offset < 0 || offset > 1) {
+        throw new RangeError('quickjs_ui Canvas gradient offset must be between 0 and 1');
+      }
+      gradient.stops.push({ offset, color });
+      gradient.stops.sort((left, right) => left.offset - right.offset);
+    }
+  });
+  return gradient;
 }
 
 function resolveCanvasFontFamily(value) {
@@ -1020,6 +1087,10 @@ export function Center(props) {
 
 export function SizedBox(props) {
   return node('SizedBox', props);
+}
+
+export function ResponsiveViewport(props) {
+  return node('ResponsiveViewport', props);
 }
 
 export function Expanded(props) {
@@ -1224,6 +1295,7 @@ export const ui = {
   Canvas,
   SnapshotBoundary,
   animate,
+  keyframes,
   canvasCommands,
   Canvas2DContext,
   ListView,
@@ -1241,6 +1313,7 @@ export const ui = {
   Align,
   Center,
   SizedBox,
+  ResponsiveViewport,
   Expanded,
   Flexible,
   Spacer,

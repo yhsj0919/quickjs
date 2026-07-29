@@ -281,6 +281,8 @@ void _dispatchPointer(
       'kind': details.kind.name,
       'x': details.localPosition.dx,
       'y': details.localPosition.dy,
+      'localX': details.localPosition.dx,
+      'localY': details.localPosition.dy,
       'globalX': details.position.dx,
       'globalY': details.position.dy,
       'deltaX': details.delta.dx,

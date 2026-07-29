@@ -8,6 +8,7 @@ import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_animation.dart';
+import 'quickjs_ui_frame_scheduler.dart';
 import 'quickjs_ui_render_context.dart';
 
 Widget withQuickjsUiEffects(
@@ -57,6 +58,10 @@ Widget withQuickjsUiEffects(
     backdropBlur: props['backdropBlur'],
     colorFilter: props['colorFilter'],
     clipBehavior: _clipBehavior(props['clipBehavior']),
+    animationFrameIntervalMs: _animationFrameIntervalMs(
+      props['animationFrameIntervalMs'],
+    ),
+    frameScheduler: context.frameScheduler,
     paused: props['paused'] == true,
     playToken: props['playToken'],
     reverse: props['reverse'] == true,
@@ -82,6 +87,8 @@ final class _QuickjsUiEffects extends StatefulWidget {
     required this.backdropBlur,
     required this.colorFilter,
     required this.clipBehavior,
+    required this.animationFrameIntervalMs,
+    required this.frameScheduler,
     required this.paused,
     required this.playToken,
     required this.reverse,
@@ -113,6 +120,8 @@ final class _QuickjsUiEffects extends StatefulWidget {
   final Object? backdropBlur;
   final Object? colorFilter;
   final Clip clipBehavior;
+  final int? animationFrameIntervalMs;
+  final QuickjsUiFrameScheduler frameScheduler;
   final bool paused;
   final Object? playToken;
   final bool reverse;
@@ -135,13 +144,15 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   double _playbackOffsetMs = 0;
   bool _didComplete = false;
   int _generation = 0;
+  QuickjsUiFrameClock? _frameClock;
+  final Stopwatch _limitedStopwatch = Stopwatch();
 
   @override
   void initState() {
     super.initState();
     widget.performanceController.addListener(_qualityChanged);
     _ticker = createTicker(_tick);
-    _syncTicker();
+    _syncScheduler();
   }
 
   @override
@@ -156,40 +167,70 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
         oldWidget.playToken != widget.playToken ||
         oldWidget.reverse != widget.reverse;
     if (restart) {
-      if (_ticker.isActive) _ticker.stop();
+      _stopScheduler();
       _elapsedMs = 0;
       _playbackOffsetMs = 0;
       _didComplete = false;
       _generation += 1;
     } else if (!oldWidget.paused && widget.paused) {
       _playbackOffsetMs = _elapsedMs;
+    } else if (oldWidget.animationFrameIntervalMs !=
+        widget.animationFrameIntervalMs) {
+      _playbackOffsetMs = _elapsedMs;
+      _stopScheduler();
     }
-    _syncTicker();
+    _syncScheduler();
   }
 
   void _tick(Duration elapsed) {
     _elapsedMs = _playbackOffsetMs + elapsed.inMicroseconds / 1000;
-    if (mounted) setState(() {});
     final timeline = widget.timeline;
-    if (!timeline.isContinuous && _elapsedMs >= timeline.endMs) {
-      _ticker.stop();
+    final completed = !timeline.isContinuous && _elapsedMs >= timeline.endMs;
+    if (mounted) setState(() {});
+    if (completed) {
+      _stopScheduler();
       _notifyAnimationEndAfterPaint();
     }
   }
 
-  void _syncTicker() {
-    if (widget.timeline.hasAnimations &&
+  void _limitedTick() {
+    _tick(Duration(microseconds: (_limitedStopwatch.elapsedMicroseconds)));
+  }
+
+  void _syncScheduler() {
+    final shouldRun =
+        widget.timeline.hasAnimations &&
         !widget.paused &&
-        widget.performanceController.quality != QuickjsUiEffectQuality.off) {
-      if (!_ticker.isActive) _ticker.start();
-    } else if (_ticker.isActive) {
-      _ticker.stop();
+        widget.performanceController.quality != QuickjsUiEffectQuality.off;
+    if (!shouldRun) {
+      _stopScheduler();
+      return;
     }
+    final interval = widget.animationFrameIntervalMs;
+    if (interval == null) {
+      if (!_ticker.isActive) _ticker.start();
+      return;
+    }
+    if (_frameClock != null) return;
+    _limitedStopwatch
+      ..reset()
+      ..start();
+    _frameClock = widget.frameScheduler.clockFor(interval)
+      ..addListener(_limitedTick);
+  }
+
+  void _stopScheduler() {
+    if (_ticker.isActive) _ticker.stop();
+    _frameClock?.removeListener(_limitedTick);
+    _frameClock = null;
+    _limitedStopwatch
+      ..stop()
+      ..reset();
   }
 
   void _qualityChanged() {
     if (!mounted) return;
-    _syncTicker();
+    _syncScheduler();
     setState(() {});
   }
 
@@ -217,6 +258,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   @override
   void dispose() {
     widget.performanceController.removeListener(_qualityChanged);
+    _stopScheduler();
     _ticker.dispose();
     super.dispose();
   }
@@ -305,32 +347,33 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
       final scaleY = scale is Map
           ? _number(scale['y'], clock, fallback: scaleX)
           : scaleX;
-      if (transform.containsKey('scale')) {
-        result = Transform.scale(
-          scaleX: scaleX,
-          scaleY: scaleY,
-          alignment: alignment,
-          child: result,
-        );
-      }
       final rotation = _number(
         transform['rotate'] ?? transform['rotation'],
         clock,
         fallback: 0,
       );
-      if (transform.containsKey('rotate') ||
-          transform.containsKey('rotation')) {
-        result = Transform.rotate(
-          angle: rotation,
+      final translate = transform['translate'];
+      var x = 0.0;
+      var y = 0.0;
+      if (translate is Map) {
+        x = _number(translate['x'], clock, fallback: 0);
+        y = _number(translate['y'], clock, fallback: 0);
+      }
+      if (widget.timeline.hasAnimations) {
+        result = RepaintBoundary(child: result);
+      }
+      if (transform.containsKey('scale') ||
+          transform.containsKey('rotate') ||
+          transform.containsKey('rotation') ||
+          translate is Map) {
+        final matrix = Matrix4.translationValues(x, y, 0)
+          ..rotateZ(rotation)
+          ..multiply(Matrix4.diagonal3Values(scaleX, scaleY, 1));
+        result = Transform(
+          transform: matrix,
           alignment: alignment,
           child: result,
         );
-      }
-      final translate = transform['translate'];
-      if (translate is Map) {
-        final x = _number(translate['x'], clock, fallback: 0);
-        final y = _number(translate['y'], clock, fallback: 0);
-        result = Transform.translate(offset: Offset(x, y), child: result);
       }
     }
 
@@ -340,6 +383,20 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
     }
     return result;
   }
+}
+
+int? _animationFrameIntervalMs(Object? value) {
+  if (value == null) return null;
+  final interval = QuickjsUiProps.intValue(
+    value,
+    name: 'animationFrameIntervalMs',
+  );
+  if (interval == null || interval < 4 || interval > 1000) {
+    throw const FormatException(
+      'quickjs_ui animationFrameIntervalMs must be between 4 and 1000',
+    );
+  }
+  return interval;
 }
 
 (double, double) _qualityBlur(
