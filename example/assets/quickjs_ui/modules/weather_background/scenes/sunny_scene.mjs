@@ -1,8 +1,8 @@
 import { Positioned, Image } from 'quickjs_ui';
-import { breathe, sceneRoot } from '../core/scene_helpers.mjs';
+import { animationProps, breathe, sceneRoot } from '../core/scene_helpers.mjs';
 
 export function SunnyScene(props) {
-  const size = props.width * 0.88;
+  const size = Math.min(props.width * 0.88, props.height * 0.95);
   return sceneRoot(props.width, props.height, [
     '#177fd1', '#55b8ec', '#bdebfb'
   ], [
@@ -26,11 +26,10 @@ export function SunnyScene(props) {
         width: size,
         height: size,
         fit: 'contain',
-        paused: props.paused,
-        playToken: props.playToken,
+        ...animationProps(props),
         opacity: 0.78,
         transform: {
-          rotate: breathe(-0.035, 0.035, 7000),
+          rotate: breathe(-0.06, 0.06, 7000),
           scale: breathe(0.98, 1.025, 4800)
         },
         filterQuality: 'low'

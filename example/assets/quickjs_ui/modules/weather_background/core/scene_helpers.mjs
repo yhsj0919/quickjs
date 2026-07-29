@@ -46,6 +46,16 @@ export function breathe(from, to, durationMs, phaseMs = 0) {
   });
 }
 
+export function animationProps(props) {
+  return {
+    paused: props.paused,
+    playToken: props.playToken,
+    ...(props.animationFrameIntervalMs == null ? {} : {
+      animationFrameIntervalMs: props.animationFrameIntervalMs
+    })
+  };
+}
+
 export function clamp(value, minimum, maximum) {
   const number = Number(value);
   if (!Number.isFinite(number)) return minimum;

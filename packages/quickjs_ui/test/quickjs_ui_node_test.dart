@@ -1252,6 +1252,41 @@ export default Page({
     expect(find.text('Overlay'), findsOneWidget);
   });
 
+  testWidgets('ResponsiveViewport follows native constraints without rebuild', (
+    tester,
+  ) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final rendered = renderer.build(
+      QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'ResponsiveViewport',
+        'designWidth': 200,
+        'designHeight': 100,
+        'fit': 'cover',
+        'child': <String, Object?>{
+          'type': 'Container',
+          'width': 200,
+          'height': 100,
+          'color': '#336699',
+        },
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(child: SizedBox(width: 300, height: 180, child: rendered)),
+      ),
+    );
+    expect(tester.getSize(find.byType(FittedBox)), const Size(300, 180));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(child: SizedBox(width: 520, height: 240, child: rendered)),
+      ),
+    );
+    expect(tester.getSize(find.byType(FittedBox)), const Size(520, 240));
+  });
+
   testWidgets('renders 0.6 built-in controls', (tester) async {
     final events = <Map<String, Object?>>[];
     final node = QuickjsUiNode.fromMap(<String, Object?>{

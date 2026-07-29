@@ -11,6 +11,7 @@ import 'quickjs_ui_component_types.dart';
 import 'quickjs_ui_canvas_scene.dart';
 import 'quickjs_ui_animation.dart';
 import 'quickjs_ui_gestures.dart';
+import 'quickjs_ui_frame_scheduler.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_snapshot.dart';
 
@@ -79,6 +80,10 @@ Widget _buildCanvasValidated(
     playToken: node.props['playToken'],
     reverse: node.props['reverse'] == true,
     forceWillChange: node.props['willChange'] == true,
+    animationFrameIntervalMs: _canvasAnimationFrameIntervalMs(
+      node.props['animationFrameIntervalMs'],
+    ),
+    frameScheduler: context.frameScheduler,
     snapshotRegistry: context.snapshotRegistry,
     performanceController: context.performanceController,
     onAnimationEnd: onAnimationEnd == null
@@ -200,6 +205,7 @@ void _validateCommands(List<Map<String, Object?>> commands) {
     'rotate',
     'scale',
     'clipRect',
+    'clipProgress',
     'line',
     'rect',
     'circle',
@@ -263,6 +269,8 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
     required this.playToken,
     required this.reverse,
     required this.forceWillChange,
+    required this.animationFrameIntervalMs,
+    required this.frameScheduler,
     required this.snapshotRegistry,
     required this.performanceController,
     required this.onAnimationEnd,
@@ -279,6 +287,8 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
   final Object? playToken;
   final bool reverse;
   final bool forceWillChange;
+  final int? animationFrameIntervalMs;
+  final QuickjsUiFrameScheduler frameScheduler;
   final QuickjsUiSnapshotRegistry snapshotRegistry;
   final QuickjsUiPerformanceController performanceController;
   final VoidCallback? onAnimationEnd;
@@ -298,6 +308,8 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   double _playbackOffsetMs = 0;
   bool _didCompleteAnimation = false;
   int _animationGeneration = 0;
+  QuickjsUiFrameClock? _frameClock;
+  final Stopwatch _limitedStopwatch = Stopwatch();
   late _QuickjsUiCanvasPainter _painter;
 
   @override
@@ -305,16 +317,8 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
     super.initState();
     widget.performanceController.addListener(_qualityChanged);
     _painter = _createPainter();
-    _ticker = createTicker((elapsed) {
-      _elapsedMs = _playbackOffsetMs + elapsed.inMicroseconds / 1000;
-      _repaint.repaint();
-      final timeline = widget.timeline;
-      if (!timeline.isContinuous && _elapsedMs >= timeline.endMs) {
-        _ticker.stop();
-        _notifyAnimationEndAfterPaint();
-      }
-    });
-    _syncTicker();
+    _ticker = createTicker(_tick);
+    _syncScheduler();
   }
 
   @override
@@ -329,17 +333,21 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
         oldWidget.playToken != widget.playToken ||
         oldWidget.reverse != widget.reverse;
     if (restart) {
-      if (_ticker.isActive) _ticker.stop();
+      _stopScheduler();
       _elapsedMs = 0;
       _playbackOffsetMs = 0;
       _didCompleteAnimation = false;
       _animationGeneration += 1;
     } else if (!oldWidget.paused && widget.paused) {
       _playbackOffsetMs = _elapsedMs;
+    } else if (oldWidget.animationFrameIntervalMs !=
+        widget.animationFrameIntervalMs) {
+      _playbackOffsetMs = _elapsedMs;
+      _stopScheduler();
     }
     _painter.disposePicture();
     _painter = _createPainter();
-    _syncTicker();
+    _syncScheduler();
   }
 
   _QuickjsUiCanvasPainter _createPainter() => _QuickjsUiCanvasPainter(
@@ -354,19 +362,53 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
     repaint: _repaint,
   );
 
-  void _syncTicker() {
-    if (widget.timeline.hasAnimations &&
-        !widget.paused &&
-        (widget.timeline.isContinuous || !_didCompleteAnimation) &&
-        widget.performanceController.quality != QuickjsUiEffectQuality.off) {
-      if (!_ticker.isActive) _ticker.start();
-    } else {
-      if (_ticker.isActive) _ticker.stop();
+  void _tick(Duration elapsed) {
+    _elapsedMs = _playbackOffsetMs + elapsed.inMicroseconds / 1000;
+    final timeline = widget.timeline;
+    final completed = !timeline.isContinuous && _elapsedMs >= timeline.endMs;
+    _repaint.repaint();
+    if (completed) {
+      _stopScheduler();
+      _notifyAnimationEndAfterPaint();
     }
   }
 
+  void _limitedTick() => _tick(_limitedStopwatch.elapsed);
+
+  void _syncScheduler() {
+    final shouldRun =
+        widget.timeline.hasAnimations &&
+        !widget.paused &&
+        (widget.timeline.isContinuous || !_didCompleteAnimation) &&
+        widget.performanceController.quality != QuickjsUiEffectQuality.off;
+    if (!shouldRun) {
+      _stopScheduler();
+      return;
+    }
+    final interval = widget.animationFrameIntervalMs;
+    if (interval == null) {
+      if (!_ticker.isActive) _ticker.start();
+      return;
+    }
+    if (_frameClock != null) return;
+    _limitedStopwatch
+      ..reset()
+      ..start();
+    _frameClock = widget.frameScheduler.clockFor(interval)
+      ..addListener(_limitedTick);
+  }
+
+  void _stopScheduler() {
+    if (_ticker.isActive) _ticker.stop();
+    _frameClock?.removeListener(_limitedTick);
+    _frameClock = null;
+    _limitedStopwatch
+      ..stop()
+      ..reset();
+  }
+
   void _qualityChanged() {
-    _syncTicker();
+    _syncScheduler();
     _repaint.repaint();
     if (mounted) setState(() {});
   }
@@ -398,6 +440,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   @override
   void dispose() {
     widget.performanceController.removeListener(_qualityChanged);
+    _stopScheduler();
     _ticker.dispose();
     _painter.disposePicture();
     _repaint.dispose();
@@ -597,17 +640,31 @@ void _paintCommands(
         canvas.scale(x, _optionalNumber(command['y'], clock) ?? x);
       case 'clipRect':
         canvas.clipRect(_rect(command, clock));
+      case 'clipProgress':
+        final progress = _number(
+          command['progress'],
+          'progress',
+          clock,
+        ).clamp(0.0, 1.0);
+        canvas.clipRect(
+          Rect.fromLTWH(0, 0, size.width * progress, size.height),
+        );
       case 'line':
-        canvas.drawLine(
-          Offset(
+        final path = Path()
+          ..moveTo(
             _number(command['x1'], 'x1', clock),
             _number(command['y1'], 'y1', clock),
-          ),
-          Offset(
+          )
+          ..lineTo(
             _number(command['x2'], 'x2', clock),
             _number(command['y2'], 'y2', clock),
-          ),
+          );
+        _drawStrokePath(
+          canvas,
+          path,
           _paint(command, clock, fill: false),
+          command,
+          clock,
         );
       case 'rect':
         final rect = _rect(command, clock);
@@ -656,12 +713,18 @@ void _paintCommands(
         );
       case 'path':
         final path = _path(command['segments'], clock);
-        _drawFillAndStroke(
-          canvas,
-          command,
-          clock,
-          (paint) => canvas.drawPath(path, paint),
-        );
+        if (command['fill'] != null) {
+          canvas.drawPath(path, _paint(command, clock, fill: true));
+        }
+        if (command['stroke'] != null || command['fill'] == null) {
+          _drawStrokePath(
+            canvas,
+            path,
+            _paint(command, clock, fill: false),
+            command,
+            clock,
+          );
+        }
       case 'text':
         _drawText(canvas, command, clock);
       case 'image':
@@ -701,12 +764,10 @@ Paint _paint(
     0.0,
     1.0,
   );
-  final color =
-      _color(fill ? command['fill'] : command['stroke']) ?? Colors.black;
-  return Paint()
+  final source = fill ? command['fill'] : command['stroke'];
+  final paint = Paint()
     ..isAntiAlias = command['antiAlias'] != false
     ..style = fill ? PaintingStyle.fill : PaintingStyle.stroke
-    ..color = color.withValues(alpha: color.a * opacity)
     ..strokeWidth = _optionalNumber(command['strokeWidth'], clock) ?? 1
     ..strokeCap = switch (command['strokeCap']) {
       'round' => StrokeCap.round,
@@ -719,6 +780,135 @@ Paint _paint(
       _ => StrokeJoin.miter,
     }
     ..blendMode = _blendMode(command['blendMode']);
+  _applyPaintSource(paint, source, opacity, clock);
+  return paint;
+}
+
+void _applyPaintSource(
+  Paint paint,
+  Object? source,
+  double opacity,
+  _CanvasClock clock,
+) {
+  if (source is! Map) {
+    final color = _color(source) ?? Colors.black;
+    paint.color = color.withValues(alpha: color.a * opacity);
+    return;
+  }
+  final gradient = _commandMap(source);
+  final rawStops = gradient['stops'];
+  if (rawStops is! List || rawStops.length < 2) {
+    throw const FormatException(
+      'quickjs_ui Canvas gradient requires at least two color stops',
+    );
+  }
+  final offsets = <double>[];
+  final colors = <Color>[];
+  var previousOffset = -1.0;
+  for (final rawStop in rawStops) {
+    final stop = _commandMap(rawStop);
+    final offset = _number(stop['offset'], 'gradient offset', clock);
+    final color = _color(stop['color']);
+    if (offset < 0 || offset > 1 || offset < previousOffset || color == null) {
+      throw const FormatException(
+        'quickjs_ui Canvas gradient stops must be ordered colors from 0 to 1',
+      );
+    }
+    offsets.add(offset);
+    colors.add(color.withValues(alpha: color.a * opacity));
+    previousOffset = offset;
+  }
+  paint.shader = switch (gradient['type']) {
+    'linear' => ui.Gradient.linear(
+      Offset(
+        _number(gradient['x0'], 'gradient x0', clock),
+        _number(gradient['y0'], 'gradient y0', clock),
+      ),
+      Offset(
+        _number(gradient['x1'], 'gradient x1', clock),
+        _number(gradient['y1'], 'gradient y1', clock),
+      ),
+      colors,
+      offsets,
+    ),
+    'radial' => _radialGradient(gradient, colors, offsets, clock),
+    _ => throw const FormatException(
+      'quickjs_ui Canvas gradient type must be linear or radial',
+    ),
+  };
+}
+
+ui.Shader _radialGradient(
+  Map<String, Object?> gradient,
+  List<Color> colors,
+  List<double> offsets,
+  _CanvasClock clock,
+) {
+  final innerCenter = Offset(
+    _number(gradient['x0'], 'gradient x0', clock),
+    _number(gradient['y0'], 'gradient y0', clock),
+  );
+  final outerCenter = Offset(
+    _number(gradient['x1'], 'gradient x1', clock),
+    _number(gradient['y1'], 'gradient y1', clock),
+  );
+  if (innerCenter != outerCenter) {
+    throw const FormatException(
+      'quickjs_ui Canvas radial gradient centers must match',
+    );
+  }
+  final innerRadius = _number(gradient['r0'], 'gradient r0', clock);
+  final outerRadius = _number(gradient['r1'], 'gradient r1', clock);
+  if (innerRadius < 0 || outerRadius <= innerRadius) {
+    throw const FormatException(
+      'quickjs_ui Canvas radial gradient requires 0 <= r0 < r1',
+    );
+  }
+  final innerOffset = innerRadius / outerRadius;
+  final adjustedOffsets = <double>[
+    for (final offset in offsets) innerOffset + (1 - innerOffset) * offset,
+  ];
+  return ui.Gradient.radial(outerCenter, outerRadius, colors, adjustedOffsets);
+}
+
+void _drawStrokePath(
+  Canvas canvas,
+  Path path,
+  Paint paint,
+  Map<String, Object?> command,
+  _CanvasClock clock,
+) {
+  final rawDash = command['lineDash'];
+  if (rawDash is! List || rawDash.isEmpty) {
+    canvas.drawPath(path, paint);
+    return;
+  }
+  final dash = <double>[
+    for (final value in rawDash) _number(value, 'lineDash', clock),
+  ];
+  if (dash.any((value) => value < 0) || dash.every((value) => value == 0)) {
+    throw const FormatException(
+      'quickjs_ui Canvas lineDash must contain non-negative visible lengths',
+    );
+  }
+  final patternLength = dash.fold<double>(0, (sum, value) => sum + value);
+  var offset =
+      (_optionalNumber(command['lineDashOffset'], clock) ?? 0) % patternLength;
+  if (offset < 0) offset += patternLength;
+  for (final metric in path.computeMetrics()) {
+    var distance = -offset;
+    var index = 0;
+    while (distance < metric.length) {
+      final length = dash[index % dash.length];
+      final start = distance.clamp(0.0, metric.length);
+      final end = (distance + length).clamp(0.0, metric.length);
+      if (index.isEven && end > start) {
+        canvas.drawPath(metric.extractPath(start, end), paint);
+      }
+      distance += length;
+      index += 1;
+    }
+  }
 }
 
 BlendMode _blendMode(Object? value) => switch (value) {
@@ -864,6 +1054,20 @@ int _frameIntervalMs(Object? value) {
   if (interval == null || interval < 16 || interval > 60000) {
     throw const FormatException(
       'quickjs_ui Canvas frameIntervalMs must be between 16 and 60000',
+    );
+  }
+  return interval;
+}
+
+int? _canvasAnimationFrameIntervalMs(Object? value) {
+  if (value == null) return null;
+  final interval = QuickjsUiProps.intValue(
+    value,
+    name: 'Canvas animationFrameIntervalMs',
+  );
+  if (interval == null || interval < 4 || interval > 1000) {
+    throw const FormatException(
+      'quickjs_ui Canvas animationFrameIntervalMs must be between 4 and 1000',
     );
   }
   return interval;

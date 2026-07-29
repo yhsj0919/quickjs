@@ -1,5 +1,5 @@
 import { Image, Positioned } from 'quickjs_ui';
-import { loop, sceneRoot } from '../core/scene_helpers.mjs';
+import { animationProps, loop, sceneRoot } from '../core/scene_helpers.mjs';
 
 export function SandstormScene(props) {
   const strength = Math.max(0.2, Math.min(1, Number(props.intensity) || 0.75));
@@ -16,8 +16,7 @@ export function SandstormScene(props) {
           width,
           fit: 'fitWidth',
           opacity: (index === 0 ? 0.68 : 0.82) * strength,
-          paused: props.paused,
-          playToken: props.playToken,
+          ...animationProps(props),
           transform: {
             translate: {
               x: loop(0, props.width + width, index === 0 ? 21000 : 15000, index * 5200)

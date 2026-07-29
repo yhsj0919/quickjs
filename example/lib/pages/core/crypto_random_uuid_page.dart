@@ -230,7 +230,7 @@ return hex + "\\nvalid=" + valid;
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Web Crypto')),
+      appBar: AppBar(title: const Text('Web 加密能力')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

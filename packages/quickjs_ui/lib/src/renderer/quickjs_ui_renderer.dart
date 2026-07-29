@@ -8,6 +8,7 @@ import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_component_registry.dart';
 import 'quickjs_ui_canvas_scene.dart';
 import 'quickjs_ui_effects.dart';
+import 'quickjs_ui_frame_scheduler.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
@@ -41,6 +42,7 @@ final class QuickjsUiRenderer {
       QuickjsUiSnapshotRegistry();
   final QuickjsUiCanvasSceneRegistry canvasSceneRegistry =
       QuickjsUiCanvasSceneRegistry();
+  final QuickjsUiFrameScheduler frameScheduler = QuickjsUiFrameScheduler();
   late final QuickjsUiEventDispatcher _eventDispatcher =
       QuickjsUiEventDispatcher(_dispatchEnvelope);
   final Map<String, _RenderedNode> _cache = <String, _RenderedNode>{};
@@ -110,6 +112,7 @@ final class QuickjsUiRenderer {
       canvasSceneRegistry: canvasSceneRegistry,
       snapshotRegistry: snapshotRegistry,
       performanceController: performanceController,
+      frameScheduler: frameScheduler,
     );
     final widget = buildNode(node);
     performanceController.updateResourceMetrics(
@@ -232,6 +235,7 @@ final class QuickjsUiRenderer {
     _eventDispatcher.dispose();
     canvasSceneRegistry.clear();
     snapshotRegistry.dispose();
+    frameScheduler.dispose();
     if (_ownsPerformanceController) performanceController.dispose();
     _cache.clear();
     _shown = false;

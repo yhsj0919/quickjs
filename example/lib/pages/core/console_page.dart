@@ -145,7 +145,7 @@ console.error(new Error("boom"));
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Console')),
+      appBar: AppBar(title: const Text('控制台输出')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

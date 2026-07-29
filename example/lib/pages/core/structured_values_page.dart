@@ -152,7 +152,7 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('结构化返回')),
+      appBar: AppBar(title: const Text('结构化值返回')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -122,7 +122,7 @@ globalThis.npmBundleResult = bundledDependency + '/' + [
   Widget build(BuildContext context) {
     final hasRuntime = _quickjs != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('NPM Bundle')),
+      appBar: AppBar(title: const Text('NPM 打包模块')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

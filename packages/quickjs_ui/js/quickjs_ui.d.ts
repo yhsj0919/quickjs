@@ -476,6 +476,8 @@ export type NodeEffectProps = {
   paused?: boolean;
   playToken?: JsonValue;
   reverse?: boolean;
+  /** Overrides the renderer frame interval for this animated node. */
+  animationFrameIntervalMs?: number;
   onAnimationEnd?: QuickjsUiEvent;
 };
 
@@ -800,14 +802,21 @@ export type CanvasPathSegment =
   | { op: 'close' };
 
 export type CanvasPaint = {
-  fill?: string | number;
-  stroke?: string | number;
+  fill?: CanvasPaintStyle;
+  stroke?: CanvasPaintStyle;
   strokeWidth?: number;
   strokeCap?: 'butt' | 'round' | 'square';
   strokeJoin?: 'miter' | 'round' | 'bevel';
   antiAlias?: boolean;
-  globalAlpha?: number;
+  lineDash?: CanvasNumber[];
+  lineDashOffset?: CanvasNumber;
+  globalAlpha?: CanvasNumber;
   blendMode?: 'srcOver' | 'clear' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'plus' | 'add' | 'difference';
+};
+
+export type NumericKeyframe = {
+  offset: number;
+  value: number;
 };
 
 export type CanvasAnimation = {
@@ -820,17 +829,45 @@ export type CanvasAnimation = {
   autoreverse?: boolean;
   timeSource?: 'elapsed' | 'epoch';
   curve?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
+  keyframes?: ReadonlyArray<NumericKeyframe>;
 };
 
 export type CanvasNumber = number | CanvasAnimation;
 
+export type CanvasGradientStop = {
+  offset: number;
+  color: string | number;
+};
+
+export type CanvasGradient = {
+  type: 'linear' | 'radial';
+  x0: CanvasNumber;
+  y0: CanvasNumber;
+  x1: CanvasNumber;
+  y1: CanvasNumber;
+  r0?: CanvasNumber;
+  r1?: CanvasNumber;
+  stops: CanvasGradientStop[];
+  addColorStop(offset: number, color: string | number): void;
+};
+
+export type CanvasPaintStyle = string | number | CanvasGradient;
+
+export type CanvasTextMetrics = {
+  width: number;
+  actualBoundingBoxAscent: number;
+  actualBoundingBoxDescent: number;
+  estimated: true;
+};
+
 export declare class Canvas2DContext {
   readonly commands: CanvasCommand[];
-  fillStyle: string | number;
-  strokeStyle: string | number;
+  fillStyle: CanvasPaintStyle;
+  strokeStyle: CanvasPaintStyle;
   lineWidth: number;
   lineCap: 'butt' | 'round' | 'square';
   lineJoin: 'miter' | 'round' | 'bevel';
+  lineDashOffset: CanvasNumber;
   globalAlpha: CanvasNumber;
   globalCompositeOperation: CanvasPaint['blendMode'];
   font: string;
@@ -844,6 +881,11 @@ export declare class Canvas2DContext {
   clear(color?: string | number): void;
   clearRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber): void;
   clipRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber): void;
+  clipProgress(progress: CanvasNumber): void;
+  createLinearGradient(x0: CanvasNumber, y0: CanvasNumber, x1: CanvasNumber, y1: CanvasNumber): CanvasGradient;
+  createRadialGradient(x0: CanvasNumber, y0: CanvasNumber, r0: CanvasNumber, x1: CanvasNumber, y1: CanvasNumber, r1: CanvasNumber): CanvasGradient;
+  setLineDash(segments: number[]): void;
+  getLineDash(): number[];
   fillRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber, radius?: CanvasNumber): void;
   strokeRect(x: CanvasNumber, y: CanvasNumber, width: CanvasNumber, height: CanvasNumber, radius?: CanvasNumber): void;
   fillCircle(cx: CanvasNumber, cy: CanvasNumber, radius: CanvasNumber): void;
@@ -893,12 +935,18 @@ export declare class Canvas2DContext {
   fill(): void;
   stroke(): void;
   fillText(text: unknown, x: CanvasNumber, y: CanvasNumber, maxWidth?: CanvasNumber): void;
+  measureText(text: unknown): CanvasTextMetrics;
 }
 
 export declare function animate(
   from: number,
   to: number,
   options: Omit<CanvasAnimation, 'from' | 'to'>
+): CanvasAnimation;
+
+export declare function keyframes(
+  frames: ReadonlyArray<NumericKeyframe>,
+  options: Omit<CanvasAnimation, 'from' | 'to' | 'keyframes'>
 ): CanvasAnimation;
 
 export declare function canvasCommands(
@@ -912,6 +960,7 @@ export type CanvasCommand =
   | { op: 'rotate'; radians: CanvasNumber }
   | { op: 'scale'; x: CanvasNumber; y?: CanvasNumber }
   | { op: 'clipRect'; x: CanvasNumber; y: CanvasNumber; width: CanvasNumber; height: CanvasNumber }
+  | { op: 'clipProgress'; progress: CanvasNumber }
   | ({ op: 'line'; x1: CanvasNumber; y1: CanvasNumber; x2: CanvasNumber; y2: CanvasNumber } & CanvasPaint)
   | ({ op: 'rect'; x: CanvasNumber; y: CanvasNumber; width: CanvasNumber; height: CanvasNumber; radius?: CanvasNumber } & CanvasPaint)
   | ({ op: 'circle'; cx: CanvasNumber; cy: CanvasNumber; radius: CanvasNumber } & CanvasPaint)
@@ -983,6 +1032,8 @@ export type CanvasProps = AccessibilityProps & {
   playToken?: JsonValue;
   /** Plays a finite retained scene from its end back to its beginning. */
   reverse?: boolean;
+  /** Overrides the renderer frame interval for this animated canvas. */
+  animationFrameIntervalMs?: number;
   willChange?: boolean;
   /** Requests sampled frame events. Minimum interval is 16ms. */
   onFrame?: QuickjsUiEvent;
@@ -1179,6 +1230,14 @@ export type SwitchProps = AccessibilityProps & {
     | ControlStateTransition
     | ControlPartStyle
     | undefined;
+};
+
+export type ResponsiveViewportProps = AccessibilityProps & {
+  designWidth: number;
+  designHeight: number;
+  fit?: BoxFit;
+  alignment?: Alignment;
+  child?: QuickjsUiNode;
 };
 
 export type SliderProps = AccessibilityProps & {
@@ -1500,6 +1559,9 @@ export declare function Margin(props: MarginProps): QuickjsUiNode;
 export declare function Align(props: AlignProps): QuickjsUiNode;
 export declare function Center(props: CenterProps): QuickjsUiNode;
 export declare function SizedBox(props: SizedBoxProps): QuickjsUiNode;
+export declare function ResponsiveViewport(
+  props: ResponsiveViewportProps
+): QuickjsUiNode;
 export declare function Expanded(props: FlexChildProps): QuickjsUiNode;
 export declare function Flexible(props: FlexChildProps): QuickjsUiNode;
 export declare function Spacer(props?: { flex?: number }): QuickjsUiNode;
@@ -1588,6 +1650,7 @@ export declare const ui: {
   Align(props: AlignProps): QuickjsUiNode;
   Center(props: CenterProps): QuickjsUiNode;
   SizedBox(props: SizedBoxProps): QuickjsUiNode;
+  ResponsiveViewport(props: ResponsiveViewportProps): QuickjsUiNode;
   Expanded(props: FlexChildProps): QuickjsUiNode;
   Flexible(props: FlexChildProps): QuickjsUiNode;
   Spacer(props?: { flex?: number }): QuickjsUiNode;

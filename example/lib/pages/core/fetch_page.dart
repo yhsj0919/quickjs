@@ -273,7 +273,7 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
   Widget build(BuildContext context) {
     final hasRuntime = _quickjs != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Fetch / XHR 协议测试')),
+      appBar: AppBar(title: const Text('网络请求 · Fetch 与 XHR')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[

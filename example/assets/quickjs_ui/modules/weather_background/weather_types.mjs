@@ -2,8 +2,6 @@ export const WEATHER_TYPES = Object.freeze([
   'sunny',
   'cloudy',
   'overcast',
-  'haze',
-  'sandstorm',
   'lightRain',
   'moderateRain',
   'largeRain',
@@ -13,4 +11,6 @@ export const WEATHER_TYPES = Object.freeze([
   'moderateSnow',
   'largeSnow',
   'heavySnow',
+  'haze',
+  'sandstorm',
 ]);

@@ -67,6 +67,7 @@
         { "$ref": "#/$defs/align" },
         { "$ref": "#/$defs/center" },
         { "$ref": "#/$defs/sizedBox" },
+        { "$ref": "#/$defs/responsiveViewport" },
         { "$ref": "#/$defs/expanded" },
         { "$ref": "#/$defs/flexible" },
         { "$ref": "#/$defs/spacer" },
@@ -1119,6 +1120,23 @@
             "animated": { "type": "boolean" },
             "matchAnchorWidth": { "type": "boolean" },
             "onDismissed": { "$ref": "#/$defs/event" }
+          }
+        }
+      ]
+    },
+    "responsiveViewport": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/singleChild" },
+        {
+          "type": "object",
+          "required": ["designWidth", "designHeight"],
+          "properties": {
+            "type": { "const": "ResponsiveViewport" },
+            "designWidth": { "type": "number", "exclusiveMinimum": 0 },
+            "designHeight": { "type": "number", "exclusiveMinimum": 0 },
+            "fit": { "type": "string" },
+            "alignment": { "type": "string" }
           }
         }
       ]

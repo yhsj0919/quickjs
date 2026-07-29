@@ -18,6 +18,7 @@ WeatherBackground({
   width: 360,
   height: 560,
   intensity: 0.8,
+  fps: 30,
   paused: false,
   theme
 });

@@ -8,6 +8,7 @@ import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import '../theme/quickjs_ui_design_tokens.dart';
 import 'quickjs_ui_canvas_scene.dart';
+import 'quickjs_ui_frame_scheduler.dart';
 import 'quickjs_ui_snapshot.dart';
 
 // Keep the public constructor parameter named `buildNode`.
@@ -71,6 +72,7 @@ final class QuickjsUiRenderContext {
     QuickjsUiCanvasSceneRegistry? canvasSceneRegistry,
     QuickjsUiSnapshotRegistry? snapshotRegistry,
     QuickjsUiPerformanceController? performanceController,
+    QuickjsUiFrameScheduler? frameScheduler,
   }) : _buildNode = buildNode,
        _buildNodeAtPath = buildNodeAtPath,
        _onUiEvent = onUiEvent,
@@ -79,6 +81,7 @@ final class QuickjsUiRenderContext {
        snapshotRegistry = snapshotRegistry ?? QuickjsUiSnapshotRegistry(),
        performanceController =
            performanceController ?? QuickjsUiPerformanceController(),
+       frameScheduler = frameScheduler ?? QuickjsUiFrameScheduler(),
        onEvent =
            onEvent ??
            ((event) => onUiEvent(QuickjsUiEventEnvelope.command(event))),
@@ -95,6 +98,7 @@ final class QuickjsUiRenderContext {
   final QuickjsUiCanvasSceneRegistry canvasSceneRegistry;
   final QuickjsUiSnapshotRegistry snapshotRegistry;
   final QuickjsUiPerformanceController performanceController;
+  final QuickjsUiFrameScheduler frameScheduler;
 
   QuickjsUiRenderContext withPath(String path) {
     return QuickjsUiRenderContext(
@@ -107,6 +111,7 @@ final class QuickjsUiRenderContext {
       canvasSceneRegistry: canvasSceneRegistry,
       snapshotRegistry: snapshotRegistry,
       performanceController: performanceController,
+      frameScheduler: frameScheduler,
       path: path,
     );
   }
@@ -363,21 +368,51 @@ extension on QuickjsUiRenderContext {
       'onprimary' => scheme.onPrimary,
       'primarycontainer' => scheme.primaryContainer,
       'onprimarycontainer' => scheme.onPrimaryContainer,
+      'primaryfixed' => scheme.primaryFixed,
+      'primaryfixeddim' => scheme.primaryFixedDim,
+      'onprimaryfixed' => scheme.onPrimaryFixed,
+      'onprimaryfixedvariant' => scheme.onPrimaryFixedVariant,
       'secondary' => scheme.secondary,
       'onsecondary' => scheme.onSecondary,
       'secondarycontainer' => scheme.secondaryContainer,
       'onsecondarycontainer' => scheme.onSecondaryContainer,
+      'secondaryfixed' => scheme.secondaryFixed,
+      'secondaryfixeddim' => scheme.secondaryFixedDim,
+      'onsecondaryfixed' => scheme.onSecondaryFixed,
+      'onsecondaryfixedvariant' => scheme.onSecondaryFixedVariant,
       'tertiary' => scheme.tertiary,
       'ontertiary' => scheme.onTertiary,
+      'tertiarycontainer' => scheme.tertiaryContainer,
+      'ontertiarycontainer' => scheme.onTertiaryContainer,
+      'tertiaryfixed' => scheme.tertiaryFixed,
+      'tertiaryfixeddim' => scheme.tertiaryFixedDim,
+      'ontertiaryfixed' => scheme.onTertiaryFixed,
+      'ontertiaryfixedvariant' => scheme.onTertiaryFixedVariant,
       'surface' => scheme.surface,
       'onsurface' => scheme.onSurface,
+      'onsurfacevariant' => scheme.onSurfaceVariant,
+      'surfacebright' => scheme.surfaceBright,
+      'surfacedim' => scheme.surfaceDim,
+      'surfacecontainerlowest' => scheme.surfaceContainerLowest,
+      'surfacecontainerlow' => scheme.surfaceContainerLow,
+      'surfacecontainer' => scheme.surfaceContainer,
+      'surfacecontainerhigh' => scheme.surfaceContainerHigh,
       'surfacecontainerhighest' => scheme.surfaceContainerHighest,
       'surfacevariant' => scheme.surfaceContainerHighest,
       'background' => scheme.surface,
       'onbackground' => scheme.onSurface,
       'error' => scheme.error,
       'onerror' => scheme.onError,
+      'errorcontainer' => scheme.errorContainer,
+      'onerrorcontainer' => scheme.onErrorContainer,
       'outline' => scheme.outline,
+      'outlinevariant' => scheme.outlineVariant,
+      'shadow' => scheme.shadow,
+      'scrim' => scheme.scrim,
+      'inversesurface' => scheme.inverseSurface,
+      'oninversesurface' => scheme.onInverseSurface,
+      'inverseprimary' => scheme.inversePrimary,
+      'surfacetint' => scheme.surfaceTint,
       _ => null,
     };
   }
@@ -426,7 +461,7 @@ extension on QuickjsUiRenderContext {
   }
 
   double? _fontToken(Object? value) {
-    return _designNumber(value, QuickjsUiTokenCategory.spacing);
+    return _designNumber(value, QuickjsUiTokenCategory.fontSize);
   }
 
   double? _designNumber(Object? value, QuickjsUiTokenCategory category) {

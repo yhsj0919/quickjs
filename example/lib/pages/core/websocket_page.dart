@@ -196,7 +196,7 @@ return await new Promise((resolve, reject) => {
   Widget build(BuildContext context) {
     final hasRuntime = _quickjs != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('WebSocket')),
+      appBar: AppBar(title: const Text('WebSocket 通信')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

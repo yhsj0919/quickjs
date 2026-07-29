@@ -300,7 +300,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     final ready = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('运行时 Worker')),
+      appBar: AppBar(title: const Text('运行时后台 Worker')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

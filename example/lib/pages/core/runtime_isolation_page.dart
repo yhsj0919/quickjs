@@ -182,7 +182,7 @@ class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
     final ready = _first != null && _second != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Runtime 隔离')),
+      appBar: AppBar(title: const Text('运行时隔离')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

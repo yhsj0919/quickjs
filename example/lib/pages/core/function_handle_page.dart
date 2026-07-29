@@ -193,7 +193,7 @@ async (a, b) => {
     final hasRuntime = _quickjs != null && _add != null && _asyncAdd != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Function Handle')),
+      appBar: AppBar(title: const Text('函数句柄')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

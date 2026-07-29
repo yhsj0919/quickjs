@@ -165,7 +165,7 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
     final hasRuntime = _quickjs != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Timer 与事件循环')),
+      appBar: AppBar(title: const Text('定时器与事件循环')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -176,7 +176,6 @@ export default Page({
         return Stack({
             fit: 'expand',
             children: [
-                // Container({color: BACKGROUND}),
                 city.videoSource
                     ? VideoPlayer({
                         source: city.videoSource,

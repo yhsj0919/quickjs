@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
+import 'package:quickjs_ui/src/renderer/quickjs_ui_overlay_layer.dart';
 
 void main() {
   testWidgets('AnchoredOverlay shrink-wraps content height', (tester) async {
@@ -589,5 +590,50 @@ void main() {
 
     expect(closes, 1);
     expect(visible, isFalse);
+  });
+
+  testWidgets('SnackBar sync does not look up a deactivated overlay context', (
+    tester,
+  ) async {
+    late BuildContext staleContext;
+    const layerKey = ValueKey<String>('persistent-overlay-layer');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            staleContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    Widget host(List<QuickjsUiOverlayIntent> intents) => MaterialApp(
+      home: Scaffold(
+        body: QuickjsUiOverlayLayer(
+          key: layerKey,
+          overlayContext: staleContext,
+          intents: intents,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(host(const <QuickjsUiOverlayIntent>[]));
+    await tester.pump();
+    await tester.pumpWidget(
+      host(const <QuickjsUiOverlayIntent>[
+        QuickjsUiSnackBarOverlayIntent(
+          signature: 'late-snack',
+          content: Text('Safe SnackBar'),
+          duration: Duration(seconds: 1),
+        ),
+      ]),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Safe SnackBar'), findsOneWidget);
   });
 }

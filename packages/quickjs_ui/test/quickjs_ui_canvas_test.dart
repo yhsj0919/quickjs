@@ -544,19 +544,18 @@ void main() {
     final renderer = QuickjsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode boundary(Object token) => QuickjsUiNode.fromMap(
-      <String, Object?>{
-        'type': 'SnapshotBoundary',
-        'key': 'stable-capture',
-        'captureToken': token,
-        'onCaptured': <String, Object?>{'method': 'captured'},
-        'child': <String, Object?>{
-          'type': 'Container',
-          'width': 80,
-          'height': 50,
-        },
-      },
-    );
+    QuickjsUiNode boundary(Object token) =>
+        QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'SnapshotBoundary',
+          'key': 'stable-capture',
+          'captureToken': token,
+          'onCaptured': <String, Object?>{'method': 'captured'},
+          'child': <String, Object?>{
+            'type': 'Container',
+            'width': 80,
+            'height': 50,
+          },
+        });
 
     Future<void> pumpCapture(Object token) async {
       await tester.pumpWidget(
@@ -570,7 +569,10 @@ void main() {
       'revision': 0,
       'parts': <Object?>[1, 2],
     });
-    expect(events.where((event) => event['method'] == 'captured'), hasLength(1));
+    expect(
+      events.where((event) => event['method'] == 'captured'),
+      hasLength(1),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -578,13 +580,19 @@ void main() {
       'revision': 0,
       'parts': <Object?>[1, 2],
     });
-    expect(events.where((event) => event['method'] == 'captured'), hasLength(1));
+    expect(
+      events.where((event) => event['method'] == 'captured'),
+      hasLength(1),
+    );
 
     await pumpCapture(<String, Object?>{
       'revision': 1,
       'parts': <Object?>[1, 2],
     });
-    expect(events.where((event) => event['method'] == 'captured'), hasLength(2));
+    expect(
+      events.where((event) => event['method'] == 'captured'),
+      hasLength(2),
+    );
   });
 
   test('SnapshotRegistry releases interrupted capture claims', () {
@@ -666,27 +674,26 @@ void main() {
     final renderer = QuickjsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode particle(String direction) => QuickjsUiNode.fromMap(
-      <String, Object?>{
-        'type': 'Canvas',
-        'commands': <Object?>[
-          <String, Object?>{
-            'op': 'snapshotParticleGrid',
-            'sourceSlot': 'source',
-            'targetSlot': 'target',
-            'width': 80,
-            'height': 50,
-            'columns': 8,
-            'rows': 5,
-            'bucketCount': 4,
-            'direction': direction,
-            'staggerMs': 4,
-            'travelMs': 60,
-            'fadeMs': 40,
-          },
-        ],
-      },
-    );
+    QuickjsUiNode particle(String direction) =>
+        QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Canvas',
+          'commands': <Object?>[
+            <String, Object?>{
+              'op': 'snapshotParticleGrid',
+              'sourceSlot': 'source',
+              'targetSlot': 'target',
+              'width': 80,
+              'height': 50,
+              'columns': 8,
+              'rows': 5,
+              'bucketCount': 4,
+              'direction': direction,
+              'staggerMs': 4,
+              'travelMs': 60,
+              'fadeMs': 40,
+            },
+          ],
+        });
 
     for (final direction in const <String>['create', 'destroy', 'transition']) {
       expect(() => renderer.build(particle(direction)), returnsNormally);
@@ -701,38 +708,133 @@ void main() {
     final renderer = QuickjsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode canvas(String label) => QuickjsUiNode.fromMap(
-      <String, Object?>{
-        'type': 'Canvas',
-        'key': 'finite-animation',
-        'semanticLabel': label,
-        'width': 80,
-        'height': 50,
-        'commands': <Object?>[
-          <String, Object?>{
-            'op': 'circle',
-            'cx': <String, Object?>{
-              'from': 0,
-              'to': 80,
-              'durationMs': 40,
+    QuickjsUiNode canvas(String label) =>
+        QuickjsUiNode.fromMap(<String, Object?>{
+          'type': 'Canvas',
+          'key': 'finite-animation',
+          'semanticLabel': label,
+          'width': 80,
+          'height': 50,
+          'commands': <Object?>[
+            <String, Object?>{
+              'op': 'circle',
+              'cx': <String, Object?>{'from': 0, 'to': 80, 'durationMs': 40},
+              'cy': 25,
+              'radius': 4,
+              'fill': '#ffffff',
             },
-            'cy': 25,
-            'radius': 4,
-            'fill': '#ffffff',
-          },
-        ],
-        'onAnimationEnd': <String, Object?>{'method': 'finished'},
-      },
-    );
+          ],
+          'onAnimationEnd': <String, Object?>{'method': 'finished'},
+        });
 
     await tester.pumpWidget(MaterialApp(home: renderer.build(canvas('one'))));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump();
-    expect(events.where((event) => event['method'] == 'finished'), hasLength(1));
+    expect(
+      events.where((event) => event['method'] == 'finished'),
+      hasLength(1),
+    );
 
     await tester.pumpWidget(MaterialApp(home: renderer.build(canvas('two'))));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump();
-    expect(events.where((event) => event['method'] == 'finished'), hasLength(1));
+    expect(
+      events.where((event) => event['method'] == 'finished'),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('Canvas renders progress clips gradients and dashed paths', (
+    tester,
+  ) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'width': 240,
+      'height': 120,
+      'commands': <Object?>[
+        <String, Object?>{'op': 'save'},
+        <String, Object?>{
+          'op': 'clipProgress',
+          'progress': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 100},
+        },
+        <String, Object?>{
+          'op': 'path',
+          'segments': <Object?>[
+            <String, Object?>{'op': 'moveTo', 'x': 0, 'y': 100},
+            <String, Object?>{'op': 'lineTo', 'x': 120, 'y': 20},
+            <String, Object?>{'op': 'lineTo', 'x': 240, 'y': 80},
+          ],
+          'stroke': <String, Object?>{
+            'type': 'linear',
+            'x0': 0,
+            'y0': 0,
+            'x1': 240,
+            'y1': 0,
+            'stops': <Object?>[
+              <String, Object?>{'offset': 0, 'color': '#38bdf8'},
+              <String, Object?>{'offset': 1, 'color': '#f97316'},
+            ],
+          },
+          'strokeWidth': 3,
+          'lineDash': <Object?>[8, 4],
+          'lineDashOffset': 2,
+        },
+        <String, Object?>{
+          'op': 'circle',
+          'cx': 200,
+          'cy': 30,
+          'radius': 18,
+          'fill': <String, Object?>{
+            'type': 'radial',
+            'x0': 200,
+            'y0': 30,
+            'r0': 2,
+            'x1': 200,
+            'y1': 30,
+            'r1': 18,
+            'stops': <Object?>[
+              <String, Object?>{'offset': 0, 'color': '#ffffff'},
+              <String, Object?>{'offset': 1, 'color': '#00ffffff'},
+            ],
+          },
+        },
+        <String, Object?>{'op': 'restore'},
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Canvas pointer events expose explicit local coordinates', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'width': 200,
+      'height': 100,
+      'onPointerDown': <String, Object?>{'method': 'inspectPoint'},
+      'commands': const <Object?>[],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+    await tester.tapAt(const Offset(35, 24));
+
+    expect(events.single['localX'], closeTo(35, 0.01));
+    expect(events.single['localY'], closeTo(24, 0.01));
+    expect(events.single['x'], events.single['localX']);
+    expect(events.single['y'], events.single['localY']);
   });
 }

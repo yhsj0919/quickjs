@@ -245,6 +245,7 @@ final class QuickjsUiOverlayLayer extends StatefulWidget {
 final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   final Set<String> _shownSnackBars = <String>{};
   final Map<_ModalKey, _ModalEntry> _modals = <_ModalKey, _ModalEntry>{};
+  ScaffoldMessengerState? _messenger;
   bool _syncScheduled = false;
   bool _disposed = false;
 
@@ -252,6 +253,15 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   void initState() {
     super.initState();
     _scheduleSync();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Resolve inherited state while this element is active. Overlay syncing is
+    // deferred until the end of the frame, when overlayContext may already be
+    // deactivated during route teardown.
+    _messenger = ScaffoldMessenger.maybeOf(context);
   }
 
   @override
@@ -267,7 +277,7 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
     _syncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncScheduled = false;
-      if (mounted) {
+      if (!_disposed && mounted) {
         _syncOverlays();
       }
     });
@@ -295,7 +305,10 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
       (signature) => !active.contains(signature),
     );
     if (removed.isNotEmpty) {
-      ScaffoldMessenger.maybeOf(widget.overlayContext)?.hideCurrentSnackBar();
+      final messenger = _messenger;
+      if (messenger?.mounted ?? false) {
+        messenger!.hideCurrentSnackBar();
+      }
       _shownSnackBars.removeAll(removed.toList(growable: false));
     }
     for (final intent in intents) {
@@ -446,8 +459,8 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
     if (_shownSnackBars.contains(intent.signature)) {
       return;
     }
-    final messenger = ScaffoldMessenger.maybeOf(widget.overlayContext);
-    if (messenger == null) {
+    final messenger = _messenger;
+    if (messenger == null || !messenger.mounted) {
       return;
     }
     _shownSnackBars.add(intent.signature);
@@ -468,10 +481,10 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
     for (final entry in entries) {
       entry.closeRoute(immediate: true);
     }
-    if (_shownSnackBars.isNotEmpty) {
-      ScaffoldMessenger.maybeOf(widget.overlayContext)?.hideCurrentSnackBar();
-      _shownSnackBars.clear();
-    }
+    // ScaffoldMessenger owns SnackBar teardown. Driving its animation while
+    // this subtree is being unmounted can make it inspect inactive Scaffolds.
+    _shownSnackBars.clear();
+    _messenger = null;
     super.dispose();
   }
 
