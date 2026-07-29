@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 import 'package:quickjs_example/app.dart';
+import 'package:quickjs_example/example_page_spec.dart';
 import 'package:quickjs_example/example_pages.dart';
 import 'package:quickjs_example/pages/core/js_call_dart_plugin_page.dart';
 import 'package:quickjs_example/pages/quickjs_ui/ui/quickjs_ui_bundle_counter_page.dart';
@@ -40,15 +41,41 @@ Future<void> _scrollUntilFound(WidgetTester tester, Finder finder) async {
   await tester.scrollUntilVisible(
     finder,
     120,
-    scrollable: find.byType(Scrollable).last,
+    scrollable: _verticalScrollable(),
   );
 }
 
+Finder _verticalScrollable() => find
+    .byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable && widget.axisDirection == AxisDirection.down,
+    )
+    .first;
+
 void main() {
+  test('example theme uses the Windows Chinese system UI font', () {
+    expect(
+      buildExampleTheme(
+        TargetPlatform.windows,
+      ).textTheme.bodyMedium?.fontFamily,
+      'Microsoft YaHei UI',
+    );
+    expect(
+      buildExampleTheme(
+        TargetPlatform.android,
+      ).textTheme.bodyMedium?.fontFamily,
+      isNot('Microsoft YaHei UI'),
+    );
+  });
+
   testWidgets('renders example index', (WidgetTester tester) async {
     await tester.pumpWidget(const ExampleApp());
     expect(find.text('Core'), findsOneWidget);
-    expect(find.text('quickjs_ui'), findsOneWidget);
+    expect(find.text('入门加载'), findsOneWidget);
+    expect(find.text('UI 基础'), findsOneWidget);
+    expect(find.text('宿主工程'), findsOneWidget);
+    expect(find.text('场景'), findsOneWidget);
+    expect(find.text('实验室'), findsOneWidget);
     expect(find.text('01'), findsOneWidget);
 
     for (final page in examplePages) {
@@ -68,14 +95,22 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ExampleApp());
-    await tester.tap(find.text('quickjs_ui'));
-    await tester.pumpAndSettle();
-
-    for (final page in quickjsUiExamplePages) {
-      final title = find.text(page.title);
-      await _scrollUntilFound(tester, title);
-      expect(title, findsOneWidget);
-      expect(find.text(page.description), findsOneWidget);
+    final groups = <(String, List<ExamplePageSpec>)>[
+      ('入门加载', quickjsUiGettingStartedExamplePages),
+      ('UI 基础', quickjsUiFoundationExamplePages),
+      ('宿主工程', quickjsUiPlatformExamplePages),
+      ('场景', quickjsUiScenarioExamplePages),
+      ('实验室', quickjsUiLabExamplePages),
+    ];
+    for (final (tab, pages) in groups) {
+      await tester.tap(find.text(tab));
+      await tester.pumpAndSettle();
+      for (final page in pages) {
+        final title = find.text(page.title);
+        await _scrollUntilFound(tester, title);
+        expect(title, findsOneWidget);
+        expect(find.text(page.description), findsOneWidget);
+      }
     }
   });
 

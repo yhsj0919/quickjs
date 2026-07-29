@@ -370,6 +370,12 @@ export default Page({
 
     expect(schema[r'$schema'], 'https://json-schema.org/draft/2020-12/schema');
     expect(schema['title'], 'quickjs_ui UI schema');
+    final flex = defs['flex']! as Map<String, Object?>;
+    final flexAllOf = flex['allOf']! as List<Object?>;
+    final flexProps =
+        (flexAllOf.last! as Map<String, Object?>)['properties']!
+            as Map<String, Object?>;
+    expect(flexProps['mainAxisSize'], isNotNull);
     expect(
       variants.map((variant) => (variant! as Map<String, Object?>)[r'$ref']),
       containsAll(<String>[
@@ -1060,6 +1066,32 @@ export default Page({
     );
 
     expect(tester.widget<Row>(find.byType(Row)).spacing, 6);
+  });
+
+  testWidgets('renders Row and Column mainAxisSize', (tester) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Column',
+      'mainAxisSize': 'min',
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'Row',
+          'mainAxisSize': 'min',
+          'children': <Object?>[
+            <String, Object?>{'type': 'Text', 'data': 'Compact'},
+          ],
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+    );
+
+    expect(
+      tester.widget<Column>(find.byType(Column)).mainAxisSize,
+      MainAxisSize.min,
+    );
+    expect(tester.widget<Row>(find.byType(Row)).mainAxisSize, MainAxisSize.min);
   });
 
   testWidgets('renders Container decoration props', (tester) async {

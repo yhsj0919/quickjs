@@ -252,6 +252,48 @@ void main() {
     expect(events.single['method'], 'overlayDismissed');
   });
 
+  testWidgets('Overlay honors a shrink-wrapped Column child', (tester) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'Overlay',
+        'visible': true,
+        'transition': 'none',
+        'child': <String, Object?>{
+          'type': 'Container',
+          'padding': 20,
+          'child': <String, Object?>{
+            'type': 'Column',
+            'mainAxisSize': 'min',
+            'children': <Object?>[
+              <String, Object?>{'type': 'Text', 'data': 'Compact overlay'},
+              <String, Object?>{'type': 'Text', 'data': 'Short body'},
+            ],
+          },
+        },
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => renderer.build(node, buildContext: context),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final container = find
+        .ancestor(
+          of: find.text('Compact overlay'),
+          matching: find.byType(Container),
+        )
+        .first;
+    expect(tester.getSize(container).height, lessThan(160));
+  });
+
   testWidgets('Overlay closes declaratively without firing onDismissed', (
     tester,
   ) async {

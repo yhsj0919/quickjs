@@ -842,13 +842,14 @@ export class Canvas2DContext {
   }
   fillText(text, x, y, maxWidth) {
     const font = /^(\d+(?:\.\d+)?)px(?:\s+(.+))?$/.exec(this.font);
+    const fontFamily = resolveCanvasFontFamily(font?.[2]);
     this.commands.push({
       op: 'text', text: String(text), x, y,
       color: this.fillStyle,
       globalAlpha: this.globalAlpha,
       blendMode: this.globalCompositeOperation,
       fontSize: font == null ? 14 : Number(font[1]),
-      fontFamily: font?.[2],
+      ...(fontFamily == null ? {} : { fontFamily }),
       align: this.textAlign,
       baseline: this.textBaseline,
       ...(maxWidth == null ? {} : { maxWidth })
@@ -872,6 +873,25 @@ export class Canvas2DContext {
       blendMode: this.globalCompositeOperation
     };
   }
+}
+
+function resolveCanvasFontFamily(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined;
+  const family = value
+    .split(',')[0]
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2');
+  const generic = family.toLowerCase();
+  if (
+    generic === 'sans-serif' ||
+    generic === 'serif' ||
+    generic === 'system-ui' ||
+    generic === 'ui-sans-serif' ||
+    generic === 'ui-serif'
+  ) {
+    return undefined;
+  }
+  return family;
 }
 
 export function ListView(props) {

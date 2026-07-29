@@ -3,39 +3,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_example/pages/example_index_page.dart';
 
 void main() {
-  testWidgets('Particle FX tab exposes every particle demo at the end', (
-    tester,
-  ) async {
+  testWidgets('Lab tab exposes every particle demo', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: ExampleIndexPage()));
 
-    expect(find.text('Particle FX'), findsOneWidget);
-    await tester.tap(find.text('Particle FX'));
+    expect(find.text('实验室'), findsOneWidget);
+    await tester.tap(find.text('实验室'));
     await tester.pumpAndSettle();
 
-    expect(find.text('QuickJS UI Canvas 模拟时钟'), findsOneWidget);
-    expect(find.text('Particle FX · 星际穿梭'), findsOneWidget);
-    expect(find.text('Particle FX · 霓虹星系'), findsOneWidget);
-    expect(find.text('Particle FX · 萤火虫花园'), findsOneWidget);
-    expect(find.text('Particle FX · 能量爆发'), findsOneWidget);
-    expect(find.text('Canvas 控件 · 弧形功率仪表盘'), findsOneWidget);
-    expect(find.text('Canvas 特效 · Snappable 灰飞烟灭'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Universal FX · 任意控件本地动画'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    expect(find.text('Universal FX · 任意控件本地动画'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Control System · 状态与结构插槽'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    expect(find.text('Control System · 状态与结构插槽'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Performance Lab · 自适应效果质量'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    expect(find.text('Performance Lab · 自适应效果质量'), findsOneWidget);
+    for (final title in <String>[
+      'Particle FX · 星际穿梭',
+      'Particle FX · 霓虹星系',
+      'Particle FX · 萤火虫花园',
+      'Particle FX · 能量爆发',
+      'Canvas 控件 · 弧形功率仪表盘',
+      'Canvas 特效 · Snappable 灰飞烟灭',
+      'Universal FX · 任意控件本地动画',
+      'Performance Lab · 自适应效果质量',
+    ]) {
+      final finder = find.text(title);
+      if (finder.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(
+          finder,
+          200,
+          scrollable: _verticalScrollable(),
+        );
+      }
+      expect(finder, findsOneWidget);
+    }
   });
 }
+
+Finder _verticalScrollable() => find
+    .byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable && widget.axisDirection == AxisDirection.down,
+    )
+    .first;
