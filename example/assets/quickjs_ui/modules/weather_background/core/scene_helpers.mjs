@@ -1,0 +1,53 @@
+import { animate, Container, Positioned } from 'quickjs_ui';
+
+export function sceneRoot(width, height, colors, children, stops) {
+  return Container({
+    width,
+    height,
+    decoration: {
+      gradient: {
+        type: 'linear',
+        begin: 'topCenter',
+        end: 'bottomCenter',
+        colors,
+        ...(stops == null ? {} : { stops })
+      }
+    },
+    child: { type: 'Stack', children }
+  });
+}
+
+export function fill(color, opacity = 1) {
+  return Positioned({
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    child: Container({ opacity, decoration: { color } })
+  });
+}
+
+export function loop(from, to, durationMs, phaseMs = 0) {
+  return animate(from, to, {
+    durationMs,
+    phaseMs,
+    repeat: true,
+    curve: 'linear'
+  });
+}
+
+export function breathe(from, to, durationMs, phaseMs = 0) {
+  return animate(from, to, {
+    durationMs,
+    phaseMs,
+    repeat: true,
+    autoreverse: true,
+    curve: 'easeInOut'
+  });
+}
+
+export function clamp(value, minimum, maximum) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return minimum;
+  return Math.min(maximum, Math.max(minimum, number));
+}

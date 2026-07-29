@@ -39,9 +39,21 @@ Widget _buildText(QuickjsUiRenderContext context, QuickjsUiNode node) {
   return Text(
     data,
     textAlign: QuickjsUiProps.textAlign(node.props['textAlign']),
+    maxLines: QuickjsUiProps.intValue(node.props['maxLines']),
+    softWrap: QuickjsUiProps.boolValue(node.props['softWrap']),
+    overflow: _textOverflow(node.props['overflow']),
     style: context.textStyle(node.props['style']),
   );
 }
+
+TextOverflow? _textOverflow(Object? value) => switch (value) {
+  null => null,
+  'clip' => TextOverflow.clip,
+  'fade' => TextOverflow.fade,
+  'ellipsis' => TextOverflow.ellipsis,
+  'visible' => TextOverflow.visible,
+  _ => throw const FormatException('Unknown quickjs_ui Text overflow'),
+};
 
 Widget _buildElevatedButton(
   QuickjsUiRenderContext context,

@@ -7,12 +7,16 @@ Widget buildQuickjsUiFileImage(
   double? width,
   double? height,
   BoxFit? fit,
+  AlignmentGeometry alignment = Alignment.center,
   int? cacheWidth,
   int? cacheHeight,
   String? semanticLabel,
   bool excludeFromSemantics = false,
   bool gaplessPlayback = false,
   FilterQuality filterQuality = FilterQuality.medium,
+  ImageRepeat repeat = ImageRepeat.noRepeat,
+  Color? color,
+  BlendMode? colorBlendMode,
 }) {
   throw UnsupportedError(
     'quickjs_ui file Image resources are not supported on this platform: '

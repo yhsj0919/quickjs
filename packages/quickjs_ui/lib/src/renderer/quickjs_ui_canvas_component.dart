@@ -90,7 +90,6 @@ Widget _buildCanvasValidated(
           ),
   );
   Widget canvas = RepaintBoundary(child: surface);
-  canvas = _withPointerEvents(context, node, canvas);
   if (onFrame != null) {
     canvas = _QuickjsUiFrameSampler(
       interval: Duration(
@@ -250,61 +249,6 @@ void _validateCommands(List<Map<String, Object?>> commands) {
       'quickjs_ui Canvas save and restore commands must be balanced',
     );
   }
-}
-
-Widget _withPointerEvents(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-  Widget child,
-) {
-  final down = QuickjsUiProps.event(node.props['onPointerDown']);
-  final move = QuickjsUiProps.event(node.props['onPointerMove']);
-  final up = QuickjsUiProps.event(node.props['onPointerUp']);
-  final cancel = QuickjsUiProps.event(node.props['onPointerCancel']);
-  if (down == null && move == null && up == null && cancel == null) {
-    return child;
-  }
-  void dispatch(
-    Map<String, Object?> event,
-    PointerEvent details,
-    String prop, {
-    bool sample = false,
-  }) {
-    context.dispatchEvent(
-      event,
-      defaultCoalesceKey: quickjsUiEventKey(node, prop),
-      kind: sample ? QuickjsUiEventKind.sample : QuickjsUiEventKind.command,
-      payload: <String, Object?>{
-        'pointer': details.pointer,
-        'x': details.localPosition.dx,
-        'y': details.localPosition.dy,
-        'globalX': details.position.dx,
-        'globalY': details.position.dy,
-        'deltaX': details.delta.dx,
-        'deltaY': details.delta.dy,
-        'buttons': details.buttons,
-        'pressure': details.pressure,
-        'timestampMs': DateTime.now().millisecondsSinceEpoch,
-      },
-    );
-  }
-
-  return Listener(
-    behavior: HitTestBehavior.opaque,
-    onPointerDown: down == null
-        ? null
-        : (details) => dispatch(down, details, 'onPointerDown'),
-    onPointerMove: move == null
-        ? null
-        : (details) => dispatch(move, details, 'onPointerMove', sample: true),
-    onPointerUp: up == null
-        ? null
-        : (details) => dispatch(up, details, 'onPointerUp'),
-    onPointerCancel: cancel == null
-        ? null
-        : (details) => dispatch(cancel, details, 'onPointerCancel'),
-    child: child,
-  );
 }
 
 final class _QuickjsUiCanvasSurface extends StatefulWidget {

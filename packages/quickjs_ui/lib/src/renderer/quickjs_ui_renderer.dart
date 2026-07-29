@@ -8,6 +8,7 @@ import '../performance/quickjs_ui_effect_quality.dart';
 import 'quickjs_ui_component_registry.dart';
 import 'quickjs_ui_canvas_scene.dart';
 import 'quickjs_ui_effects.dart';
+import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_snapshot.dart';
@@ -319,7 +320,11 @@ Widget _decorateNode(
   QuickjsUiNode node,
   Widget child,
 ) {
-  return withQuickjsUiEffects(context, node, _withAccessibility(node, child));
+  return withQuickjsUiEffects(
+    context,
+    node,
+    withQuickjsUiInput(context, node, _withAccessibility(node, child)),
+  );
 }
 
 Widget _withAccessibility(QuickjsUiNode node, Widget child) {

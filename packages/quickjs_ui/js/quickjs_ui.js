@@ -1139,6 +1139,10 @@ export function Overlay(props) {
   return node('Overlay', props);
 }
 
+export function AnchoredOverlay(props) {
+  return node('AnchoredOverlay', props);
+}
+
 export function AlertDialog(props) {
   return node('AlertDialog', props);
 }
@@ -1243,6 +1247,7 @@ export const ui = {
   CircularProgressIndicator,
   LinearProgressIndicator,
   Overlay,
+  AnchoredOverlay,
   SnackBar,
   AlertDialog,
   BottomSheet,

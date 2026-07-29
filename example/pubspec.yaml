@@ -72,6 +72,15 @@ flutter:
     - assets/quickjs_ui/package_demo/
     - assets/quickjs_ui/package_demo/components/
     - assets/quickjs_ui/weatherIcon/
+    - assets/quickjs_ui/modules/weather_background/
+    - assets/quickjs_ui/modules/weather_background/core/
+    - assets/quickjs_ui/modules/weather_background/scenes/
+    - assets/quickjs_ui/modules/weather_background/assets/cloudy/
+    - assets/quickjs_ui/modules/weather_background/assets/heavy_rain/
+    - assets/quickjs_ui/modules/weather_background/assets/heavy_snow/
+    - assets/quickjs_ui/modules/weather_background/assets/sandstorm/
+    - assets/quickjs_ui/modules/weather_background/assets/sunny/
+    - assets/quickjs_ui/modules/weather_background/assets/thunderstorm/
     - assets/plugins/
     - web/icons/Icon-192.png
 

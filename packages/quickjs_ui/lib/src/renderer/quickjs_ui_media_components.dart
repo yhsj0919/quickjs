@@ -22,6 +22,8 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final width = QuickjsUiProps.doubleValue(node.props['width']);
   final height = QuickjsUiProps.doubleValue(node.props['height']);
   final fit = QuickjsUiProps.boxFit(node.props['fit']);
+  final alignment =
+      QuickjsUiProps.alignment(node.props['alignment']) ?? Alignment.center;
   final cacheWidth = QuickjsUiProps.intValue(node.props['cacheWidth']);
   final cacheHeight = QuickjsUiProps.intValue(node.props['cacheHeight']);
   final semanticLabel = _semanticLabel(node);
@@ -29,30 +31,41 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final gaplessPlayback =
       QuickjsUiProps.boolValue(node.props['gaplessPlayback']) ?? false;
   final filterQuality = _filterQuality(node.props['filterQuality']);
+  final repeat = _imageRepeat(node.props['repeat']);
+  final color = context.color(node.props['color']);
+  final colorBlendMode = _imageBlendMode(node.props['blendMode']);
   final image = switch (resource.kind) {
     QuickjsUiResourceKind.asset => Image.asset(
       resource.location,
       width: width,
       height: height,
       fit: fit,
+      alignment: alignment,
       cacheWidth: cacheWidth,
       cacheHeight: cacheHeight,
       semanticLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
       gaplessPlayback: gaplessPlayback,
       filterQuality: filterQuality,
+      repeat: repeat,
+      color: color,
+      colorBlendMode: colorBlendMode,
     ),
     QuickjsUiResourceKind.file => buildQuickjsUiFileImage(
       resource.location,
       width: width,
       height: height,
       fit: fit,
+      alignment: alignment,
       cacheWidth: cacheWidth,
       cacheHeight: cacheHeight,
       semanticLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
       gaplessPlayback: gaplessPlayback,
       filterQuality: filterQuality,
+      repeat: repeat,
+      color: color,
+      colorBlendMode: colorBlendMode,
     ),
     QuickjsUiResourceKind.network => Image.network(
       resource.location,
@@ -60,12 +73,16 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
       width: width,
       height: height,
       fit: fit,
+      alignment: alignment,
       cacheWidth: cacheWidth,
       cacheHeight: cacheHeight,
       semanticLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
       gaplessPlayback: gaplessPlayback,
       filterQuality: filterQuality,
+      repeat: repeat,
+      color: color,
+      colorBlendMode: colorBlendMode,
       errorBuilder: (_, _, _) {
         return SizedBox(width: width, height: height);
       },
@@ -75,12 +92,16 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
       width: width,
       height: height,
       fit: fit,
+      alignment: alignment,
       cacheWidth: cacheWidth,
       cacheHeight: cacheHeight,
       semanticLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
       gaplessPlayback: gaplessPlayback,
       filterQuality: filterQuality,
+      repeat: repeat,
+      color: color,
+      colorBlendMode: colorBlendMode,
     ),
     QuickjsUiResourceKind.custom => throw FormatException(
       'quickjs_ui Image does not support custom resource: ${resource.location}',
@@ -88,6 +109,26 @@ Widget _buildImage(QuickjsUiRenderContext context, QuickjsUiNode node) {
   };
   return withQuickjsUiGestures(context, node, image);
 }
+
+ImageRepeat _imageRepeat(Object? value) => switch (value) {
+  null || 'noRepeat' => ImageRepeat.noRepeat,
+  'repeat' => ImageRepeat.repeat,
+  'repeatX' => ImageRepeat.repeatX,
+  'repeatY' => ImageRepeat.repeatY,
+  _ => throw const FormatException('Unknown quickjs_ui Image repeat'),
+};
+
+BlendMode? _imageBlendMode(Object? value) => switch (value) {
+  null => null,
+  'srcIn' => BlendMode.srcIn,
+  'srcOver' => BlendMode.srcOver,
+  'multiply' => BlendMode.multiply,
+  'screen' => BlendMode.screen,
+  'overlay' => BlendMode.overlay,
+  'darken' => BlendMode.darken,
+  'lighten' => BlendMode.lighten,
+  _ => throw const FormatException('Unknown quickjs_ui Image blendMode'),
+};
 
 Widget _buildSvg(QuickjsUiRenderContext context, QuickjsUiNode node) {
   _configureMediaCaches();

@@ -1,5 +1,7 @@
 import 'example_page_spec.dart';
 import 'pages/quickjs_ui/integrated/quickjs_ui_weather_demo_page.dart';
+import 'pages/quickjs_ui/integrated/quickjs_ui_weather_background_page.dart';
+import 'pages/quickjs_ui/ui/quickjs_ui_anchored_overlay_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_bundle_counter_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_adaptive_performance_lab_page.dart';
 import 'pages/quickjs_ui/ui/quickjs_ui_canvas_clock_page.dart';
@@ -164,6 +166,11 @@ final List<ExamplePageSpec> quickjsUiWidgetExamplePages = [
     description: '专门测试列表分页追加、加载提示、防重复请求和系统下拉刷新。',
     builder: (_) => const QuickjsUiInfiniteListPage(),
   ),
+  ExamplePageSpec(
+    title: 'QuickJS UI 基础能力',
+    description: '渐变阴影、鼠标指针、焦点键盘，以及原生 Overlay 锚定与滚动跟随。',
+    builder: (_) => const QuickjsUiAnchoredOverlayPage(),
+  ),
 ];
 
 final List<ExamplePageSpec> quickjsUiIntegratedExamplePages = [
@@ -171,6 +178,12 @@ final List<ExamplePageSpec> quickjsUiIntegratedExamplePages = [
     title: 'QuickJS UI 天气综合 Demo',
     description: '实际天气卡片场景：IP 定位、刷新、当前天气、小时预报和生活提示。',
     builder: (_) => const QuickjsUiWeatherDemoPage(),
+  ),
+  ExamplePageSpec(
+    title: 'QuickJS UI Weather Background Library',
+    description:
+        'Portable image-layered weather backgrounds with native VSync effects and Canvas rain/snow.',
+    builder: (_) => const QuickjsUiWeatherBackgroundPage(),
   ),
 ];
 

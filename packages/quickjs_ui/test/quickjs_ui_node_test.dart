@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs/quickjs.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 import 'package:quickjs_ui/src/renderer/quickjs_ui_event_ingress.dart';
+import 'package:quickjs_ui/src/renderer/quickjs_ui_scrollable.dart';
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 100 && finder.evaluate().isEmpty; attempt++) {
@@ -161,6 +163,84 @@ void main() {
     expect(QuickjsUiProps.fontWeight(600), FontWeight.w600);
     expect(QuickjsUiProps.opacity(2), 1);
     expect(QuickjsUiProps.opacity(-1), 0);
+  });
+
+  test('parses box decoration gradients and shadows', () {
+    final linear = QuickjsUiProps.boxDecoration(<String, Object?>{
+      'decoration': <String, Object?>{
+        'gradient': <String, Object?>{
+          'colors': <Object?>['#177fd1', '#55b8ec', '#bdebfb'],
+          'stops': <Object?>[0, 0.58, 1],
+          'begin': 'topCenter',
+          'end': 'bottomCenter',
+        },
+        'boxShadows': <Object?>[
+          <String, Object?>{
+            'color': '#55000000',
+            'offset': <String, Object?>{'x': 3, 'y': 7},
+            'blurRadius': 12,
+            'spreadRadius': 2,
+          },
+        ],
+      },
+    });
+    final radial = QuickjsUiProps.boxDecoration(<String, Object?>{
+      'decoration': <String, Object?>{
+        'gradient': <String, Object?>{
+          'type': 'radial',
+          'colors': <Object?>['#ffffffff', '#00ffffff'],
+          'radius': 0.8,
+        },
+      },
+    });
+
+    expect(linear?.gradient, isA<LinearGradient>());
+    final linearGradient = linear!.gradient! as LinearGradient;
+    expect(linearGradient.begin, Alignment.topCenter);
+    expect(linearGradient.end, Alignment.bottomCenter);
+    expect(linearGradient.stops, <double>[0, 0.58, 1]);
+    expect(linear.color, isNull);
+    expect(linear.boxShadow, <BoxShadow>[
+      const BoxShadow(
+        color: Color(0x55000000),
+        offset: Offset(3, 7),
+        blurRadius: 12,
+        spreadRadius: 2,
+      ),
+    ]);
+    expect(radial?.gradient, isA<RadialGradient>());
+    expect((radial!.gradient! as RadialGradient).radius, 0.8);
+  });
+
+  testWidgets('paints non-uniform borders together with borderRadius', (
+    tester,
+  ) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'width': 180,
+      'height': 100,
+      'decoration': <String, Object?>{
+        'color': '#ffffff',
+        'borderRadius': 18,
+        'border': <String, Object?>{
+          'left': <String, Object?>{'color': '#ff0000', 'width': 3},
+          'top': <String, Object?>{'color': '#00ff00', 'width': 2},
+          'right': <String, Object?>{'color': '#0000ff', 'width': 4},
+          'bottom': <String, Object?>{'color': '#ffff00', 'width': 5},
+        },
+      },
+      'child': <String, Object?>{'type': 'Text', 'data': 'Rounded border'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: renderer.build(node))),
+    );
+    await tester.pump();
+
+    expect(find.text('Rounded border'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('loads bundle manifest from memory resources', () async {
@@ -1781,10 +1861,12 @@ export default Page({
                   'headers': <String, Object?>{'X-Test': 'yes'},
                 },
                 'width': 32,
+                'alignment': 'topRight',
               }),
             )
             as Image;
     expect(networkImage.image, isA<NetworkImage>());
+    expect(networkImage.alignment, Alignment.topRight);
     expect((networkImage.image as NetworkImage).headers, <String, String>{
       'X-Test': 'yes',
     });
@@ -1799,6 +1881,62 @@ export default Page({
             )
             as Image;
     expect(dataImage.image, isA<MemoryImage>());
+  });
+
+  test('Stack clips by default and Wrap defaults to horizontal', () {
+    final registry = QuickjsUiComponentRegistry.defaults();
+    final context = QuickjsUiRenderContext(
+      buildNode: (_) => const SizedBox.shrink(),
+      onUiEvent: (_) {},
+      onEvent: (_) {},
+    );
+    final stack = registry.build(
+      context,
+      QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'Stack',
+        'children': const <Object?>[],
+      }),
+    );
+    final wrap = registry.build(
+      context,
+      QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'Wrap',
+        'children': const <Object?>[],
+      }),
+    );
+
+    expect(stack, isA<Stack>());
+    expect((stack as Stack).clipBehavior, Clip.hardEdge);
+    expect(wrap, isA<Wrap>());
+    expect((wrap as Wrap).direction, Axis.horizontal);
+  });
+
+  test('ListView defaults vertical and PageView defaults horizontal', () {
+    final registry = QuickjsUiComponentRegistry.defaults();
+    final context = QuickjsUiRenderContext(
+      buildNode: (_) => const SizedBox.shrink(),
+      onUiEvent: (_) {},
+      onEvent: (_) {},
+    );
+    final list = registry.build(
+      context,
+      QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'ListView',
+        'children': const <Object?>[],
+      }),
+    );
+    final page = registry.build(
+      context,
+      QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'PageView',
+        'children': const <Object?>[],
+      }),
+    );
+
+    expect(list, isA<QuickjsUiScrollableList>());
+    expect((list as QuickjsUiScrollableList).axis, Axis.vertical);
+    expect(page, isA<PageView>());
+    expect((page as PageView).scrollDirection, Axis.horizontal);
   });
 
   testWidgets('renders TextField events and controlled value', (tester) async {
@@ -1985,6 +2123,105 @@ export default Page({
 
     await tester.longPress(find.text('Gesture card'));
     expect(events.last, <String, Object?>{'method': 'holdCard'});
+  });
+
+  testWidgets('renders mouse and pointer events with a system cursor', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'width': 120,
+      'height': 80,
+      'mouseCursor': 'click',
+      'onMouseEnter': <String, Object?>{'method': 'enter'},
+      'onMouseExit': <String, Object?>{'method': 'exit'},
+      'onMouseHover': <String, Object?>{'method': 'hover'},
+      'onMouseScroll': <String, Object?>{'method': 'scroll'},
+      'onPointerDown': <String, Object?>{'method': 'down'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    final region = tester.widget<MouseRegion>(find.byType(MouseRegion).last);
+    expect(region.cursor, SystemMouseCursors.click);
+    region.onEnter!(
+      const PointerEnterEvent(
+        kind: PointerDeviceKind.mouse,
+        position: Offset(12, 18),
+      ),
+    );
+    final listener = tester.widget<Listener>(find.byType(Listener).last);
+    listener.onPointerDown!(
+      const PointerDownEvent(
+        kind: PointerDeviceKind.mouse,
+        position: Offset(12, 18),
+        buttons: kPrimaryMouseButton,
+      ),
+    );
+    const scrollEvent = PointerScrollEvent(
+      kind: PointerDeviceKind.mouse,
+      position: Offset(12, 18),
+      scrollDelta: Offset(0, 20),
+    );
+    listener.onPointerSignal!(scrollEvent);
+    GestureBinding.instance.pointerSignalResolver.resolve(scrollEvent);
+    await tester.pump();
+
+    expect(events.map((event) => event['method']), <Object?>[
+      'enter',
+      'down',
+      'scroll',
+    ]);
+    expect(events.first, containsPair('kind', 'mouse'));
+    expect(events.first, containsPair('globalX', 12.0));
+    expect(events.last, containsPair('scrollDeltaY', 20.0));
+  });
+
+  testWidgets('onMouseScroll consumes wheel input before an outer scrollable', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'ListView',
+      'children': <Object?>[
+        <String, Object?>{
+          'type': 'Container',
+          'height': 120,
+          'onMouseScroll': <String, Object?>{'method': 'wheel'},
+          'child': <String, Object?>{'type': 'Text', 'data': 'Wheel consumer'},
+        },
+        <String, Object?>{'type': 'SizedBox', 'height': 1200},
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickjsUiRenderer(onEvent: events.add).build(node),
+        ),
+      ),
+    );
+
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    final position = tester.getCenter(find.text('Wheel consumer'));
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        position: position,
+        scrollDelta: const Offset(0, 100),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(events.single['method'], 'wheel');
+    expect(scrollable.position.pixels, 0);
   });
 
   testWidgets('renders drag and swipe gesture events', (tester) async {

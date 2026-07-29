@@ -452,6 +452,11 @@ export type NodeEffectProps = {
     rotate?: CanvasNumber;
     alignment?: Alignment;
   };
+  translate?: { x?: CanvasNumber; y?: CanvasNumber };
+  scale?: CanvasNumber | { x?: CanvasNumber; y?: CanvasNumber };
+  rotate?: CanvasNumber;
+  rotation?: CanvasNumber;
+  transformAlignment?: Alignment;
   clipRadius?: CanvasNumber;
   clipBehavior?: 'none' | 'hardEdge' | 'antiAlias' | 'antiAliasWithSaveLayer';
   blur?: CanvasNumber | {
@@ -474,6 +479,8 @@ export type NodeEffectProps = {
   onAnimationEnd?: QuickjsUiEvent;
 };
 
+export type MouseCursor = 'defer' | 'default' | 'basic' | 'click' | 'pointer' | 'text' | 'move' | 'grab' | 'grabbing' | 'forbidden' | 'notAllowed' | 'wait' | 'progress' | 'resizeLeftRight' | 'resizeUpDown' | 'resizeUpLeftDownRight' | 'resizeUpRightDownLeft' | 'resizeColumn' | 'resizeRow';
+
 export type AccessibilityProps = NodeEffectProps & {
   semanticLabel?: string;
   semanticsLabel?: string;
@@ -481,6 +488,15 @@ export type AccessibilityProps = NodeEffectProps & {
   tooltip?: string;
   role?: AccessibilityRole;
   enabled?: boolean;
+  hitTestBehavior?: 'deferToChild' | 'opaque' | 'translucent';
+  ignorePointer?: boolean;
+  absorbPointer?: boolean;
+  autofocus?: boolean;
+  canRequestFocus?: boolean;
+  onFocus?: QuickjsUiEvent;
+  onBlur?: QuickjsUiEvent;
+  onKeyDown?: QuickjsUiEvent;
+  onKeyUp?: QuickjsUiEvent;
   focusOrder?: number;
   onTap?: QuickjsUiEvent;
   onLongPress?: QuickjsUiEvent;
@@ -489,6 +505,16 @@ export type AccessibilityProps = NodeEffectProps & {
   onDragUpdate?: QuickjsUiEvent;
   onDragEnd?: QuickjsUiEvent;
   onSwipe?: QuickjsUiEvent;
+  onMouseEnter?: QuickjsUiEvent;
+  onMouseExit?: QuickjsUiEvent;
+  onMouseHover?: QuickjsUiEvent;
+  onMouseScroll?: QuickjsUiEvent;
+  onPointerDown?: QuickjsUiEvent;
+  onPointerMove?: QuickjsUiEvent;
+  onPointerUp?: QuickjsUiEvent;
+  onPointerCancel?: QuickjsUiEvent;
+  mouseCursor?: MouseCursor;
+  cursor?: MouseCursor;
 };
 
 export type ScrollableProps = {
@@ -500,12 +526,17 @@ export type ScrollableProps = {
   scrollDurationMs?: number;
   scrollCurve?: Curve;
   onScroll?: QuickjsUiEvent;
+  physics?: 'platform' | 'always' | 'alwaysScrollable' | 'bouncing' | 'clamping' | 'never' | 'neverScrollable';
+  scrollbar?: boolean;
 };
 
 export type TextProps = AccessibilityProps & {
   data?: string;
   text?: string;
   textAlign?: TextAlign;
+  maxLines?: number;
+  softWrap?: boolean;
+  overflow?: 'clip' | 'fade' | 'ellipsis' | 'visible';
   style?: TextStyle | ThemeTextStyleToken;
 };
 
@@ -644,15 +675,22 @@ export type ContainerProps = AccessibilityProps & {
   child?: QuickjsUiNode;
   width?: number;
   height?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
   padding?: EdgeInsets;
   margin?: EdgeInsets;
   alignment?: Alignment;
   color?: ColorValue;
   backgroundColor?: ColorValue;
+  decoration?: BoxDecorationValue;
   borderRadius?: BorderRadius;
   borderColor?: ColorValue;
   borderWidth?: number;
   elevation?: ElevationValue;
+  shape?: 'rectangle' | 'circle';
+  backgroundBlendMode?: CanvasBlendMode;
 };
 
 export type ImageProps = AccessibilityProps & {
@@ -664,6 +702,10 @@ export type ImageProps = AccessibilityProps & {
   width?: number;
   height?: number;
   fit?: BoxFit;
+  alignment?: Alignment;
+  repeat?: 'noRepeat' | 'repeat' | 'repeatX' | 'repeatY';
+  color?: ColorValue;
+  blendMode?: 'srcIn' | 'srcOver' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten';
   cacheWidth?: number;
   cacheHeight?: number;
   filterQuality?: FilterQuality;
@@ -685,6 +727,53 @@ export type SvgProps = AccessibilityProps & {
   fit?: BoxFit;
   color?: ColorValue;
   excludeFromSemantics?: boolean;
+};
+
+export type GradientValue = {
+  type?: 'linear' | 'radial';
+  colors: ColorValue[];
+  stops?: number[];
+  begin?: Alignment;
+  end?: Alignment;
+  center?: Alignment;
+  radius?: number;
+  tileMode?: 'clamp' | 'repeat' | 'mirror' | 'decal';
+};
+
+export type BoxShadowValue = {
+  color?: ColorValue;
+  offset?: { x?: number; y?: number };
+  offsetX?: number;
+  offsetY?: number;
+  blurRadius?: number;
+  blur?: number;
+  spreadRadius?: number;
+  spread?: number;
+};
+
+export type BoxDecorationValue = {
+  color?: ColorValue;
+  gradient?: GradientValue;
+  borderRadius?: BorderRadius;
+  border?: {
+    color?: ColorValue;
+    width?: number;
+    left?: BorderSideValue;
+    top?: BorderSideValue;
+    right?: BorderSideValue;
+    bottom?: BorderSideValue;
+  };
+  shape?: 'rectangle' | 'circle';
+  backgroundBlendMode?: CanvasBlendMode;
+  boxShadow?: BoxShadowValue | BoxShadowValue[];
+  boxShadows?: BoxShadowValue[];
+  shadows?: BoxShadowValue[];
+};
+
+export type BorderSideValue = {
+  color?: ColorValue;
+  width?: number;
+  style?: 'solid' | 'none';
 };
 
 export type CanvasPathSegment =
@@ -1000,6 +1089,7 @@ export type StackProps = AccessibilityProps & {
   children?: QuickjsUiNode[];
   alignment?: Alignment;
   fit?: StackFit;
+  clipBehavior?: ClipBehavior;
 };
 
 export type PaddingProps = AccessibilityProps & {
@@ -1151,7 +1241,7 @@ export type DecoratedBoxProps = AccessibilityProps & {
   position?: 'background' | 'foreground';
   color?: ColorValue;
   backgroundColor?: ColorValue;
-  decoration?: JsonValue;
+  decoration?: BoxDecorationValue;
   borderRadius?: BorderRadius;
   borderColor?: ColorValue;
   borderWidth?: number;
@@ -1260,6 +1350,23 @@ export type OverlayProps = AccessibilityProps & {
   curve?: Curve;
   onDismissed?: QuickjsUiEvent;
   onClosing?: QuickjsUiEvent;
+};
+
+export type AnchoredOverlayProps = AccessibilityProps & {
+  visible?: boolean;
+  anchor: QuickjsUiNode;
+  overlay: QuickjsUiNode;
+  content?: QuickjsUiNode;
+  placement?: 'auto' | 'topStart' | 'top' | 'topCenter' | 'topEnd' | 'bottomStart' | 'bottom' | 'bottomCenter' | 'bottomEnd' | 'left' | 'centerLeft' | 'right' | 'centerRight' | 'center';
+  offset?: { x?: number; y?: number };
+  gap?: number;
+  screenPadding?: EdgeInsetsValue;
+  consumeOutsideTap?: boolean;
+  dismissOnTapOutside?: boolean;
+  useRootOverlay?: boolean;
+  animated?: boolean;
+  matchAnchorWidth?: boolean;
+  onDismissed?: QuickjsUiEvent;
 };
 
 export type AlertDialogProps = AccessibilityProps & {
@@ -1404,6 +1511,7 @@ export declare function LinearProgressIndicator(
 ): QuickjsUiNode;
 export declare function SnackBar(props: SnackBarProps): QuickjsUiNode;
 export declare function Overlay(props: OverlayProps): QuickjsUiNode;
+export declare function AnchoredOverlay(props: AnchoredOverlayProps): QuickjsUiNode;
 export declare function AlertDialog(props: AlertDialogProps): QuickjsUiNode;
 export declare function BottomSheet(props: BottomSheetProps): QuickjsUiNode;
 export declare function AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
@@ -1481,6 +1589,7 @@ export declare const ui: {
   LinearProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
   SnackBar(props: SnackBarProps): QuickjsUiNode;
   Overlay(props: OverlayProps): QuickjsUiNode;
+  AnchoredOverlay(props: AnchoredOverlayProps): QuickjsUiNode;
   AlertDialog(props: AlertDialogProps): QuickjsUiNode;
   BottomSheet(props: BottomSheetProps): QuickjsUiNode;
   AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
