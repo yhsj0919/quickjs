@@ -49,12 +49,16 @@ Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
     animateItems: animateItems,
     itemDuration: quickjsUiItemTransitionDuration(node),
     itemCurve: quickjsUiItemTransitionCurve(node),
+    physics: _scrollPhysics(node.props['physics']),
   );
   final withGestures = withQuickjsUiGestures(context, node, listView);
-  return quickjsUiWrapScrollNotifications(
-    context: context,
-    node: node,
-    child: withGestures,
+  return _withScrollConfiguration(
+    node,
+    quickjsUiWrapScrollNotifications(
+      context: context,
+      node: node,
+      child: withGestures,
+    ),
   );
 }
 
@@ -115,12 +119,16 @@ Widget _buildListViewBuilder(
               defaultCoalesceKey: quickjsUiEventKey(node, 'onLoadMore'),
             );
           },
+    physics: _scrollPhysics(node.props['physics']),
   );
   final withGestures = withQuickjsUiGestures(context, node, listView);
-  return quickjsUiWrapScrollNotifications(
-    context: context,
-    node: node,
-    child: withGestures,
+  return _withScrollConfiguration(
+    node,
+    quickjsUiWrapScrollNotifications(
+      context: context,
+      node: node,
+      child: withGestures,
+    ),
   );
 }
 
@@ -131,13 +139,17 @@ Widget _buildSingleChildScrollView(
   final scrollView = QuickjsUiScrollableColumn(
     padding: context.edgeInsets(node.props['padding']),
     scroll: QuickjsUiScrollCommand.fromNode(node),
+    physics: _scrollPhysics(node.props['physics']),
     children: _childrenWithGap(context, node, Axis.vertical),
   );
   final withGestures = withQuickjsUiGestures(context, node, scrollView);
-  return quickjsUiWrapScrollNotifications(
-    context: context,
-    node: node,
-    child: withGestures,
+  return _withScrollConfiguration(
+    node,
+    quickjsUiWrapScrollNotifications(
+      context: context,
+      node: node,
+      child: withGestures,
+    ),
   );
 }
 
@@ -162,21 +174,28 @@ Widget _buildGridView(QuickjsUiRenderContext context, QuickjsUiNode node) {
         0,
     padding: context.edgeInsets(node.props['padding']),
     shrinkWrap: QuickjsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
+    physics: _scrollPhysics(node.props['physics']),
     children: context.children(node),
   );
   final withGestures = withQuickjsUiGestures(context, node, gridView);
-  return quickjsUiWrapScrollNotifications(
-    context: context,
-    node: node,
-    child: withGestures,
+  return _withScrollConfiguration(
+    node,
+    quickjsUiWrapScrollNotifications(
+      context: context,
+      node: node,
+      child: withGestures,
+    ),
   );
 }
 
 Widget _buildPageView(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final onPageChanged = QuickjsUiProps.event(node.props['onPageChanged']);
   final pageView = PageView(
-    scrollDirection: QuickjsUiProps.axis(node.props['scrollDirection']),
+    scrollDirection: node.props['scrollDirection'] == null
+        ? Axis.horizontal
+        : QuickjsUiProps.axis(node.props['scrollDirection']),
     pageSnapping: QuickjsUiProps.boolValue(node.props['pageSnapping']) ?? true,
+    physics: _scrollPhysics(node.props['physics']),
     onPageChanged: onPageChanged == null
         ? null
         : (index) => context.dispatchEvent(
@@ -188,11 +207,49 @@ Widget _buildPageView(QuickjsUiRenderContext context, QuickjsUiNode node) {
     children: context.children(node),
   );
   final withGestures = withQuickjsUiGestures(context, node, pageView);
-  return quickjsUiWrapScrollNotifications(
-    context: context,
-    node: node,
-    child: withGestures,
+  return _withScrollConfiguration(
+    node,
+    quickjsUiWrapScrollNotifications(
+      context: context,
+      node: node,
+      child: withGestures,
+    ),
   );
+}
+
+ScrollPhysics? _scrollPhysics(Object? value) => switch (value) {
+  null || 'platform' => null,
+  'always' || 'alwaysScrollable' => const AlwaysScrollableScrollPhysics(),
+  'bouncing' => const BouncingScrollPhysics(),
+  'clamping' => const ClampingScrollPhysics(),
+  'never' || 'neverScrollable' => const NeverScrollableScrollPhysics(),
+  _ => throw const FormatException('Unknown quickjs_ui scroll physics'),
+};
+
+Widget _withScrollConfiguration(QuickjsUiNode node, Widget child) {
+  final scrollbars = QuickjsUiProps.boolValue(node.props['scrollbar']);
+  if (scrollbars == null) return child;
+  return _QuickjsUiScrollConfiguration(scrollbars: scrollbars, child: child);
+}
+
+final class _QuickjsUiScrollConfiguration extends StatelessWidget {
+  const _QuickjsUiScrollConfiguration({
+    required this.scrollbars,
+    required this.child,
+  });
+
+  final bool scrollbars;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(
+        context,
+      ).copyWith(scrollbars: scrollbars),
+      child: child,
+    );
+  }
 }
 
 Widget _buildRefreshIndicator(

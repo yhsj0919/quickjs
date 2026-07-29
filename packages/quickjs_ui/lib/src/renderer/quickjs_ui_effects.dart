@@ -16,9 +16,27 @@ Widget withQuickjsUiEffects(
   Widget child,
 ) {
   final props = node.props;
+  final transform =
+      props['transform'] ??
+      (props.containsKey('translate') ||
+              props.containsKey('scale') ||
+              props.containsKey('rotate') ||
+              props.containsKey('rotation') ||
+              props.containsKey('transformAlignment')
+          ? <String, Object?>{
+              if (props.containsKey('translate'))
+                'translate': props['translate'],
+              if (props.containsKey('scale')) 'scale': props['scale'],
+              if (props.containsKey('rotate')) 'rotate': props['rotate'],
+              if (props.containsKey('rotation')) 'rotation': props['rotation'],
+              if (props.containsKey('transformAlignment'))
+                'alignment': props['transformAlignment'],
+            }
+          : null);
   final hasEffects =
       props.containsKey('opacity') ||
       props.containsKey('transform') ||
+      transform != null ||
       props.containsKey('clipRadius') ||
       props.containsKey('blur') ||
       props.containsKey('backdropBlur') ||
@@ -33,7 +51,7 @@ Widget withQuickjsUiEffects(
   final onAnimationEnd = QuickjsUiProps.event(props['onAnimationEnd']);
   return _QuickjsUiEffects(
     opacity: props['opacity'],
-    transform: props['transform'],
+    transform: transform,
     clipRadius: props['clipRadius'],
     blur: props['blur'],
     backdropBlur: props['backdropBlur'],

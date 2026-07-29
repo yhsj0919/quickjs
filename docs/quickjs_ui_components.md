@@ -76,6 +76,32 @@ Container({
 })
 ```
 
+`Container` and `DecoratedBox` decorations also support linear/radial
+gradients and one or more box shadows:
+
+```js
+Container({
+  decoration: {
+    gradient: {
+      colors: ['#177fd1', '#55b8ec', '#bdebfb'],
+      stops: [0, 0.58, 1],
+      begin: 'topCenter',
+      end: 'bottomCenter'
+    },
+    boxShadow: {
+      color: '#55000000',
+      offset: { x: 0, y: 8 },
+      blurRadius: 18,
+      spreadRadius: 1
+    }
+  }
+})
+```
+
+`Image.alignment` controls image placement inside its bounds. `Stack` accepts
+`clipBehavior` and clips with `hardEdge` by default; `Wrap` defaults to the
+horizontal direction, matching Flutter.
+
 High-frequency events can opt into renderer-side coalescing before crossing the
 QuickJS boundary:
 
@@ -171,3 +197,40 @@ the native video player example.
 
 Use the same registry with `QuickjsUiView` or `QuickjsUiNavigator` so nested
 JSUI routes render custom component types consistently.
+All rendered nodes can also use `onMouseEnter`, `onMouseExit`, `onMouseHover`,
+`onMouseScroll`, `onPointerDown`, `onPointerMove`, `onPointerUp`, and
+`onPointerCancel`.
+Pointer payloads include local/global coordinates, deltas, buttons, pressure,
+device `kind`, and a timestamp. Scroll events also include `scrollDeltaX` and
+`scrollDeltaY`. High-frequency hover and move events are
+coalesced per frame. Use `mouseCursor` (or `cursor`) for common system cursors
+such as `click`, `text`, `move`, `grab`, and resize cursors.
+
+Input behavior is shared by every rendered node. `hitTestBehavior` accepts
+`deferToChild`, `opaque`, or `translucent`; `ignorePointer` lets events pass
+through a subtree, while `absorbPointer` consumes them. Keyboard-capable nodes
+can use `autofocus`, `canRequestFocus`, `onFocus`, `onBlur`, `onKeyDown`, and
+`onKeyUp`. Key and pointer payloads include Ctrl/Shift/Alt/Meta modifier state.
+
+Layout and visual fundamentals include Container min/max constraints,
+independent `translate`, `scale`, `rotate`, and `transformAlignment` shortcuts,
+per-side borders, circle decorations, and background blend modes. Text supports
+`maxLines`, `softWrap`, and `overflow`. Images support `repeat`, tint `color`,
+and `blendMode`. Scrollable components support `physics` and an optional
+`scrollbar`. Stack paint and hit-test order follows child array order; later
+children are above earlier children.
+
+Use `AnchoredOverlay` for popovers, dropdown panels, context menus, teaching
+bubbles, and similar system-layer content. Its `anchor` remains in normal
+layout while `overlay` renders in Flutter's Overlay and follows the anchor.
+`placement` supports automatic, top/bottom start/center/end, left/right, and
+center positions. `gap` sets the base anchor distance. Positive main-axis
+`offset` values move the overlay farther in its placement direction (up for
+top, down for bottom, left for left, and right for right); the cross-axis keeps
+screen-coordinate direction. `screenPadding` reserves edge space and the
+native positioner flips or shifts content when needed.
+`consumeOutsideTap`, `useRootOverlay`, `animated`, `matchAnchorWidth`, and
+`onDismissed` control common popover behavior.
+Set `dismissOnTapOutside: false` for overlays that must remain open while the
+user drags or scrolls outside the anchor; the default remains `true` for menus
+and dropdown panels.

@@ -122,6 +122,7 @@ final class QuickjsUiScrollableList extends StatefulWidget {
     required this.animateItems,
     required this.itemDuration,
     required this.itemCurve,
+    required this.physics,
   });
 
   final Axis axis;
@@ -139,6 +140,7 @@ final class QuickjsUiScrollableList extends StatefulWidget {
   final bool animateItems;
   final Duration itemDuration;
   final Curve itemCurve;
+  final ScrollPhysics? physics;
 
   @override
   State<QuickjsUiScrollableList> createState() =>
@@ -168,6 +170,7 @@ final class QuickjsUiBuilderList extends StatefulWidget {
     required this.batchChildren,
     required this.requestRange,
     required this.loadMore,
+    required this.physics,
   });
 
   final String listKey;
@@ -190,6 +193,7 @@ final class QuickjsUiBuilderList extends StatefulWidget {
   final List<Widget> batchChildren;
   final void Function(int start, int end) requestRange;
   final VoidCallback? loadMore;
+  final ScrollPhysics? physics;
 
   @override
   State<QuickjsUiBuilderList> createState() => _QuickjsUiBuilderListState();
@@ -310,6 +314,7 @@ final class _QuickjsUiBuilderListState extends State<QuickjsUiBuilderList> {
       scrollDirection: widget.axis,
       shrinkWrap: widget.shrinkWrap,
       padding: widget.padding,
+      physics: widget.physics,
       itemExtent: widget.itemExtent,
       scrollCacheExtent: widget.cacheExtent == null
           ? null
@@ -480,6 +485,7 @@ final class _QuickjsUiScrollableListState
               child: children[index],
             ),
         ],
+        physics: widget.physics,
       );
     }
 
@@ -492,6 +498,7 @@ final class _QuickjsUiScrollableListState
         scrollDirection: widget.axis,
         shrinkWrap: widget.shrinkWrap,
         padding: widget.padding,
+        physics: widget.physics,
         scrollCacheExtent: widget.cacheExtent == null
             ? null
             : ScrollCacheExtent.pixels(widget.cacheExtent!),
@@ -510,6 +517,7 @@ final class _QuickjsUiScrollableListState
       scrollDirection: widget.axis,
       shrinkWrap: widget.shrinkWrap,
       padding: widget.padding,
+      physics: widget.physics,
       itemExtent: widget.itemExtent,
       scrollCacheExtent: widget.cacheExtent == null
           ? null
@@ -528,11 +536,13 @@ final class QuickjsUiScrollableColumn extends StatefulWidget {
     required this.padding,
     required this.children,
     required this.scroll,
+    required this.physics,
   });
 
   final EdgeInsetsGeometry? padding;
   final List<Widget> children;
   final QuickjsUiScrollCommand scroll;
+  final ScrollPhysics? physics;
 
   @override
   State<QuickjsUiScrollableColumn> createState() =>
@@ -597,6 +607,7 @@ final class _QuickjsUiScrollableColumnState
     return SingleChildScrollView(
       controller: _controller,
       padding: widget.padding,
+      physics: widget.physics,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: widget.children,
@@ -622,6 +633,7 @@ final class QuickjsUiAnimatedListView extends StatefulWidget {
     required this.duration,
     required this.curve,
     required this.items,
+    required this.physics,
   });
 
   final ScrollController controller;
@@ -631,6 +643,7 @@ final class QuickjsUiAnimatedListView extends StatefulWidget {
   final Duration duration;
   final Curve curve;
   final List<QuickjsUiAnimatedListItem> items;
+  final ScrollPhysics? physics;
 
   @override
   State<QuickjsUiAnimatedListView> createState() =>
@@ -716,6 +729,7 @@ final class _QuickjsUiAnimatedListViewState
       scrollDirection: widget.axis,
       shrinkWrap: widget.shrinkWrap,
       padding: widget.padding,
+      physics: widget.physics,
       initialItemCount: _items.length,
       itemBuilder: (context, index, animation) {
         if (index >= _items.length) {

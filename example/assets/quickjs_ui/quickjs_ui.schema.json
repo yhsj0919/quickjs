@@ -99,6 +99,7 @@
         { "$ref": "#/$defs/circularProgressIndicator" },
         { "$ref": "#/$defs/linearProgressIndicator" },
         { "$ref": "#/$defs/overlay" },
+        { "$ref": "#/$defs/anchoredOverlay" },
         { "$ref": "#/$defs/snackBar" },
         { "$ref": "#/$defs/alertDialog" },
         { "$ref": "#/$defs/bottomSheet" },
@@ -126,9 +127,23 @@
           "enum": ["button", "image", "textField", "header"]
         },
         "enabled": { "type": "boolean" },
+        "hitTestBehavior": { "enum": ["deferToChild", "opaque", "translucent"] },
+        "ignorePointer": { "type": "boolean" },
+        "absorbPointer": { "type": "boolean" },
+        "autofocus": { "type": "boolean" },
+        "canRequestFocus": { "type": "boolean" },
+        "onFocus": { "$ref": "#/$defs/event" },
+        "onBlur": { "$ref": "#/$defs/event" },
+        "onKeyDown": { "$ref": "#/$defs/event" },
+        "onKeyUp": { "$ref": "#/$defs/event" },
         "focusOrder": { "type": "number" },
         "opacity": { "$ref": "#/$defs/animatedNumber" },
         "transform": { "$ref": "#/$defs/nodeTransform" },
+        "translate": { "$ref": "#/$defs/translate" },
+        "scale": { "$ref": "#/$defs/scale" },
+        "rotate": { "$ref": "#/$defs/animatedNumber" },
+        "rotation": { "$ref": "#/$defs/animatedNumber" },
+        "transformAlignment": { "$ref": "#/$defs/alignment" },
         "clipRadius": { "$ref": "#/$defs/animatedNumber" },
         "clipBehavior": {
           "type": "string",
@@ -155,6 +170,16 @@
         "onDragUpdate": { "$ref": "#/$defs/event" },
         "onDragEnd": { "$ref": "#/$defs/event" },
         "onSwipe": { "$ref": "#/$defs/event" },
+        "onMouseEnter": { "$ref": "#/$defs/event" },
+        "onMouseExit": { "$ref": "#/$defs/event" },
+        "onMouseHover": { "$ref": "#/$defs/event" },
+        "onMouseScroll": { "$ref": "#/$defs/event" },
+        "onPointerDown": { "$ref": "#/$defs/event" },
+        "onPointerMove": { "$ref": "#/$defs/event" },
+        "onPointerUp": { "$ref": "#/$defs/event" },
+        "onPointerCancel": { "$ref": "#/$defs/event" },
+        "mouseCursor": { "$ref": "#/$defs/mouseCursor" },
+        "cursor": { "$ref": "#/$defs/mouseCursor" },
         "child": { "$ref": "#/$defs/node" },
         "children": {
           "type": "array",
@@ -164,6 +189,14 @@
       "not": {
         "required": ["child", "children"]
       }
+    },
+    "mouseCursor": {
+      "type": "string",
+      "enum": ["defer", "default", "basic", "click", "pointer", "text", "move", "grab", "grabbing", "forbidden", "notAllowed", "wait", "progress", "resizeLeftRight", "resizeUpDown", "resizeUpLeftDownRight", "resizeUpRightDownLeft", "resizeColumn", "resizeRow"]
+    },
+    "alignment": {
+      "type": "string",
+      "enum": ["topLeft", "topCenter", "topRight", "centerLeft", "center", "centerRight", "bottomLeft", "bottomCenter", "bottomRight"]
     },
     "animatedNumber": {
       "oneOf": [
@@ -280,6 +313,19 @@
         "rotate": { "$ref": "#/$defs/animatedNumber" },
         "alignment": { "type": "string" }
       }
+    },
+    "translate": {
+      "type": "object",
+      "properties": {
+        "x": { "$ref": "#/$defs/animatedNumber" },
+        "y": { "$ref": "#/$defs/animatedNumber" }
+      }
+    },
+    "scale": {
+      "oneOf": [
+        { "$ref": "#/$defs/animatedNumber" },
+        { "type": "object", "properties": { "x": { "$ref": "#/$defs/animatedNumber" }, "y": { "$ref": "#/$defs/animatedNumber" } } }
+      ]
     },
     "blurEffect": {
       "oneOf": [
@@ -402,15 +448,72 @@
       "additionalProperties": false,
       "properties": {
         "color": { "$ref": "#/$defs/color" },
+        "gradient": { "$ref": "#/$defs/gradient" },
+        "boxShadow": {
+          "oneOf": [
+            { "$ref": "#/$defs/boxShadow" },
+            { "type": "array", "items": { "$ref": "#/$defs/boxShadow" } }
+          ]
+        },
+        "boxShadows": { "type": "array", "items": { "$ref": "#/$defs/boxShadow" } },
+        "shadows": { "type": "array", "items": { "$ref": "#/$defs/boxShadow" } },
         "borderRadius": { "$ref": "#/$defs/borderRadius" },
         "border": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "color": { "$ref": "#/$defs/color" },
-            "width": { "$ref": "#/$defs/space" }
+            "width": { "$ref": "#/$defs/space" },
+            "left": { "$ref": "#/$defs/borderSide" },
+            "top": { "$ref": "#/$defs/borderSide" },
+            "right": { "$ref": "#/$defs/borderSide" },
+            "bottom": { "$ref": "#/$defs/borderSide" }
           }
-        }
+        },
+        "shape": { "enum": ["rectangle", "circle"] },
+        "backgroundBlendMode": { "type": "string" }
+      }
+    },
+    "borderSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/color" },
+        "width": { "$ref": "#/$defs/space" },
+        "style": { "enum": ["solid", "none"] }
+      }
+    },
+    "gradient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colors"],
+      "properties": {
+        "type": { "enum": ["linear", "radial"] },
+        "colors": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/color" } },
+        "stops": { "type": "array", "minItems": 2, "items": { "type": "number", "minimum": 0, "maximum": 1 } },
+        "begin": { "$ref": "#/$defs/alignment" },
+        "end": { "$ref": "#/$defs/alignment" },
+        "center": { "$ref": "#/$defs/alignment" },
+        "radius": { "type": "number", "exclusiveMinimum": 0 },
+        "tileMode": { "enum": ["clamp", "repeat", "mirror", "decal"] }
+      }
+    },
+    "boxShadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/color" },
+        "offset": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+        },
+        "offsetX": { "type": "number" },
+        "offsetY": { "type": "number" },
+        "blurRadius": { "type": "number", "minimum": 0 },
+        "blur": { "type": "number", "minimum": 0 },
+        "spreadRadius": { "type": "number" },
+        "spread": { "type": "number" }
       }
     },
     "resource": {
@@ -478,7 +581,9 @@
         "scrollToToken": { "type": "integer", "minimum": 0 },
         "scrollDurationMs": { "type": "integer", "minimum": 0 },
         "scrollCurve": { "$ref": "#/$defs/curve" },
-        "onScroll": { "$ref": "#/$defs/event" }
+        "onScroll": { "$ref": "#/$defs/event" },
+        "physics": { "enum": ["platform", "always", "alwaysScrollable", "bouncing", "clamping", "never", "neverScrollable"] },
+        "scrollbar": { "type": "boolean" }
       }
     },
     "singleChild": {
@@ -509,7 +614,10 @@
               "type": "string",
               "enum": ["left", "right", "center", "justify", "start", "end"]
             },
-            "style": { "$ref": "#/$defs/textStyle" }
+            "style": { "$ref": "#/$defs/textStyle" },
+            "maxLines": { "type": "integer", "minimum": 1 },
+            "softWrap": { "type": "boolean" },
+            "overflow": { "enum": ["clip", "fade", "ellipsis", "visible"] }
           }
         }
       ]
@@ -587,6 +695,10 @@
             "type": { "const": "Container" },
             "width": { "type": "number" },
             "height": { "type": "number" },
+            "minWidth": { "type": "number" },
+            "maxWidth": { "type": "number" },
+            "minHeight": { "type": "number" },
+            "maxHeight": { "type": "number" },
             "padding": { "$ref": "#/$defs/edgeInsets" },
             "margin": { "$ref": "#/$defs/edgeInsets" },
             "alignment": {
@@ -600,7 +712,9 @@
             "borderRadius": { "$ref": "#/$defs/borderRadius" },
             "borderColor": { "$ref": "#/$defs/color" },
             "borderWidth": { "$ref": "#/$defs/space" },
-            "elevation": { "$ref": "#/$defs/elevation" }
+            "elevation": { "$ref": "#/$defs/elevation" },
+            "shape": { "enum": ["rectangle", "circle"] },
+            "backgroundBlendMode": { "type": "string" }
           }
         }
       ]
@@ -636,6 +750,10 @@
               "type": "string",
               "enum": ["none", "low", "medium", "high"]
             },
+            "alignment": { "$ref": "#/$defs/alignment" },
+            "repeat": { "enum": ["noRepeat", "repeat", "repeatX", "repeatY"] },
+            "color": { "$ref": "#/$defs/color" },
+            "blendMode": { "enum": ["srcIn", "srcOver", "multiply", "screen", "overlay", "darken", "lighten"] },
             "gaplessPlayback": { "type": "boolean" },
             "excludeFromSemantics": { "type": "boolean" }
           }
@@ -879,7 +997,8 @@
               "type": "string",
               "enum": ["topLeft", "topCenter", "topRight", "centerLeft", "center", "centerRight", "bottomLeft", "bottomCenter", "bottomRight"]
             },
-            "fit": { "type": "string", "enum": ["loose", "expand", "passthrough"] }
+            "fit": { "type": "string", "enum": ["loose", "expand", "passthrough"] },
+            "clipBehavior": { "enum": ["none", "hardEdge", "antiAlias", "antiAliasWithSaveLayer"] }
           }
         }
       ]
@@ -974,6 +1093,32 @@
     "circularProgressIndicator": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "CircularProgressIndicator" } } }] },
     "linearProgressIndicator": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "LinearProgressIndicator" } } }] },
     "overlay": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "$ref": "#/$defs/singleChild" }, { "type": "object", "properties": { "type": { "const": "Overlay" }, "visible": { "type": "boolean" }, "alignment": { "enum": ["topLeft", "topCenter", "topRight", "centerLeft", "center", "centerRight", "bottomLeft", "bottomCenter", "bottomRight"] }, "padding": { "$ref": "#/$defs/edgeInsets" }, "barrierDismissible": { "type": "boolean" }, "barrierColor": { "$ref": "#/$defs/color" }, "transition": { "enum": ["fade", "scale", "fadeScale", "slideDown", "slideUp", "none"] }, "durationMs": { "type": "number", "minimum": 0 }, "curve": { "type": "string" }, "onDismissed": { "$ref": "#/$defs/event" }, "onClosing": { "$ref": "#/$defs/event" } } }] },
+    "anchoredOverlay": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        {
+          "type": "object",
+          "required": ["anchor", "overlay"],
+          "properties": {
+            "type": { "const": "AnchoredOverlay" },
+            "visible": { "type": "boolean" },
+            "anchor": { "$ref": "#/$defs/node" },
+            "overlay": { "$ref": "#/$defs/node" },
+            "content": { "$ref": "#/$defs/node" },
+            "placement": { "enum": ["auto", "topStart", "top", "topCenter", "topEnd", "bottomStart", "bottom", "bottomCenter", "bottomEnd", "left", "centerLeft", "right", "centerRight", "center"] },
+            "offset": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+            "gap": { "type": "number" },
+            "screenPadding": { "$ref": "#/$defs/edgeInsets" },
+            "consumeOutsideTap": { "type": "boolean" },
+            "dismissOnTapOutside": { "type": "boolean" },
+            "useRootOverlay": { "type": "boolean" },
+            "animated": { "type": "boolean" },
+            "matchAnchorWidth": { "type": "boolean" },
+            "onDismissed": { "$ref": "#/$defs/event" }
+          }
+        }
+      ]
+    },
     "snackBar": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "SnackBar" } } }] },
     "alertDialog": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "AlertDialog" } } }] },
     "bottomSheet": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "BottomSheet" } } }] },

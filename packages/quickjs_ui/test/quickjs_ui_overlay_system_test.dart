@@ -4,6 +4,190 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 
 void main() {
+  testWidgets('AnchoredOverlay shrink-wraps content height', (tester) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'Center',
+        'child': <String, Object?>{
+          'type': 'AnchoredOverlay',
+          'visible': true,
+          'placement': 'bottomStart',
+          'dismissOnTapOutside': false,
+          'anchor': <String, Object?>{
+            'type': 'SizedBox',
+            'width': 160,
+            'height': 40,
+            'child': <String, Object?>{'type': 'Text', 'data': 'Height anchor'},
+          },
+          'overlay': <String, Object?>{
+            'type': 'Container',
+            'padding': 12,
+            'child': <String, Object?>{
+              'type': 'Column',
+              'children': <Object?>[
+                <String, Object?>{'type': 'Text', 'data': 'Short title'},
+                <String, Object?>{'type': 'Text', 'data': 'Short detail'},
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => renderer.build(node, buildContext: context),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final material = find
+        .ancestor(of: find.text('Short title'), matching: find.byType(Material))
+        .first;
+    expect(tester.getSize(material).height, lessThan(120));
+  });
+
+  testWidgets('AnchoredOverlay remains attached while its anchor scrolls', (
+    tester,
+  ) async {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'ListView',
+        'children': <Object?>[
+          <String, Object?>{'type': 'SizedBox', 'height': 260},
+          <String, Object?>{
+            'type': 'AnchoredOverlay',
+            'visible': true,
+            'placement': 'bottomStart',
+            'gap': 6,
+            'dismissOnTapOutside': false,
+            'anchor': <String, Object?>{
+              'type': 'Container',
+              'height': 40,
+              'child': <String, Object?>{
+                'type': 'Text',
+                'data': 'Moving anchor',
+              },
+            },
+            'overlay': <String, Object?>{
+              'type': 'Container',
+              'height': 50,
+              'child': <String, Object?>{
+                'type': 'Text',
+                'data': 'Moving overlay',
+              },
+            },
+          },
+          <String, Object?>{'type': 'SizedBox', 'height': 600},
+        ],
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => renderer.build(node, buildContext: context),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before =
+        tester.getTopLeft(find.text('Moving overlay')).dy -
+        tester.getTopLeft(find.text('Moving anchor')).dy;
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -90));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Moving overlay'), findsOneWidget);
+    final after =
+        tester.getTopLeft(find.text('Moving overlay')).dy -
+        tester.getTopLeft(find.text('Moving anchor')).dy;
+    expect(after, closeTo(before, 0.5));
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(find.text('Moving overlay'), findsNothing);
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Moving overlay'), findsOneWidget);
+  });
+
+  testWidgets(
+    'AnchoredOverlay positions above its anchor and dismisses outside',
+    (tester) async {
+      final events = <Map<String, Object?>>[];
+      final renderer = QuickjsUiRenderer(onEvent: events.add);
+      addTearDown(renderer.dispose);
+      final node = QuickjsUiNode.fromMap(<String, Object?>{
+        'type': 'Scaffold',
+        'body': <String, Object?>{
+          'type': 'Center',
+          'child': <String, Object?>{
+            'type': 'AnchoredOverlay',
+            'visible': true,
+            'placement': 'topStart',
+            'gap': 8,
+            'offset': <String, Object?>{'x': 6, 'y': 8},
+            'matchAnchorWidth': true,
+            'consumeOutsideTap': true,
+            'onDismissed': <String, Object?>{'method': 'anchorDismissed'},
+            'anchor': <String, Object?>{
+              'type': 'Container',
+              'width': 140,
+              'height': 40,
+              'child': <String, Object?>{'type': 'Text', 'data': 'Anchor'},
+            },
+            'overlay': <String, Object?>{
+              'type': 'Container',
+              'height': 60,
+              'color': '#ffffff',
+              'child': <String, Object?>{'type': 'Text', 'data': 'Popover'},
+            },
+          },
+        },
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => renderer.build(node, buildContext: context),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Popover'), findsOneWidget);
+      expect(
+        tester.getBottomLeft(find.text('Popover')).dy,
+        lessThan(tester.getTopLeft(find.text('Anchor')).dy),
+      );
+      final popoverContainer = find
+          .ancestor(of: find.text('Popover'), matching: find.byType(Container))
+          .first;
+      final anchorContainer = find
+          .ancestor(of: find.text('Anchor'), matching: find.byType(Container))
+          .first;
+      expect(tester.getSize(popoverContainer).width, 140);
+      expect(
+        tester.getBottomLeft(popoverContainer).dy,
+        closeTo(tester.getTopLeft(anchorContainer).dy - 16, 0.5),
+      );
+
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
+      expect(events.last['method'], 'anchorDismissed');
+    },
+  );
+
   testWidgets('Overlay renders arbitrary aligned content and dismisses', (
     tester,
   ) async {

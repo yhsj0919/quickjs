@@ -9,24 +9,32 @@ Widget buildQuickjsUiFileImage(
   double? width,
   double? height,
   BoxFit? fit,
+  AlignmentGeometry alignment = Alignment.center,
   int? cacheWidth,
   int? cacheHeight,
   String? semanticLabel,
   bool excludeFromSemantics = false,
   bool gaplessPlayback = false,
   FilterQuality filterQuality = FilterQuality.medium,
+  ImageRepeat repeat = ImageRepeat.noRepeat,
+  Color? color,
+  BlendMode? colorBlendMode,
 }) {
   return Image.file(
     File(quickjsUiFilePath(location)),
     width: width,
     height: height,
     fit: fit,
+    alignment: alignment,
     cacheWidth: cacheWidth,
     cacheHeight: cacheHeight,
     semanticLabel: semanticLabel,
     excludeFromSemantics: excludeFromSemantics,
     gaplessPlayback: gaplessPlayback,
     filterQuality: filterQuality,
+    repeat: repeat,
+    color: color,
+    colorBlendMode: colorBlendMode,
   );
 }
 

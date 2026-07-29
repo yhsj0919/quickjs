@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_helpers.dart';
+import 'quickjs_ui_decoration.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 
@@ -60,7 +61,9 @@ Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final decoration = context.boxDecoration(node.props);
+  final resolvedDecoration = context.boxDecoration(node.props);
+  final decorations = splitQuickjsUiRoundedBorder(resolvedDecoration);
+  final decoration = decorations.background;
   final animationDuration = quickjsUiAnimationDuration(node);
   final curve = QuickjsUiProps.curve(node.props['animationCurve']);
   final width = QuickjsUiProps.doubleValue(node.props['width']);
@@ -69,6 +72,7 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final margin = context.edgeInsets(node.props['margin']);
   final alignment = QuickjsUiProps.alignment(node.props['alignment']);
   final elevation = context.elevation(node.props['elevation']);
+  final constraints = _boxConstraints(node.props);
   final color = decoration == null
       ? context.color(node.props['color'] ?? node.props['backgroundColor'])
       : null;
@@ -80,7 +84,9 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
           padding: padding,
           margin: margin,
           alignment: alignment,
+          constraints: constraints,
           decoration: decoration,
+          foregroundDecoration: decorations.foreground,
           color: color,
           child: nodeChild,
         )
@@ -92,7 +98,9 @@ Widget _buildContainer(QuickjsUiRenderContext context, QuickjsUiNode node) {
           padding: padding,
           margin: margin,
           alignment: alignment,
+          constraints: constraints,
           decoration: decoration,
+          foregroundDecoration: decorations.foreground,
           color: color,
           child: nodeChild,
         );
@@ -112,9 +120,35 @@ Widget _buildStack(QuickjsUiRenderContext context, QuickjsUiNode node) {
         QuickjsUiProps.alignment(node.props['alignment']) ??
         AlignmentDirectional.topStart,
     fit: QuickjsUiProps.stackFit(node.props['fit']),
+    clipBehavior: _stackClipBehavior(node.props['clipBehavior']),
     children: context.children(node),
   );
 }
+
+BoxConstraints? _boxConstraints(Map<String, Object?> props) {
+  final hasConstraints = <String>[
+    'minWidth',
+    'maxWidth',
+    'minHeight',
+    'maxHeight',
+  ].any(props.containsKey);
+  if (!hasConstraints) return null;
+  return BoxConstraints(
+    minWidth: QuickjsUiProps.doubleValue(props['minWidth']) ?? 0,
+    maxWidth: QuickjsUiProps.doubleValue(props['maxWidth']) ?? double.infinity,
+    minHeight: QuickjsUiProps.doubleValue(props['minHeight']) ?? 0,
+    maxHeight:
+        QuickjsUiProps.doubleValue(props['maxHeight']) ?? double.infinity,
+  );
+}
+
+Clip _stackClipBehavior(Object? value) => switch (value) {
+  null || 'hardEdge' => Clip.hardEdge,
+  'none' => Clip.none,
+  'antiAlias' => Clip.antiAlias,
+  'antiAliasWithSaveLayer' => Clip.antiAliasWithSaveLayer,
+  _ => throw const FormatException('Unknown quickjs_ui Stack clipBehavior'),
+};
 
 Widget _buildPositioned(QuickjsUiRenderContext context, QuickjsUiNode node) {
   return Positioned(
@@ -221,7 +255,9 @@ Widget _buildWrap(QuickjsUiRenderContext context, QuickjsUiNode node) {
     context,
     node,
     Wrap(
-      direction: QuickjsUiProps.axis(node.props['direction']),
+      direction: node.props['direction'] == null
+          ? Axis.horizontal
+          : QuickjsUiProps.axis(node.props['direction']),
       alignment: _wrapAlignment(node.props['alignment']),
       runAlignment: _wrapAlignment(node.props['runAlignment']),
       crossAxisAlignment: _wrapCrossAlignment(node.props['crossAxisAlignment']),

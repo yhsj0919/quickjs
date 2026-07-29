@@ -496,6 +496,10 @@ final class QuickjsUiProps {
         'borderRadius': props['borderRadius'],
       if (props.containsKey('borderColor')) 'borderColor': props['borderColor'],
       if (props.containsKey('borderWidth')) 'borderWidth': props['borderWidth'],
+      if (props.containsKey('border')) 'border': props['border'],
+      if (props.containsKey('shape')) 'shape': props['shape'],
+      if (props.containsKey('backgroundBlendMode'))
+        'backgroundBlendMode': props['backgroundBlendMode'],
     };
     final background = color(merged['color'], resolveColor: resolveColor);
     final radius = borderRadius(
@@ -507,14 +511,204 @@ final class QuickjsUiProps {
       resolveColor: resolveColor,
       resolveNumber: resolveBorderWidth,
     );
-    if (background == null && radius == null && border == null) {
+    final gradient = _gradient(
+      merged['gradient'],
+      resolveColor: resolveColor,
+      resolveNumber: resolveRadius,
+    );
+    final shadows = _boxShadows(
+      merged['boxShadow'] ?? merged['boxShadows'] ?? merged['shadows'],
+      resolveColor: resolveColor,
+      resolveNumber: resolveRadius,
+    );
+    final shape = switch (merged['shape']) {
+      null || 'rectangle' => BoxShape.rectangle,
+      'circle' => BoxShape.circle,
+      _ => throw const FormatException('Unknown quickjs_ui decoration shape'),
+    };
+    if (background == null &&
+        radius == null &&
+        border == null &&
+        gradient == null &&
+        shadows == null &&
+        merged['shape'] == null) {
       return null;
     }
+    if (shape == BoxShape.circle && radius != null) {
+      throw const FormatException(
+        'quickjs_ui circle decoration cannot use borderRadius',
+      );
+    }
     return BoxDecoration(
-      color: background,
+      color: gradient == null ? background : null,
+      gradient: gradient,
       borderRadius: radius,
       border: border,
+      boxShadow: shadows,
+      shape: shape,
+      backgroundBlendMode: _blendMode(merged['backgroundBlendMode']),
     );
+  }
+
+  static List<BoxShadow>? _boxShadows(
+    Object? value, {
+    QuickjsUiColorResolver? resolveColor,
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
+    if (value == null) return null;
+    final values = value is List ? value : <Object?>[value];
+    return values
+        .map((raw) {
+          final shadow = map(raw, name: 'Container boxShadow');
+          final rawOffset = shadow['offset'];
+          final offset = rawOffset == null
+              ? const <String, Object?>{}
+              : map(rawOffset, name: 'Container boxShadow offset');
+          final blurRadius =
+              number(
+                shadow['blurRadius'] ?? shadow['blur'],
+                name: 'boxShadow blurRadius',
+                resolveNumber: resolveNumber,
+              ) ??
+              0;
+          final spreadRadius =
+              number(
+                shadow['spreadRadius'] ?? shadow['spread'],
+                name: 'boxShadow spreadRadius',
+                resolveNumber: resolveNumber,
+              ) ??
+              0;
+          if (blurRadius < 0) {
+            throw const FormatException(
+              'quickjs_ui Container boxShadow blurRadius must not be negative',
+            );
+          }
+          return BoxShadow(
+            color:
+                color(shadow['color'], resolveColor: resolveColor) ??
+                const Color(0x55000000),
+            offset: Offset(
+              number(
+                    offset['x'] ?? shadow['offsetX'],
+                    name: 'boxShadow offset x',
+                    resolveNumber: resolveNumber,
+                  ) ??
+                  0,
+              number(
+                    offset['y'] ?? shadow['offsetY'],
+                    name: 'boxShadow offset y',
+                    resolveNumber: resolveNumber,
+                  ) ??
+                  0,
+            ),
+            blurRadius: blurRadius,
+            spreadRadius: spreadRadius,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  static Gradient? _gradient(
+    Object? value, {
+    QuickjsUiColorResolver? resolveColor,
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
+    if (value == null) return null;
+    final gradient = map(value, name: 'Container gradient');
+    final rawColors = gradient['colors'];
+    if (rawColors is! List || rawColors.length < 2) {
+      throw const FormatException(
+        'quickjs_ui Container gradient colors must contain at least two colors',
+      );
+    }
+    final colors = rawColors
+        .map((value) => color(value, resolveColor: resolveColor))
+        .toList(growable: false);
+    if (colors.any((value) => value == null)) {
+      throw const FormatException(
+        'quickjs_ui Container gradient colors must be valid colors',
+      );
+    }
+    final rawStops = gradient['stops'];
+    List<double>? stops;
+    if (rawStops != null) {
+      if (rawStops is! List || rawStops.length != colors.length) {
+        throw const FormatException(
+          'quickjs_ui Container gradient stops must match colors length',
+        );
+      }
+      final parsedStops = rawStops
+          .map(
+            (value) => number(
+              value,
+              name: 'gradient stop',
+              resolveNumber: resolveNumber,
+            ),
+          )
+          .toList(growable: false);
+      if (parsedStops.any((value) => value == null)) {
+        throw const FormatException(
+          'quickjs_ui Container gradient stops must be numbers',
+        );
+      }
+      stops = parsedStops.cast<double>();
+      for (var index = 0; index < stops.length; index += 1) {
+        final stop = stops[index];
+        if (stop < 0 || stop > 1 || (index > 0 && stop < stops[index - 1])) {
+          throw const FormatException(
+            'quickjs_ui Container gradient stops must be ordered from 0 to 1',
+          );
+        }
+      }
+    }
+    final resolvedColors = colors.cast<Color>();
+    return switch (gradient['type']) {
+      null || 'linear' => LinearGradient(
+        begin: alignment(gradient['begin']) ?? Alignment.topCenter,
+        end: alignment(gradient['end']) ?? Alignment.bottomCenter,
+        colors: resolvedColors,
+        stops: stops,
+        tileMode: _gradientTileMode(gradient['tileMode']),
+      ),
+      'radial' => RadialGradient(
+        center: alignment(gradient['center']) ?? Alignment.center,
+        radius: _positiveGradientRadius(
+          gradient['radius'],
+          resolveNumber: resolveNumber,
+        ),
+        colors: resolvedColors,
+        stops: stops,
+        tileMode: _gradientTileMode(gradient['tileMode']),
+      ),
+      _ => throw const FormatException(
+        'quickjs_ui Container gradient type must be linear or radial',
+      ),
+    };
+  }
+
+  static TileMode _gradientTileMode(Object? value) => switch (value) {
+    null || 'clamp' => TileMode.clamp,
+    'repeat' => TileMode.repeated,
+    'mirror' => TileMode.mirror,
+    'decal' => TileMode.decal,
+    _ => throw const FormatException(
+      'quickjs_ui Container gradient tileMode is invalid',
+    ),
+  };
+
+  static double _positiveGradientRadius(
+    Object? value, {
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
+    final radius =
+        number(value, name: 'gradient radius', resolveNumber: resolveNumber) ??
+        0.5;
+    if (radius <= 0) {
+      throw const FormatException(
+        'quickjs_ui Container radial gradient radius must be positive',
+      );
+    }
+    return radius;
   }
 
   static BoxBorder? _border(
@@ -525,6 +719,20 @@ final class QuickjsUiProps {
     final border = props['border'] == null
         ? const <String, Object?>{}
         : map(props['border'], name: 'Container border');
+    final hasSides = <String>[
+      'left',
+      'top',
+      'right',
+      'bottom',
+    ].any(border.containsKey);
+    if (hasSides) {
+      return Border(
+        left: _borderSide(border['left'], resolveColor, resolveNumber),
+        top: _borderSide(border['top'], resolveColor, resolveNumber),
+        right: _borderSide(border['right'], resolveColor, resolveNumber),
+        bottom: _borderSide(border['bottom'], resolveColor, resolveNumber),
+      );
+    }
     final colorValue = props['borderColor'] ?? border['color'];
     final widthValue = props['borderWidth'] ?? border['width'];
     if (colorValue == null && widthValue == null) {
@@ -541,4 +749,45 @@ final class QuickjsUiProps {
           1,
     );
   }
+
+  static BorderSide _borderSide(
+    Object? value,
+    QuickjsUiColorResolver? resolveColor,
+    QuickjsUiNumberResolver? resolveNumber,
+  ) {
+    if (value == null) return BorderSide.none;
+    final side = map(value, name: 'Container border side');
+    return BorderSide(
+      color: color(side['color'], resolveColor: resolveColor) ?? Colors.black,
+      width:
+          number(
+            side['width'],
+            name: 'border side width',
+            resolveNumber: resolveNumber,
+          ) ??
+          1,
+      style: side['style'] == 'none' ? BorderStyle.none : BorderStyle.solid,
+    );
+  }
+
+  static BlendMode? _blendMode(Object? value) => switch (value) {
+    null => null,
+    'srcOver' => BlendMode.srcOver,
+    'multiply' => BlendMode.multiply,
+    'screen' => BlendMode.screen,
+    'overlay' => BlendMode.overlay,
+    'darken' => BlendMode.darken,
+    'lighten' => BlendMode.lighten,
+    'colorDodge' => BlendMode.colorDodge,
+    'colorBurn' => BlendMode.colorBurn,
+    'hardLight' => BlendMode.hardLight,
+    'softLight' => BlendMode.softLight,
+    'difference' => BlendMode.difference,
+    'exclusion' => BlendMode.exclusion,
+    'hue' => BlendMode.hue,
+    'saturation' => BlendMode.saturation,
+    'color' => BlendMode.color,
+    'luminosity' => BlendMode.luminosity,
+    _ => throw const FormatException('Unknown quickjs_ui blend mode'),
+  };
 }

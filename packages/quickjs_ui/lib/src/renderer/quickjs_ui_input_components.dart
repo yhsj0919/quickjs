@@ -70,7 +70,10 @@ Widget _buildTextInput(
             ) ??
             false,
         requestFocus:
-            QuickjsUiProps.boolValue(node.props['requestFocus']) ?? false,
+            QuickjsUiProps.boolValue(
+              node.props['requestFocus'] ?? node.props['autofocus'],
+            ) ??
+            false,
         clearFocus: QuickjsUiProps.boolValue(node.props['clearFocus']) ?? false,
         obscureText:
             QuickjsUiProps.boolValue(node.props['obscureText']) ?? false,
