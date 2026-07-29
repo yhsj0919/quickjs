@@ -87,6 +87,72 @@ void main() {
     controller.dispose();
   });
 
+  test('performance session exports fixed-mode samples as JSON', () {
+    final controller = QuickjsUiPerformanceController(
+      mode: QuickjsUiPerformanceMode.high,
+      targetFrameBudget: const Duration(milliseconds: 8),
+    );
+    controller.updateDisplayRefreshRate(120);
+    controller.updateDisplayMetrics(
+      logicalSize: const Size(1080, 2400),
+      devicePixelRatio: 3,
+    );
+    controller.startSession(
+      warmUp: Duration.zero,
+      scene: const <String, Object?>{'primitiveCount': 10000},
+      metadata: const <String, Object?>{'revision': 'test'},
+    );
+    controller.addFrameSample(
+      build: const Duration(milliseconds: 4),
+      raster: const Duration(milliseconds: 7),
+    );
+    controller.addFrameSample(
+      build: const Duration(milliseconds: 9),
+      raster: const Duration(milliseconds: 17),
+    );
+
+    final report = controller.stopSession();
+    final json = report.toJson(pretty: false);
+    expect(report.frameCount, 2);
+    expect(report.slowFrameCount, 1);
+    expect(report.severeFrameCount, 1);
+    expect(report.buildP50Ms, anyOf(4, 9));
+    expect(report.buildMaxMs, 9);
+    expect(report.rasterMaxMs, 17);
+    expect(report.qualityDurationsMs, contains('high'));
+    expect(report.environment['refreshRate'], 120);
+    expect(report.environment['logicalWidth'], 1080);
+    expect(report.environment['devicePixelRatio'], 3);
+    expect(report.environment['revision'], 'test');
+    expect(report.scene['primitiveCount'], 10000);
+    expect(json, contains('"schemaVersion":1'));
+    expect(json, contains('"frameCount":2'));
+    controller.dispose();
+  });
+
+  test('performance session records automatic quality degradation', () {
+    final controller = QuickjsUiPerformanceController(
+      mode: QuickjsUiPerformanceMode.auto,
+      targetFrameBudget: const Duration(milliseconds: 8),
+      degradeAfterFrames: 1,
+      upgradeAfterFrames: 2,
+    );
+    controller.startSession(warmUp: Duration.zero);
+    controller.addFrameSample(
+      build: const Duration(milliseconds: 12),
+      raster: const Duration(milliseconds: 12),
+    );
+
+    final report = controller.stopSession();
+    expect(report.degradeCount, 1);
+    expect(report.qualityTimeline.map((event) => event.quality), <String>[
+      'high',
+      'balanced',
+    ]);
+    expect(report.qualityTimeline.last.reason, contains('exceeded'));
+    controller.dispose();
+  });
+
   testWidgets('low quality removes expensive widget effects locally', (
     tester,
   ) async {

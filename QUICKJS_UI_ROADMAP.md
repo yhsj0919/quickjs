@@ -690,6 +690,8 @@ JS 持有 `CustomPainter`、`Paint`、`Path` 或其他 Dart 对象。JS 侧提�
 - [x] Inspector 记录刷新率、帧预算、质量等级、降级原因、build/raster P50/P90/P99、
   command/Path 数量、Canvas painter CPU 耗时、重绘次数、scene/snapshot 资源、粒子实际数量、
   效果降级数量和被拒绝的命令原因；GPU 成本继续以 Flutter raster timing 为准。
+- [x] 性能实验室支持预热后采样、固定/自动质量档位、质量变化时间线和版本化 JSON 报告导出，
+  作为 Profile 自动运行与基准比较的统一数据格式。
 - [~] 已有时钟、仪表盘、粒子、快照和通用控件动画 Demo、交互测试及 widget benchmark；真机 profile/golden 基线待补。
 - [ ] 首版不做 WebGL、任意 shader、完整滤镜体系和高频 `getImageData()` 像素回传。
 

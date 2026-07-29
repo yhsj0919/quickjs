@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:quickjs_ui/quickjs_ui.dart';
 
 class QuickjsUiAdaptivePerformanceLabPage extends StatefulWidget {
@@ -18,6 +19,7 @@ class _QuickjsUiAdaptivePerformanceLabPageState
   late QuickjsUiPerformanceController _performance;
   QuickjsUiPerformanceMode _mode = QuickjsUiPerformanceMode.auto;
   Timer? _refreshTimer;
+  QuickjsUiPerformanceReport? _report;
 
   @override
   void initState() {
@@ -39,8 +41,32 @@ class _QuickjsUiAdaptivePerformanceLabPageState
     setState(() {
       _mode = mode;
       _performance = _createPerformance(mode);
+      _report = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+  }
+
+  void _toggleSession() {
+    if (_performance.isSessionActive) {
+      setState(() => _report = _performance.stopSession());
+      return;
+    }
+    _performance.startSession(
+      warmUp: const Duration(seconds: 2),
+      scene: const <String, Object?>{'demo': 'adaptive-performance-lab'},
+      metadata: const <String, Object?>{'app': 'quickjs-example'},
+    );
+    setState(() => _report = null);
+  }
+
+  Future<void> _copyReport() async {
+    final report = _report;
+    if (report == null) return;
+    await Clipboard.setData(ClipboardData(text: report.toJson()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('性能报告 JSON 已复制')));
   }
 
   @override
@@ -63,7 +89,17 @@ class _QuickjsUiAdaptivePerformanceLabPageState
       ),
       body: Column(
         children: <Widget>[
-          _QualitySelector(mode: _mode, onChanged: _setMode),
+          _QualitySelector(
+            mode: _mode,
+            enabled: !_performance.isSessionActive,
+            onChanged: _setMode,
+          ),
+          _SessionControls(
+            recording: _performance.isSessionActive,
+            hasReport: _report != null,
+            onToggle: _toggleSession,
+            onCopy: _copyReport,
+          ),
           Expanded(
             child: QuickjsUiView.asset(
               path: 'assets/quickjs_ui/adaptive_performance_lab_page.mjs',
@@ -77,17 +113,56 @@ class _QuickjsUiAdaptivePerformanceLabPageState
               ),
             ),
           ),
-          _MetricsPanel(metrics: metrics),
+          _MetricsPanel(metrics: metrics, report: _report),
         ],
       ),
     );
   }
 }
 
+class _SessionControls extends StatelessWidget {
+  const _SessionControls({
+    required this.recording,
+    required this.hasReport,
+    required this.onToggle,
+    required this.onCopy,
+  });
+
+  final bool recording;
+  final bool hasReport;
+  final VoidCallback onToggle;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    child: Row(
+      children: <Widget>[
+        FilledButton.icon(
+          onPressed: onToggle,
+          icon: Icon(recording ? Icons.stop : Icons.fiber_manual_record),
+          label: Text(recording ? '停止并生成报告' : '开始采样（预热 2 秒）'),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: hasReport ? onCopy : null,
+          icon: const Icon(Icons.copy),
+          label: const Text('复制 JSON'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _QualitySelector extends StatelessWidget {
-  const _QualitySelector({required this.mode, required this.onChanged});
+  const _QualitySelector({
+    required this.mode,
+    required this.enabled,
+    required this.onChanged,
+  });
 
   final QuickjsUiPerformanceMode mode;
+  final bool enabled;
   final ValueChanged<QuickjsUiPerformanceMode> onChanged;
 
   @override
@@ -102,7 +177,7 @@ class _QualitySelector extends StatelessWidget {
             child: ChoiceChip(
               label: Text(value.name),
               selected: value == mode,
-              onSelected: (_) => onChanged(value),
+              onSelected: enabled ? (_) => onChanged(value) : null,
             ),
           ),
       ],
@@ -111,9 +186,10 @@ class _QualitySelector extends StatelessWidget {
 }
 
 class _MetricsPanel extends StatelessWidget {
-  const _MetricsPanel({required this.metrics});
+  const _MetricsPanel({required this.metrics, required this.report});
 
   final Map<String, Object?> metrics;
+  final QuickjsUiPerformanceReport? report;
 
   @override
   Widget build(BuildContext context) => ExpansionTile(
@@ -134,7 +210,8 @@ class _MetricsPanel extends StatelessWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: SelectableText(
-            const JsonEncoder.withIndent('  ').convert(metrics),
+            report?.toJson() ??
+                const JsonEncoder.withIndent(' ').convert(metrics),
             style: const TextStyle(
               color: Color(0xFFCBD5E1),
               fontFamily: 'monospace',
