@@ -857,6 +857,21 @@ export declare class Canvas2DContext {
     dWidth: CanvasNumber,
     dHeight: CanvasNumber
   ): void;
+  drawSnapshotParticleGrid(options: {
+    sourceSlot: string;
+    targetSlot: string;
+    x?: number;
+    y?: number;
+    width: number;
+    height: number;
+    columns?: number;
+    rows?: number;
+    bucketCount?: number;
+    direction?: 'transition' | 'destroy' | 'create';
+    staggerMs?: number;
+    travelMs?: number;
+    fadeMs?: number;
+  }): void;
   drawImage(
     image: CanvasImageSource,
     sx: CanvasNumber,
@@ -915,6 +930,22 @@ export type CanvasCommand =
       dHeight?: CanvasNumber;
       filterQuality?: 'none' | 'low' | 'medium' | 'high';
     } & Pick<CanvasPaint, 'globalAlpha' | 'blendMode'>)
+  | {
+      op: 'snapshotParticleGrid';
+      sourceSlot: string;
+      targetSlot: string;
+      x?: number;
+      y?: number;
+      width: number;
+      height: number;
+      columns: number;
+      rows: number;
+      bucketCount: number;
+      direction?: 'transition' | 'destroy' | 'create';
+      staggerMs: number;
+      travelMs: number;
+      fadeMs: number;
+    }
   | {
       op: 'text';
       text: string;

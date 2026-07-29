@@ -1,6 +1,21 @@
 import 'package:flutter/services.dart';
 import 'package:quickjs/quickjs.dart';
 
+const List<String> quickjsUiPagePluginExports = <String>[
+  'mount',
+  'handleEvent',
+  'commit',
+  'setState',
+  'lifecycle',
+  'snapshot',
+  'capabilities',
+  'dispose',
+  'bootstrap',
+  'mutate',
+  'mutationChunk',
+  'poll',
+];
+
 /// Builds QuickJS plugins from `export default Page(...)` UI modules.
 final class QuickjsUiPagePlugin {
   const QuickjsUiPagePlugin._();
@@ -60,19 +75,7 @@ final class QuickjsUiPagePlugin {
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: const <String>[
-          'mount',
-          'handleEvent',
-          'commit',
-          'setState',
-          'lifecycle',
-          'snapshot',
-          'capabilities',
-          'dispose',
-          'bootstrap',
-          'mutate',
-          'poll',
-        ],
+        exports: quickjsUiPagePluginExports,
         permissions: permissions,
       ),
       modules: <QuickjsPluginModule>[
@@ -88,6 +91,66 @@ final class QuickjsUiPagePlugin {
   static String adapterSource(String pageSpecifier) {
     return '''
 import page from '$pageSpecifier';
+
+const mutationChunkSize = 64 * 1024;
+const mutationNodeLimit = 4096;
+const pendingMutations = new Map();
+let nextMutationId = 1;
+
+function transportMutation(result) {
+  const json = JSON.stringify(result);
+  if (
+    json.length <= mutationChunkSize &&
+    countMutationNodes(result, mutationNodeLimit) <= mutationNodeLimit
+  ) {
+    return result;
+  }
+  pendingMutations.clear();
+  const id = String(nextMutationId++);
+  pendingMutations.set(id, json);
+  return {
+    changed: result?.changed === true,
+    chunked: true,
+    transferId: id,
+    chunkCount: Math.ceil(json.length / mutationChunkSize)
+  };
+}
+
+function countMutationNodes(root, limit) {
+  const pending = [root];
+  const seen = new Set();
+  let count = 0;
+  while (pending.length > 0 && count <= limit) {
+    const value = pending.pop();
+    count += 1;
+    if (value == null || typeof value !== 'object') continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const child of value) pending.push(child);
+    } else {
+      for (const key of Object.keys(value)) pending.push(value[key]);
+    }
+  }
+  return count;
+}
+
+export function mutationChunk(id, index) {
+  const json = pendingMutations.get(id);
+  if (typeof json !== 'string') {
+    throw new Error('quickjs_ui mutation transfer is missing: ' + id);
+  }
+  if (!Number.isInteger(index) || index < 0) {
+    throw new TypeError('quickjs_ui mutation chunk index is invalid');
+  }
+  const chunkCount = Math.ceil(json.length / mutationChunkSize);
+  if (index >= chunkCount) {
+    throw new RangeError('quickjs_ui mutation chunk index is out of range');
+  }
+  const chunk = json.slice(index * mutationChunkSize, (index + 1) * mutationChunkSize);
+  if (index + 1 === chunkCount) pendingMutations.delete(id);
+  return chunk;
+}
 
 function requireRuntimeMethod(name) {
   if (typeof page?.[name] !== 'function') {
@@ -111,11 +174,11 @@ export async function bootstrap(props) {
   const runtimeCapabilities = page.capabilities();
   const snapshot = await page.mount(props);
   const committed = await page.commit();
-  return {
+  return transportMutation({
     capabilities: runtimeCapabilities,
     snapshot,
     commit: committed
-  };
+  });
 }
 
 // Runs one complete state mutation without returning to Dart between the
@@ -126,11 +189,11 @@ export async function mutate(operation, payload, render = true) {
     case 'finalize':
       requireRuntimeMethod('snapshot');
       requireRuntimeMethod('commit');
-      return {
+      return transportMutation({
         changed: true,
         snapshot: page.snapshot(),
         commit: page.commit()
-      };
+      });
     case 'dispatch': {
       requireRuntimeMethod('handleEvent');
       const events = Array.isArray(payload) ? payload : [payload];
@@ -170,11 +233,11 @@ export async function mutate(operation, payload, render = true) {
     requireRuntimeMethod('commit');
     committed = page.commit();
   }
-  return {
+  return transportMutation({
     changed: true,
     snapshot,
     commit: committed
-  };
+  });
 }
 
 // Polling compares the JS-owned state version before materializing data for
@@ -186,11 +249,11 @@ export function poll(lastVersion) {
     return { changed: false, version: lastVersion };
   }
   requireRuntimeMethod('commit');
-  return {
+  return transportMutation({
     changed: true,
     snapshot,
     commit: page.commit()
-  };
+  });
 }
 
 export function mount(props) {

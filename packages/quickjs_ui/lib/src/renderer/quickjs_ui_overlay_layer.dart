@@ -95,13 +95,6 @@ List<QuickjsUiOverlayIntent> collectQuickjsUiOverlayIntents(
   return intents;
 }
 
-bool isQuickjsUiOverlayNode(String type) {
-  return type == 'Overlay' ||
-      type == 'SnackBar' ||
-      type == 'AlertDialog' ||
-      type == 'BottomSheet';
-}
-
 QuickjsUiOverlayIntent? _customOverlayIntent(
   QuickjsUiRenderContext context,
   QuickjsUiNode node,
@@ -253,6 +246,7 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   final Set<String> _shownSnackBars = <String>{};
   final Map<_ModalKey, _ModalEntry> _modals = <_ModalKey, _ModalEntry>{};
   bool _syncScheduled = false;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -337,10 +331,16 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   void _openModal(_ModalKey key, QuickjsUiOverlayIntent intent) {
-    late final _ModalEntry entry;
-    entry = _ModalEntry(closeRoute: () => _closeModalRoute(intent));
+    final routeBinding = _createModalRoute(intent);
+    final entry = _ModalEntry(
+      navigator: routeBinding.navigator,
+      route: routeBinding.route,
+    );
     _modals[key] = entry;
-    _showModalRoute(intent).whenComplete(() {
+    routeBinding.navigator.push<void>(routeBinding.route).whenComplete(() {
+      if (_disposed) {
+        return;
+      }
       final current = _modals[key];
       final userInitiated = identical(current, entry);
       if (userInitiated) {
@@ -350,56 +350,79 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
     });
   }
 
-  Future<void> _showModalRoute(QuickjsUiOverlayIntent intent) {
+  ({NavigatorState navigator, Route<void> route}) _createModalRoute(
+    QuickjsUiOverlayIntent intent,
+  ) {
+    final context = widget.overlayContext;
     return switch (intent) {
-      QuickjsUiDialogOverlayIntent() => showDialog<void>(
-        context: widget.overlayContext,
-        barrierDismissible: intent.barrierDismissible,
-        builder: (_) => intent.dialog,
-      ),
-      QuickjsUiBottomSheetOverlayIntent() => showModalBottomSheet<void>(
-        context: widget.overlayContext,
-        backgroundColor: intent.backgroundColor,
-        builder: (_) => intent.child,
-      ),
-      QuickjsUiCustomOverlayIntent() => showGeneralDialog<void>(
-        context: widget.overlayContext,
-        barrierDismissible: intent.barrierDismissible,
-        barrierLabel: MaterialLocalizations.of(
-          widget.overlayContext,
-        ).modalBarrierDismissLabel,
-        barrierColor: intent.barrierColor,
-        transitionDuration: intent.duration,
-        pageBuilder: (context, _, _) => SafeArea(
-          child: Align(
-            alignment: intent.alignment,
-            child: Padding(
-              padding: intent.padding,
-              child: Material(
-                type: MaterialType.transparency,
-                child: intent.child,
-              ),
+      QuickjsUiDialogOverlayIntent() => () {
+        final navigator = Navigator.of(context, rootNavigator: true);
+        return (
+          navigator: navigator,
+          route: DialogRoute<void>(
+            context: context,
+            builder: (_) => intent.dialog,
+            barrierDismissible: intent.barrierDismissible,
+            themes: InheritedTheme.capture(
+              from: context,
+              to: navigator.context,
             ),
           ),
-        ),
-        transitionBuilder: (context, animation, _, child) =>
-            _buildCustomTransition(intent, animation, child),
-      ),
+        );
+      }(),
+      QuickjsUiBottomSheetOverlayIntent() => () {
+        final navigator = Navigator.of(context);
+        final localizations = MaterialLocalizations.of(context);
+        return (
+          navigator: navigator,
+          route: ModalBottomSheetRoute<void>(
+            builder: (_) => intent.child,
+            capturedThemes: InheritedTheme.capture(
+              from: context,
+              to: navigator.context,
+            ),
+            isScrollControlled: false,
+            barrierLabel: localizations.scrimLabel,
+            barrierOnTapHint: localizations.scrimOnTapHint(
+              localizations.bottomSheetLabel,
+            ),
+            backgroundColor: intent.backgroundColor,
+            modalBarrierColor: Theme.of(
+              context,
+            ).bottomSheetTheme.modalBarrierColor,
+          ),
+        );
+      }(),
+      QuickjsUiCustomOverlayIntent() => () {
+        final navigator = Navigator.of(context, rootNavigator: true);
+        return (
+          navigator: navigator,
+          route: RawDialogRoute<void>(
+            barrierDismissible: intent.barrierDismissible,
+            barrierLabel: MaterialLocalizations.of(
+              context,
+            ).modalBarrierDismissLabel,
+            barrierColor: intent.barrierColor,
+            transitionDuration: intent.duration,
+            pageBuilder: (context, _, _) => SafeArea(
+              child: Align(
+                alignment: intent.alignment,
+                child: Padding(
+                  padding: intent.padding,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: intent.child,
+                  ),
+                ),
+              ),
+            ),
+            transitionBuilder: (context, animation, _, child) =>
+                _buildCustomTransition(intent, animation, child),
+          ),
+        );
+      }(),
       _ => throw StateError('Unsupported modal intent ${intent.runtimeType}'),
     };
-  }
-
-  void _closeModalRoute(QuickjsUiOverlayIntent intent) {
-    switch (intent) {
-      case QuickjsUiDialogOverlayIntent():
-        Navigator.maybeOf(widget.overlayContext, rootNavigator: true)?.pop();
-      case QuickjsUiBottomSheetOverlayIntent():
-        Navigator.maybeOf(widget.overlayContext)?.pop();
-      case QuickjsUiCustomOverlayIntent():
-        Navigator.maybeOf(widget.overlayContext, rootNavigator: true)?.pop();
-      default:
-        throw StateError('Unsupported modal intent ${intent.runtimeType}');
-    }
   }
 
   void _notifyModalClosed(
@@ -438,6 +461,21 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   @override
+  void dispose() {
+    _disposed = true;
+    final entries = _modals.values.toList(growable: false);
+    _modals.clear();
+    for (final entry in entries) {
+      entry.closeRoute(immediate: true);
+    }
+    if (_shownSnackBars.isNotEmpty) {
+      ScaffoldMessenger.maybeOf(widget.overlayContext)?.hideCurrentSnackBar();
+      _shownSnackBars.clear();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return widget.child;
   }
@@ -465,10 +503,21 @@ final class _ModalKey {
 }
 
 final class _ModalEntry {
-  _ModalEntry({required this.closeRoute});
+  _ModalEntry({required this.navigator, required this.route});
 
-  final VoidCallback closeRoute;
+  final NavigatorState navigator;
+  final Route<void> route;
   _ModalPhase phase = _ModalPhase.open;
+
+  void closeRoute({bool immediate = false}) {
+    if (route.isActive && navigator.mounted) {
+      if (!immediate && route.isCurrent) {
+        navigator.pop<void>();
+      } else {
+        navigator.removeRoute<void>(route);
+      }
+    }
+  }
 }
 
 _ModalKey _modalKey(QuickjsUiOverlayIntent intent) {

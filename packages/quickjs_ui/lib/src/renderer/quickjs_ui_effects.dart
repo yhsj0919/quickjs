@@ -255,9 +255,14 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
 
     final blur = _qualityBlur(_blur(widget.blur, clock), quality);
     if (widget.blur != null && quality != QuickjsUiEffectQuality.off) {
-      result = ImageFiltered(
-        imageFilter: ui.ImageFilter.blur(sigmaX: blur.$1, sigmaY: blur.$2),
-        child: result,
+      result = RepaintBoundary(
+        child: ClipRect(
+          clipBehavior: Clip.hardEdge,
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: blur.$1, sigmaY: blur.$2),
+            child: result,
+          ),
+        ),
       );
     }
 
@@ -267,12 +272,17 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
     );
     if (widget.backdropBlur != null &&
         quality.index <= QuickjsUiEffectQuality.balanced.index) {
-      result = BackdropFilter(
-        filter: ui.ImageFilter.blur(
-          sigmaX: backdropBlur.$1,
-          sigmaY: backdropBlur.$2,
+      result = RepaintBoundary(
+        child: ClipRect(
+          clipBehavior: Clip.hardEdge,
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(
+              sigmaX: backdropBlur.$1,
+              sigmaY: backdropBlur.$2,
+            ),
+            child: result,
+          ),
         ),
-        child: result,
       );
     }
 

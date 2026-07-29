@@ -50,6 +50,9 @@ final class QuickjsUiRenderer {
   bool _paused = false;
 
   Widget build(QuickjsUiNode node, {BuildContext? buildContext}) {
+    if (buildContext == null && node.overlayNodes.isNotEmpty) {
+      return Builder(builder: (context) => build(node, buildContext: context));
+    }
     performanceController.beginRenderPass();
     late final QuickjsUiRenderContext context;
     final nextCache = <String, _RenderedNode>{};

@@ -71,6 +71,7 @@ flutter:
     - assets/quickjs_ui/bundle_counter/components/
     - assets/quickjs_ui/package_demo/
     - assets/quickjs_ui/package_demo/components/
+    - assets/quickjs_ui/adaptive_performance/
     - assets/quickjs_ui/weatherIcon/
     - assets/quickjs_ui/modules/weather_background/
     - assets/quickjs_ui/modules/weather_background/core/

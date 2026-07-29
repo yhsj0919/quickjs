@@ -52,6 +52,15 @@ void _validateSnapshotParticleGrid(Map<String, Object?> command) {
   final columns = positiveInt('columns');
   final rows = positiveInt('rows');
   positiveInt('bucketCount');
+  final direction = command['direction'];
+  if (direction != null &&
+      direction != 'transition' &&
+      direction != 'destroy' &&
+      direction != 'create') {
+    throw const FormatException(
+      'quickjs_ui Canvas snapshotParticleGrid direction must be transition, destroy or create',
+    );
+  }
   if (columns * rows > _maxSnapshotParticleFragments) {
     throw const FormatException(
       'quickjs_ui Canvas snapshotParticleGrid fragment limit exceeded',
@@ -116,6 +125,7 @@ void _drawSnapshotParticleGrid(
   final staggerMs = _rawFiniteNumber(command['staggerMs']);
   final travelMs = _rawFiniteNumber(command['travelMs']);
   final fadeMs = _rawFiniteNumber(command['fadeMs']);
+  final direction = command['direction'] ?? 'transition';
   final cellWidth = width / columns;
   final cellHeight = height / rows;
   final rowDivisor = math.max(1, rows - 1);
@@ -141,42 +151,46 @@ void _drawSnapshotParticleGrid(
       final driftY = -26 - randomC * 88 + (randomA - 0.5) * 28;
       final rotation = (randomB - 0.5) * 1.45;
 
-      _drawSnapshotParticle(
-        canvas: canvas,
-        snapshot: source,
-        sourceX: sourceX,
-        sourceY: sourceY,
-        cellWidth: cellWidth,
-        cellHeight: cellHeight,
-        centerX: centerX,
-        centerY: centerY,
-        driftX: driftX,
-        driftY: driftY,
-        rotation: rotation,
-        delayMs: outgoingDelay,
-        travelMs: travelMs,
-        fadeMs: fadeMs,
-        elapsedMs: clock.elapsedMs,
-        incoming: false,
-      );
-      _drawSnapshotParticle(
-        canvas: canvas,
-        snapshot: target,
-        sourceX: sourceX,
-        sourceY: sourceY,
-        cellWidth: cellWidth,
-        cellHeight: cellHeight,
-        centerX: centerX,
-        centerY: centerY,
-        driftX: driftX,
-        driftY: driftY,
-        rotation: rotation,
-        delayMs: incomingDelay,
-        travelMs: travelMs,
-        fadeMs: fadeMs,
-        elapsedMs: clock.elapsedMs,
-        incoming: true,
-      );
+      if (direction != 'create') {
+        _drawSnapshotParticle(
+          canvas: canvas,
+          snapshot: source,
+          sourceX: sourceX,
+          sourceY: sourceY,
+          cellWidth: cellWidth,
+          cellHeight: cellHeight,
+          centerX: centerX,
+          centerY: centerY,
+          driftX: driftX,
+          driftY: driftY,
+          rotation: rotation,
+          delayMs: outgoingDelay,
+          travelMs: travelMs,
+          fadeMs: fadeMs,
+          elapsedMs: clock.elapsedMs,
+          incoming: false,
+        );
+      }
+      if (direction != 'destroy') {
+        _drawSnapshotParticle(
+          canvas: canvas,
+          snapshot: target,
+          sourceX: sourceX,
+          sourceY: sourceY,
+          cellWidth: cellWidth,
+          cellHeight: cellHeight,
+          centerX: centerX,
+          centerY: centerY,
+          driftX: driftX,
+          driftY: driftY,
+          rotation: rotation,
+          delayMs: incomingDelay,
+          travelMs: travelMs,
+          fadeMs: fadeMs,
+          elapsedMs: clock.elapsedMs,
+          incoming: true,
+        );
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -132,9 +133,9 @@ final class QuickjsUiSession {
       try {
         if (plugin.manifest.exports.contains('bootstrap')) {
           _validateRuntimeManifest(plugin);
-          final bootstrap = await _clientCall('bootstrap', <Object?>[
-            page.props,
-          ]);
+          final bootstrap = await _resolveMutationResult(
+            await _clientCall('bootstrap', <Object?>[page.props]),
+          );
           record('bootstrap');
           if (_disposed) return;
           _applyBootstrapResult(page, bootstrap);
@@ -346,7 +347,9 @@ final class QuickjsUiSession {
       _ensureActive();
       if (_supportsMutationProtocol()) {
         await _applyMutation(
-          await _clientCall('mutate', <Object?>['setState', patch, true]),
+          await _resolveMutationResult(
+            await _clientCall('mutate', <Object?>['setState', patch, true]),
+          ),
         );
         return;
       }
@@ -403,7 +406,9 @@ final class QuickjsUiSession {
       }
       if (_pageBinding!.plugin.manifest.exports.contains('poll')) {
         final changed = _applyPolledResult(
-          await _clientCall('poll', <Object?>[_stateVersion]),
+          await _resolveMutationResult(
+            await _clientCall('poll', <Object?>[_stateVersion]),
+          ),
         );
         return (changed: changed, nextDelay: nextDelay);
       }
@@ -669,7 +674,9 @@ final class QuickjsUiSession {
     inspector?.recordLifecycle(phase, type, payload: payload);
     if (_supportsMutationProtocol()) {
       return _applyMutation(
-        await _clientCall('mutate', <Object?>['lifecycle', event, render]),
+        await _resolveMutationResult(
+          await _clientCall('mutate', <Object?>['lifecycle', event, render]),
+        ),
         render: render,
       );
     }
@@ -695,7 +702,9 @@ final class QuickjsUiSession {
   Future<void> _dispatchMutationBatch(List<Map<String, Object?>> events) async {
     if (events.length <= _quickjsUiDispatchChunkSize) {
       await _applyMutation(
-        await _clientCall('mutate', <Object?>['dispatch', events, true]),
+        await _resolveMutationResult(
+          await _clientCall('mutate', <Object?>['dispatch', events, true]),
+        ),
       );
       return;
     }
@@ -720,8 +729,41 @@ final class QuickjsUiSession {
       return;
     }
     await _applyMutation(
-      await _clientCall('mutate', const <Object?>['finalize', null, true]),
+      await _resolveMutationResult(
+        await _clientCall('mutate', const <Object?>['finalize', null, true]),
+      ),
     );
+  }
+
+  Future<Object?> _resolveMutationResult(Object? result) async {
+    if (result is! Map || result['chunked'] != true) return result;
+    final transferId = result['transferId'];
+    final chunkCount = result['chunkCount'];
+    if (transferId is! String || chunkCount is! int || chunkCount <= 0) {
+      throw const FormatException(
+        'quickjs_ui chunked mutation descriptor is invalid',
+      );
+    }
+    final buffer = StringBuffer();
+    for (var index = 0; index < chunkCount; index += 1) {
+      final chunk = await _clientCall('mutationChunk', <Object?>[
+        transferId,
+        index,
+      ]);
+      if (chunk is! String) {
+        throw const FormatException(
+          'quickjs_ui mutationChunk() must return a string',
+        );
+      }
+      buffer.write(chunk);
+    }
+    final decoded = jsonDecode(buffer.toString());
+    if (decoded is! Map) {
+      throw const FormatException(
+        'quickjs_ui chunked mutation must decode to an object',
+      );
+    }
+    return decoded;
   }
 
   Future<bool> _applyMutation(Object? result, {bool render = true}) async {

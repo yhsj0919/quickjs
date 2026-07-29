@@ -783,6 +783,7 @@ export class Canvas2DContext {
       columns = 24,
       rows = 18,
       bucketCount = 16,
+      direction = 'transition',
       staggerMs = 16,
       travelMs = 920,
       fadeMs = 760
@@ -797,6 +798,11 @@ export class Canvas2DContext {
         'quickjs_ui drawSnapshotParticleGrid requires targetSlot'
       );
     }
+    if (!['transition', 'destroy', 'create'].includes(direction)) {
+      throw new TypeError(
+        'quickjs_ui drawSnapshotParticleGrid direction is invalid'
+      );
+    }
     this.commands.push({
       op: 'snapshotParticleGrid',
       sourceSlot,
@@ -808,6 +814,7 @@ export class Canvas2DContext {
       columns,
       rows,
       bucketCount,
+      direction,
       staggerMs,
       travelMs,
       fadeMs

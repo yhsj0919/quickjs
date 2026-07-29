@@ -44,14 +44,37 @@ void main() {
   test('adaptive performance lab builds bounded local stress scenes', () async {
     const path = 'assets/quickjs_ui/adaptive_performance_lab_page.mjs';
     final source = await rootBundle.loadString(path);
+    final retainedSceneSource = await rootBundle.loadString(
+      'assets/quickjs_ui/adaptive_performance/retained_load_scene.mjs',
+    );
+    final particleLayerSource = await rootBundle.loadString(
+      'assets/quickjs_ui/adaptive_performance/snapshot_particle_stage.mjs',
+    );
     final engine = await Quickjs.create();
     final session = QuickjsUiSession(engine: engine);
     addTearDown(session.dispose);
+    final scaffold = QuickjsUiPagePlugin.singleFile(
+      id: 'adaptive_performance_lab',
+      version: '1.0.0',
+      source: source,
+    );
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
-        id: 'adaptive_performance_lab',
-        version: '1.0.0',
-        source: source,
+      QuickjsPlugin(
+        manifest: scaffold.manifest,
+        modules: <QuickjsPluginModule>[
+          scaffold.modules.first,
+          QuickjsPluginModule(
+            specifier:
+                'adaptive_performance_lab/adaptive_performance/retained_load_scene.mjs',
+            source: retainedSceneSource,
+          ),
+          QuickjsPluginModule(
+            specifier:
+                'adaptive_performance_lab/adaptive_performance/snapshot_particle_stage.mjs',
+            source: particleLayerSource,
+          ),
+          scaffold.modules.last,
+        ],
       ),
     );
 
@@ -60,6 +83,85 @@ void main() {
     expect(loadCanvas!.type, 'Canvas');
     expect(loadCanvas.props['onFrame'], isNull);
     expect(loadCanvas.props['commands'], hasLength(1000));
+    expect(
+      _findNodeByKey(session.node!, 'adaptive-snapshot-source'),
+      isNotNull,
+    );
+    expect(_findNodeByKey(session.node!, 'adaptive-particle-canvas'), isNull);
+
+    await session.dispatch(<String, Object?>{
+      'method': 'captured',
+      'snapshotId': 'snapshot-1',
+    });
+    final retainedLoadCanvas = _findNodeByKey(
+      session.node!,
+      'adaptive-load-canvas',
+    );
+    expect(retainedLoadCanvas, isNotNull);
+    expect(retainedLoadCanvas!.props.containsKey('commands'), isFalse);
+    expect(retainedLoadCanvas.props.containsKey('staticCommands'), isFalse);
+    final particleCanvas = _findNodeByKey(
+      session.node!,
+      'adaptive-particle-canvas',
+    );
+    expect(
+      _findNodeByKey(session.node!, 'adaptive-snapshot-source'),
+      isNull,
+    );
+    expect(particleCanvas, isNotNull);
+    expect(particleCanvas!.props['onAnimationEnd'], isNotNull);
+    expect(
+      (particleCanvas.props['commands']! as List).single,
+      containsPair('direction', 'create'),
+    );
+
+    await session.dispatch(<String, Object?>{
+      'method': 'captured',
+      'snapshotId': 'snapshot-duplicate',
+    });
+    final particleAfterDuplicateCapture = _findNodeByKey(
+      session.node!,
+      'adaptive-particle-canvas',
+    );
+    expect(
+      (particleAfterDuplicateCapture!.props['resources']! as Map)[
+        'source'
+      ],
+      'snapshot-1',
+    );
+
+    await session.dispatch(<String, Object?>{
+      'method': 'particlesFinished',
+      'run': 0,
+    });
+    final settledParticleCanvas = _findNodeByKey(
+      session.node!,
+      'adaptive-particle-canvas',
+    );
+    expect(settledParticleCanvas, isNotNull);
+    expect(settledParticleCanvas!.props['onAnimationEnd'], isNull);
+    expect(
+      _findNodeByKey(session.node!, 'adaptive-snapshot-source'),
+      isNull,
+    );
+
+    await session.dispatch(<String, Object?>{'method': 'restart'});
+    expect(
+      _findNodeByKey(session.node!, 'adaptive-snapshot-source'),
+      isNotNull,
+    );
+    expect(_findNodeByKey(session.node!, 'adaptive-particle-canvas'), isNull);
+
+    await session.dispatch(<String, Object?>{
+      'method': 'setCount',
+      'count': 10000,
+    });
+    final largeLoadCanvas = _findNodeByKey(
+      session.node!,
+      'adaptive-load-canvas',
+    );
+    expect(largeLoadCanvas, isNotNull);
+    expect(largeLoadCanvas!.props['commands'], hasLength(10000));
   });
 
   test('universal effects demo animates a regular Flutter node', () async {
