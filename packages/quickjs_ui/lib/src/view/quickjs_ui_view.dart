@@ -606,6 +606,10 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       _performanceController.updateDisplayRefreshRate(
         View.of(context).display.refreshRate,
       );
+      _performanceController.updateDisplayMetrics(
+        logicalSize: MediaQuery.sizeOf(context),
+        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+      );
       _performanceController.updateReduceMotion(
         MediaQuery.maybeOf(context)?.disableAnimations ?? false,
       );

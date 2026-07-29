@@ -1,7 +1,10 @@
 import 'dart:collection';
+import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+
+import 'quickjs_ui_performance_report.dart';
 
 enum QuickjsUiEffectQuality { high, balanced, low, off }
 
@@ -53,6 +56,9 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   int _slowFrames = 0;
   int _stableFrames = 0;
   bool _started = false;
+  Size? _logicalDisplaySize;
+  double? _devicePixelRatio;
+  _PerformanceSession? _session;
 
   QuickjsUiEffectQuality get quality =>
       _reduceMotion ? QuickjsUiEffectQuality.off : _quality;
@@ -60,6 +66,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   double? get refreshRate => _refreshRate;
   bool get reduceMotion => _reduceMotion;
   bool get isStarted => _started;
+  bool get isSessionActive => _session != null;
 
   void updateDisplayRefreshRate(double refreshRate) {
     if (!refreshRate.isFinite || refreshRate <= 0) return;
@@ -71,12 +78,95 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     }
   }
 
+  void updateDisplayMetrics({
+    required Size logicalSize,
+    required double devicePixelRatio,
+  }) {
+    _logicalDisplaySize = logicalSize;
+    if (devicePixelRatio.isFinite && devicePixelRatio > 0) {
+      _devicePixelRatio = devicePixelRatio;
+    }
+  }
+
+  /// Starts an explicit capture. Frames during [warmUp] are intentionally
+  /// excluded while the scene and shader caches settle.
+  void startSession({
+    Duration warmUp = const Duration(seconds: 2),
+    Map<String, Object?> scene = const <String, Object?>{},
+    Map<String, Object?> metadata = const <String, Object?>{},
+  }) {
+    if (_session != null) {
+      throw StateError('A performance session is already active.');
+    }
+    final now = DateTime.now();
+    _session = _PerformanceSession(
+      startedAt: now,
+      warmUp: warmUp,
+      initialQuality: quality.name,
+      scene: Map<String, Object?>.unmodifiable(scene),
+      metadata: Map<String, Object?>.unmodifiable(metadata),
+    );
+  }
+
+  /// Stops the active capture and returns a stable, JSON-serializable report.
+  QuickjsUiPerformanceReport stopSession() {
+    final session = _session;
+    if (session == null) {
+      throw StateError('No performance session is active.');
+    }
+    _session = null;
+    final sceneMetrics = snapshot.toMap()
+      ..removeWhere(
+        (key, _) => const <String>{
+          'mode',
+          'quality',
+          'refreshRate',
+          'targetFrameBudgetMs',
+          'reducedMotion',
+          'buildP50Ms',
+          'buildP90Ms',
+          'buildP99Ms',
+          'rasterP50Ms',
+          'rasterP90Ms',
+          'rasterP99Ms',
+          'consecutiveSlowFrames',
+          'consecutiveStableFrames',
+          'lastTransitionReason',
+        }.contains(key),
+      );
+    return session.finish(
+      endedAt: DateTime.now(),
+      environment: <String, Object?>{
+        'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+        'buildMode': kReleaseMode
+            ? 'release'
+            : kProfileMode
+            ? 'profile'
+            : 'debug',
+        if (_refreshRate != null) 'refreshRate': _refreshRate,
+        'targetFrameBudgetMs': targetFrameBudget.inMicroseconds / 1000,
+        if (_logicalDisplaySize != null) ...<String, Object?>{
+          'logicalWidth': _logicalDisplaySize!.width,
+          'logicalHeight': _logicalDisplaySize!.height,
+        },
+        if (_devicePixelRatio != null) 'devicePixelRatio': _devicePixelRatio,
+        ...session.metadata,
+      },
+      sceneMetrics: <String, Object?>{...sceneMetrics, ...session.scene},
+    );
+  }
+
   void updateReduceMotion(bool value) {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
     _lastTransitionReason = value
         ? 'system reduced motion enabled'
         : 'system reduced motion disabled';
+    _session?.addQualityChange(
+      timestamp: DateTime.now(),
+      quality: quality.name,
+      reason: _lastTransitionReason!,
+    );
     notifyListeners();
   }
 
@@ -185,7 +275,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   }
 
   void start() {
-    if (_started || mode != QuickjsUiPerformanceMode.auto) return;
+    if (_started) return;
     SchedulerBinding.instance.addTimingsCallback(_handleTimings);
     _started = true;
   }
@@ -197,10 +287,20 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   }
 
   @visibleForTesting
-  void addFrameSample({required Duration build, required Duration raster}) {
-    if (mode != QuickjsUiPerformanceMode.auto) return;
+  void addFrameSample({
+    required Duration build,
+    required Duration raster,
+    DateTime? timestamp,
+  }) {
     _appendSample(_buildSamplesMs, build.inMicroseconds / 1000);
     _appendSample(_rasterSamplesMs, raster.inMicroseconds / 1000);
+    _session?.addFrame(
+      timestamp: timestamp ?? DateTime.now(),
+      build: build,
+      raster: raster,
+      frameBudget: targetFrameBudget,
+    );
+    if (mode != QuickjsUiPerformanceMode.auto) return;
     final elapsed = build > raster ? build : raster;
     final slowThreshold = targetFrameBudget * 1.15;
     final stableThreshold = targetFrameBudget * 0.75;
@@ -244,6 +344,11 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     if (_quality == value) return;
     _quality = value;
     _lastTransitionReason = reason;
+    _session?.addQualityChange(
+      timestamp: DateTime.now(),
+      quality: quality.name,
+      reason: reason,
+    );
     notifyListeners();
   }
 
@@ -252,6 +357,137 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     stop();
     super.dispose();
   }
+}
+
+final class _PerformanceSession {
+  _PerformanceSession({
+    required this.startedAt,
+    required this.warmUp,
+    required this.initialQuality,
+    required this.scene,
+    required this.metadata,
+  });
+
+  final DateTime startedAt;
+  final Duration warmUp;
+  final String initialQuality;
+  final Map<String, Object?> scene;
+  final Map<String, Object?> metadata;
+  final List<double> _buildMs = <double>[];
+  final List<double> _rasterMs = <double>[];
+  final List<_QualityChange> _changes = <_QualityChange>[];
+  int _slowFrames = 0;
+  int _severeFrames = 0;
+
+  DateTime get recordingStartsAt => startedAt.add(warmUp);
+
+  void addFrame({
+    required DateTime timestamp,
+    required Duration build,
+    required Duration raster,
+    required Duration frameBudget,
+  }) {
+    if (timestamp.isBefore(recordingStartsAt)) return;
+    final buildMs = build.inMicroseconds / 1000;
+    final rasterMs = raster.inMicroseconds / 1000;
+    _buildMs.add(buildMs);
+    _rasterMs.add(rasterMs);
+    final frame = build > raster ? build : raster;
+    if (frame > frameBudget) _slowFrames += 1;
+    if (frame > frameBudget * 2) _severeFrames += 1;
+  }
+
+  void addQualityChange({
+    required DateTime timestamp,
+    required String quality,
+    required String reason,
+  }) {
+    _changes.add(_QualityChange(timestamp, quality, reason));
+  }
+
+  QuickjsUiPerformanceReport finish({
+    required DateTime endedAt,
+    required Map<String, Object?> environment,
+    required Map<String, Object?> sceneMetrics,
+  }) {
+    final captureStart = recordingStartsAt.isAfter(endedAt)
+        ? endedAt
+        : recordingStartsAt;
+    final relevantChanges = _changes
+        .where((change) => !change.at.isBefore(captureStart))
+        .toList();
+    final events = <QuickjsUiQualityEvent>[
+      QuickjsUiQualityEvent(
+        offsetMs: captureStart.difference(startedAt).inMilliseconds,
+        quality: _qualityAt(captureStart),
+        reason: 'capture started',
+      ),
+      for (final change in relevantChanges)
+        QuickjsUiQualityEvent(
+          offsetMs: change.at.difference(startedAt).inMilliseconds,
+          quality: change.quality,
+          reason: change.reason,
+        ),
+    ];
+    final durations = <String, int>{};
+    for (var index = 0; index < events.length; index += 1) {
+      final nextOffset = index + 1 < events.length
+          ? events[index + 1].offsetMs
+          : endedAt.difference(startedAt).inMilliseconds;
+      durations.update(
+        events[index].quality,
+        (value) =>
+            value + (nextOffset - events[index].offsetMs).clamp(0, 1 << 31),
+        ifAbsent: () => (nextOffset - events[index].offsetMs).clamp(0, 1 << 31),
+      );
+    }
+    var degradeCount = 0;
+    var recoveryCount = 0;
+    for (var index = 1; index < events.length; index += 1) {
+      final previous = _qualityRank(events[index - 1].quality);
+      final current = _qualityRank(events[index].quality);
+      if (current > previous) degradeCount += 1;
+      if (current < previous) recoveryCount += 1;
+    }
+    return QuickjsUiPerformanceReport(
+      startedAt: startedAt,
+      endedAt: endedAt,
+      warmUp: warmUp,
+      frameCount: _buildMs.length,
+      slowFrameCount: _slowFrames,
+      severeFrameCount: _severeFrames,
+      buildP50Ms: _listPercentile(_buildMs, 0.50),
+      buildP90Ms: _listPercentile(_buildMs, 0.90),
+      buildP99Ms: _listPercentile(_buildMs, 0.99),
+      buildMaxMs: _listMax(_buildMs),
+      rasterP50Ms: _listPercentile(_rasterMs, 0.50),
+      rasterP90Ms: _listPercentile(_rasterMs, 0.90),
+      rasterP99Ms: _listPercentile(_rasterMs, 0.99),
+      rasterMaxMs: _listMax(_rasterMs),
+      qualityTimeline: List<QuickjsUiQualityEvent>.unmodifiable(events),
+      qualityDurationsMs: Map<String, int>.unmodifiable(durations),
+      degradeCount: degradeCount,
+      recoveryCount: recoveryCount,
+      environment: Map<String, Object?>.unmodifiable(environment),
+      scene: Map<String, Object?>.unmodifiable(sceneMetrics),
+    );
+  }
+
+  String _qualityAt(DateTime timestamp) {
+    var result = initialQuality;
+    for (final change in _changes) {
+      if (!change.at.isBefore(timestamp)) break;
+      result = change.quality;
+    }
+    return result;
+  }
+}
+
+final class _QualityChange {
+  const _QualityChange(this.at, this.quality, this.reason);
+  final DateTime at;
+  final String quality;
+  final String reason;
 }
 
 final class QuickjsUiPerformanceSnapshot {
@@ -393,6 +629,22 @@ double? _percentile(Iterable<double> samples, double percentile) {
   final index = ((sorted.length - 1) * percentile).round();
   return sorted[index];
 }
+
+double? _listPercentile(List<double> samples, double percentile) =>
+    _percentile(samples, percentile);
+
+double? _listMax(List<double> samples) {
+  if (samples.isEmpty) return null;
+  return samples.reduce((left, right) => left > right ? left : right);
+}
+
+int _qualityRank(String quality) => switch (quality) {
+  'high' => 0,
+  'balanced' => 1,
+  'low' => 2,
+  'off' => 3,
+  _ => 0,
+};
 
 QuickjsUiEffectQuality _qualityForMode(QuickjsUiPerformanceMode mode) =>
     switch (mode) {

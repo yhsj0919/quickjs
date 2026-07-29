@@ -178,6 +178,14 @@ host owns the performance controller, offers manual `auto/high/balanced/low/off`
 selection, and displays the live serialized performance snapshot without
 sending frame statistics through JavaScript.
 
+Use **开始采样** to exclude a two-second warm-up, then stop and copy a versioned
+JSON report. Reports include frame counts, slow/severe frames, build/raster
+P50/P90/P99/max, quality transitions and time at each quality, display/build
+metadata, and the current Canvas/effect scene metrics. Programmatic hosts can
+call `startSession(...)` and `stopSession()`; fixed quality modes are sampled as
+well, enabling repeatable `high` versus `low` Profile-mode A/B comparisons.
+`toJson()` is platform-neutral so the host can save, upload, or copy the result.
+
 Useful local regression commands:
 
 ```bash
