@@ -270,7 +270,7 @@ String? _findDuplicateSiblingKey(List<QuickjsUiNode> children) {
 
 List<QuickjsUiNode> _prepareOverlayNodes(QuickjsUiNode node) {
   List<QuickjsUiNode>? result;
-  if (_isOverlayType(node.type)) {
+  if (isQuickjsUiRouteOverlayType(node.type)) {
     result = <QuickjsUiNode>[node];
   }
   for (final child in node.children) {
@@ -314,7 +314,7 @@ List<QuickjsUiNode>? _propOverlayNodes(Object? value) {
   return null;
 }
 
-bool _isOverlayType(String type) {
+bool isQuickjsUiRouteOverlayType(String type) {
   return type == 'Overlay' ||
       type == 'SnackBar' ||
       type == 'AlertDialog' ||

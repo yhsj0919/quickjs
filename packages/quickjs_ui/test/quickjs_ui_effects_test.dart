@@ -32,12 +32,48 @@ void main() {
     expect(find.byType(ColorFiltered), findsOneWidget);
     expect(
       tester
+          .widgetList<ClipRect>(find.byType(ClipRect))
+          .any((clip) => clip.child is ImageFiltered),
+      isTrue,
+    );
+    expect(
+      tester
           .widgetList<RepaintBoundary>(find.byType(RepaintBoundary))
           .any(
             (boundary) =>
                 boundary.child is ClipRect &&
                 (boundary.child! as ClipRect).child is ColorFiltered,
           ),
+      isTrue,
+    );
+  });
+
+  testWidgets('blur and backdrop blur stay inside their paint bounds', (
+    tester,
+  ) async {
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Container',
+      'width': 80,
+      'height': 40,
+      'blur': 8,
+      'backdropBlur': 8,
+      'child': <String, Object?>{'type': 'Text', 'data': 'bounded blur'},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+    );
+
+    expect(
+      tester
+          .widgetList<ClipRect>(find.byType(ClipRect))
+          .any((clip) => clip.child is ImageFiltered),
+      isTrue,
+    );
+    expect(
+      tester
+          .widgetList<ClipRect>(find.byType(ClipRect))
+          .any((clip) => clip.child is BackdropFilter),
       isTrue,
     );
   });

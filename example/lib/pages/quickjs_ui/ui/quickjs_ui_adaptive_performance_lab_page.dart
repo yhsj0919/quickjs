@@ -191,6 +191,11 @@ class _MetricsPanel extends StatelessWidget {
   final Map<String, Object?> metrics;
   final QuickjsUiPerformanceReport? report;
 
+  String _metric(Object? value, {int digits = 2}) {
+    if (value is num) return value.toStringAsFixed(digits);
+    return '-';
+  }
+
   @override
   Widget build(BuildContext context) => ExpansionTile(
     collapsedTextColor: Colors.white,
@@ -198,10 +203,11 @@ class _MetricsPanel extends StatelessWidget {
     iconColor: Colors.white,
     collapsedIconColor: Colors.white,
     title: Text(
-      'quality=${metrics['quality']} · '
-      '${metrics['refreshRate'] ?? '-'}Hz · '
-      'budget=${metrics['targetFrameBudgetMs']}ms · '
-      'rasterP90=${metrics['rasterP90Ms'] ?? '-'}ms',
+      'mode=${metrics['mode']} · quality=${metrics['quality']} · '
+      '${_metric(metrics['refreshRate'], digits: 1)}Hz\n'
+      'budget=${_metric(metrics['targetFrameBudgetMs'])}ms · '
+      'rasterP90=${_metric(metrics['rasterP90Ms'])}ms · '
+      'slowFrames=${metrics['consecutiveSlowFrames'] ?? 0}',
       style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
     ),
     children: <Widget>[

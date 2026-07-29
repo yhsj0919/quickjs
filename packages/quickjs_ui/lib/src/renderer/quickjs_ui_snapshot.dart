@@ -14,6 +14,9 @@ final class QuickjsUiSnapshotRegistry {
   final int maxSnapshotPixels;
   final Map<String, QuickjsUiSnapshot> _snapshots =
       <String, QuickjsUiSnapshot>{};
+  final Map<String, Object?> _captureTokens = <String, Object?>{};
+  final Map<String, _QuickjsUiCaptureClaim> _captureClaims =
+      <String, _QuickjsUiCaptureClaim>{};
   int _nextSnapshotId = 0;
 
   int get length => _snapshots.length;
@@ -23,6 +26,43 @@ final class QuickjsUiSnapshotRegistry {
   );
 
   QuickjsUiSnapshot? resolve(String id) => _snapshots[id];
+
+  /// Claims one capture for a boundary/token pair for the lifetime of this
+  /// page registry. Rebuilding or remounting the widget cannot claim it again.
+  bool claimCapture({
+    required String boundaryId,
+    required Object? token,
+    required Object owner,
+  }) {
+    if (_captureTokens.containsKey(boundaryId) &&
+        _snapshotTokenEquals(_captureTokens[boundaryId], token)) {
+      return false;
+    }
+    final active = _captureClaims[boundaryId];
+    if (active != null && _snapshotTokenEquals(active.token, token)) {
+      return false;
+    }
+    _captureClaims[boundaryId] = _QuickjsUiCaptureClaim(token, owner);
+    return true;
+  }
+
+  void completeCapture({
+    required String boundaryId,
+    required Object? token,
+    required Object owner,
+  }) {
+    final active = _captureClaims[boundaryId];
+    if (active == null || !identical(active.owner, owner)) return;
+    _captureClaims.remove(boundaryId);
+    _captureTokens[boundaryId] = token;
+  }
+
+  void cancelCapture({required String boundaryId, required Object owner}) {
+    final active = _captureClaims[boundaryId];
+    if (active != null && identical(active.owner, owner)) {
+      _captureClaims.remove(boundaryId);
+    }
+  }
 
   QuickjsUiSnapshot register({
     required String boundaryId,
@@ -57,9 +97,40 @@ final class QuickjsUiSnapshotRegistry {
       snapshot.image.dispose();
     }
     _snapshots.clear();
+    _captureTokens.clear();
+    _captureClaims.clear();
   }
 
   void _dispose(QuickjsUiSnapshot? snapshot) => snapshot?.image.dispose();
+}
+
+final class _QuickjsUiCaptureClaim {
+  const _QuickjsUiCaptureClaim(this.token, this.owner);
+
+  final Object? token;
+  final Object owner;
+}
+
+bool _snapshotTokenEquals(Object? left, Object? right) {
+  if (identical(left, right) || left == right) return true;
+  if (left is List && right is List) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index += 1) {
+      if (!_snapshotTokenEquals(left[index], right[index])) return false;
+    }
+    return true;
+  }
+  if (left is Map && right is Map) {
+    if (left.length != right.length) return false;
+    for (final entry in left.entries) {
+      if (!right.containsKey(entry.key) ||
+          !_snapshotTokenEquals(entry.value, right[entry.key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
 }
 
 final class QuickjsUiSnapshot {

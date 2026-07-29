@@ -300,8 +300,9 @@ ctx.drawSnapshotParticleGrid({
 });
 ```
 
-The optional `bucketCount`, `staggerMs`, `travelMs`, and `fadeMs` parameters
-control the locally rendered finite animation.
+The optional `direction` selects `transition` (the default), `destroy`, or
+`create`. `bucketCount`, `staggerMs`, `travelMs`, and `fadeMs` control the
+locally rendered finite animation.
 
 ## Control states and structural slots
 

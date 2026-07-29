@@ -8,7 +8,6 @@ import 'quickjs_ui_input_components.dart';
 import 'quickjs_ui_layout_components.dart';
 import 'quickjs_ui_media_components.dart';
 import 'quickjs_ui_navigation_components.dart';
-import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_scroll_components.dart';
 import 'quickjs_ui_snapshot_component.dart';
@@ -115,7 +114,7 @@ final class QuickjsUiComponentRegistry {
     QuickjsUiNode node, {
     QuickjsUiComponentController? controller,
   }) {
-    if (context.buildContext != null && isQuickjsUiOverlayNode(node.type)) {
+    if (isQuickjsUiRouteOverlayType(node.type)) {
       return const SizedBox.shrink();
     }
     final component = _components[node.type];

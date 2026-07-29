@@ -330,6 +330,114 @@ void main() {
     expect(events, isEmpty);
   });
 
+  testWidgets('renderer without buildContext uses the unified overlay layer', (
+    tester,
+  ) async {
+    var visible = true;
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'AlertDialog',
+        'visible': visible,
+        'titleText': 'Unified dialog',
+      },
+    });
+
+    Widget harness() => MaterialApp(home: renderer.build(schema()));
+
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+    expect(find.text('Unified dialog'), findsOneWidget);
+
+    visible = false;
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+    expect(find.text('Unified dialog'), findsNothing);
+  });
+
+  testWidgets('removing one modal closes its route instead of the top route', (
+    tester,
+  ) async {
+    var showFirst = true;
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'Column',
+        'children': <Object?>[
+          <String, Object?>{
+            'type': 'AlertDialog',
+            'visible': showFirst,
+            'titleText': 'First modal',
+          },
+          <String, Object?>{
+            'type': 'AlertDialog',
+            'visible': true,
+            'titleText': 'Second modal',
+          },
+        ],
+      },
+    });
+
+    Widget harness() => MaterialApp(
+      home: Builder(
+        builder: (context) => renderer.build(schema(), buildContext: context),
+      ),
+    );
+
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+    expect(find.text('First modal'), findsOneWidget);
+    expect(find.text('Second modal'), findsOneWidget);
+
+    showFirst = false;
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+    expect(find.text('First modal'), findsNothing);
+    expect(find.text('Second modal'), findsOneWidget);
+  });
+
+  testWidgets('unmounting the overlay layer removes its active modal route', (
+    tester,
+  ) async {
+    var mounted = true;
+    late StateSetter rebuild;
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+    final node = QuickjsUiNode.fromMap(<String, Object?>{
+      'type': 'Scaffold',
+      'body': <String, Object?>{
+        'type': 'AlertDialog',
+        'visible': true,
+        'titleText': 'Owned modal',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return mounted
+                ? renderer.build(node, buildContext: context)
+                : const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Owned modal'), findsOneWidget);
+
+    rebuild(() => mounted = false);
+    await tester.pumpAndSettle();
+    expect(find.text('Owned modal'), findsNothing);
+  });
+
   testWidgets('slideDown enters from above and reverses on close', (
     tester,
   ) async {

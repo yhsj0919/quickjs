@@ -357,6 +357,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   void _syncTicker() {
     if (widget.timeline.hasAnimations &&
         !widget.paused &&
+        (widget.timeline.isContinuous || !_didCompleteAnimation) &&
         widget.performanceController.quality != QuickjsUiEffectQuality.off) {
       if (!_ticker.isActive) _ticker.start();
     } else {

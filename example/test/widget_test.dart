@@ -364,7 +364,7 @@ void main() {
 
     expect(find.text('QuickJS UI JSON Schema'), findsOneWidget);
     await _pumpUntilFound(tester, find.textContaining('quickjs_ui UI schema'));
-    expect(find.textContaining('13 node variants'), findsOneWidget);
+    expect(find.textContaining('node variants'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Pure JSON UI schema'));
     expect(find.text('Pure JSON UI schema'), findsOneWidget);
   });

@@ -80,12 +80,14 @@ final class QuickjsUiSnapshotBoundary extends StatefulWidget {
 final class _QuickjsUiSnapshotBoundaryState
     extends State<QuickjsUiSnapshotBoundary> {
   final GlobalKey _boundaryKey = GlobalKey();
+  final Object _claimOwner = Object();
   int _captureGeneration = 0;
+  Object? _claimedToken;
 
   @override
   void initState() {
     super.initState();
-    if (widget.captureToken != null) _scheduleCapture();
+    _requestCapture();
   }
 
   @override
@@ -93,8 +95,27 @@ final class _QuickjsUiSnapshotBoundaryState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.captureToken != widget.captureToken &&
         widget.captureToken != null) {
-      _scheduleCapture();
+      _requestCapture();
     }
+  }
+
+  void _requestCapture() {
+    final token = widget.captureToken;
+    widget.registry.cancelCapture(
+      boundaryId: widget.boundaryId,
+      owner: _claimOwner,
+    );
+    _claimedToken = null;
+    if (token == null ||
+        !widget.registry.claimCapture(
+          boundaryId: widget.boundaryId,
+          token: token,
+          owner: _claimOwner,
+        )) {
+      return;
+    }
+    _claimedToken = token;
+    _scheduleCapture();
   }
 
   void _scheduleCapture() {
@@ -130,11 +151,32 @@ final class _QuickjsUiSnapshotBoundaryState
         image: image,
         pixelRatio: widget.pixelRatio,
       );
+      widget.registry.completeCapture(
+        boundaryId: widget.boundaryId,
+        token: _claimedToken,
+        owner: _claimOwner,
+      );
+      _claimedToken = null;
       widget.onCaptured?.call(snapshot);
     } catch (error) {
       if (!mounted || generation != _captureGeneration) return;
+      widget.registry.cancelCapture(
+        boundaryId: widget.boundaryId,
+        owner: _claimOwner,
+      );
+      _claimedToken = null;
       widget.onCaptureError?.call(error);
     }
+  }
+
+  @override
+  void dispose() {
+    _captureGeneration += 1;
+    widget.registry.cancelCapture(
+      boundaryId: widget.boundaryId,
+      owner: _claimOwner,
+    );
+    super.dispose();
   }
 
   @override

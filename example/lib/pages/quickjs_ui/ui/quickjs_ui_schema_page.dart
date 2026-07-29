@@ -13,7 +13,8 @@ class QuickjsUiSchemaPage extends StatefulWidget {
   static const String path = 'assets/quickjs_ui/schema_preview.json';
 
   /// quickjs_ui 协议 schema 文件路径（用于校验）。
-  static const String schemaPath = 'assets/quickjs_ui/quickjs_ui.schema.json';
+  static const String schemaPath =
+      'packages/quickjs_ui/js/quickjs_ui.schema.json';
 
   @override
   State<QuickjsUiSchemaPage> createState() => _QuickjsUiSchemaPageState();

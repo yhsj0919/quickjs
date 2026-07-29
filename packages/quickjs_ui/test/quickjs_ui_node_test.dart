@@ -3538,6 +3538,34 @@ export default Page({
     expect((session.state! as Map)['expanded'], isFalse);
   });
 
+  test('page bootstrap chunks a low-byte oversized object graph', () async {
+    final engine = await Quickjs.create();
+    final session = QuickjsUiSession(engine: engine);
+    addTearDown(session.dispose);
+
+    await session.loadPlugin(
+      QuickjsUiPagePlugin.singleFile(
+        id: 'chunked_bootstrap_graph',
+        version: '1.0.0',
+        source: '''
+import { Container, Page } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { values: Array.from({ length: 12000 }, () => 0) };
+  },
+  build(state) {
+    return Container({ key: 'large-node', payload: state.values });
+  }
+});
+''',
+      ),
+    );
+
+    expect((session.state! as Map)['values'], hasLength(12000));
+    expect(session.node!.props['payload'], hasLength(12000));
+  });
+
   testWidgets('QuickjsUiView.asset creates a multi-file asset view', (
     tester,
   ) async {

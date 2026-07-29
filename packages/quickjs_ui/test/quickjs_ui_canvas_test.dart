@@ -537,6 +537,95 @@ void main() {
     expect(renderer.snapshotRegistry.length, 0);
   });
 
+  testWidgets('SnapshotBoundary captures a token once across remounts', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode boundary(Object token) => QuickjsUiNode.fromMap(
+      <String, Object?>{
+        'type': 'SnapshotBoundary',
+        'key': 'stable-capture',
+        'captureToken': token,
+        'onCaptured': <String, Object?>{'method': 'captured'},
+        'child': <String, Object?>{
+          'type': 'Container',
+          'width': 80,
+          'height': 50,
+        },
+      },
+    );
+
+    Future<void> pumpCapture(Object token) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Center(child: renderer.build(boundary(token)))),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+    }
+
+    await pumpCapture(<String, Object?>{
+      'revision': 0,
+      'parts': <Object?>[1, 2],
+    });
+    expect(events.where((event) => event['method'] == 'captured'), hasLength(1));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await pumpCapture(<String, Object?>{
+      'revision': 0,
+      'parts': <Object?>[1, 2],
+    });
+    expect(events.where((event) => event['method'] == 'captured'), hasLength(1));
+
+    await pumpCapture(<String, Object?>{
+      'revision': 1,
+      'parts': <Object?>[1, 2],
+    });
+    expect(events.where((event) => event['method'] == 'captured'), hasLength(2));
+  });
+
+  test('SnapshotRegistry releases interrupted capture claims', () {
+    final registry = QuickjsUiSnapshotRegistry();
+    addTearDown(registry.dispose);
+    final firstOwner = Object();
+    final secondOwner = Object();
+    const token = <String, Object?>{'revision': 1};
+
+    expect(
+      registry.claimCapture(
+        boundaryId: 'capture',
+        token: token,
+        owner: firstOwner,
+      ),
+      isTrue,
+    );
+    registry.cancelCapture(boundaryId: 'capture', owner: firstOwner);
+    expect(
+      registry.claimCapture(
+        boundaryId: 'capture',
+        token: const <String, Object?>{'revision': 1},
+        owner: secondOwner,
+      ),
+      isTrue,
+    );
+    registry.completeCapture(
+      boundaryId: 'capture',
+      token: token,
+      owner: secondOwner,
+    );
+    expect(
+      registry.claimCapture(
+        boundaryId: 'capture',
+        token: token,
+        owner: Object(),
+      ),
+      isFalse,
+    );
+  });
+
   test('Canvas validates save/restore before paint', () {
     final renderer = QuickjsUiRenderer(onEvent: (_) {});
     final node = QuickjsUiNode.fromMap(<String, Object?>{
@@ -571,5 +660,79 @@ void main() {
     });
 
     expect(() => renderer.build(node), throwsFormatException);
+  });
+
+  test('Canvas validates snapshot particle animation direction', () {
+    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode particle(String direction) => QuickjsUiNode.fromMap(
+      <String, Object?>{
+        'type': 'Canvas',
+        'commands': <Object?>[
+          <String, Object?>{
+            'op': 'snapshotParticleGrid',
+            'sourceSlot': 'source',
+            'targetSlot': 'target',
+            'width': 80,
+            'height': 50,
+            'columns': 8,
+            'rows': 5,
+            'bucketCount': 4,
+            'direction': direction,
+            'staggerMs': 4,
+            'travelMs': 60,
+            'fadeMs': 40,
+          },
+        ],
+      },
+    );
+
+    for (final direction in const <String>['create', 'destroy', 'transition']) {
+      expect(() => renderer.build(particle(direction)), returnsNormally);
+    }
+    expect(() => renderer.build(particle('invalid')), throwsFormatException);
+  });
+
+  testWidgets('completed finite Canvas animation survives widget updates', (
+    tester,
+  ) async {
+    final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    addTearDown(renderer.dispose);
+
+    QuickjsUiNode canvas(String label) => QuickjsUiNode.fromMap(
+      <String, Object?>{
+        'type': 'Canvas',
+        'key': 'finite-animation',
+        'semanticLabel': label,
+        'width': 80,
+        'height': 50,
+        'commands': <Object?>[
+          <String, Object?>{
+            'op': 'circle',
+            'cx': <String, Object?>{
+              'from': 0,
+              'to': 80,
+              'durationMs': 40,
+            },
+            'cy': 25,
+            'radius': 4,
+            'fill': '#ffffff',
+          },
+        ],
+        'onAnimationEnd': <String, Object?>{'method': 'finished'},
+      },
+    );
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(canvas('one'))));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(events.where((event) => event['method'] == 'finished'), hasLength(1));
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(canvas('two'))));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(events.where((event) => event['method'] == 'finished'), hasLength(1));
   });
 }

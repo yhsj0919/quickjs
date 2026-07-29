@@ -1,38 +1,23 @@
 import {
   animate,
-  Canvas,
   Column,
   Container,
   ElevatedButton,
   Page,
   Row,
   SingleChildScrollView,
-  SnapshotBoundary,
   Text,
   Wrap
 } from 'quickjs_ui';
+import { createRetainedLoadScene } from './adaptive_performance/retained_load_scene.mjs';
+import { snapshotParticleStage } from './adaptive_performance/snapshot_particle_stage.mjs';
 
 const counts = [1000, 5000, 10000];
-
-function drawLoad(ctx, count) {
-  for (let index = 0; index < count; index += 1) {
-    const column = index % 100;
-    const row = Math.floor(index / 100);
-    const phase = (index % 31) * 11;
-    ctx.fillStyle = index % 3 === 0 ? '#22d3ee' : '#6366f1';
-    ctx.globalAlpha = 0.35 + (index % 7) * 0.08;
-    ctx.fillCircle(
-      animate(-4, 344, {
-        durationMs: 900 + (index % 23) * 37,
-        phaseMs: phase,
-        repeat: true
-      }),
-      8 + (row % 75) * 3.25 + (column % 3),
-      0.7 + (index % 4) * 0.25
-    );
-  }
-  ctx.globalAlpha = 1;
-}
+const loadScene = createRetainedLoadScene({
+  sceneKey: 'adaptive-load',
+  width: 340,
+  height: 260
+});
 
 function effectCard(index, enabled, run) {
   const duration = 700 + index * 31;
@@ -79,18 +64,17 @@ export default Page({
       expensiveEffects: true,
       run: 0,
       captureToken: 0,
-      snapshotId: null
+      snapshotId: null,
+      snapshotPhase: 'source'
     };
   },
 
   build(state, props, actions) {
-    const snapshotResources = state.snapshotId == null
-      ? {}
-      : { source: state.snapshotId, target: state.snapshotId };
     return SingleChildScrollView({
       padding: 12,
       child: Column({
-        crossAxisAlignment: 'stretch',
+        crossAxisAlignment: 'start',
+        gap: 8,
         children: [
           Text('Adaptive Performance Lab', {
             style: { color: '#f8fafc', fontSize: 22, fontWeight: 'bold' }
@@ -120,65 +104,13 @@ export default Page({
               })
             ]
           }),
-          Canvas({
-            key: 'adaptive-load-canvas',
-            width: 340,
-            height: 260,
-            playToken: state.run,
-            staticDraw(ctx) {
-              ctx.fillStyle = '#020617';
-              ctx.fillRect(0, 0, 340, 260);
-            },
-            draw(ctx) {
-              drawLoad(ctx, state.count);
-            }
-          }),
+          loadScene.build({ count: state.count, revision: state.run }),
           Wrap({
             children: Array.from({ length: 12 }, (_, index) =>
               effectCard(index, state.expensiveEffects, state.run)
             )
           }),
-          SnapshotBoundary({
-            key: 'adaptive-snapshot-source',
-            captureToken: state.captureToken,
-            onCaptured: actions.captured(),
-            child: Container({
-              width: 340,
-              height: 90,
-              decoration: {
-                color: '#0f172a',
-                borderColor: '#22d3ee',
-                borderWidth: 1,
-                borderRadius: 16
-              },
-              child: Text('SNAPSHOT PARTICLE LOAD', {
-                textAlign: 'center',
-                style: { color: '#67e8f9', fontSize: 19, fontWeight: 'bold' }
-              })
-            })
-          }),
-          Canvas({
-            key: 'adaptive-particle-canvas',
-            width: 340,
-            height: 90,
-            resources: snapshotResources,
-            playToken: state.run,
-            commands: state.snapshotId == null ? [] : [{
-              op: 'snapshotParticleGrid',
-              sourceSlot: 'source',
-              targetSlot: 'target',
-              x: 0,
-              y: 0,
-              width: 340,
-              height: 90,
-              columns: 32,
-              rows: 16,
-              bucketCount: 16,
-              staggerMs: 12,
-              travelMs: 800,
-              fadeMs: 620
-            }]
-          })
+          snapshotParticleStage(state, actions)
         ]
       })
     });
@@ -195,11 +127,20 @@ export default Page({
   restart(state) {
     return {
       run: state.run + 1,
-      captureToken: state.captureToken + 1
+      captureToken: state.captureToken + 1,
+      snapshotPhase: 'source'
     };
   },
 
   captured(state, payload) {
-    return { snapshotId: payload.snapshotId };
+    if (state.snapshotPhase !== 'source') return null;
+    return { snapshotId: payload.snapshotId, snapshotPhase: 'animating' };
+  },
+
+  particlesFinished(state, payload) {
+    if (state.snapshotPhase !== 'animating' || payload.run !== state.run) {
+      return null;
+    }
+    return { snapshotPhase: 'settled' };
   }
 });
