@@ -648,6 +648,10 @@
         {
           "type": "object",
           "properties": {
+            "mainAxisSize": {
+              "type": "string",
+              "enum": ["min", "max"]
+            },
             "mainAxisAlignment": {
               "type": "string",
               "enum": ["start", "end", "center", "spaceBetween", "spaceAround", "spaceEvenly"]

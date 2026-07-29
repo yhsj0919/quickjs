@@ -148,8 +148,6 @@ export default Page({
                 minWidth: 260,
                 maxWidth: 560,
                 padding: 18,
-                translate: { x: 4, y: -2 },
-                rotate: -0.012,
                 decoration: {
                   gradient: {
                     type: 'linear',
@@ -160,10 +158,10 @@ export default Page({
                   },
                   borderRadius: 22,
                   border: {
-                    left: { color: '#bfdbfe', width: 3 },
+                    left: { color: '#bfdbfe', width: 2 },
                     top: { color: '#ddd6fe', width: 1 },
-                    right: { color: '#fbcfe8', width: 3 },
-                    bottom: { color: '#f5d0fe', width: 5 },
+                    right: { color: '#fbcfe8', width: 2 },
+                    bottom: { color: '#f5d0fe', width: 2 },
                   },
                   boxShadow: [
                     { color: '#552563eb', offset: { x: 8, y: 14 }, blurRadius: 24, spreadRadius: 2 },
@@ -176,7 +174,7 @@ export default Page({
                     Text('系统绘制的线性渐变', {
                       style: { color: '#ffffff', fontSize: 20, fontWeight: 'w800' },
                     }),
-                    Text('三色 stops、起止方向、双层阴影、阴影偏移、分边边框、约束和轻微变换同时生效。', {
+                    Text('三色 stops、起止方向、双层阴影、阴影偏移、分边边框和约束同时生效。', {
                       maxLines: 2,
                       overflow: 'ellipsis',
                       style: { color: '#eef2ff', fontSize: 13, height: 1.35 },

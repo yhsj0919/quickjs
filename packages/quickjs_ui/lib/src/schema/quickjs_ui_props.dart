@@ -386,6 +386,14 @@ final class QuickjsUiProps {
     };
   }
 
+  static MainAxisSize mainAxisSize(Object? value) {
+    return switch (value) {
+      null || 'max' => MainAxisSize.max,
+      'min' => MainAxisSize.min,
+      _ => throw const FormatException('Unknown quickjs_ui mainAxisSize'),
+    };
+  }
+
   static CrossAxisAlignment crossAxisAlignment(Object? value) {
     return switch (value) {
       null => CrossAxisAlignment.center,

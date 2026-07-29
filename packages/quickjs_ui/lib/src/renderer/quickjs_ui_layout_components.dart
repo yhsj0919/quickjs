@@ -36,6 +36,7 @@ final QuickjsUiComponentBuilderMap quickjsUiLayoutComponentBuilders =
 
 Widget _buildRow(QuickjsUiRenderContext context, QuickjsUiNode node) {
   return Row(
+    mainAxisSize: QuickjsUiProps.mainAxisSize(node.props['mainAxisSize']),
     mainAxisAlignment: QuickjsUiProps.mainAxisAlignment(
       node.props['mainAxisAlignment'],
     ),
@@ -49,6 +50,7 @@ Widget _buildRow(QuickjsUiRenderContext context, QuickjsUiNode node) {
 
 Widget _buildColumn(QuickjsUiRenderContext context, QuickjsUiNode node) {
   return Column(
+    mainAxisSize: QuickjsUiProps.mainAxisSize(node.props['mainAxisSize']),
     mainAxisAlignment: QuickjsUiProps.mainAxisAlignment(
       node.props['mainAxisAlignment'],
     ),
