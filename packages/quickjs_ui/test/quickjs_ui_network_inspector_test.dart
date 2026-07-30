@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,28 @@ import 'package:quickjs_ui/quickjs_ui.dart';
 
 void main() {
   group('quickjs_ui network inspector', () {
+    test('default network loader decodes modules as UTF-8', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      const source = "export default '济南市天气';";
+      final requestTask = server.first.then((request) async {
+        request.response.headers.contentType = ContentType(
+          'application',
+          'javascript',
+        );
+        request.response.add(utf8.encode(source));
+        await request.response.close();
+      });
+
+      final url = Uri.parse(
+        'http://${server.address.address}:${server.port}/main.mjs',
+      );
+      final bundle = await QuickjsUiNetworkLoader().load(url: url);
+      await requestTask;
+
+      expect(bundle.modules[bundle.entry], source);
+    });
+
     test('journal merges bundle request lifecycle into one record', () async {
       final journal = QuickjsUiNetworkJournal();
       final loader = QuickjsUiNetworkLoader(
