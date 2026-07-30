@@ -479,7 +479,7 @@ Future<QuickjsUiNetworkResponse> _defaultFetch(
     headers: fetchRequest.headers,
   );
   return QuickjsUiNetworkResponse(
-    body: response.body,
+    body: utf8.decode(response.bodyBytes),
     statusCode: response.statusCode,
     headers: Map<String, String>.from(response.headers),
   );
