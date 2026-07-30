@@ -15,9 +15,11 @@ import {
     Stack,
     Svg,
     Text,
+    TextButton,
 } from 'quickjs_ui';
 import {
     WeatherBackground,
+    WEATHER_TYPES,
     createWeatherTheme,
 } from './modules/weather_background/index.mjs';
 
@@ -34,6 +36,23 @@ const TOP_TEXT_SHADOWS = [
 const DEFAULT_API_URL = 'https://ad.palsmon.com/api/app/weather/city';
 const DEFAULT_REFRESH_MS = 10 * 60 * 1000;
 const DEFAULT_RESOURCE_BASE_URL = 'assets/quickjs_ui';
+const BACKGROUND_OPTIONS = Object.freeze([null, ...WEATHER_TYPES]);
+const BACKGROUND_LABELS = Object.freeze({
+    sunny: '晴天',
+    cloudy: '多云',
+    overcast: '阴天',
+    lightRain: '小雨',
+    moderateRain: '中雨',
+    largeRain: '大雨',
+    thunderstorm: '雷雨',
+    heavyRain: '暴雨',
+    lightSnow: '小雪',
+    moderateSnow: '中雪',
+    largeSnow: '大雪',
+    heavySnow: '暴雪',
+    haze: '霾',
+    sandstorm: '沙尘',
+});
 
 // Packed lunar years 2000–2099. The high four bits store the leap month
 // position (15 means no leap month); the low thirteen bits store month lengths.
@@ -140,6 +159,7 @@ export default Page({
     createState(props) {
         return {
             refreshCount: 0,
+            backgroundIndex: 0,
             date: formatSystemDate(),
             loading: true,
             error: '',
@@ -169,7 +189,7 @@ export default Page({
         }
     },
 
-    build(state) {
+    build(state, _props, actions) {
         const city = state.city ?? EMPTY_CITY;
         return Stack({
             fit: 'expand',
@@ -189,8 +209,15 @@ export default Page({
                         ].filter(Boolean),
                     })
                 }),
+                backgroundSwitcher(state, actions),
             ],
         });
+    },
+
+    cycleBackground(state) {
+        return {
+            backgroundIndex: (state.backgroundIndex + 1) % BACKGROUND_OPTIONS.length,
+        };
     },
 
     async refresh(state, _payload, props) {
@@ -321,13 +348,39 @@ function weatherBackground(city, state) {
         assetBase: `${state.resourceBaseUrl}/modules/weather_background/assets`,
     });
     return WeatherBackground({
-        weather: weatherTypeForCode(city.weatherCode),
+        weather: BACKGROUND_OPTIONS[state.backgroundIndex]
+            ?? weatherTypeForCode(city.weatherCode),
         width: Number(state.viewportWidth) || 360,
         height: Number(state.viewportHeight) || 640,
         responsive: true,
         borderRadius: 0,
         fps: 30,
         theme,
+    });
+}
+
+function backgroundSwitcher(state, actions) {
+    const weather = BACKGROUND_OPTIONS[state.backgroundIndex];
+    const label = weather == null ? '自动' : BACKGROUND_LABELS[weather];
+    return Positioned({
+        top: 16,
+        right: 16,
+        child: Container({
+            decoration: {
+                color: '#40FFFFFF',
+                borderRadius: 18,
+                border: {color: '#55FFFFFF', width: 1},
+            },
+            child: TextButton({
+                label: `背景：${label}`,
+                onPressed: actions.cycleBackground(),
+                style: {
+                    foregroundColor: WHITE,
+                    padding: {horizontal: 14, vertical: 8},
+                    textStyle: {fontSize: 13, fontWeight: 'w700'},
+                },
+            }),
+        }),
     });
 }
 
