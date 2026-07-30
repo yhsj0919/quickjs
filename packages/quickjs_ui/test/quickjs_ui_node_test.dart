@@ -1517,10 +1517,6 @@ export default Page({
     expect(find.byType(RichText), findsAtLeastNWidgets(1));
     expect(find.byType(AnimatedAlign), findsOneWidget);
     expect(find.byType(AnimatedSwitcher), findsOneWidget);
-    expect(find.byType(AlertDialog), findsOneWidget);
-
-    await tester.pump();
-    expect(find.byType(SnackBar), findsOneWidget);
 
     await tester.tap(find.byType(FloatingActionButton));
     expect(events.single['method'], 'add');
@@ -1528,6 +1524,8 @@ export default Page({
     tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(Drawer), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
   });
 
   testWidgets('shows 0.6 bottom sheet control declaratively', (tester) async {
@@ -3600,6 +3598,38 @@ export default Page({
     expect((session.state! as Map)['values'], hasLength(12000));
     expect(session.node!.props['payload'], hasLength(12000));
   });
+
+  test(
+    'page bootstrap preserves multibyte text across chunk boundaries',
+    () async {
+      final engine = await Quickjs.create();
+      final session = QuickjsUiSession(engine: engine);
+      addTearDown(session.dispose);
+
+      await session.loadPlugin(
+        QuickjsUiPagePlugin.singleFile(
+          id: 'chunked_multibyte_graph',
+          version: '1.0.0',
+          source: '''
+import { Container, Page } from 'quickjs_ui';
+
+export default Page({
+  createState() {
+    return { payload: '汉😀'.repeat(24000) };
+  },
+  build(state) {
+    return Container({ key: 'large-multibyte-node', payload: state.payload });
+  }
+});
+''',
+        ),
+      );
+
+      final expected = List<String>.filled(24000, '汉😀').join();
+      expect((session.state! as Map)['payload'], expected);
+      expect(session.node!.props['payload'], expected);
+    },
+  );
 
   testWidgets('QuickjsUiView.asset creates a multi-file asset view', (
     tester,

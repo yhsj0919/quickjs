@@ -201,6 +201,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
     final shouldRun =
         widget.timeline.hasAnimations &&
         !widget.paused &&
+        (widget.timeline.isContinuous || !_didComplete) &&
         widget.performanceController.quality != QuickjsUiEffectQuality.off;
     if (!shouldRun) {
       _stopScheduler();

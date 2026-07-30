@@ -12,7 +12,7 @@ void main() {
           'width': 40,
           'height': 40,
           'opacity': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 1000},
-          if (interval != null) 'animationFrameIntervalMs': interval,
+          'animationFrameIntervalMs': ?interval,
         });
 
     await tester.pumpWidget(
@@ -133,6 +133,8 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
+    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    addTearDown(renderer.dispose);
     final node = QuickjsUiNode.fromMap(<String, Object?>{
       'type': 'Container',
       'key': 'animated-effects',
@@ -155,9 +157,7 @@ void main() {
       'onAnimationEnd': <String, Object?>{'method': 'effectsEnded'},
     });
 
-    await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: events.add).build(node)),
-    );
+    await tester.pumpWidget(MaterialApp(home: renderer.build(node)));
     expect(find.byType(Opacity), findsOneWidget);
     expect(find.byType(Transform), findsOneWidget);
     expect(find.byType(ImageFiltered), findsOneWidget);
@@ -168,6 +168,11 @@ void main() {
     expect(find.byType(Opacity), findsOneWidget);
     expect(find.byType(Transform), findsOneWidget);
     expect(find.byType(ImageFiltered), findsOneWidget);
+
+    await tester.pumpWidget(MaterialApp(home: renderer.build(node)));
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1);
+    expect(events, hasLength(1));
   });
 
   testWidgets('universal effects preserve pause and restart by playToken', (
