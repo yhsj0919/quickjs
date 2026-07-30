@@ -391,6 +391,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   late final _QuickjsUiLoadCoordinator _loadCoordinator;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
+  late int _observedPageRevision;
   int _generation = 0;
   _QuickjsUiAppLifecycleSignal? _lastAppLifecycleSignal;
 
@@ -412,6 +413,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _ownsPerformanceController = widget.performanceController == null;
     _performanceController.addListener(_recordPerformance);
     _controller.addListener(_handleControllerChanged);
+    _observedPageRevision = _controller.pageRevision;
     _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
     _scheduleLoad(immediate: true);
@@ -492,6 +494,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
           );
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
+      _observedPageRevision = _controller.pageRevision;
       _eventIngress.dispose();
       _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
       _renderer.dispose();
@@ -802,6 +805,10 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
 
   void _handleControllerChanged() {
     if (mounted) {
+      if (_observedPageRevision != _controller.pageRevision) {
+        _observedPageRevision = _controller.pageRevision;
+        _advanceGeneration();
+      }
       setState(() {});
     }
   }

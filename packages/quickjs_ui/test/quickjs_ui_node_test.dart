@@ -4479,21 +4479,26 @@ export default Page({
       );
     }
 
+    expect(controller.pageRevision, 0);
     await controller.load(loadVersionedPlugin);
 
     expect(controller.node?.props['data'], 'Version 1');
+    expect(controller.pageRevision, 1);
 
     await controller.refresh();
 
     expect(controller.node?.props['data'], 'Version 1');
+    expect(controller.pageRevision, 1);
 
     await controller.restart();
 
     expect(controller.node?.props['data'], 'Version 1');
+    expect(controller.pageRevision, 2);
 
     await controller.reload();
 
     expect(controller.node?.props['data'], 'Version 2');
+    expect(controller.pageRevision, 3);
   });
 
   test(
