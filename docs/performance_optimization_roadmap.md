@@ -2,6 +2,8 @@
 
 本文记录 2026-07-14 对 core 与 quickjs_ui 的性能审查结果，作为后续重构依据。
 
+所有新性能问题必须先执行 [性能问题诊断与重构流程](performance_troubleshooting.md)，完成可比较检测、原生基线和分层排除后，才能进入本路线中的实现或重构阶段。
+
 ## 当前基线
 
 共享 Runtime、独立 Context、首载 `bootstrap(props)` 重构完成后，计数器页面表现为：
@@ -207,7 +209,7 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 
 ## P1：统一混合动画管线的帧提交（未来计划）
 
-问题来源：同一动态场景同时包含 Canvas/CustomPainter、Image/Transform 和普通 Widget 动画时，当前各管线分别触发 repaint、setState 与合成提交。即使平均 CPU/GPU 占用不高，也可能因为单帧工作分布不均产生 P95/P99 尖峰和可见掉帧。雪景的 Canvas 远景与 Image 近景混用已经暴露该问题；当前天气模块暂时统一为 Image 管线规避，但底层仍需架构修复。
+问题来源：同一动态场景同时包含 Canvas/CustomPainter、Image/Transform 和普通 Widget 动画时，各管线可能分别触发 repaint、setState 与合成提交。即使平均 CPU/GPU 占用不高，也可能因为单帧工作分布不均产生 P95/P99 尖峰和可见掉帧。雪景现已使用 `ParticleFlow` 将图片粒子收敛到一个共享时钟和一个 Flow 重绘层；Canvas、普通 Widget 与平台纹理之间的跨管线帧事务仍属于后续工作。
 
 计划方向：
 
@@ -223,7 +225,7 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 - 混合场景与等量单管线场景的 P95/P99 帧耗时差距不超过 10%。
 - 在平均负载未超预算时，不允许出现连续可见掉帧；Profile 模式记录 missed frame 数量为 0。
 - 暂停、恢复、切换质量、窗口缩放和组件销毁后不得残留 ticker、timer 或 repaint listener。
-- 天气雪景恢复混合素材实现后，应达到暴雨场景相同等级的帧稳定性。
+- 图片粒子场景不得退回每个粒子独立 ticker、listener 或 `setState` 的实现。
 
 ## 推荐实施顺序
 

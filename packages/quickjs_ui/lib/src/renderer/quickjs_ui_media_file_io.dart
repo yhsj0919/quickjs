@@ -3,6 +3,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:vector_graphics/vector_graphics_compat.dart'
+    show RenderingStrategy;
+
+import 'quickjs_ui_svg_compat.dart';
 
 Widget buildQuickjsUiFileImage(
   String location, {
@@ -46,16 +50,26 @@ Widget buildQuickjsUiFileSvg(
   ui.ColorFilter? colorFilter,
   String? semanticsLabel,
   bool excludeFromSemantics = false,
+  RenderingStrategy renderingStrategy = RenderingStrategy.picture,
 }) {
-  return SvgPicture.file(
-    File(quickjsUiFilePath(location)),
+  return SvgPicture(
+    _QuickjsUiSvgFileLoader(File(quickjsUiFilePath(location))),
     width: width,
     height: height,
     fit: fit,
     colorFilter: colorFilter,
     semanticsLabel: semanticsLabel,
     excludeFromSemantics: excludeFromSemantics,
+    renderingStrategy: renderingStrategy,
   );
+}
+
+final class _QuickjsUiSvgFileLoader extends SvgFileLoader {
+  const _QuickjsUiSvgFileLoader(File file) : super(file);
+
+  @override
+  String provideSvg(void message) =>
+      normalizeQuickjsUiSvg(super.provideSvg(message));
 }
 
 String quickjsUiFilePath(String location) {

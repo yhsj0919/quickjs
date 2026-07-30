@@ -583,6 +583,14 @@ export function Text(dataOrProps, props = {}) {
   return node('Text', dataOrProps);
 }
 
+export function AutoRefresh(props) {
+  return node('AutoRefresh', props);
+}
+
+export function DateTimeText(props) {
+  return node('DateTimeText', props);
+}
+
 export function ElevatedButton(props) {
   return node('ElevatedButton', props);
 }
@@ -625,6 +633,10 @@ export function Image(props) {
 
 export function Svg(props) {
   return node('Svg', props);
+}
+
+export function ParticleFlow(props) {
+  return node('ParticleFlow', props);
 }
 
 export function animate(from, to, options = {}) {
@@ -1093,6 +1105,10 @@ export function ResponsiveViewport(props) {
   return node('ResponsiveViewport', props);
 }
 
+export function RepaintBoundary(props) {
+  return node('RepaintBoundary', props);
+}
+
 export function Expanded(props) {
   return node('Expanded', props);
 }
@@ -1281,6 +1297,8 @@ export const ui = {
   setState,
   eventField,
   Text,
+  AutoRefresh,
+  DateTimeText,
   ElevatedButton,
   TextButton,
   OutlinedButton,
@@ -1292,6 +1310,7 @@ export const ui = {
   Container,
   Image,
   Svg,
+  ParticleFlow,
   Canvas,
   SnapshotBoundary,
   animate,
@@ -1314,6 +1333,7 @@ export const ui = {
   Center,
   SizedBox,
   ResponsiveViewport,
+  RepaintBoundary,
   Expanded,
   Flexible,
   Spacer,

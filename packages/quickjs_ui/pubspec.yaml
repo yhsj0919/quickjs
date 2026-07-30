@@ -16,6 +16,7 @@ dependencies:
   http: ^1.6.0
   quickjs:
     path: ../../
+  vector_graphics: ^1.2.2
 
 executables:
   manifest: manifest

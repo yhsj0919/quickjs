@@ -50,6 +50,7 @@ export function WeatherBackground(props = {}) {
     child: scene.render(sceneProps)
   });
   const responsive = props.responsive === true;
+  const borderRadius = Math.max(0, Number(props.borderRadius ?? 28) || 0);
   const children = [responsive
     ? ResponsiveViewport({
         designWidth: width,
@@ -63,8 +64,11 @@ export function WeatherBackground(props = {}) {
   return Container({
     key: props.key,
     ...(responsive ? {} : { width, height }),
-    clipRadius: props.borderRadius ?? 28,
-    decoration: { color: '#172836', borderRadius: props.borderRadius ?? 28 },
+    ...(borderRadius > 0 ? { clipRadius: borderRadius } : {}),
+    decoration: {
+      color: '#172836',
+      ...(borderRadius > 0 ? { borderRadius } : {})
+    },
     child: Stack({ fit: responsive ? 'expand' : 'loose', children })
   });
 }

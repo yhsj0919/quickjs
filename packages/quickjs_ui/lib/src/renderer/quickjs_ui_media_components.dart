@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:vector_graphics/vector_graphics_compat.dart'
+    show RenderingStrategy;
 
 import '../resource/quickjs_ui_resource.dart';
 import '../schema/quickjs_ui_node.dart';
@@ -11,6 +13,7 @@ import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_helpers.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_media_file.dart';
+import 'quickjs_ui_svg_compat.dart';
 import 'quickjs_ui_render_context.dart';
 
 final QuickjsUiComponentBuilderMap quickjsUiMediaComponentBuilders =
@@ -137,6 +140,11 @@ Widget _buildSvg(QuickjsUiRenderContext context, QuickjsUiNode node) {
   final fit = QuickjsUiProps.boxFit(node.props['fit']) ?? BoxFit.contain;
   final semanticLabel = _semanticLabel(node);
   final excludeFromSemantics = _excludeFromSemantics(node);
+  final renderingStrategy = _svgRenderingStrategy(
+    node.props['renderingStrategy'],
+    width: width,
+    height: height,
+  );
   final color = context.color(node.props['color']);
   final colorFilter = color == null
       ? null
@@ -148,28 +156,30 @@ Widget _buildSvg(QuickjsUiRenderContext context, QuickjsUiNode node) {
     return withQuickjsUiGestures(
       context,
       node,
-      SvgPicture.string(
-        rawSvg,
+      SvgPicture(
+        QuickjsUiSvgStringLoader(rawSvg),
         width: width,
         height: height,
         fit: fit,
         colorFilter: colorFilter,
         semanticsLabel: semanticLabel,
         excludeFromSemantics: excludeFromSemantics,
+        renderingStrategy: renderingStrategy,
       ),
     );
   }
 
   final resource = context.resource(_resourceSource(node), name: 'Svg src');
   final svg = switch (resource.kind) {
-    QuickjsUiResourceKind.asset => SvgPicture.asset(
-      resource.location,
+    QuickjsUiResourceKind.asset => SvgPicture(
+      QuickjsUiSvgAssetLoader(resource.location),
       width: width,
       height: height,
       fit: fit,
       colorFilter: colorFilter,
       semanticsLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
+      renderingStrategy: renderingStrategy,
     ),
     QuickjsUiResourceKind.file => buildQuickjsUiFileSvg(
       resource.location,
@@ -179,31 +189,54 @@ Widget _buildSvg(QuickjsUiRenderContext context, QuickjsUiNode node) {
       colorFilter: colorFilter,
       semanticsLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
+      renderingStrategy: renderingStrategy,
     ),
-    QuickjsUiResourceKind.network => SvgPicture.network(
-      resource.location,
-      headers: resource.headers.isEmpty ? null : resource.headers,
+    QuickjsUiResourceKind.network => SvgPicture(
+      QuickjsUiSvgNetworkLoader(
+        resource.location,
+        headers: resource.headers.isEmpty ? null : resource.headers,
+      ),
       width: width,
       height: height,
       fit: fit,
       colorFilter: colorFilter,
       semanticsLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
+      renderingStrategy: renderingStrategy,
     ),
-    QuickjsUiResourceKind.data => SvgPicture.string(
-      _dataUriText(resource.location),
+    QuickjsUiResourceKind.data => SvgPicture(
+      QuickjsUiSvgStringLoader(_dataUriText(resource.location)),
       width: width,
       height: height,
       fit: fit,
       colorFilter: colorFilter,
       semanticsLabel: semanticLabel,
       excludeFromSemantics: excludeFromSemantics,
+      renderingStrategy: renderingStrategy,
     ),
     QuickjsUiResourceKind.custom => throw FormatException(
       'quickjs_ui Svg does not support custom resource: ${resource.location}',
     ),
   };
   return withQuickjsUiGestures(context, node, svg);
+}
+
+RenderingStrategy _svgRenderingStrategy(
+  Object? value, {
+  required double? width,
+  required double? height,
+}) {
+  return switch (QuickjsUiProps.string(value, name: 'renderingStrategy')) {
+    null =>
+      width != null && height != null
+          ? RenderingStrategy.raster
+          : RenderingStrategy.picture,
+    'raster' => RenderingStrategy.raster,
+    'picture' => RenderingStrategy.picture,
+    _ => throw const FormatException(
+      'Unknown quickjs_ui Svg renderingStrategy',
+    ),
+  };
 }
 
 Object? _resourceSource(QuickjsUiNode node) {
