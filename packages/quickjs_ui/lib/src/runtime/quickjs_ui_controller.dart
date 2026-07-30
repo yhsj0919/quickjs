@@ -52,6 +52,7 @@ final class QuickjsUiController extends ChangeNotifier {
   Future<void>? _closeFuture;
   bool _timerPumpRunning = false;
   int _loadRequestId = 0;
+  int _pageRevision = 0;
   Timer? _timerPump;
 
   QuickjsUiSession get session => _session;
@@ -62,6 +63,10 @@ final class QuickjsUiController extends ChangeNotifier {
   QuickjsUiNode? get node => _session.node;
   QuickjsUiError? get error => _error;
   QuickjsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
+
+  /// Monotonically identifies the JS page instance currently owned by this
+  /// controller. It changes only after a page replacement succeeds.
+  int get pageRevision => _pageRevision;
 
   void _acceptLoadMetrics(QuickjsUiLoadMetrics? metrics) {
     if (metrics == null) return;
@@ -142,6 +147,10 @@ final class QuickjsUiController extends ChangeNotifier {
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
+      if (_disposed || requestId != _loadRequestId) {
+        return;
+      }
+      _pageRevision += 1;
       final metrics = _session.lastLoadMetrics;
       _acceptLoadMetrics(
         metrics?.withStage('resourceLoad', resourceWatch.elapsed),
@@ -193,6 +202,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
+      _pageRevision += 1;
       _startTimerPump();
     } catch (error) {
       if (_disposed || requestId != _loadRequestId) {
@@ -422,6 +432,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
+      _pageRevision += 1;
       _startTimerPump();
     } catch (error) {
       if (_disposed || requestId != _loadRequestId) {
@@ -469,6 +480,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
+      _pageRevision += 1;
       _startTimerPump();
       if (_disposed || requestId != _loadRequestId) {
         return;
