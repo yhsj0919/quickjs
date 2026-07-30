@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_basic_components.dart';
+import 'quickjs_ui_auto_refresh_components.dart';
 import 'quickjs_ui_canvas_component.dart';
 import 'quickjs_ui_feedback_components.dart';
 import 'quickjs_ui_input_components.dart';
 import 'quickjs_ui_layout_components.dart';
 import 'quickjs_ui_media_components.dart';
 import 'quickjs_ui_navigation_components.dart';
+import 'quickjs_ui_particle_flow_component.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_scroll_components.dart';
 import 'quickjs_ui_snapshot_component.dart';
@@ -53,12 +55,14 @@ final class QuickjsUiComponentRegistry {
   factory QuickjsUiComponentRegistry.defaults() {
     return QuickjsUiComponentRegistry(<String, QuickjsUiComponentBuilder>{
       ...quickjsUiBasicComponentBuilders,
+      ...quickjsUiAutoRefreshComponentBuilders,
       ...quickjsUiCanvasComponentBuilders,
       ...quickjsUiLayoutComponentBuilders,
       ...quickjsUiMediaComponentBuilders,
       ...quickjsUiScrollComponentBuilders,
       ...quickjsUiInputComponentBuilders,
       ...quickjsUiNavigationComponentBuilders,
+      ...quickjsUiParticleFlowComponentBuilders,
       ...quickjsUiFeedbackComponentBuilders,
       ...quickjsUiSnapshotComponentBuilders,
     });

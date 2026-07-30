@@ -20,6 +20,7 @@ final QuickjsUiComponentBuilderMap quickjsUiLayoutComponentBuilders =
       'Center': _buildCenter,
       'SizedBox': _buildSizedBox,
       'ResponsiveViewport': _buildResponsiveViewport,
+      'RepaintBoundary': _buildRepaintBoundary,
       'Expanded': _buildExpanded,
       'Flexible': _buildFlexible,
       'Spacer': _buildSpacer,
@@ -272,6 +273,13 @@ Widget _buildResponsiveViewport(
       );
     },
   );
+}
+
+Widget _buildRepaintBoundary(
+  QuickjsUiRenderContext context,
+  QuickjsUiNode node,
+) {
+  return RepaintBoundary(child: context.child(node) ?? const SizedBox.shrink());
 }
 
 Widget _buildExpanded(QuickjsUiRenderContext context, QuickjsUiNode node) {

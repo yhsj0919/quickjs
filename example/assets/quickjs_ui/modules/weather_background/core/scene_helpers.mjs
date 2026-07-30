@@ -1,19 +1,28 @@
-import { animate, Container, Positioned } from 'quickjs_ui';
+import { animate, Container, Positioned, RepaintBoundary, Stack } from 'quickjs_ui';
 
 export function sceneRoot(width, height, colors, children, stops) {
   return Container({
     width,
     height,
-    decoration: {
-      gradient: {
-        type: 'linear',
-        begin: 'topCenter',
-        end: 'bottomCenter',
-        colors,
-        ...(stops == null ? {} : { stops })
-      }
-    },
-    child: { type: 'Stack', children }
+    child: Stack({
+      fit: 'expand',
+      children: [
+        RepaintBoundary({
+          child: Container({
+            decoration: {
+              gradient: {
+                type: 'linear',
+                begin: 'topCenter',
+                end: 'bottomCenter',
+                colors,
+                ...(stops == null ? {} : { stops })
+              }
+            }
+          })
+        }),
+        ...children
+      ]
+    })
   });
 }
 

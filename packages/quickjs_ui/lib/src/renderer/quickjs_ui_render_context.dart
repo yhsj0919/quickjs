@@ -73,6 +73,7 @@ final class QuickjsUiRenderContext {
     QuickjsUiSnapshotRegistry? snapshotRegistry,
     QuickjsUiPerformanceController? performanceController,
     QuickjsUiFrameScheduler? frameScheduler,
+    this.networkResourceBaseUri,
   }) : _buildNode = buildNode,
        _buildNodeAtPath = buildNodeAtPath,
        _onUiEvent = onUiEvent,
@@ -99,6 +100,7 @@ final class QuickjsUiRenderContext {
   final QuickjsUiSnapshotRegistry snapshotRegistry;
   final QuickjsUiPerformanceController performanceController;
   final QuickjsUiFrameScheduler frameScheduler;
+  final Uri? networkResourceBaseUri;
 
   QuickjsUiRenderContext withPath(String path) {
     return QuickjsUiRenderContext(
@@ -112,6 +114,7 @@ final class QuickjsUiRenderContext {
       snapshotRegistry: snapshotRegistry,
       performanceController: performanceController,
       frameScheduler: frameScheduler,
+      networkResourceBaseUri: networkResourceBaseUri,
       path: path,
     );
   }
@@ -174,7 +177,19 @@ final class QuickjsUiRenderContext {
     Object? value, {
     String name = 'resource',
   }) {
-    return QuickjsUiResourceReference.parse(value, name: name);
+    final resource = QuickjsUiResourceReference.parse(value, name: name);
+    final baseUri = networkResourceBaseUri;
+    if (baseUri == null || resource.kind != QuickjsUiResourceKind.asset) {
+      return resource;
+    }
+    return QuickjsUiResourceReference(
+      location: baseUri.resolve(resource.location).toString(),
+      kind: QuickjsUiResourceKind.network,
+      mimeType: resource.mimeType,
+      sha256: resource.sha256,
+      cacheKey: resource.cacheKey,
+      headers: resource.headers,
+    );
   }
 
   Widget build(QuickjsUiNode node) {

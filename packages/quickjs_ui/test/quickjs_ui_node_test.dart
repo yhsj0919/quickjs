@@ -165,6 +165,39 @@ void main() {
     expect(QuickjsUiProps.opacity(-1), 0);
   });
 
+  test('resolves relative renderer resources against a network bundle', () {
+    final context = QuickjsUiRenderContext(
+      buildNode: (_) => const SizedBox.shrink(),
+      onUiEvent: (_) {},
+      networkResourceBaseUri: Uri.parse('https://cdn.example/weather/'),
+    );
+
+    final resource = context.resource('./weatherIcon/104.svg');
+
+    expect(resource.kind, QuickjsUiResourceKind.network);
+    expect(
+      resource.location,
+      'https://cdn.example/weather/weatherIcon/104.svg',
+    );
+  });
+
+  test('parses text shadows', () {
+    final style = QuickjsUiProps.textStyle(<String, Object?>{
+      'color': '#ffffffff',
+      'shadows': <Object?>[
+        <String, Object?>{
+          'color': '#66000000',
+          'offset': <String, Object?>{'x': 1, 'y': 2},
+          'blurRadius': 3,
+        },
+      ],
+    });
+
+    expect(style?.shadows, const <Shadow>[
+      Shadow(color: Color(0x66000000), offset: Offset(1, 2), blurRadius: 3),
+    ]);
+  });
+
   test('parses box decoration gradients and shadows', () {
     final linear = QuickjsUiProps.boxDecoration(<String, Object?>{
       'decoration': <String, Object?>{

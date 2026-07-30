@@ -542,6 +542,16 @@ export type TextProps = AccessibilityProps & {
   style?: TextStyle | ThemeTextStyleToken;
 };
 
+export type AutoRefreshProps = AccessibilityProps & {
+  intervalMs: number;
+  paused?: boolean;
+  child: QuickjsUiNode;
+};
+
+export type DateTimeTextProps = Omit<TextProps, 'data' | 'text'> & {
+  format?: string;
+};
+
 export type ControlVisualStyle = {
   backgroundColor?: ColorValue;
   foregroundColor?: ColorValue;
@@ -728,7 +738,35 @@ export type SvgProps = AccessibilityProps & {
   height?: number;
   fit?: BoxFit;
   color?: ColorValue;
+  renderingStrategy?: 'raster' | 'picture';
   excludeFromSemantics?: boolean;
+};
+
+export type ParticleFlowParticle = {
+  fromX: number;
+  toX: number;
+  fromY: number;
+  toY: number;
+  fromOpacity?: number;
+  toOpacity?: number;
+  fromScale?: number;
+  toScale?: number;
+  /** Rotation in radians. */
+  fromRotation?: number;
+  /** Rotation in radians. */
+  toRotation?: number;
+  durationMs: number;
+  phaseMs?: number;
+};
+
+export type ParticleFlowProps = AccessibilityProps & {
+  width: number;
+  height: number;
+  particles: ParticleFlowParticle[];
+  children: QuickjsUiNode[];
+  frameIntervalMs?: number;
+  paused?: boolean;
+  playToken?: JsonValue;
 };
 
 export type GradientValue = {
@@ -1240,6 +1278,10 @@ export type ResponsiveViewportProps = AccessibilityProps & {
   child?: QuickjsUiNode;
 };
 
+export type RepaintBoundaryProps = AccessibilityProps & {
+  child?: QuickjsUiNode;
+};
+
 export type SliderProps = AccessibilityProps & {
   value?: number;
   min?: number;
@@ -1522,6 +1564,8 @@ export declare function Text(
   props?: Omit<TextProps, 'data'>
 ): QuickjsUiNode;
 export declare function Text(props: TextProps): QuickjsUiNode;
+export declare function AutoRefresh(props: AutoRefreshProps): QuickjsUiNode;
+export declare function DateTimeText(props: DateTimeTextProps): QuickjsUiNode;
 export declare function ElevatedButton(props: ButtonProps): QuickjsUiNode;
 export declare function TextButton(props: ButtonProps): QuickjsUiNode;
 export declare function OutlinedButton(props: ButtonProps): QuickjsUiNode;
@@ -1533,6 +1577,7 @@ export declare function Column(props: FlexProps): QuickjsUiNode;
 export declare function Container(props: ContainerProps): QuickjsUiNode;
 export declare function Image(props: ImageProps): QuickjsUiNode;
 export declare function Svg(props: SvgProps): QuickjsUiNode;
+export declare function ParticleFlow(props: ParticleFlowProps): QuickjsUiNode;
 export declare function Canvas(props: CanvasProps): QuickjsUiNode;
 export declare function SnapshotBoundary(
   props: SnapshotBoundaryProps
@@ -1561,6 +1606,9 @@ export declare function Center(props: CenterProps): QuickjsUiNode;
 export declare function SizedBox(props: SizedBoxProps): QuickjsUiNode;
 export declare function ResponsiveViewport(
   props: ResponsiveViewportProps
+): QuickjsUiNode;
+export declare function RepaintBoundary(
+  props: RepaintBoundaryProps
 ): QuickjsUiNode;
 export declare function Expanded(props: FlexChildProps): QuickjsUiNode;
 export declare function Flexible(props: FlexChildProps): QuickjsUiNode;
@@ -1619,6 +1667,8 @@ export declare function Hero(props: HeroProps): QuickjsUiNode;
 export declare const ui: {
   Text(data: string, props?: Omit<TextProps, 'data'>): QuickjsUiNode;
   Text(props: TextProps): QuickjsUiNode;
+  AutoRefresh(props: AutoRefreshProps): QuickjsUiNode;
+  DateTimeText(props: DateTimeTextProps): QuickjsUiNode;
   ElevatedButton(props: ButtonProps): QuickjsUiNode;
   TextButton(props: ButtonProps): QuickjsUiNode;
   OutlinedButton(props: ButtonProps): QuickjsUiNode;
@@ -1630,6 +1680,7 @@ export declare const ui: {
   Container(props: ContainerProps): QuickjsUiNode;
   Image(props: ImageProps): QuickjsUiNode;
   Svg(props: SvgProps): QuickjsUiNode;
+  ParticleFlow(props: ParticleFlowProps): QuickjsUiNode;
   Canvas(props: CanvasProps): QuickjsUiNode;
   SnapshotBoundary(props: SnapshotBoundaryProps): QuickjsUiNode;
   animate: typeof animate;
@@ -1651,6 +1702,7 @@ export declare const ui: {
   Center(props: CenterProps): QuickjsUiNode;
   SizedBox(props: SizedBoxProps): QuickjsUiNode;
   ResponsiveViewport(props: ResponsiveViewportProps): QuickjsUiNode;
+  RepaintBoundary(props: RepaintBoundaryProps): QuickjsUiNode;
   Expanded(props: FlexChildProps): QuickjsUiNode;
   Flexible(props: FlexChildProps): QuickjsUiNode;
   Spacer(props?: { flex?: number }): QuickjsUiNode;

@@ -90,6 +90,28 @@ immediately. Flutter's reduced-motion accessibility setting also disables
 control-state transitions. Product code should provide an equivalent static
 end state and must not make meaning depend on motion alone.
 
+## Retained particle flow
+
+`ParticleFlow` is the preferred carrier for a large set of widget-backed
+particles that share the same vertical looping motion. JavaScript provides
+serializable trajectories and retained child widgets once; Flutter advances
+all particles from one clock and repaints one `Flow` layer without rebuilding
+each child on every frame.
+
+- `width` and `height` are required logical-pixel bounds.
+- `particles.length` must equal `children.length`.
+- Each particle defines `fromX`, `toX`, `fromY`, `toY`, and `durationMs`.
+  Optional start/end pairs interpolate opacity, scale, and rotation; `phaseMs`
+  offsets its loop without creating another clock.
+- `frameIntervalMs` limits paint frequency. Omitting it follows display VSync.
+- `paused` preserves elapsed time; changing `playToken` restarts all particles
+  as one generation.
+
+Use this component when the visual must remain a normal Flutter widget (for
+example decoded image sprites). Prefer Canvas for primitive-only particles.
+Do not create one independently ticking effect per particle: that multiplies
+listeners, rebuilds, and layer work even when all particles share one timeline.
+
 ## Performance acceptance
 
 ### Adaptive effect quality

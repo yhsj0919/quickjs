@@ -39,6 +39,8 @@
     "node": {
       "oneOf": [
         { "$ref": "#/$defs/text" },
+        { "$ref": "#/$defs/autoRefresh" },
+        { "$ref": "#/$defs/dateTimeText" },
         { "$ref": "#/$defs/elevatedButton" },
         { "$ref": "#/$defs/textButton" },
         { "$ref": "#/$defs/outlinedButton" },
@@ -50,6 +52,7 @@
         { "$ref": "#/$defs/container" },
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/svg" },
+        { "$ref": "#/$defs/particleFlow" },
         { "$ref": "#/$defs/canvas" },
         { "$ref": "#/$defs/snapshotBoundary" },
         { "$ref": "#/$defs/listView" },
@@ -68,6 +71,7 @@
         { "$ref": "#/$defs/center" },
         { "$ref": "#/$defs/sizedBox" },
         { "$ref": "#/$defs/responsiveViewport" },
+        { "$ref": "#/$defs/repaintBoundary" },
         { "$ref": "#/$defs/expanded" },
         { "$ref": "#/$defs/flexible" },
         { "$ref": "#/$defs/spacer" },
@@ -439,7 +443,15 @@
               ]
             },
             "letterSpacing": { "$ref": "#/$defs/space" },
-            "height": { "type": "number" }
+            "height": { "type": "number" },
+            "textShadow": { "$ref": "#/$defs/textShadow" },
+            "textShadows": { "type": "array", "items": { "$ref": "#/$defs/textShadow" } },
+            "shadows": {
+              "oneOf": [
+                { "$ref": "#/$defs/textShadow" },
+                { "type": "array", "items": { "$ref": "#/$defs/textShadow" } }
+              ]
+            }
           }
         }
       ]
@@ -515,6 +527,22 @@
         "blur": { "type": "number", "minimum": 0 },
         "spreadRadius": { "type": "number" },
         "spread": { "type": "number" }
+      }
+    },
+    "textShadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/color" },
+        "offset": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+        },
+        "offsetX": { "type": "number" },
+        "offsetY": { "type": "number" },
+        "blurRadius": { "type": "number", "minimum": 0 },
+        "blur": { "type": "number", "minimum": 0 }
       }
     },
     "resource": {
@@ -611,6 +639,41 @@
             "type": { "const": "Text" },
             "data": { "type": "string" },
             "text": { "type": "string" },
+            "textAlign": {
+              "type": "string",
+              "enum": ["left", "right", "center", "justify", "start", "end"]
+            },
+            "style": { "$ref": "#/$defs/textStyle" },
+            "maxLines": { "type": "integer", "minimum": 1 },
+            "softWrap": { "type": "boolean" },
+            "overflow": { "enum": ["clip", "fade", "ellipsis", "visible"] }
+          }
+        }
+      ]
+    },
+    "autoRefresh": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/singleChild" },
+        {
+          "type": "object",
+          "required": ["intervalMs", "child"],
+          "properties": {
+            "type": { "const": "AutoRefresh" },
+            "intervalMs": { "type": "integer", "minimum": 16, "maximum": 86400000 },
+            "paused": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "dateTimeText": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "DateTimeText" },
+            "format": { "type": "string" },
             "textAlign": {
               "type": "string",
               "enum": ["left", "right", "center", "justify", "start", "end"]
@@ -797,7 +860,56 @@
               "enum": ["fill", "contain", "cover", "fitWidth", "fitHeight", "none", "scaleDown"]
             },
             "color": { "$ref": "#/$defs/color" },
+            "renderingStrategy": { "enum": ["raster", "picture"] },
             "excludeFromSemantics": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "particleFlow": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        {
+          "type": "object",
+          "required": ["type", "width", "height", "particles", "children"],
+          "properties": {
+            "type": { "const": "ParticleFlow" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "particles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "fromX",
+                  "toX",
+                  "fromY",
+                  "toY",
+                  "durationMs"
+                ],
+                "properties": {
+                  "fromX": { "type": "number" },
+                  "toX": { "type": "number" },
+                  "fromY": { "type": "number" },
+                  "toY": { "type": "number" },
+                  "fromOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+                  "toOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+                  "fromScale": { "type": "number" },
+                  "toScale": { "type": "number" },
+                  "fromRotation": { "type": "number" },
+                  "toRotation": { "type": "number" },
+                  "durationMs": { "type": "number", "exclusiveMinimum": 0 },
+                  "phaseMs": { "type": "number" }
+                }
+              }
+            },
+            "children": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/node" }
+            },
+            "frameIntervalMs": { "type": "integer", "minimum": 4, "maximum": 1000 },
+            "paused": { "type": "boolean" },
+            "playToken": { "$ref": "#/$defs/jsonValue" }
           }
         }
       ]
@@ -1138,6 +1250,16 @@
             "fit": { "type": "string" },
             "alignment": { "type": "string" }
           }
+        }
+      ]
+    },
+    "repaintBoundary": {
+      "allOf": [
+        { "$ref": "#/$defs/baseNode" },
+        { "$ref": "#/$defs/singleChild" },
+        {
+          "type": "object",
+          "properties": { "type": { "const": "RepaintBoundary" } }
         }
       ]
     },

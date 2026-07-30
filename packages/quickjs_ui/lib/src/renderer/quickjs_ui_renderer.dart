@@ -25,6 +25,7 @@ final class QuickjsUiRenderer {
     this.onDiffStats,
     QuickjsUiComponentRegistry? registry,
     QuickjsUiPerformanceController? performanceController,
+    this.networkResourceBaseUri,
   }) : registry = registry ?? QuickjsUiComponentRegistry.defaults(),
        performanceController =
            performanceController ?? QuickjsUiPerformanceController(),
@@ -37,6 +38,7 @@ final class QuickjsUiRenderer {
   final QuickjsUiDiffStatsListener? onDiffStats;
   final QuickjsUiComponentRegistry registry;
   final QuickjsUiPerformanceController performanceController;
+  final Uri? networkResourceBaseUri;
   final bool _ownsPerformanceController;
   final QuickjsUiSnapshotRegistry snapshotRegistry =
       QuickjsUiSnapshotRegistry();
@@ -113,6 +115,7 @@ final class QuickjsUiRenderer {
       snapshotRegistry: snapshotRegistry,
       performanceController: performanceController,
       frameScheduler: frameScheduler,
+      networkResourceBaseUri: networkResourceBaseUri,
     );
     final widget = buildNode(node);
     performanceController.updateResourceMetrics(

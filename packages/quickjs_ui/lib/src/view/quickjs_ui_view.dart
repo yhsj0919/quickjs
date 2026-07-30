@@ -425,7 +425,16 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       onUiEvent: _eventIngress.submitEnvelope,
       onDiffStats: devOptions.logDiff ? _controller.inspector.recordDiff : null,
       performanceController: _performanceController,
+      networkResourceBaseUri: _networkResourceBaseUri(),
     );
+  }
+
+  Uri? _networkResourceBaseUri() {
+    if (widget._source != _QuickjsUiViewSource.network) return null;
+    final root = widget.networkBundleRoot;
+    if (root == null) return widget.networkUrl!.resolve('.');
+    final value = root.toString();
+    return value.endsWith('/') ? root : Uri.parse('$value/');
   }
 
   QuickjsUiComponentRegistry? _effectiveRegistry() {

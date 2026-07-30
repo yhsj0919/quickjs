@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:vector_graphics/vector_graphics_compat.dart'
+    show RenderingStrategy;
 
 Widget buildQuickjsUiFileImage(
   String location, {
@@ -32,6 +34,7 @@ Widget buildQuickjsUiFileSvg(
   ui.ColorFilter? colorFilter,
   String? semanticsLabel,
   bool excludeFromSemantics = false,
+  RenderingStrategy renderingStrategy = RenderingStrategy.picture,
 }) {
   throw UnsupportedError(
     'quickjs_ui file Svg resources are not supported on this platform: '

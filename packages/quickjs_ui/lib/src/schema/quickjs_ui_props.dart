@@ -451,7 +451,62 @@ final class QuickjsUiProps {
         name: 'text style height',
         resolveNumber: resolveNumber,
       ),
+      shadows: _textShadows(
+        props['shadows'] ?? props['textShadows'] ?? props['textShadow'],
+        resolveColor: resolveColor,
+        resolveNumber: resolveNumber,
+      ),
     );
+  }
+
+  static List<Shadow>? _textShadows(
+    Object? value, {
+    QuickjsUiColorResolver? resolveColor,
+    QuickjsUiNumberResolver? resolveNumber,
+  }) {
+    if (value == null) return null;
+    final values = value is List ? value : <Object?>[value];
+    return values
+        .map((raw) {
+          final shadow = map(raw, name: 'Text shadow');
+          final rawOffset = shadow['offset'];
+          final offset = rawOffset == null
+              ? const <String, Object?>{}
+              : map(rawOffset, name: 'Text shadow offset');
+          final blurRadius =
+              number(
+                shadow['blurRadius'] ?? shadow['blur'],
+                name: 'text shadow blurRadius',
+                resolveNumber: resolveNumber,
+              ) ??
+              0;
+          if (blurRadius < 0) {
+            throw const FormatException(
+              'quickjs_ui Text shadow blurRadius must not be negative',
+            );
+          }
+          return Shadow(
+            color:
+                color(shadow['color'], resolveColor: resolveColor) ??
+                const Color(0x55000000),
+            offset: Offset(
+              number(
+                    offset['x'] ?? shadow['offsetX'],
+                    name: 'text shadow offset x',
+                    resolveNumber: resolveNumber,
+                  ) ??
+                  0,
+              number(
+                    offset['y'] ?? shadow['offsetY'],
+                    name: 'text shadow offset y',
+                    resolveNumber: resolveNumber,
+                  ) ??
+                  0,
+            ),
+            blurRadius: blurRadius,
+          );
+        })
+        .toList(growable: false);
   }
 
   static FontWeight? fontWeight(Object? value) {

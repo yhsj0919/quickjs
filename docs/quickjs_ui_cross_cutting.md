@@ -14,6 +14,9 @@ Flutter already has a stronger primitive.
 
 > **功能修复允许重构，不要一直在错误的路径上打补丁。**
 
+性能问题必须先遵循
+[`performance_troubleshooting.md`](performance_troubleshooting.md)：开启统一检测、建立原生基线、分层单变量排除并确认根因后，才允许修改生产实现。
+
 When a bug reveals a lifecycle or ownership mismatch, fix the architecture first.
 Do not stack frame-timing workarounds across `QuickjsUiView`, `QuickjsUiController`,
 custom renderers, and page code unless the workaround is itself the documented
