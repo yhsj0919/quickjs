@@ -33,8 +33,6 @@ const TOP_TEXT_SHADOWS = [
     {color: '#66000000', offset: {x: 0, y: 1.5}, blurRadius: 3},
 ];
 
-const DEFAULT_API_URL = 'https://ad.palsmon.com/api/app/weather/city';
-const DEFAULT_REFRESH_MS = 10 * 60 * 1000;
 const DEFAULT_RESOURCE_BASE_URL = 'assets/quickjs_ui';
 const BACKGROUND_OPTIONS = Object.freeze([null, ...WEATHER_TYPES]);
 const BACKGROUND_LABELS = Object.freeze({
@@ -134,23 +132,38 @@ const QWEATHER_TO_METEOCONS = {
     999: 'not-available',
 };
 
-let refreshTimer = 0;
-
-const EMPTY_CITY = {
-    name: '加载中...',
-    condition: '',
-    iconSource: null,
-    temp: '--',
-    high: '--',
-    low: '--',
-    air: '-',
-    aqi: '-',
-    alert: '-',
-    bodyTemp: '--',
-    humidity: '--',
-    uv: '-',
-    hourly: [],
-    daily: [],
+const DEMO_CITY = {
+    name: '示例城市',
+    condition: '晴天',
+    iconSource: 'assets/quickjs_ui/weatherIcon/clear-day.svg',
+    weatherCode: 100,
+    temp: '24',
+    high: '28',
+    low: '18',
+    air: '优',
+    aqi: '24',
+    alert: '无',
+    bodyTemp: '24',
+    humidity: '45',
+    uv: '适宜',
+    hourly: [
+        {time: '现在', iconSource: 'assets/quickjs_ui/weatherIcon/clear-day.svg', temp: '24'},
+        {time: '11:00', iconSource: 'assets/quickjs_ui/weatherIcon/clear-day.svg', temp: '25'},
+        {time: '12:00', iconSource: 'assets/quickjs_ui/weatherIcon/partly-cloudy-day.svg', temp: '26'},
+        {time: '13:00', iconSource: 'assets/quickjs_ui/weatherIcon/partly-cloudy-day.svg', temp: '27'},
+        {time: '14:00', iconSource: 'assets/quickjs_ui/weatherIcon/cloudy.svg', temp: '28'},
+        {time: '15:00', iconSource: 'assets/quickjs_ui/weatherIcon/cloudy.svg', temp: '27'},
+        {time: '16:00', iconSource: 'assets/quickjs_ui/weatherIcon/clear-day.svg', temp: '26'},
+    ],
+    daily: [
+        {day: '今天', date: '08/10', iconSource: 'assets/quickjs_ui/weatherIcon/clear-day.svg', text: '晴', high: '28', low: '18', air: '优'},
+        {day: '周二', date: '08/11', iconSource: 'assets/quickjs_ui/weatherIcon/partly-cloudy-day.svg', text: '多云', high: '27', low: '19', air: '优'},
+        {day: '周三', date: '08/12', iconSource: 'assets/quickjs_ui/weatherIcon/cloudy.svg', text: '阴', high: '25', low: '20', air: '良'},
+        {day: '周四', date: '08/13', iconSource: 'assets/quickjs_ui/weatherIcon/rain.svg', text: '小雨', high: '23', low: '19', air: '良'},
+        {day: '周五', date: '08/14', iconSource: 'assets/quickjs_ui/weatherIcon/rain.svg', text: '阵雨', high: '24', low: '18', air: '优'},
+        {day: '周六', date: '08/15', iconSource: 'assets/quickjs_ui/weatherIcon/clear-day.svg', text: '晴', high: '27', low: '17', air: '优'},
+        {day: '周日', date: '08/16', iconSource: 'assets/quickjs_ui/weatherIcon/snow.svg', text: '示例', high: '22', low: '16', air: '优'},
+    ],
 };
 
 export default Page({
@@ -161,42 +174,23 @@ export default Page({
             refreshCount: 0,
             backgroundIndex: 0,
             date: formatSystemDate(),
-            loading: true,
+            loading: false,
             error: '',
-            axiosStatus: '正在检测 Axios...',
-            city: null,
-            apiUrl: props.apiUrl ?? DEFAULT_API_URL,
+            city: DEMO_CITY,
             resourceBaseUrl: normalizeResourceBaseUrl(props.resourceBaseUrl),
             viewportWidth: Number(props.width) || 360,
             viewportHeight: Number(props.height) || 640,
         };
     },
 
-    async onMount(state, _payload, props, _event, ctx) {
-        if (ctx?.actions?.refresh) {
-            refreshTimer = setInterval(
-                () => ctx.actions.refresh(),
-                props.refreshMs ?? DEFAULT_REFRESH_MS,
-            );
-        }
-        return loadWeather(state, props);
-    },
-
-    onDispose() {
-        if (refreshTimer) {
-            clearInterval(refreshTimer);
-            refreshTimer = 0;
-        }
-    },
-
     build(state, _props, actions) {
-        const city = state.city ?? EMPTY_CITY;
+        const city = state.city ?? DEMO_CITY;
         return Stack({
             fit: 'expand',
             children: [
                 weatherBackground(city, state),
                 Padding({
-                    padding: {left: 50, top: 50, right: 50, bottom: 150},
+                    padding: {left: 50, top: 50, right: 50, bottom: 24},
                     child: Column({
                         children: [
                             Flexible({flex: 1, child: Container({})}),
@@ -220,127 +214,7 @@ export default Page({
         };
     },
 
-    async refresh(state, _payload, props) {
-        const next = await loadWeather(state, props);
-        return {...next, refreshCount: state.refreshCount + 1};
-    },
-
 });
-
-async function loadWeather(state, props = {}) {
-    const resourceBaseUrl = normalizeResourceBaseUrl(
-        props.resourceBaseUrl ?? state.resourceBaseUrl,
-    );
-    try {
-        const apiUrl = props.apiUrl ?? state.apiUrl ?? DEFAULT_API_URL;
-        const data = await requestJson(apiUrl);
-        return {
-            loading: false,
-            error: '',
-            axiosStatus: axiosStatusText(),
-            city: mapWeatherPayload(data, `${resourceBaseUrl}/weatherIcon`),
-            apiUrl,
-            resourceBaseUrl,
-            date: formatSystemDate(),
-        };
-    } catch (error) {
-        return {
-            loading: false,
-            error: describeError(error),
-            axiosStatus: axiosStatusText(),
-            city: state.city ?? null,
-            resourceBaseUrl,
-            date: formatSystemDate(),
-        };
-    }
-}
-
-async function requestJson(url) {
-    if (typeof axios === 'function') {
-        const response = await axios.get(url);
-        console.log('weather api response', JSON.stringify(response.data));
-        return response.data;
-    }
-    if (typeof fetch === 'function') {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        console.log('weather api response', JSON.stringify(data));
-        return data;
-    }
-    throw new Error('Axios/Fetch 未注入');
-}
-
-function axiosStatusText() {
-    if (typeof axios === 'function') {
-        return `Axios ${axios.VERSION ?? '已注入'} · Fetch/XHR 已启用`;
-    }
-    return 'Axios 未注入';
-}
-
-function mapWeatherPayload(data, weatherIconBaseUrl) {
-    const payload = data?.data ?? data;
-    const item = payload?.list?.[0];
-    if (!item) {
-        throw new Error(`天气接口未返回 list 数据，实际 keys: ${Object.keys(payload ?? {}).join(',') || 'empty'}`);
-    }
-
-    const now = item.now ?? {};
-    const location = payload.location ?? {};
-    const air = item.current_airquality?.[0];
-    const alert = item.current_weatheralert?.alerts?.[0];
-    const uv = item.indices?.find((entry) => entry.name === '紫外线指数');
-    const today = item.days?.[0] ?? {};
-
-    return {
-        name: location.city_name ?? `${item.city ?? '未知'}市`,
-        condition: now.text ?? '',
-        iconSource: weatherIconSource(now.icon, weatherIconBaseUrl),
-        weatherCode: now.icon,
-        temp: toNumber(now.temp),
-        high: toNumber(today.tempMax),
-        low: toNumber(today.tempMin),
-        air: air?.category ?? '-',
-        aqi: air?.aqi ?? '-',
-        alert: alert?.eventType?.name ?? '无',
-        bodyTemp: toNumber(now.feelsLike),
-        humidity: toNumber(now.humidity),
-        uv: uv?.category ?? '-',
-        hourly: mapHourly(item.hours ?? [], weatherIconBaseUrl),
-        daily: mapDaily(item.days ?? [], item.daily_airquality ?? [], weatherIconBaseUrl),
-    };
-}
-
-function mapHourly(hours, weatherIconBaseUrl) {
-    const now = Date.now();
-    const upcoming = hours.filter((hour) => {
-        const time = Date.parse(hour.fxTime ?? '');
-        return Number.isFinite(time) && time >= now - 60 * 60 * 1000;
-    });
-
-    return upcoming.slice(0, 7).map((hour) => ({
-        time: formatHourTime(hour.fxTime),
-        iconSource: weatherIconSource(hour.icon, weatherIconBaseUrl),
-        temp: toNumber(hour.temp),
-    }));
-}
-
-function mapDaily(days, dailyAir, weatherIconBaseUrl) {
-    return days.slice(0, 7).map((day, index) => {
-        const airEntry = dailyAir[index]?.indexes?.[0];
-        return {
-            day: dayLabel(index, day.fxDate),
-            date: formatShortDate(day.fxDate),
-            iconSource: weatherIconSource(day.iconDay, weatherIconBaseUrl),
-            text: day.textDay ?? '',
-            high: toNumber(day.tempMax),
-            low: toNumber(day.tempMin),
-            air: airEntry?.category ?? '-',
-        };
-    });
-}
 
 
 function weatherBackground(city, state) {
@@ -400,14 +274,6 @@ function weatherTypeForCode(value) {
     if ([502, 511, 512, 513].includes(code)) return 'haze';
     if ([503, 504, 507, 508].includes(code)) return 'sandstorm';
     return 'sunny';
-}
-
-function weatherIconSource(iconCode, weatherIconBaseUrl) {
-    if (iconCode == null || iconCode === '') {
-        return null;
-    }
-    const name = QWEATHER_TO_METEOCONS[Number(iconCode)] ?? 'not-available';
-    return `${weatherIconBaseUrl}/${name}.svg`;
 }
 
 function normalizeResourceBaseUrl(value) {
@@ -521,18 +387,6 @@ function dayLabel(index, fxDate) {
 function toNumber(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : value ?? '-';
-}
-
-function describeError(error) {
-    if (error == null) return '未知错误';
-    if (typeof axios !== 'undefined' && axios.isAxiosError?.(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.msg ?? error.message ?? 'Axios 请求失败';
-        return status == null ? message : `HTTP ${status}: ${message}`;
-    }
-    if (typeof error === 'string') return error;
-    if (error && typeof error.message === 'string') return error.message;
-    return String(error);
 }
 
 function errorBanner(message) {

@@ -9,7 +9,6 @@ import 'package:lemon_js_example/pages/quickjs_ui/foundation/quickjs_ui_controls
 import 'package:lemon_js_example/pages/quickjs_ui/foundation/quickjs_ui_scroll_transition_page.dart';
 import 'package:lemon_js_example/pages/quickjs_ui/getting_started/quickjs_ui_bundle_counter_page.dart';
 import 'package:lemon_js_example/pages/quickjs_ui/getting_started/quickjs_ui_counter_page.dart';
-import 'package:lemon_js_example/pages/quickjs_ui/getting_started/quickjs_ui_network_counter_page.dart';
 import 'package:lemon_js_example/pages/quickjs_ui/getting_started/quickjs_ui_schema_page.dart';
 import 'package:lemon_js_example/pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart';
 import 'package:lemon_js_example/pages/quickjs_ui/platform/quickjs_ui_custom_components_page.dart';
@@ -132,18 +131,6 @@ void main() {
 
     expect(find.text('多文件模块计数器'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-  });
-
-  testWidgets('registers quickjs_ui network counter page', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiNetworkCounterPage()),
-    );
-
-    expect(find.text('网络加载计数器'), findsOneWidget);
-    expect(find.text('Refresh'), findsOneWidget);
-    expect(find.text('Reload source'), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui controls page', (

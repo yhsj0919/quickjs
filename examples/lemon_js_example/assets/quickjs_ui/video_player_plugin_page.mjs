@@ -10,7 +10,7 @@ import {
 import { VideoPlayer } from 'quickjs_ui/video_player';
 
 const DEFAULT_SOURCE =
-  'https://ht-1368.oss-cn-qingdao.aliyuncs.com/media/202607/8221be4a8ef9_20241226004348483.mp4';
+  'https://media.w3.org/2010/05/sintel/trailer.mp4';
 
 function formatMs(value) {
   const totalMs = Math.max(0, value ?? 0);
