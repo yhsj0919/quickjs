@@ -178,7 +178,7 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 | version poll | 1.360ms | 1.773ms | 3.254ms | 167.056ms | 240 | 0 |
 | legacy | 2.291ms | 2.814ms | 4.446ms | 281.401ms | 360 | 120 |
 
-第一阶段将空闲执行时间降低约 40.6%，并消除了空闲 Flutter rebuild。剩余成本主要是每个 tick 的 timer eval 与 poll 两次 worker 往返；基准入口为 `packages/quickjs_ui/benchmark/timer_pump_benchmark_test.dart`。
+第一阶段将空闲执行时间降低约 40.6%，并消除了空闲 Flutter rebuild。剩余成本主要是每个 tick 的 timer eval 与 poll 两次 worker 往返；基准入口为 `packages/lemon_js_ui/benchmark/timer_pump_benchmark_test.dart`。
 
 第二阶段现已完成：native 为 root Runtime 和独立 Context 暴露下一次 `due_ms`。Controller 使用一次性 Dart Timer 按该延迟调度，timer 回调结束后重新读取最早 deadline；没有 timer 时不再创建 Dart Timer。页面操作完成后会立即重新同步 deadline，因此操作中新建或取消 timer 不会遗漏。
 
@@ -203,7 +203,7 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 - overlay declaration 在节点准备阶段汇总，构建结束后不再第二次遍历完整 schema 树。
 - Inspector 的 `node.toMap()` 保持在 null-aware 调用内，未启用时不会执行。
 
-2026-07-14 Release/JIT 测试进程中的 1021 节点基准：schema 准备中位数约 6.2ms；旧递归 keyed signature 约 1.1–1.4ms/次，预计算签名读取低于 1µs 计时分辨率。单叶更新的 parse + render 约 7–8ms，只重建 root、变更 section 和变更 leaf 共 3 个节点，并复用 68 个完整 keyed 子树。基准入口为 `packages/quickjs_ui/benchmark/node_pipeline_benchmark_test.dart`。
+2026-07-14 Release/JIT 测试进程中的 1021 节点基准：schema 准备中位数约 6.2ms；旧递归 keyed signature 约 1.1–1.4ms/次，预计算签名读取低于 1µs 计时分辨率。单叶更新的 parse + render 约 7–8ms，只重建 root、变更 section 和变更 leaf 共 3 个节点，并复用 68 个完整 keyed 子树。基准入口为 `packages/lemon_js_ui/benchmark/node_pipeline_benchmark_test.dart`。
 
 计数器页面 Renderer 约 0.1ms，因此该项不应早于调用边界和资源缓存优化。
 

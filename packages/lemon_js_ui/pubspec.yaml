@@ -1,0 +1,35 @@
+name: lemon_js_ui
+description: "Declarative Flutter UI layer powered by package:lemon_js."
+version: 0.1.0
+homepage: https://github.com/yhsj0919/quickjs
+repository: https://github.com/yhsj0919/quickjs
+issue_tracker: https://github.com/yhsj0919/quickjs/issues
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+resolution: workspace
+
+dependencies:
+  archive: ^4.0.9
+  crypto: ^3.0.7
+  flutter:
+    sdk: flutter
+  flutter_svg: ^2.3.0
+  http: ^1.6.0
+  lemon_js: ^0.1.0
+  vector_graphics: ^1.2.2
+
+executables:
+  codegen: codegen
+  manifest: manifest
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  assets:
+    - js/quickjs_ui.schema.json

@@ -1,4 +1,4 @@
-# quickjs_ui Roadmap
+# quickjs_ui 路线图
 
 ## quickjs_ui：独立 UI 包开发计划
 
@@ -421,7 +421,7 @@ Flutter 风格对象写法：
 
 ### 0.1：最小可用原型
 
-- [x] 新建 `packages/quickjs_ui`：独立 Flutter package，依赖 `quickjs`，先提供导出入口、
+- [x] 新建 `packages/lemon_js_ui`：独立 Flutter package，依赖 `quickjs`，先提供导出入口、
   `QuickjsUiNode`、`QuickjsUiController` 和 `QuickjsUiView` 骨架。
 - [x] 实现 `QuickjsUiView.plugin()`。
 - [x] 实现 JS 页面协议：公开写法为 `Page({ createState, build, ...methods })`，底层适配
@@ -462,7 +462,7 @@ Flutter 风格对象写法：
 - [x] `QuickjsUiController.reload()`。
 - [x] network bundle 开启后支持基础 `reload()`：重新拉取入口/manifest/resources 并刷新页面。
 - [x] `QuickjsUiNetworkLoader`：支持 network `.mjs` 加载、相对 import 解析、可替换 fetch client 和结构化状态码错误。
-- [x] tool：`quickjs_ui_dev_server.dart`，本地 HTTP 服务 `example/assets/quickjs_ui`，用于 network 页面开发调试。
+- [x] tool：`quickjs_ui_dev_server.dart`，本地 HTTP 服务 `examples/lemon_js_example/assets/quickjs_ui`，用于 network 页面开发调试。
 - [x] example：network counter 页面，通过 `QuickjsUiView.network(url)` 加载本地 dev server 页面。
 - [x] `QuickjsUiNetworkLoader`：补充 ETag、304 not modified 和内存缓存复用。
 - [x] `QuickjsUiNetworkLoader`：提供 request/response/cacheStore/cacheHit 日志回调，demo 可观察缓存命中。

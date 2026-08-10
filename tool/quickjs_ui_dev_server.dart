@@ -1,13 +1,14 @@
 import 'dart:io';
 
-/// Serves [example/assets/quickjs_ui] over HTTP for network UI page development.
+/// Serves [examples/lemon_js_example/assets/quickjs_ui] over HTTP for network
+/// UI page development.
 ///
 /// Example:
 /// ```bash
 /// dart run tool/quickjs_ui_dev_server.dart
 /// ```
 Future<void> main() async {
-  final root = Directory('example/assets/quickjs_ui');
+  final root = Directory('examples/lemon_js_example/assets/quickjs_ui');
   if (!root.existsSync()) {
     stderr.writeln('Missing directory: ${root.path}');
     exitCode = 1;

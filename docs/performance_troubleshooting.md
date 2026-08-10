@@ -36,6 +36,10 @@
 - 使用同一台设备、相同分辨率、DPR、天气或业务数据。
 - 对静态页面使用独立且极小的原生帧驱动器持续请求 VSync；驱动器必须拥有自己的最外层重绘边界，不能把重绘传播到被测页面。
 - 暂停动画后没有持续帧请求时，FPS 表示“产生了多少帧”，不表示设备的最大渲染能力。
+- Web 页面能够绘制但动画停在一帧时，先检查浏览器控制台中的
+  `matchMedia('(prefers-reduced-motion: reduce)').matches`，以及性能快照中的
+  `reducedMotion`、`quality` 和 `stoppedCanvasTickerCount`。系统请求减少动画时，
+  JSUI 会主动停止 Canvas Ticker，不能将其误判为 Web Canvas 或 VSync 故障。
 
 ## 2. 建立原生基线
 

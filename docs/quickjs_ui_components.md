@@ -1,12 +1,11 @@
-# quickjs_ui components
+# quickjs_ui 组件
 
-0.4.0 introduces a lightweight JS component convention. A JS component is still
-only a function that returns quickjs_ui UI schema. It does not create or hold a
-Flutter `Widget`, and it does not own a page session.
+0.4.0 引入轻量级 JS 组件约定。JS 组件仍只是返回 quickjs_ui UI Schema 的函数，
+不会创建或持有 Flutter `Widget`，也不拥有页面 Session。
 
-## JS component modules
+## JS 组件模块
 
-Use `Component(render)` for reusable schema-producing functions:
+使用 `Component(render)` 定义可复用的 Schema 生成函数：
 
 ```js
 import { Column, Component, ElevatedButton, Text } from 'quickjs_ui';
@@ -24,7 +23,7 @@ export const CounterCard = Component((props) => {
 });
 ```
 
-Pages pass plain props down and pass event maps up:
+页面向下传递普通 props，向上传递事件映射：
 
 ```js
 import { Page } from 'quickjs_ui';
@@ -47,24 +46,20 @@ export default Page({
 });
 ```
 
-The event protocol is intentionally restricted to serializable maps such as
-`{ method: 'increment', payload: { step: 1 } }`. Do not pass JS callback
-functions through UI schema props.
+事件协议刻意限制为 `{ method: 'increment', payload: { step: 1 } }` 等可序列化映射。
+不要通过 UI Schema props 传递 JS 回调函数。
 
-Built-in interactive props use the same event map protocol. `onTap` and
-`onLongPress` are supported on layout/media wrapper nodes such as `Container`,
-`Padding`, `Center`, `SizedBox`, `Image`, and `ListView`. `ListView` also
-supports `onScroll`; the dispatched event includes `pixels`, `minScrollExtent`,
-`maxScrollExtent`, `viewportDimension`, and `axis`.
+内置交互属性使用相同的事件映射协议。`Container`、`Padding`、`Center`、
+`SizedBox`、`Image` 和 `ListView` 等布局/媒体包装节点支持 `onTap` 与
+`onLongPress`。`ListView` 还支持 `onScroll`，事件包含 `pixels`、
+`minScrollExtent`、`maxScrollExtent`、`viewportDimension` 和 `axis`。
 
-Form controls are controlled by JS state. `TextField`, `Checkbox`, `Switch`,
-`Radio`, and `DropdownButton` render the schema value they receive and dispatch
-`onChanged` with the next `value`. They do not keep authoritative state in
-Flutter.
+表单控件由 JS state 控制。`TextField`、`Checkbox`、`Switch`、`Radio` 和
+`DropdownButton` 渲染收到的 Schema 值，并通过 `onChanged` 分发新的 `value`；
+Flutter 不保存权威业务状态。
 
-Basic implicit animation is opt-in with serializable props. `Container` animates
-size, padding, margin, alignment, color/decoration, and opacity; `Padding`
-animates padding.
+基础隐式动画通过可序列化 props 显式启用。`Container` 可对尺寸、内外边距、对齐、
+颜色/装饰及透明度执行动画；`Padding` 可对内边距执行动画。
 
 ```js
 Container({
@@ -76,8 +71,7 @@ Container({
 })
 ```
 
-`Container` and `DecoratedBox` decorations also support linear/radial
-gradients and one or more box shadows:
+`Container` 和 `DecoratedBox` 的装饰也支持线性/径向渐变及一个或多个阴影：
 
 ```js
 Container({
@@ -98,12 +92,10 @@ Container({
 })
 ```
 
-`Image.alignment` controls image placement inside its bounds. `Stack` accepts
-`clipBehavior` and clips with `hardEdge` by default; `Wrap` defaults to the
-horizontal direction, matching Flutter.
+`Image.alignment` 控制图像在边界内的位置。`Stack` 接受 `clipBehavior`，默认使用
+`hardEdge` 裁剪；`Wrap` 与 Flutter 一致，默认采用水平方向。
 
-High-frequency events can opt into renderer-side coalescing before crossing the
-QuickJS boundary:
+高频事件可在跨越 QuickJS 边界前启用渲染器侧合并：
 
 ```js
 {
@@ -116,16 +108,14 @@ QuickJS boundary:
 }
 ```
 
-`throttleMs` sends the first event immediately and coalesces later events in the
-window, keeping only the latest payload. `debounceMs` waits until events stop
-for the configured window, also keeping only the latest payload. `dropMs` sends
-the first event and discards later events in the window; it does not keep a
-pending latest event. The same fields may be placed under `policy`.
+`throttleMs` 立即发送首个事件，并在时间窗口内合并后续事件，只保留最新 payload。
+`debounceMs` 等待事件停止指定时间，同样只保留最新 payload。`dropMs` 发送首个事件并
+丢弃窗口内后续事件，不保留待发送的最新事件。这些字段也可以放在 `policy` 下。
 
-## Host renderer components
+## 宿主渲染组件
 
-JS components can return a custom `type`. The host must register that type in
-`QuickjsUiComponentRegistry`; otherwise rendering fails with an unknown node type.
+JS 组件可以返回自定义 `type`。宿主必须在 `QuickjsUiComponentRegistry` 中注册该类型，
+否则渲染会因未知节点类型失败。
 
 ```js
 import { Component, Text } from 'quickjs_ui';
@@ -149,10 +139,8 @@ final registry = QuickjsUiComponentRegistry.defaults()
   });
 ```
 
-Custom renderers should use `context.dispatchEvent()` for high-frequency native
-callbacks so they share the same event policy. For example, a video player can
-drop overly frequent progress ticks while still sending terminal events
-immediately:
+自定义渲染器的高频原生回调应使用 `context.dispatchEvent()`，以共享同一事件策略。
+例如，视频播放器可丢弃过于频繁的进度采样，同时立即发送结束事件：
 
 ```dart
 context.dispatchEvent(
@@ -165,72 +153,53 @@ context.dispatchEvent(
 );
 ```
 
-Use `dropMs` for status samples where skipped intermediate values are fine, such
-as playback progress. Use `throttleMs` when the latest value in each window
-matters, such as scroll position. Use `debounceMs` for settled values, such as
-text composing or resize-like input.
+允许跳过中间值的状态采样（如播放进度）使用 `dropMs`；需要每个窗口最新值的场景
+（如滚动位置）使用 `throttleMs`；等待稳定值的场景（如文字组合或缩放输入）使用
+`debounceMs`。
 
-The renderer event dispatcher applies backpressure before events reach the page
-session. Each `coalesceKey` can have at most one pending event. The dispatcher
-also has a bounded pending queue; when the queue is full, the oldest pending
-event is discarded. Timing policies without a `coalesceKey` are sent
-immediately and are not queued, so high-frequency custom components should
-always provide a stable key.
+渲染器事件分发器会在事件抵达页面 Session 前施加背压。每个 `coalesceKey` 最多有一个
+待处理事件；待处理队列也有容量上限，满载时丢弃最早事件。未提供 `coalesceKey` 的
+定时策略会立即发送且不进入队列，因此高频自定义组件必须提供稳定 key。
 
-Use plain `context.dispatch()` only for low-frequency events such as `onEnded`,
-`onError`, `onPlay`, or `onPause`.
+普通 `context.dispatch()` 仅用于 `onEnded`、`onError`、`onPlay` 或 `onPause`
+等低频事件。
 
-## Renderer event ingress
+## 渲染器事件入口
 
-`QuickjsUiView` does not wire renderer callbacks directly to
-`QuickjsUiController.dispatch()`. All renderer and custom-component events go
-through `QuickjsUiEventIngress`, which queues them and flushes after the
-current frame. This keeps page state updates from synchronously rebuilding the
-view during Flutter `build`.
+`QuickjsUiView` 不会把渲染器回调直接连接到 `QuickjsUiController.dispatch()`。
+所有渲染器及自定义组件事件均经过 `QuickjsUiEventIngress`，由其入队并在当前帧后刷新，
+避免页面状态更新在 Flutter `build` 期间同步重建 View。
 
-Custom renderers should call `context.dispatch()` / `context.dispatchEvent()`
-normally. Do not add `addPostFrameCallback` around those calls in host code.
+自定义渲染器正常调用 `context.dispatch()` / `context.dispatchEvent()` 即可，
+宿主代码不要再在调用外包裹 `addPostFrameCallback`。
 
-See `docs/quickjs_ui_cross_cutting.md` for the full pipeline, fix/refactor
-policy, and the `seekToken` / `restartToken` imperative-control pattern used by
-the native video player example.
+完整管线、修复/重构策略，以及原生视频播放器示例采用的 `seekToken` / `restartToken`
+命令式控制模式见 `docs/quickjs_ui_cross_cutting.md`。
 
-Use the same registry with `QuickjsUiView` or `QuickjsUiNavigator` so nested
-JSUI routes render custom component types consistently.
-All rendered nodes can also use `onMouseEnter`, `onMouseExit`, `onMouseHover`,
-`onMouseScroll`, `onPointerDown`, `onPointerMove`, `onPointerUp`, and
-`onPointerCancel`.
-Pointer payloads include local/global coordinates, deltas, buttons, pressure,
-device `kind`, and a timestamp. Scroll events also include `scrollDeltaX` and
-`scrollDeltaY`. High-frequency hover and move events are
-coalesced per frame. Use `mouseCursor` (or `cursor`) for common system cursors
-such as `click`, `text`, `move`, `grab`, and resize cursors.
+`QuickjsUiView` 与 `QuickjsUiNavigator` 应使用同一注册表，保证嵌套 JSUI 路由一致渲染
+自定义组件类型。所有渲染节点还可使用 `onMouseEnter`、`onMouseExit`、`onMouseHover`、
+`onMouseScroll`、`onPointerDown`、`onPointerMove`、`onPointerUp` 和
+`onPointerCancel`。
+指针 payload 包含局部/全局坐标、增量、按键、压力、设备 `kind` 和时间戳。滚轮事件还
+包含 `scrollDeltaX` 与 `scrollDeltaY`。高频悬停和移动事件按帧合并。常用系统光标可通过
+`mouseCursor`（或 `cursor`）设置，例如 `click`、`text`、`move`、`grab` 和缩放光标。
 
-Input behavior is shared by every rendered node. `hitTestBehavior` accepts
-`deferToChild`, `opaque`, or `translucent`; `ignorePointer` lets events pass
-through a subtree, while `absorbPointer` consumes them. Keyboard-capable nodes
-can use `autofocus`, `canRequestFocus`, `onFocus`, `onBlur`, `onKeyDown`, and
-`onKeyUp`. Key and pointer payloads include Ctrl/Shift/Alt/Meta modifier state.
+每个渲染节点共享相同输入行为。`hitTestBehavior` 接受 `deferToChild`、`opaque` 或
+`translucent`；`ignorePointer` 允许事件穿透子树，`absorbPointer` 则消费事件。
+支持键盘的节点可使用 `autofocus`、`canRequestFocus`、`onFocus`、`onBlur`、
+`onKeyDown` 和 `onKeyUp`。键盘与指针 payload 均包含 Ctrl/Shift/Alt/Meta 修饰键状态。
 
-Layout and visual fundamentals include Container min/max constraints,
-independent `translate`, `scale`, `rotate`, and `transformAlignment` shortcuts,
-per-side borders, circle decorations, and background blend modes. Text supports
-`maxLines`, `softWrap`, and `overflow`. Images support `repeat`, tint `color`,
-and `blendMode`. Scrollable components support `physics` and an optional
-`scrollbar`. Stack paint and hit-test order follows child array order; later
-children are above earlier children.
+布局与视觉基础能力包括 Container 最小/最大约束，独立的 `translate`、`scale`、
+`rotate` 和 `transformAlignment` 快捷属性，分边框线、圆形装饰及背景混合模式。
+Text 支持 `maxLines`、`softWrap` 和 `overflow`；Image 支持 `repeat`、着色 `color`
+和 `blendMode`；可滚动组件支持 `physics` 及可选 `scrollbar`。Stack 的绘制和命中顺序
+遵循 children 数组顺序，越靠后的子节点越靠上。
 
-Use `AnchoredOverlay` for popovers, dropdown panels, context menus, teaching
-bubbles, and similar system-layer content. Its `anchor` remains in normal
-layout while `overlay` renders in Flutter's Overlay and follows the anchor.
-`placement` supports automatic, top/bottom start/center/end, left/right, and
-center positions. `gap` sets the base anchor distance. Positive main-axis
-`offset` values move the overlay farther in its placement direction (up for
-top, down for bottom, left for left, and right for right); the cross-axis keeps
-screen-coordinate direction. `screenPadding` reserves edge space and the
-native positioner flips or shifts content when needed.
-`consumeOutsideTap`, `useRootOverlay`, `animated`, `matchAnchorWidth`, and
-`onDismissed` control common popover behavior.
-Set `dismissOnTapOutside: false` for overlays that must remain open while the
-user drags or scrolls outside the anchor; the default remains `true` for menus
-and dropdown panels.
+弹出框、下拉面板、上下文菜单、引导气泡等系统层内容使用 `AnchoredOverlay`。
+`anchor` 保持在普通布局中，`overlay` 在 Flutter Overlay 中渲染并跟随锚点。
+`placement` 支持自动定位、上下方向的 start/center/end、左右及居中位置；`gap` 设置
+基础锚点距离。主轴正 `offset` 会让浮层沿放置方向远离锚点，交叉轴仍采用屏幕坐标方向。
+`screenPadding` 预留屏幕边缘空间，原生定位器会在需要时翻转或平移内容。
+`consumeOutsideTap`、`useRootOverlay`、`animated`、`matchAnchorWidth` 和
+`onDismissed` 控制常见弹出层行为。需要在用户于锚点外拖动或滚动时保持打开，可设置
+`dismissOnTapOutside: false`；菜单和下拉面板默认仍为 `true`。

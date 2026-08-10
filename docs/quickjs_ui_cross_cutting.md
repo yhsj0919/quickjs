@@ -1,271 +1,120 @@
-# quickjs_ui cross-cutting modules
+# quickjs_ui 跨模块设计
 
-This document tracks large quickjs_ui concerns that cut across schema, renderer,
-custom components, navigation, resource loading, and tooling. These are not
-single-widget features.
+本文记录横跨 Schema、Renderer、自定义组件、导航、资源加载和工具链的设计约束。
+这些能力不是某个单独 Widget 的特性，应在拥有边界的架构层统一实现。
 
-## Design Rule
+## 设计原则
 
-For each cross-cutting module, start from Flutter's native model and expose only
-the serializable subset that fits quickjs_ui. Do not copy Web/DOM concepts when
-Flutter already has a stronger primitive.
+每个跨模块能力都应从 Flutter 原生模型出发，只向 JS 暴露适合 quickjs_ui 的可序列化
+子集。当 Flutter 已经提供更可靠的原语时，不复制 Web/DOM 概念，也不创建平行 UI
+Runtime。
 
-### Fix and Refactor Policy
+Flutter 对应原语包括：
 
-> **功能修复允许重构，不要一直在错误的路径上打补丁。**
+- 无障碍：`Semantics`、`SemanticsProperties`、`Tooltip`；
+- 主题：`ThemeData`、`ColorScheme`、`TextTheme`；
+- 焦点与键盘：`FocusNode`、`FocusTraversalPolicy`、`Actions`、`Shortcuts`；
+- 表单：`Form`、`FormField` 和受控输入控件；
+- 滚动：`ScrollController`、`ScrollNotification`；
+- 动画：`ImplicitlyAnimatedWidget`、`AnimatedContainer`、`AnimatedList`。
+
+### 修复与重构策略
+
+> 功能修复允许重构，不要持续在错误的生命周期或所有权边界上叠加补丁。
 
 性能问题必须先遵循
-[`performance_troubleshooting.md`](performance_troubleshooting.md)：开启统一检测、建立原生基线、分层单变量排除并确认根因后，才允许修改生产实现。
+[`performance_troubleshooting.md`](performance_troubleshooting.md)：开启统一检测、建立
+原生基线、进行分层单变量对照并确认根因，之后才允许修改生产实现。
 
-When a bug reveals a lifecycle or ownership mismatch, fix the architecture first.
-Do not stack frame-timing workarounds across `QuickjsUiView`, `QuickjsUiController`,
-custom renderers, and page code unless the workaround is itself the documented
-contract.
+发现 Bug 时依次确认：
 
-Use this decision checklist:
+1. 明确被破坏的不变量，例如 Renderer 回调不得在 Flutter build 期间同步重建页面。
+2. 问题横跨多层时，在拥有边界的层修复，不增加零散的 `addPostFrameCallback`、延迟
+   `setState` 或重复 `notifyListeners`。
+3. 结构修复完成后删除被替代的临时分支和逐组件帧时序补丁。
+4. 在本文及 `docs/quickjs_ui_components.md` 中记录新契约。
 
-1. Name the real invariant being violated. Example: renderer callbacks must not
-   synchronously rebuild the page while Flutter is still building widgets.
-2. If the failure spans more than one layer, move the fix to the layer that owns
-   the boundary instead of adding local `addPostFrameCallback` / deferred
-   `setState` / extra `notifyListeners` calls.
-3. Delete superseded patches after the structural fix lands. A correct design
-   should make per-widget frame hacks unnecessary.
-4. Document the new contract in this file and in `docs/quickjs_ui_components.md`
-   so future custom renderers follow the same path.
+## 无障碍与语义
 
-Anti-patterns that were removed in favor of the renderer event ingress:
+UI Schema 应携带足够信息，使 Flutter 能生成可用的无障碍树。规划字段包括
+`semanticLabel`、`tooltip`、`role`、`enabled`、`selected`、焦点顺序及遍历提示。
+图片、按钮、表单、自定义 Renderer 和列表项都应提供语义测试。
 
-- `QuickjsUiView` deferring every controller notification with chained post-frame
-  rebuild flags.
-- `QuickjsUiController.dispatch()` notifying listeners before the page session
-  finishes, then notifying again after completion.
-- Custom renderers such as `VideoPlayer` deferring `onReady` / progress listeners
-  with their own post-frame callbacks.
+边界：JS 只返回可序列化 Schema，不接收 Flutter `SemanticsNode` 或平台无障碍句柄。
 
-Preferred outcome: one documented pipeline, predictable tests, and example pages
-that only express product behavior rather than Flutter frame timing.
+## 主题与设计令牌
 
-Reference points in Flutter:
+页面应引用宿主提供的稳定设计令牌，而不是依赖 Flutter 主题对象的内部结构。令牌范围
+包括颜色、文字、间距、圆角、海拔和动效，并支持深色、高对比度、品牌注入、校验与
+回退。Schema 可以引用 `$colors.primary`、`$text.titleMedium` 等名称，但不得依赖
+`ThemeData` 的对象形状。
 
-- Accessibility: `Semantics`, `SemanticsProperties`, `Tooltip`.
-- Theme: `ThemeData`, `ColorScheme`, `TextTheme`.
-- Focus and keyboard: `FocusNode`, `FocusTraversalPolicy`,
-  `FocusTraversalGroup`, `Actions`, `Shortcuts`.
-- Forms: `Form`, `FormField`, controlled input widgets.
-- Scrolling: `ScrollController`, `ScrollNotification`.
-- Animation: `ImplicitlyAnimatedWidget`, `AnimatedContainer`,
-  `AnimatedPadding`, `AnimatedList`.
+## Renderer → Page 事件管线
 
-quickjs_ui should translate JS schema into these Flutter concepts, not create a
-parallel UI runtime.
-
-## Accessibility / Semantics
-
-Goal: UI schema should carry enough semantic information for Flutter to expose a
-usable accessibility tree.
-
-Flutter reference: map schema props to `Semantics` / `SemanticsProperties` and
-`Tooltip` where appropriate.
-
-Planned scope:
-
-- `semanticLabel`, `tooltip`, `role`, `enabled`, `selected`, and related
-  semantic props.
-- Screen reader labels for images, buttons, form fields, custom renderers, and
-  list items.
-- Focus order and traversal hints where Flutter defaults are not enough.
-- Tests that verify semantic labels and roles for representative widgets.
-
-Boundary: JS still returns serializable schema only. It does not receive Flutter
-`SemanticsNode` or platform accessibility handles.
-
-## Theme / Design Tokens
-
-Goal: pages should reference host-provided design tokens instead of hard-coding
-Flutter theme internals.
-
-Flutter reference: resolve tokens through `ThemeData`, `ColorScheme`, and
-`TextTheme`, while keeping token names stable across host apps.
-
-Planned scope:
-
-- Color, text style, spacing, radius, elevation, and motion tokens.
-- Dark mode and high-contrast variants.
-- Host brand theme injection.
-- Token validation and fallback rules.
-- Documentation for token names that are stable across host apps.
-
-Boundary: JS schema may reference tokens such as `$colors.primary` or
-`$text.titleMedium`; it should not depend on Flutter `ThemeData` object shape.
-
-## Renderer → Page Event Pipeline
-
-Goal: all renderer-originated UI events must cross the JS boundary without
-violating Flutter build/layout invariants.
-
-### Problem
-
-Built-in widgets and custom renderers call `QuickjsUiRenderContext.dispatch()` or
-`dispatchEvent()` from gesture handlers, scroll notifications, media callbacks,
-and sometimes while a renderer rebuild is still in progress. A direct
-`QuickjsUiController.dispatch()` from those call sites can:
-
-1. Run JS `dispatch()` during Flutter `build`.
-2. Call `notifyListeners()` and synchronously rebuild `QuickjsUiView`.
-3. Trigger `setState() called during build` or silently drop the final refresh
-   when notifications are merged.
-
-Patching each call site or each custom renderer with post-frame deferral does not
-scale and hides the real boundary violation.
-
-### Architecture
-
-`QuickjsUiView` owns a `QuickjsUiEventIngress`. The renderer and every custom
-component still call `onEvent` through `QuickjsUiRenderContext`; the view wires
-that to `ingress.submit()` instead of `controller.dispatch()`:
+所有 Renderer 产生的 UI 事件都必须安全跨越 JS 边界，不能破坏 Flutter build/layout
+不变量。统一管线如下：
 
 ```text
 Widget build / gesture / media callback
   -> QuickjsUiRenderContext.dispatch / dispatchEvent
-  -> QuickjsUiEventDispatcher (optional coalesce / throttle / debounce)
-  -> QuickjsUiEventIngress.submit (queue)
-  -> post-frame flush
+  -> QuickjsUiEventDispatcher（合并、节流、防抖）
+  -> QuickjsUiEventIngress.submit（入队）
+  -> 帧结束后刷新
   -> QuickjsUiController.dispatch
   -> QuickjsUiSession.dispatch
   -> notifyListeners
   -> QuickjsUiView setState
 ```
 
-Responsibilities:
+职责划分：
 
-| Layer | Responsibility |
+| 层 | 职责 |
 | --- | --- |
-| `QuickjsUiEventDispatcher` | Renderer-side backpressure for high-frequency events before they reach the page session. |
-| `QuickjsUiEventIngress` | Frame-safe delivery into the controller; preserves event order per flush. |
-| `QuickjsUiController` | Session serialization, error surface, and a single `notifyListeners()` after dispatch completes. |
-| `QuickjsUiView` | Plain `setState` on controller changes; no frame-timing rebuild chain. |
-| Custom renderers | Emit serializable events only; no post-frame dispatch workarounds. |
+| `QuickjsUiEventDispatcher` | 高频事件进入页面 Session 前的 Renderer 侧背压。 |
+| `QuickjsUiEventIngress` | 按帧安全投递到 Controller，并保持单次刷新内的事件顺序。 |
+| `QuickjsUiController` | Session 串行化、错误呈现，以及 dispatch 完成后一次通知。 |
+| `QuickjsUiView` | Controller 变化时执行普通 `setState`，不维护帧时序重建链。 |
+| 自定义 Renderer | 只发送可序列化事件，不增加自己的帧后延迟补丁。 |
 
-Implementation reference:
+### 通过 JS state 进行命令式控制
 
-- `packages/quickjs_ui/lib/src/renderer/quickjs_ui_event_ingress.dart`
-- `packages/quickjs_ui/lib/src/view/quickjs_ui_view.dart`
+JS state 需要触发 seek、restart、replace source 等原生副作用时，应使用显式可序列化
+props 加单调递增 token，而不是隐藏 Renderer 状态。例如：
 
-### Imperative control from JS state
+- `seekPositionMs` 携带目标位置；
+- `seekToken` 每次请求 seek 时递增；
+- `restartToken` 使用同一模式表示“从头播放”。
 
-When JS page state must command native side effects such as `seek`, `restart`, or
-`replace source`, use explicit serializable props plus a monotonic token instead
-of hidden renderer state.
+这样媒体控制仍然是声明式、可测试的，并与 Renderer → Page 事件入口分离。
 
-Example from the native video player demo:
+## 焦点、键盘与 IME
 
-- `seekPositionMs` carries the target position.
-- `seekToken` increments when the page wants the host renderer to apply that seek.
-- `restartToken` uses the same pattern for "play from start".
+表单和文字输入应映射到 Flutter `FocusNode`、焦点遍历、`Actions` 与 `Shortcuts`。
+JS 接收 `onFocus`、`onBlur`、键盘动作、提交及可序列化组合输入事件，不持有焦点句柄。
+`onChanged` 和 IME 高频事件必须使用明确的事件策略。
 
-This keeps media control declarative in schema, testable in page state, and
-separate from the event ingress that handles renderer → page callbacks.
+## Schema 版本与兼容性
 
-Boundary: ingress is owned by `QuickjsUiView` / navigator-hosted views. Code that
-constructs `QuickjsUiRenderer` directly for isolated widget tests bypasses ingress
-by design.
+发布包和宿主应能协商 quickjs_ui 协议版本。新增 props 必须有安全默认值；弃用 props
+应保留到明确的移除版本；未知类型和未知字段按显式策略忽略或失败。版本信息属于
+quickjs_ui 和发布包元数据，不应要求 quickjs core 理解 UI Schema。
 
-## Focus / Keyboard / IME
+## 自定义 Renderer 生命周期
 
-Goal: form and text input behavior should be predictable without leaking
-platform-specific IME details into page code.
+视频、地图、相机和平台 View 等自定义 Renderer 应像 `StatefulWidget` 一样管理资源：
+初始化时创建，Schema 变化时更新，响应 show/hide、pause/resume，并确定性 dispose。
+高频回调统一通过 `QuickjsUiRenderContext.dispatchEvent()`，不得自行增加帧后回调。
 
-Flutter reference: use `FocusNode`, focus traversal policies, `Actions`, and
-`Shortcuts` for native keyboard behavior. JS should receive events, not focus
-handles.
+边界：自定义 Renderer 可以持有 Flutter/Dart 资源；JS 只能观察可序列化状态和事件。
+Stream 只用于真正的数据流，不作为普通 UI 事件的默认通道。
 
-Planned scope:
+## 资源与媒体模型
 
-- Unified `onFocus` / `onBlur` events across text fields and custom inputs.
-- `autofocus`, `enabled`, `readOnly`, and next/previous focus traversal.
-- Keyboard action handling and form submit.
-- Text composing / IME high-frequency update strategy.
-- Event policies for `onChanged` and composing-like events.
+asset、file、network、zip 发布包和自定义媒体组件应使用一致的资源解析模型。
+`QuickjsUiResourceReference` 将资源分类为 `asset`、`file`、`network`、`data` 或
+`custom`，校验 scheme，并携带缓存、校验和及诊断元数据。
 
-Boundary: focus handles stay in Flutter. JS receives serializable events and
-updates controlled state.
-
-## Schema Versioning / Compatibility
-
-Goal: bundles and host apps should be able to negotiate quickjs_ui protocol
-compatibility.
-
-Flutter reference: follow the same compatibility posture Flutter widgets use:
-new props should have safe defaults, deprecated props should keep working until
-a documented removal point, and unknown inputs should fail or ignore according
-to an explicit policy.
-
-Planned scope:
-
-- Schema version and helper/runtime protocol version.
-- Minimum required `quickjs_ui` version in bundle manifests.
-- Deprecated prop tracking and migration notes.
-- Unknown type / unknown prop policy.
-- Compatibility tests using fixture bundles from older schema versions.
-
-Boundary: versioning belongs to quickjs_ui package and bundle metadata. It
-should not require changes to quickjs core except where core loading APIs need
-to expose metadata.
-
-## Custom Renderer Lifecycle
-
-Goal: custom renderers should have a clear ownership model for native resources
-such as video players, maps, camera previews, or platform views.
-
-Flutter reference: model renderer-owned resources like `StatefulWidget` state:
-create in init, update when schema changes, react to show/hide, and dispose
-deterministically.
-
-Planned scope:
-
-- Controller creation and disposal.
-- Visibility lifecycle: show/hide, pause/resume, dispose.
-- Host resource ownership and cancellation.
-- Integration with `QuickjsUiRenderContext.dispatchEvent()` for high-frequency
-  callbacks.
-- Recommended policies for progress, buffering, position, and sensor-like
-  events.
-- Custom renderers must not defer `context.dispatch()` with local post-frame
-  callbacks; frame safety is handled by `QuickjsUiEventIngress` in
-  `QuickjsUiView`.
-- Imperative native actions from page state should use explicit props plus token
-  counters (`seekToken`, `restartToken`, etc.) rather than hidden controller
-  handles.
-
-Boundary: custom renderers may own Flutter/Dart resources, but JS only observes
-serializable state and events. Streams are used only for real data streams, not
-as the default UI event channel.
-
-## Resource / Media Model
-
-Goal: resources should be resolved consistently across asset, file, network,
-zip bundle, and custom media components.
-
-Flutter reference: align resource categories with `AssetImage`, network image
-loading, platform media controllers, and cache invalidation patterns. Use core
-streams for large data streams, not for ordinary widget events.
-
-Planned scope:
-
-- Resource resolver API for asset/file/network references.
-- Image cache and cache invalidation policy.
-- Video/audio/custom media references.
-- Permission, allowlist, checksum, and manifest integration.
-- Clear rule for when core stream transport is appropriate, such as response
-  bodies, subtitles, timed metadata, or long-running host data sources.
-
-Boundary: media resources are declared in schema or manifest. JS does not get
-direct file handles unless the host explicitly exposes a capability.
-
-### 0.4.1 contract
-
-Resource props may be either a legacy string or a serializable resource object:
+资源属性可使用旧字符串，也可使用对象：
 
 ```js
 Image({
@@ -280,124 +129,49 @@ Image({
 });
 ```
 
-The normalized Dart model is `QuickjsUiResourceReference`. It classifies
-resources as `asset`, `file`, `network`, `data`, or `custom`, validates allowed
-schemes, and carries cache/checksum metadata for host policy and diagnostics.
-Built-in `Image` resolves asset/file/network/data resources through this model.
-Custom media renderers, such as `VideoPlayer`, should parse their `source` with
-the same model and reject unsupported resource kinds with a structured `onError`
-event where available.
+发布包入口固定为包根 `main.mjs`，`manifest.json` 负责描述与校验，可包含 `modules`、
+`resources`、`routes`、`permissions`、`cache` 和 `metadata`。资源元数据不会授予新的
+宿主能力；文件、网络、Stream 或 DRM 访问仍需显式宿主策略。完整格式见
+[`quickjs_ui_package_format.md`](quickjs_ui_package_format.md)。
 
-发布包 manifest 使用包根目录下的 `manifest.json`。发布包的运行入口固定为
-包根 `main.mjs`，manifest 只负责描述和校验，不作为运行入口。manifest 可以包含
-`modules`、`resources`、`routes`、`permissions`、`cache` 和 `metadata`。
-其中 `resources` 记录资源 metadata，和 JS module 清单分开；它不授予 JS 新的
-host capability。文件系统、网络、stream 或 DRM 访问仍然需要显式 host policy /
-capability。完整格式见 `docs/quickjs_ui_package_format.md`。
+核心 Stream 传输只用于响应体、字幕、定时元数据或长期宿主数据源。普通 Widget 事件
+和媒体进度继续通过 `QuickjsUiEventIngress`。
 
-Core stream transport is reserved for large or long-lived data streams such as
-response bodies, subtitles, timed metadata, or live host data sources. Ordinary
-widget events and media progress remain renderer events via
-`QuickjsUiEventIngress`.
+## 滚动、手势与列表过渡模型
 
-## Scroll, Gesture, And List Transition Model
+可滚动节点支持 `initialScrollOffset`、`scrollToOffset`、`scrollToKey`、`scrollToken`、
+`scrollDurationMs`、`scrollCurve` 和 `onScroll`。`scrollToken` 是命令式动作边界：JS
+更新 token 与目标，Flutter 在下一帧应用命令；JS 不持有 `ScrollController`。
 
-Goal: scroll and gesture controls should stay declarative and serializable while
-still mapping to Flutter's native `ScrollController`, `GestureDetector`, and
-`AnimatedList` primitives.
+手势只使用结构化描述：`onTap`、`onLongPress`、`onDoubleTap`、`onDragStart`、
+`onDragUpdate`、`onDragEnd` 和 `onSwipe`。拖动更新可由事件分发器合并；Swipe 只发送
+方向、速度和总位移，不传递原始指针对象。
 
-### 0.4.2 contract
+`ListView.animateItems` 依赖直接子节点的稳定字符串 key，实现基础进入、退出与重排。
+JS 始终拥有列表状态，只返回下一份 Schema。
 
-Scrollable schema nodes support `initialScrollOffset`, `scrollToOffset`,
-`scrollToKey`, `scrollToken`, `scrollDurationMs`, `scrollCurve`, and `onScroll`.
-`scrollToken` is the imperative action boundary: JS updates state with a new
-token and target, Flutter applies the command after the next frame. JS never
-receives or stores a Flutter `ScrollController`.
+## 开发工具与网络检查器
 
-Gesture events are limited to structured descriptors: `onTap`, `onLongPress`,
-`onDoubleTap`, `onDragStart`, `onDragUpdate`, `onDragEnd`, and `onSwipe`.
-Drag updates are sample events and may be coalesced by the renderer event
-dispatcher. Swipe emits only direction, velocity, and total delta; it does not
-stream raw pointer objects.
+开发工具按需启用，位于 quickjs_ui diagnostics 模块，不进入 quickjs core。
 
-`ListView.animateItems` enables basic item enter/exit/reorder transitions. It
-requires stable string keys on direct children so Flutter can preserve item
-identity. Reorder is implemented as remove/insert around the changed keyed
-positions; JS still owns the list state and only returns the next schema.
+`QuickjsUiDevOptions` 控制错误浮层、热重载状态保留及 Schema/Diff/资源日志。
+`QuickjsUiInspector` 记录生命周期、最近 Action、Renderer Diff 和资源日志。
+`exportPageSnapshot()` 导出可 JSON 序列化的 props、state、Schema、manifest、资源、宿主
+API、生命周期及 Diff，仅用于调试和问题复现，不用于跨启动持久化。
 
-Boundary: scroll and gesture callbacks still enter JS through
-`QuickjsUiEventIngress`. Do not add per-widget post-frame dispatch workarounds or
-hidden native handles to page state.
+`QuickjsUiNetworkJournal` 统一记录发布包加载和经过埋点的宿主网络请求，包括 method、
+URI、状态、耗时、Body 大小、缓存阶段及结构化错误。它只提供开发期可观测性，不改变
+权限、缓存或生产网络语义。
 
-### 0.4.3 contract
+## 一致性测试
 
-Development tooling is opt-in and lives in `quickjs_ui` diagnostics modules, not
-in `quickjs` core.
+一致性测试应覆盖：
 
-`QuickjsUiDevOptions` controls:
+- Schema fixture 与旧版本发布包兼容；
+- Renderer 冒烟、语义及必要的稳定 Golden 测试；
+- mount/show/hide/dispose 和路由生命周期顺序；
+- push/replace/pop/result 导航顺序；
+- drop/throttle/debounce 和队列上限背压；
+- manifest、资源和旧 Schema 版本兼容。
 
-- `showErrorOverlay`: whether the built-in error overlay is shown when no custom
-  `errorBuilder` is provided.
-- `preserveStateOnReload`: whether `QuickjsUiController.reload()` reapplies the
-  current JS state after reloading resources.
-- `logSchema`, `logDiff`, `logResources`: diagnostic logging switches.
-
-`QuickjsUiInspector` records:
-
-- lifecycle timeline entries with `phase` (`widget`, `route`, `app`, `action`)
-- last dispatched action
-- last renderer diff stats (`rebuilt`, `reused`, `unkeyed`)
-- optional resource loader log lines
-
-`QuickjsUiController.exportPageSnapshot()` returns a JSON-compatible snapshot
-with props, state, schema, manifest, resources, host API names, last action,
-lifecycle timeline, and diff stats. This is for debugging and issue reproduction,
-not persistence across app restarts.
-
-`QuickjsUiInspectorPanel` is the reference Flutter UI for local development. It
-reads from the controller and inspector but does not change runtime behavior.
-
-Inspector listener notifications are deferred to the next frame, matching
-`QuickjsUiEventIngress`. Renderer diff/schema updates must not synchronously
-rebuild inspector panels while `QuickjsUiView` is building.
-
-Boundary: inspector data is structured values only. Do not expose Flutter
-widget handles, JS function handles, or engine internals through the snapshot.
-
-### 0.4.3.x network inspector contract
-
-`QuickjsUiNetworkJournal` is the single timeline for development network
-observability. It records:
-
-- bundle loader traffic from `QuickjsUiNetworkLoader` (`source=bundle`)
-- host API traffic from `quickjsUiHost.network(request)` when handlers are
-  wrapped with `instrumentHostNetworkLogging()` or
-  `QuickjsUiController.instrumentHostHandlers()`
-
-Each `QuickjsUiNetworkRecord` tracks method, URI, status, duration, body size,
-cache hit/store phase, and structured errors. Inspector notifications remain
-frame-deferred.
-
-Boundary: the journal is dev-only observability. It does not change fetch
-behavior, permission policy, or production network semantics.
-
-## Conformance Tests
-
-Goal: quickjs_ui should have stable compatibility coverage beyond feature-level
-unit tests.
-
-Flutter reference: keep renderer tests close to Flutter widget tests and
-semantics tests; use golden tests only where visual regressions matter and can
-remain deterministic.
-
-Planned scope:
-
-- Schema fixture tests.
-- Renderer smoke and targeted golden tests.
-- Lifecycle sequence tests for mount/show/hide/dispose and route events.
-- Navigation sequence tests for push/replace/pop/result.
-- Event backpressure tests for drop/throttle/debounce/pending limits.
-- Bundle compatibility tests for manifests and older schema versions.
-
-Boundary: conformance tests should stay deterministic and avoid depending on a
-full example application unless the behavior truly needs Flutter app wiring.
+测试应保持确定性；只有确实需要完整 Flutter 应用接线时才依赖示例应用。

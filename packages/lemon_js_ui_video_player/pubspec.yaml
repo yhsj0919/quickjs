@@ -1,0 +1,25 @@
+name: lemon_js_ui_video_player
+description: "VideoPlayer component plugin for package:lemon_js_ui."
+version: 0.1.0
+homepage: https://github.com/yhsj0919/quickjs
+repository: https://github.com/yhsj0919/quickjs
+issue_tracker: https://github.com/yhsj0919/quickjs/issues
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+resolution: workspace
+
+dependencies:
+  fvp: ^0.37.3
+  flutter:
+    sdk: flutter
+  lemon_js: ^0.1.0
+  lemon_js_ui: ^0.1.0
+  video_player: ^2.13.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

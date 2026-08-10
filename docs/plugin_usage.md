@@ -1,6 +1,6 @@
 # QuickJS 完整使用指南
 
-本文介绍 `package:quickjs` 的主要能力：创建运行时、执行 JS、结构化值转换、模块加载、CommonJS、Dart 方法注入、对象和类绑定、host mount、fetch、Web Crypto、Node/Web 兼容、插件、调试、异常和生命周期。
+本文介绍 `package:lemon_js` 的主要能力：创建运行时、执行 JS、结构化值转换、模块加载、CommonJS、Dart 方法注入、对象和类绑定、host mount、fetch、Web Crypto、Node/Web 兼容、插件、调试、异常和生命周期。
 
 示例默认使用：
 
@@ -8,7 +8,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:quickjs/quickjs.dart';
+import 'package:lemon_js/lemon_js.dart';
 ```
 
 ## 1. 创建和释放运行时

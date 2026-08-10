@@ -9,8 +9,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$VendorPath = Join-Path $Root "third_party\quickjs"
-$VersionFile = Join-Path $Root "third_party\VERSION"
+$QuickjsRoot = Join-Path $Root "packages\lemon_js"
+$VendorPath = Join-Path $QuickjsRoot "third_party\quickjs"
+$VersionFile = Join-Path $QuickjsRoot "third_party\VERSION"
 $RepositoryUrl = "https://github.com/quickjs-ng/quickjs.git"
 
 if (-not $Tag) {

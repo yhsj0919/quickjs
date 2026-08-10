@@ -294,7 +294,7 @@ webpack 预打包。
 目标：在基础执行模型稳定后，提供更自然的 JS function / Dart object 访问方式。handle
 与 proxy 绑定 runtime，调用走 worker 消息模型，并复用 timeout / cancel 语义。
 
-### JS function handle
+### JS 函数句柄
 
 从 eval 取得 JS 函数引用，并在 Dart 侧重复调用：
 
@@ -324,7 +324,7 @@ await add.cancel(); // 取消当前 call，语义对齐 eval stop / cancel
 - [x] `handle.dispose()` 显式释放 runtime 内 function registry entry；重复释放不报错。
 - [x] runtime dispose 后 handle 调用返回 closed error。
 
-### Dart object proxy
+### Dart 对象代理
 
 将 Dart 实例暴露给 JS，按属性 / 方法名桥接：
 
@@ -349,7 +349,7 @@ await user.save()
 - [x] `QuickjsObjectHandle.dispose()`：显式删除 JS global proxy 和隐藏 method/accessor callback globals；重复释放不报错。
 - [x] runtime-level callback unregister：proxy dispose 后即使 JS 持有泄漏的 method/accessor 引用，也不能再触发 Dart callback。
 
-### Dart class / instance binding
+### Dart 类与实例绑定
 
 支持 JS `new` 构造 Dart 侧管理的实例：
 

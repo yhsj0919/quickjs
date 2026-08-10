@@ -41,26 +41,26 @@
 
 ### 3.1 架构决策：使用独立基础包
 
-混合插件采用独立基础包实现，不放入最底层的 `package:quickjs`，也不作为 quickjs_ui 内部的附属功能。包名确定为 `quickjs_extensions`。
+混合插件采用独立基础包实现，不放入最底层的 `package:lemon_js`，也不作为 quickjs_ui 内部的附属功能。包名确定为 `quickjs_extensions`。
 
 ```text
 业务宿主
     ↓
 quickjs_extensions
-├── 依赖 quickjs
-└── 依赖 quickjs_ui
+├── 依赖 lemon_js
+└── 依赖 lemon_js_ui
         ↓
-quickjs_ui -> quickjs
+lemon_js_ui -> lemon_js
 ```
 
 依赖方向必须保持单向：
 
-- `quickjs` 只负责 JS runtime、模块、Core 插件、mount/provider 和底层生命周期，不依赖 quickjs_ui 或 `quickjs_extensions`；
-- quickjs_ui 负责通用 JSUI 加载、渲染、事件、导航与页面生命周期，继续依赖 `quickjs`，但不依赖 `quickjs_extensions`；
-- `quickjs_extensions` 同时依赖 `quickjs` 与 quickjs_ui，提供二者的通用组合能力；
-- 业务宿主可以直接使用 `quickjs`、quickjs_ui，也可以选择依赖 `quickjs_extensions`，由业务层解释登录、内容源、播放器等具体语义。
+- `lemon_js` 只负责 JS runtime、模块、Core 插件、mount/provider 和底层生命周期，不依赖 lemon_js_ui 或 `quickjs_extensions`；
+- lemon_js_ui 负责通用 JSUI 加载、渲染、事件、导航与页面生命周期，继续依赖 `lemon_js`，但不依赖 `quickjs_extensions`；
+- `quickjs_extensions` 同时依赖 `lemon_js` 与 lemon_js_ui，提供二者的通用组合能力；
+- 业务宿主可以直接使用 `lemon_js`、lemon_js_ui，也可以选择依赖 `quickjs_extensions`，由业务层解释登录、内容源、播放器等具体语义。
 
-`quickjs_extensions` 是可选的插件系统与组合语法糖层。它不取代 `quickjs` 和 quickjs_ui 的独立使用方式。它负责：
+`quickjs_extensions` 是可选的插件系统与组合语法糖层。它不取代 `lemon_js` 和 `lemon_js_ui` 的独立使用方式。它负责：
 
 - 统一混合插件包和 manifest；
 - `InstalledQuickjsExtension` 与 `QuickjsExtensionSession`；
@@ -137,7 +137,7 @@ final plugin = QuickjsPlugin(...);
 final bundle = QuickjsUiBundle(...);
 ```
 
-`quickjs_extensions` 必须通过 `quickjs` 与 quickjs_ui 的公开 API 完成组合，不要求简单使用者先包装成 `QuickjsExtension`，也不应让底层 API 依赖扩展系统。
+`quickjs_extensions` 必须通过 `lemon_js` 与 `lemon_js_ui` 的公开 API 完成组合，不要求简单使用者先包装成 `QuickjsExtension`，也不应让底层 API 依赖扩展系统。
 
 ### 3.3 View 命名与职责
 
@@ -198,7 +198,7 @@ QuickjsExtensionView
 └── .route
 ```
 
-`package:quickjs_extensions/quickjs_extensions.dart` 作为扩展系统的统一导出入口，可以同时导出 `QuickjsExtension`、`QuickjsExtensionView` 等扩展 API，以及使用扩展 API 时必要的 `quickjs`、quickjs_ui 公共类型。直接依赖 quickjs_ui 的使用者仍从其原入口使用 `QuickjsUiView`，不需要引入扩展包。
+`package:quickjs_extensions/quickjs_extensions.dart` 作为扩展系统的统一导出入口，可以同时导出 `QuickjsExtension`、`QuickjsExtensionView` 等扩展 API，以及使用扩展 API 时必要的 `lemon_js`、`lemon_js_ui` 公共类型。直接依赖 `lemon_js_ui` 的使用者仍从其原入口使用 `QuickjsUiView`，不需要引入扩展包。
 
 ## 4. QuickjsExtensionSession
 
@@ -514,7 +514,7 @@ const result = await pluginService.call('submitLogin', form);
 
 ### 12.1 统一的混合插件包与 manifest
 
-目前 Core 插件 manifest 与 quickjs_ui package manifest 是两套平行契约。尚未有一个应用级 manifest 同时描述 service、UI routes、flows、统一权限和兼容版本，也没有对应的统一包加载器与校验器。该能力确定由独立的 `quickjs_extensions` 包承载，而不是修改 `quickjs` 使其反向依赖 quickjs_ui。
+目前 Core 插件 manifest 与 lemon_js_ui package manifest 是两套平行契约。尚未有一个应用级 manifest 同时描述 service、UI routes、flows、统一权限和兼容版本，也没有对应的统一包加载器与校验器。该能力确定由独立的 `quickjs_extensions` 包承载，而不是修改 `lemon_js` 使其反向依赖 lemon_js_ui。
 
 ### 12.2 安装管理和持久化注册表
 
