@@ -3,7 +3,7 @@
 ## Current State
 
 - The working tree contains uncommitted work spanning 0.6.0 through 0.9.0. Preserve it and do not assume a clean checkout.
-- Public imports still enter through `package:quickjs/quickjs.dart`, while implementation files are now grouped under:
+- Public imports enter through `package:lemon_js/lemon_js.dart`, while implementation files remain grouped under:
   - `lib/src/backend/`
   - `lib/src/bridge/`
   - `lib/src/diagnostics/`
@@ -34,7 +34,7 @@
   - the old `QuickjsHostEnvironment` / `hostEnvironments` API has been removed
 - Example coverage includes host modules, Web host globals, Web Crypto, bulk host mounts,
   and Fetch (`QuickjsFetchMount` with POST, FormData, XHR, redirects, and origin policy).
-- `docs/npm_bundling.md` and `example/npm_bundle` document and test the supported npm boundary: esbuild produces a self-contained ESM Flutter asset that is registered through `QuickjsRuntimeOptions.modules`; the dedicated `NPM Bundle` page shows only asset loading, module registration, and one exported method call.
+- `docs/npm_bundling.md` and `examples/lemon_js_example/npm_bundle` document and test the supported npm boundary: esbuild produces a self-contained ESM Flutter asset that is registered through `QuickjsRuntimeOptions.modules`; the dedicated `NPM Bundle` page shows only asset loading, module registration, and one exported method call.
 - `QuickjsFetchMount` is an opt-in mount with an exact origin allowlist, timeout/body limits,
   and configurable redirect following with per-hop allowlist checks; native uses HttpClient
   and Web uses browser fetch; the JS wrapper exposes Fetch APIs plus an XHR compatibility
@@ -43,23 +43,23 @@
 ## Important Files
 
 - `ROADMAP.md`
-- `lib/quickjs.dart`
-- `lib/src/runtime/quickjs.dart`
-- `lib/src/runtime/quickjs_runtime_options.dart`
-- `lib/src/runtime/quickjs_runtime_base.dart`
-- `lib/src/module/quickjs_asset_module_loader.dart`
-- `lib/src/module/quickjs_web_crypto_mount.dart`
-- `lib/src/native/quickjs_native_worker.dart`
-- `lib/src/web/quickjs_web_backend.dart`
-- `test/quickjs_consistency_test.dart`
-- `example/lib/example_pages.dart`
-- `example/lib/pages/host_modules_page.dart`
-- `example/lib/pages/host_mounts_page.dart`
-- `example/lib/pages/web_host_environment_page.dart`
-- `example/lib/pages/crypto_random_uuid_page.dart`
-- `example/lib/pages/fetch_page.dart`
-- `example/test/widget_test.dart`
-- `test/quickjs_fetch_mount_test.dart`
+- `packages/lemon_js/lib/lemon_js.dart`
+- `packages/lemon_js/lib/src/runtime/quickjs.dart`
+- `packages/lemon_js/lib/src/runtime/quickjs_runtime_options.dart`
+- `packages/lemon_js/lib/src/runtime/quickjs_runtime_base.dart`
+- `packages/lemon_js/lib/src/module/quickjs_asset_module_loader.dart`
+- `packages/lemon_js/lib/src/module/quickjs_web_crypto_mount.dart`
+- `packages/lemon_js/lib/src/native/quickjs_native_worker.dart`
+- `packages/lemon_js/lib/src/web/quickjs_web_backend.dart`
+- `packages/lemon_js/test/quickjs_consistency_test.dart`
+- `examples/lemon_js_example/lib/example_pages.dart`
+- `examples/lemon_js_example/lib/pages/host_modules_page.dart`
+- `examples/lemon_js_example/lib/pages/host_mounts_page.dart`
+- `examples/lemon_js_example/lib/pages/web_host_environment_page.dart`
+- `examples/lemon_js_example/lib/pages/crypto_random_uuid_page.dart`
+- `examples/lemon_js_example/lib/pages/fetch_page.dart`
+- `examples/lemon_js_example/test/widget_test.dart`
+- `packages/lemon_js/test/quickjs_fetch_mount_test.dart`
 
 ## Commands To Verify
 

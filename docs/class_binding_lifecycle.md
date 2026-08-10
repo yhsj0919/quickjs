@@ -1,8 +1,8 @@
-# Dart class binding lifecycle
+# Dart 类绑定生命周期
 
 本文档说明 `Quickjs.bindClass<T>()` 第一版窄切片的生命周期语义。当前实现只覆盖显式 descriptor 绑定，不支持 Dart 反射、继承、静态成员或 JS GC 驱动的 Dart 对象回收。
 
-## API shape
+## API 形式
 
 ```dart
 final handle = await engine.bindClass<User>(
@@ -33,7 +33,7 @@ user.name = 'Jerry';
 const greeting = await user.greet('Alice');
 ```
 
-## Construction
+## 构造
 
 `new User(...)` 会同步返回一个 JS instance proxy。Dart constructor 不会同步阻塞 JS constructor，而是通过现有 Promise callback bridge 在 Dart 侧创建实例。
 
@@ -67,7 +67,7 @@ user.name = 'Jerry';
 
 JavaScript assignment 表达式本身不能返回 setter 内部的 Promise，因此 async setter 错误不能通过 `await user.name = ...` 这类写法捕获。需要可 await 的写入语义时，应优先暴露显式 method，例如 `await user.setName('Jerry')`。
 
-## Ownership
+## 所有权
 
 Dart 实例由所属 `Quickjs` runtime 管理。当前实现的所有权边界是：
 
@@ -76,7 +76,7 @@ Dart 实例由所属 `Quickjs` runtime 管理。当前实现的所有权边界�
 - instance id 只在创建它的 `Quickjs` runtime 内有效。
 - 不允许跨 runtime 混用 constructor、instance proxy 或 Dart handle。
 
-## Disposal
+## 释放
 
 `QuickjsClassHandle.dispose()` 会：
 
@@ -98,7 +98,7 @@ await leakedUser.greet() // throws "QuickJS class instance is disposed"
 
 `Quickjs.dispose()` 会释放整个 runtime，并清空 class instance table。`Quickjs.stop()` 在需要重建底层 runtime 时也会清空 class instance table；之前绑定到旧 runtime 的 constructor / instance proxy 不再可用。
 
-## JS GC and Dart GC
+## JS GC 与 Dart GC
 
 当前版本不承诺 JS GC 会触发 Dart instance 回收。JS 侧对象被回收时，Dart instance table 不会依赖 finalizer 立即清理。
 
@@ -110,7 +110,7 @@ await leakedUser.greet() // throws "QuickJS class instance is disposed"
 
 这个约束避免把 Dart 对象生命周期绑定到 native QuickJS / web WASM 两端不同的 GC 暴露能力上。
 
-## Current Limits
+## 当前限制
 
 - 不支持自动 Dart 反射。
 - 不支持继承、静态成员、symbol member 或 private field。

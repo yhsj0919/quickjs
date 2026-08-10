@@ -1,25 +1,23 @@
-# QuickJS Plugin Manifest
+# QuickJS 插件清单
 
-`QuickjsPluginManifest` describes the callable contract for a JavaScript plugin.
-It is intentionally small: the runtime uses it to validate and call exported
-functions, while installation, updates, signatures, and remote catalogs stay in
-the application layer.
+`QuickjsPluginManifest` 描述 JavaScript 插件的可调用契约。它刻意保持精简：
+运行时只用它校验和调用导出函数；安装、更新、签名及远程目录均由应用层负责。
 
-## Fields
+## 字段
 
-| Field | Required | Type | Meaning |
+| 字段 | 必填 | 类型 | 含义 |
 | --- | --- | --- | --- |
-| `id` | yes | string | Plugin namespace. It must not contain `/`. Plugin modules must start with `${id}/`. |
-| `version` | yes | string | Application-defined plugin version. The runtime does not compare versions. |
-| `entry` | yes | string | Entry ES module specifier, for example `demo/main`. |
-| `exports` | yes | string array | Callable function exports exposed to Dart. |
-| `init` | no | string | Optional lifecycle export called by `initPlugin()` / `QuickjsPluginClient.init()`. |
-| `dispose` | no | string | Optional lifecycle export called by `disposePlugin()` / `QuickjsPluginClient.dispose()`. |
-| `permissions` | no | string array | Application-defined permission labels. The runtime does not grant capabilities from this field. |
-| `metadata` | no | object | Application-defined metadata, for display or catalog usage. |
-| `files` | zip only | object | Optional zip path map used by `QuickjsZipPlugin`. Keys are module specifiers, values are zip-relative file paths. |
+| `id` | 是 | string | 插件命名空间，不得包含 `/`；插件模块必须以 `${id}/` 开头。 |
+| `version` | 是 | string | 应用定义的插件版本；运行时不比较版本。 |
+| `entry` | 是 | string | ES 模块入口标识，例如 `demo/main`。 |
+| `exports` | 是 | string array | 暴露给 Dart 调用的导出函数。 |
+| `init` | 否 | string | 可选生命周期导出，由 `initPlugin()` / `QuickjsPluginClient.init()` 调用。 |
+| `dispose` | 否 | string | 可选生命周期导出，由 `disposePlugin()` / `QuickjsPluginClient.dispose()` 调用。 |
+| `permissions` | 否 | string array | 应用定义的权限标签；运行时不会依据该字段自动授权能力。 |
+| `metadata` | 否 | object | 应用定义的展示或目录元数据。 |
+| `files` | 仅 zip | object | `QuickjsZipPlugin` 使用的可选路径映射；键为模块标识，值为 zip 内相对路径。 |
 
-## Minimal Example
+## 最小示例
 
 ```json
 {
@@ -36,10 +34,10 @@ the application layer.
 }
 ```
 
-## Zip Packages
+## Zip 发布包
 
-`QuickjsZipPlugin.asset()` and `QuickjsZipPlugin.bytes()` look for
-`quickjs-plugin.json` or `manifest.json`. With this layout:
+`QuickjsZipPlugin.asset()` 和 `QuickjsZipPlugin.bytes()` 会查找
+`quickjs-plugin.json` 或 `manifest.json`。假设目录结构如下：
 
 ```text
 manifest.json
@@ -47,7 +45,7 @@ main.js
 modules/helper.js
 ```
 
-and this entry:
+清单入口如下：
 
 ```json
 {
@@ -58,10 +56,10 @@ and this entry:
 }
 ```
 
-`main.js` maps to `demo/main`, and `modules/helper.js` maps to
-`demo/modules/helper.js`, so relative imports like `./modules/helper.js` work.
+`main.js` 映射为 `demo/main`，`modules/helper.js` 映射为
+`demo/modules/helper.js`，因此 `./modules/helper.js` 等相对导入可以正常工作。
 
-Use `files` when zip paths do not match the default mapping:
+zip 路径不符合默认映射时，使用 `files` 显式声明：
 
 ```json
 {
@@ -76,11 +74,9 @@ Use `files` when zip paths do not match the default mapping:
 }
 ```
 
-## Runtime Boundaries
+## 运行时边界
 
-- Manifest `permissions` are labels only. Host capabilities still require
-  explicit `QuickjsHostMount` / provider configuration.
-- Manifest `version` is not an update policy. The application decides which
-  plugin version to mount.
-- File system scanning, installation state, hash/signature verification, and
-  update sources are not runtime responsibilities.
+- 清单中的 `permissions` 只是标签；宿主能力仍须显式配置
+  `QuickjsHostMount` / provider。
+- 清单中的 `version` 不代表更新策略；由应用决定挂载哪个插件版本。
+- 文件系统扫描、安装状态、哈希/签名校验和更新源均不属于运行时职责。

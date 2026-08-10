@@ -181,13 +181,13 @@ enum QuickjsUiManifestMode {
 开发期使用内置工具扫描包根目录并生成或更新 manifest：
 
 ```powershell
-dart run quickjs_ui:manifest --root assets/quickjs_ui/profile --id com.example.profile --version 1.0.0
+dart run lemon_js_ui:manifest --root assets/quickjs_ui/profile --id com.example.profile --version 1.0.0
 ```
 
 在 CI 或发布前可以只检查不写入：
 
 ```powershell
-dart run quickjs_ui:manifest --root assets/quickjs_ui/profile --check
+dart run lemon_js_ui:manifest --root assets/quickjs_ui/profile --check
 ```
 
 工具规则：

@@ -1,0 +1,14 @@
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+coverage/
+benchmark/
+pubspec.lock
+**/.cxx/
+android/.cxx/
+ios/Pods/
+.idea/
+**/.cxx/
+android/.cxx/
+ios/Pods/
+.idea/

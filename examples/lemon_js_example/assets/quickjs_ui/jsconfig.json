@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "checkJs": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": {
+      "quickjs_ui": [
+        "../../../../packages/lemon_js_ui/js/quickjs_ui.d.ts"
+      ],
+      "quickjs_ui/video_player": [
+        "../../../../packages/lemon_js_ui_video_player/js/quickjs_ui_video_player.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.mjs",
+    "**/*.js"
+  ]
+}

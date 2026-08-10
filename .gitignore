@@ -31,7 +31,7 @@ migrate_working_dir/
 **/doc/api/
 .dart_tool/
 .flutter-plugins-dependencies
-# Cover root, packages/*, example, and third_party/*/build artifacts.
+# Cover the workspace, packages/*, examples/*, and vendored build artifacts.
 build/
 /coverage/
-/example/npm_bundle/node_modules/
+/examples/lemon_js_example/npm_bundle/node_modules/
