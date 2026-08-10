@@ -2,7 +2,6 @@ import '../example_page_spec.dart';
 import '../pages/quickjs_ui/scenario/quickjs_ui_profile_form_page.dart';
 import '../pages/quickjs_ui/scenario/quickjs_ui_todo_page.dart';
 import '../pages/quickjs_ui/scenario/quickjs_ui_weather_background_page.dart';
-import '../pages/quickjs_ui/scenario/quickjs_ui_weather_demo_page.dart';
 import 'catalog_helpers.dart';
 
 // Repository rule: append newly created demos to the end of this list.
@@ -26,17 +25,9 @@ final List<ExamplePageSpec> quickjsUiScenarioExamplePages = [
   quickjsUiPageSpec(
     category: ExampleCategory.scenario,
     kind: ExampleKind.scenario,
-    title: '天气综合页面',
-    description: '实际天气卡片场景：IP 定位、刷新、当前天气、小时预报和生活提示。',
-    tags: const ['weather', 'network'],
-    builder: (_) => const QuickjsUiWeatherDemoPage(),
-  ),
-  quickjsUiPageSpec(
-    category: ExampleCategory.scenario,
-    kind: ExampleKind.scenario,
-    title: '天气背景库',
-    description: '可迁移的图片分层天气背景库，使用原生 VSync 和 Canvas 雨雪效果。',
-    tags: const ['weather', 'module', 'animation'],
+    title: '动态天气背景',
+    description: '使用内置静态天气数据驱动动态 Canvas 背景，不依赖远程天气接口。',
+    tags: const ['weather', 'static', 'canvas', 'animation'],
     builder: (_) => const QuickjsUiWeatherBackgroundPage(),
   ),
 ];

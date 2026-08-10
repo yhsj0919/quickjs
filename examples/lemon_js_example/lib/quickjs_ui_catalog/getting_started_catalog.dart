@@ -1,7 +1,6 @@
 import '../example_page_spec.dart';
 import '../pages/quickjs_ui/getting_started/quickjs_ui_bundle_counter_page.dart';
 import '../pages/quickjs_ui/getting_started/quickjs_ui_counter_page.dart';
-import '../pages/quickjs_ui/getting_started/quickjs_ui_network_counter_page.dart';
 import '../pages/quickjs_ui/getting_started/quickjs_ui_package_demo_page.dart';
 import '../pages/quickjs_ui/getting_started/quickjs_ui_schema_page.dart';
 import '../pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart';
@@ -43,13 +42,6 @@ final List<ExamplePageSpec> quickjsUiGettingStartedExamplePages = [
     description: '演示固定包根 main.mjs + manifest.json 的 asset 发布包加载和校验。',
     tags: const ['package', 'manifest'],
     builder: (_) => const QuickjsUiPackageDemoPage(),
-  ),
-  quickjsUiPageSpec(
-    category: ExampleCategory.gettingStarted,
-    title: '网络加载计数器',
-    description: '通过本地开发服务器按 network URL 加载 quickjs_ui 页面并渲染。',
-    tags: const ['network', 'loader'],
-    builder: (_) => const QuickjsUiNetworkCounterPage(),
   ),
   quickjsUiPageSpec(
     category: ExampleCategory.gettingStarted,

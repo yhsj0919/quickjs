@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js_example/pages/quickjs_ui/scenario/quickjs_ui_weather_background_page.dart';
-import 'package:lemon_js_example/pages/quickjs_ui/scenario/quickjs_ui_weather_demo_page.dart';
 
 Future<void> _pumpUntilMissing(WidgetTester tester, Finder finder) async {
   for (
@@ -17,24 +16,6 @@ Future<void> _pumpUntilMissing(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
-  testWidgets('weather demo exposes a visible back button', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        initialRoute: '/weather',
-        routes: <String, WidgetBuilder>{
-          '/': (_) => const Scaffold(body: Text('Examples')),
-          '/weather': (_) => const QuickjsUiWeatherDemoPage(),
-        },
-      ),
-    );
-    await tester.pump();
-
-    expect(find.byType(BackButton), findsOneWidget);
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
-    expect(find.text('Examples'), findsOneWidget);
-  });
-
   testWidgets('weather background redraws without loading after resize', (
     tester,
   ) async {

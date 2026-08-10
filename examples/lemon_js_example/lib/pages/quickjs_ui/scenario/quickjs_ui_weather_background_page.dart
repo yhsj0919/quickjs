@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 class QuickjsUiWeatherBackgroundPage extends StatefulWidget {
@@ -47,7 +46,6 @@ class _QuickjsUiWeatherBackgroundPageState
                 path: QuickjsUiWeatherBackgroundPage.path,
                 controller: _controller,
                 initialProps: _initialProps!,
-                mounts: _weatherBackgroundMounts,
                 loadingBuilder: (_) =>
                     const Center(child: CircularProgressIndicator()),
                 errorBuilder: (_, error) => Padding(
@@ -68,10 +66,3 @@ class _QuickjsUiWeatherBackgroundPageState
     );
   }
 }
-
-final List<QuickjsHostMount> _weatherBackgroundMounts = <QuickjsHostMount>[
-  QuickjsAxiosMount(
-    assetKey: 'assets/js/axios.js',
-    timeout: const Duration(seconds: 15),
-  ),
-];
