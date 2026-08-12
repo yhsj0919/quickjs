@@ -113,8 +113,8 @@ QuickjsUiVideoPlayerPlugin.registerDesktopBackend(
 
 ## 完整示例
 
-- [Flutter 页面](https://github.com/yhsj0919/quickjs/blob/main/examples/lemon_js_example/lib/pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart)
-- [独立 JS 页面](https://github.com/yhsj0919/quickjs/blob/main/examples/lemon_js_example/assets/quickjs_ui/video_player_plugin_page.mjs)
-- [lemon_js_ui 使用指南](https://github.com/yhsj0919/quickjs/blob/main/packages/lemon_js_ui/doc/usage.md)
+- [Flutter 页面](https://github.com/yhsj0919/quickjs/blob/master/examples/lemon_js_example/lib/pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart)
+- [独立 JS 页面](https://github.com/yhsj0919/quickjs/blob/master/examples/lemon_js_example/assets/quickjs_ui/video_player_plugin_page.mjs)
+- [lemon_js_ui 使用指南](https://github.com/yhsj0919/quickjs/blob/master/packages/lemon_js_ui/doc/usage.md)
 
 完整示例位于 GitHub 仓库；pub 包 README 中的代码用于最小接入。
