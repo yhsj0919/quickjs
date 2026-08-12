@@ -8,8 +8,8 @@ import 'quickjs_extension_manager.dart';
 final class QuickjsExtensionDefaultStore implements QuickjsExtensionStore {
   QuickjsExtensionDefaultStore();
 
-  static const _indexKey = 'quickjs_extensions.installations';
-  static const _entryPrefix = 'quickjs_extensions.installation.';
+  static const _indexKey = 'lemon_js_extensions.installations';
+  static const _entryPrefix = 'lemon_js_extensions.installation.';
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 

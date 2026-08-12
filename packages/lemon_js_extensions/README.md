@@ -1,6 +1,6 @@
-# quickjs_extensions
+# lemon_js_extensions
 
-`quickjs_extensions` 是 `lemon_js` 与 `lemon_js_ui` 之上的统一插件管理层。一个安装包可以
+`lemon_js_extensions` 是 `lemon_js` 与 `lemon_js_ui` 之上的统一插件管理层。一个安装包可以
 只包含 Core 数据服务、只包含 JSUI 页面，或同时包含两者。Manager 负责安装、恢复、更新、
 启停、卸载、按 ID 调用和插件级 KV 隔离；插件管理页面由宿主业务层实现。
 
@@ -8,11 +8,11 @@
 
 ```yaml
 dependencies:
-  quickjs_extensions: ^0.1.0
+  lemon_js_extensions: ^0.1.0
 ```
 
 ```dart
-import 'package:quickjs_extensions/quickjs_extensions.dart';
+import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 ```
 
 ## 插件目录
@@ -83,8 +83,8 @@ export async function submitLogin(account, password) {
 
 ```js
 import { ElevatedButton, Page, Text } from 'quickjs_ui';
-import pluginService from 'quickjs_extensions/plugin_service';
-import storage from 'quickjs_extensions/storage';
+import pluginService from 'lemon_js_extensions/plugin_service';
+import storage from 'lemon_js_extensions/storage';
 
 export default Page({
   name: 'LoginPage',
@@ -179,7 +179,7 @@ Manager 会校验插件 ID、`compatibilityCode` 和数字 `versionCode`，默�
 
 ```js
 export async function migrateStorage(fromVersion, toVersion) {
-  // 使用 quickjs_extensions/storage 迁移当前插件命名空间。
+  // 使用 lemon_js_extensions/storage 迁移当前插件命名空间。
 }
 ```
 
@@ -207,7 +207,7 @@ Manager 只提供无 UI 的状态和管理 API，安装列表、权限确认和�
 
 ## 示例与设计
 
-- [pub 包最小示例](example/quickjs_extensions_example.dart)
+- [pub 包最小示例](example/lemon_js_extensions_example.dart)
 - [可运行混合插件](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example/assets/extensions/hybrid_demo)
 - [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example)
 - [混合插件设计](https://github.com/yhsj0919/quickjs/blob/master/docs/hybrid_plugin_design.md)

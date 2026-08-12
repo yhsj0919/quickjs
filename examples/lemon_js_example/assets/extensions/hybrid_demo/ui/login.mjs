@@ -9,8 +9,8 @@ import {
   Text,
   TextField
 } from 'quickjs_ui';
-import pluginService from 'quickjs_extensions/plugin_service';
-import storage from 'quickjs_extensions/storage';
+import pluginService from 'lemon_js_extensions/plugin_service';
+import storage from 'lemon_js_extensions/storage';
 
 export default Page({
   createState() {

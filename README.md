@@ -11,7 +11,7 @@ JavaScript、加载隔离插件、注入宿主能力，并使用 JavaScript 描�
 | [`lemon_js`](packages/lemon_js/README.md) | QuickJS runtime、模块、插件、网络、KV、加密和宿主能力 |
 | [`lemon_js_ui`](packages/lemon_js_ui/README.md) | JavaScript 驱动的 Flutter 原生动态 UI |
 | [`lemon_js_ui_video_player`](packages/lemon_js_ui_video_player/README.md) | JSUI 原生视频播放器插件 |
-| [`quickjs_extensions`](packages/quickjs_extensions/README.md) | Core、JSUI 与混合插件的统一安装和管理层 |
+| [`lemon_js_extensions`](packages/lemon_js_extensions/README.md) | Core、JSUI 与混合插件的统一安装和管理层 |
 
 ## 快速开始
 
@@ -34,7 +34,7 @@ try {
 ```
 
 需要动态 Flutter 页面时加入 `lemon_js_ui`，需要统一插件安装、更新、恢复和按 ID 调用时
-加入 `quickjs_extensions`。各包 README 提供独立的最小用法。
+加入 `lemon_js_extensions`。各包 README 提供独立的最小用法。
 
 ## 运行完整示例
 

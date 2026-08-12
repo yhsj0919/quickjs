@@ -14,7 +14,7 @@ void main() {
       options: QuickjsRuntimeOptions(
         mounts: <QuickjsHostMount>[
           QuickjsAxiosMount(
-            assetKey: 'packages/quickjs_extensions/assets/js/axios.js',
+            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
             scriptName: 'test:axios.js',
             allowedOrigins: const <String>{'https://httpbingo.org'},
             timeout: const Duration(seconds: 15),

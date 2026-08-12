@@ -11,7 +11,7 @@ import 'package:lemon_js/lemon_js.dart';
 final class _FileAssetBundle extends CachingAssetBundle {
   @override
   Future<ByteData> load(String key) async {
-    final path = key.startsWith('packages/quickjs_extensions/')
+    final path = key.startsWith('packages/lemon_js_extensions/')
         ? '../../$key'
         : key;
     return ByteData.sublistView(await File(path).readAsBytes());
@@ -46,7 +46,7 @@ void main() {
       options: QuickjsRuntimeOptions(
         mounts: <QuickjsHostMount>[
           QuickjsAxiosMount(
-            assetKey: 'packages/quickjs_extensions/assets/js/axios.js',
+            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
             bundle: _FileAssetBundle(),
             allowedOrigins: <String>{origin},
             scriptName: 'test:axios.js',
