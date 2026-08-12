@@ -406,6 +406,13 @@ class Quickjs implements QuickjsPluginHost {
     QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
     QuickjsConsoleSink? onConsole,
   }) async {
+    if (options.maxPendingEvaluations < 1) {
+      throw ArgumentError.value(
+        options.maxPendingEvaluations,
+        'options.maxPendingEvaluations',
+        'must be positive',
+      );
+    }
     final backend = await createQuickjsBackend();
     final runtime = await backend.createRuntime(options);
     final engine = Quickjs._(backend, runtime, options, onConsole);
@@ -846,7 +853,7 @@ return JSON.stringify({ type: 'null' });
     List<Object?> args, {
     Duration? timeout,
     String? name,
-  }) {
+  }) async {
     final moduleName = _canonicalModuleName(_validateModuleName(module));
     final encodedModule = jsonEncode(moduleName);
     final encodedMethod = jsonEncode(method);
@@ -854,7 +861,7 @@ return JSON.stringify({ type: 'null' });
     final encodedArgs = jsonEncode(<Object>[
       for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
     ]);
-    return _evaluateModuleNamespaceValue(
+    return await _evaluateModuleNamespaceValue(
       moduleName,
       '''
 const method = $encodedMethod;
@@ -1418,7 +1425,7 @@ try {
     type: 'conversionError',
     message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
   });
-  const budget = { nodes: 0, maxNodes: 10000, maxDepth: 128 };
+  const budget = { nodes: 0, maxNodes: 10000, maxDepth: 32 };
   const convert = (value, seen, depth = 0) => {
     if (depth > budget.maxDepth) {
       return unsupported('object graph is too deep');
@@ -1744,10 +1751,8 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     String name = '<eval>',
     bool async = false,
   }) {
-    final terminalError = _terminalError;
-    if (terminalError != null) {
-      return Future<String>.error(terminalError);
-    }
+    final rejection = _queueRejection;
+    if (rejection != null) return Future<String>.error(rejection);
 
     final request = _QueuedEval(
       ++_nextEvalRequestId,
@@ -1783,10 +1788,8 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     required Map<String, String> modules,
     Duration? timeout,
   }) {
-    final terminalError = _terminalError;
-    if (terminalError != null) {
-      return Future<String>.error(terminalError);
-    }
+    final rejection = _queueRejection;
+    if (rejection != null) return Future<String>.error(rejection);
     final request = _QueuedModuleEval(
       ++_nextEvalRequestId,
       source,
@@ -1813,6 +1816,12 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     _drainQueue();
     return request.future;
   }
+
+  Object? get _queueRejection =>
+      _terminalError ??
+      (_queue.length >= _options.maxPendingEvaluations
+          ? const JsQueueFullException()
+          : null);
 
   void _drainQueue() {
     if (_state != QuickjsRuntimeState.ready ||
@@ -3040,7 +3049,7 @@ for (const callbackName of $encodedCallbackNames) {
 
 String _dartValueInflateFunctionSource() {
   return '''
-(payload, depth = 0, budget = { nodes: 0, maxNodes: 10000, maxDepth: 128 }) => {
+(payload, depth = 0, budget = { nodes: 0, maxNodes: 10000, maxDepth: 32 }) => {
   if (depth > budget.maxDepth) {
     throw new RangeError('QuickJS Dart value graph is too deep');
   }
@@ -3077,7 +3086,7 @@ String _dartValueInflateFunctionSource() {
 
 String _jsValueConvertFunctionSource() {
   return '''
-(value, seen, depth = 0, budget = { nodes: 0, maxNodes: 10000, maxDepth: 128 }) => {
+(value, seen, depth = 0, budget = { nodes: 0, maxNodes: 10000, maxDepth: 32 }) => {
   const unsupported = (reason) => ({
     type: 'conversionError',
     message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
@@ -3361,7 +3370,18 @@ String _canonicalModuleName(String name) {
   return name.startsWith('node:') ? name.substring(5) : name;
 }
 
-Object _encodeDartValue(Object? value, Set<Object> seen) {
+Object _encodeDartValue(
+  Object? value,
+  Set<Object> seen, [
+  int depth = 0,
+  _DartValueBudget? budget,
+]) {
+  final activeBudget = budget ?? _DartValueBudget();
+  if (depth > _DartValueBudget.maxDepth) {
+    throw const JsValueConversionException(
+      'QuickJS Dart value graph is too deep',
+    );
+  }
   if (value == null) {
     return {'type': 'null'};
   }
@@ -3389,16 +3409,24 @@ Object _encodeDartValue(Object? value, Set<Object> seen) {
     return {'type': 'date', 'value': value.toUtc().toIso8601String()};
   }
   if (value is List) {
+    activeBudget.countContainer();
     return _encodeWithCycleCheck(value, seen, () {
       return {
         'type': 'array',
-        'value': [for (final item in value) _encodeDartValue(item, seen)],
+        'value': [
+          for (final item in value)
+            _encodeDartValue(item, seen, depth + 1, activeBudget),
+        ],
       };
     });
   }
   if (value is Map) {
+    activeBudget.countContainer();
     return _encodeWithCycleCheck(value, seen, () {
-      return {'type': 'object', 'value': _encodeDartMap(value, seen)};
+      return {
+        'type': 'object',
+        'value': _encodeDartMap(value, seen, depth + 1, activeBudget),
+      };
     });
   }
   throw JsValueConversionException(
@@ -3406,7 +3434,12 @@ Object _encodeDartValue(Object? value, Set<Object> seen) {
   );
 }
 
-Map<String, Object> _encodeDartMap(Map value, Set<Object> seen) {
+Map<String, Object> _encodeDartMap(
+  Map value,
+  Set<Object> seen,
+  int depth,
+  _DartValueBudget budget,
+) {
   final result = <String, Object>{};
   for (final entry in value.entries) {
     final key = entry.key;
@@ -3415,9 +3448,23 @@ Map<String, Object> _encodeDartMap(Map value, Set<Object> seen) {
         'QuickJS global map keys must be strings',
       );
     }
-    result[key] = _encodeDartValue(entry.value, seen);
+    result[key] = _encodeDartValue(entry.value, seen, depth, budget);
   }
   return result;
+}
+
+final class _DartValueBudget {
+  static const maxNodes = 10000;
+  static const maxDepth = 32;
+  int _nodes = 0;
+
+  void countContainer() {
+    if (++_nodes > maxNodes) {
+      throw const JsValueConversionException(
+        'QuickJS Dart value graph is too large',
+      );
+    }
+  }
 }
 
 Object _encodeWithCycleCheck(

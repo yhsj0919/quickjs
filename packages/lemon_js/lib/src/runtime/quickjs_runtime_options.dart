@@ -480,6 +480,7 @@ final class QuickjsRuntimeOptions {
   const QuickjsRuntimeOptions({
     this.memoryLimitBytes,
     this.stackLimitBytes,
+    this.maxPendingEvaluations = 256,
     this.moduleLoader,
     this.hostCapabilities = QuickjsHostCapabilities.none,
     this.environmentPatches = const <QuickjsHostScript>[],
@@ -499,6 +500,11 @@ final class QuickjsRuntimeOptions {
   /// `null` keeps the QuickJS default. Native uses `JS_SetMaxStackSize`; the
   /// current web backend does not expose an equivalent WASM option yet.
   final int? stackLimitBytes;
+
+  /// 等待执行的最大请求数，不包含当前正在运行的请求。
+  ///
+  /// 达到上限时新请求立即抛出 [JsQueueFullException]，避免未知插件无限堆积任务。
+  final int maxPendingEvaluations;
 
   /// Runtime-scoped ES module source loader.
   ///
