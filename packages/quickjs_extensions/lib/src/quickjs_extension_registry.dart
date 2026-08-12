@@ -1,6 +1,7 @@
 import 'package:lemon_js/lemon_js.dart';
 
 import 'quickjs_extension.dart';
+import 'quickjs_extension_capabilities.dart';
 import 'quickjs_extension_session.dart';
 import 'quickjs_extension_storage.dart';
 
@@ -105,6 +106,9 @@ final class QuickjsExtensionInstaller {
     List<QuickjsHostMount> sharedMounts = const <QuickjsHostMount>[],
     List<QuickjsHostMount> serviceMounts = const <QuickjsHostMount>[],
     List<QuickjsHostMount> uiMounts = const <QuickjsHostMount>[],
+    QuickjsExtensionOptionalCapabilities? optionalCapabilities,
+    int maxPendingCoreCalls = 64,
+    Duration defaultCallTimeout = const Duration(seconds: 30),
     QuickjsExtensionRuntimeFactory? runtimeFactory,
   }) {
     final session = QuickjsExtensionSession(
@@ -114,6 +118,9 @@ final class QuickjsExtensionInstaller {
       sharedMounts: sharedMounts,
       serviceMounts: serviceMounts,
       uiMounts: uiMounts,
+      optionalCapabilities: optionalCapabilities,
+      maxPendingCoreCalls: maxPendingCoreCalls,
+      defaultCallTimeout: defaultCallTimeout,
       runtimeFactory: runtimeFactory,
     );
     final installed = InstalledQuickjsExtension(

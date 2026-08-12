@@ -110,6 +110,11 @@ final manager = QuickjsExtensionManager(
 await manager.restore();
 ```
 
+权限声明和授权不会触发能力创建。Manager 默认统一注入隔离 KV、Axios（包含 Fetch/XHR）和当前完整的
+`QuickjsWebCryptoMount`；宿主可通过 `optionalCapabilities` 关闭或替换。Core 调用默认
+30 秒超时、最多等待 64 项，
+均可在 Manager 构造参数中调整。
+
 `restore()` 只恢复安装项、Registry 和 Session，Core runtime 保持懒加载。第三方
 `QuickjsUiPlugin` 包含宿主原生对象，不能写入 JSON，因此由 `uiPluginsResolver` 按插件
 ID 重新注入。Web 平台应实现 `QuickjsExtensionStore`，接入 IndexedDB 或其他持久化方案。
@@ -136,6 +141,10 @@ manifest 的额外导出不参与校验。可以使用 `manager.supports(id, met
 ```dart
 final result = await manager.call('site.example', 'getHome');
 ```
+
+故障 Runtime 会在当前调用返回错误后被丢弃，下一次调用惰性重建，不自动重放业务方法。
+宿主可以调用 `manager.restartRuntime(id)` 强制重建插件 Core。该操作会丢失模块变量、
+内存缓存、未完成 Promise 等 Runtime 内存状态；下一次调用会重新执行插件 `init()`。
 
 也可以按 contract 调用。存在多个实现时必须指定 `pluginId`，不会随机选择：
 
@@ -265,9 +274,16 @@ final loginFlow = registry.findFlow('site.example', 'authentication');
 
 ## 存储与卸载
 
-Manager 默认使用核心提供的 `SharedPreferencesQuickjsKeyValueStore` 持久化 KV，并自动将
-插件 ID 绑定为 namespace。宿主也可以实现 `QuickjsKeyValueStore` 后通过 `storage` 注入；
-测试可使用 `InMemoryQuickjsExtensionStorage` 兼容名称。
+Manager 默认使用核心提供的 `SharedPreferencesQuickjsKeyValueStore` 管理插件持久化数据，
+并通过默认可选能力按插件 ID 注入隔离 KV mount。`storage` 参数可替换数据实现；测试可
+使用 `InMemoryQuickjsExtensionStorage` 兼容名称。关闭全部默认可选能力：
+
+```dart
+QuickjsExtensionManager(
+  // 其他必需参数省略
+  optionalCapabilities: const QuickjsExtensionOptionalCapabilities.none(),
+);
+```
 
 ```dart
 await registry.disable('site.example');

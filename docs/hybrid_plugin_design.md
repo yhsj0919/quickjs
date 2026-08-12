@@ -168,7 +168,7 @@ QuickjsExtensionView.route(
 
 - 从 `QuickjsExtensionSession` 解析指定 UI route；
 - 取得对应 bundle/plugin；
-- 自动注入 scoped KV、已授权权限与宿主 mounts；
+- 绑定宿主明确配置的 scoped KV、权限策略与 host mounts；
 - 对 hybrid 变体注入绑定到同一 Session Core 的 service bridge；
 - 最终委托现有 `QuickjsUiView` 完成加载和渲染。
 
@@ -601,11 +601,32 @@ IndexedDB 或 Cache Storage 等等价实现。
 
 ### 12.3 QuickjsExtensionSession 生命周期与资源边界（第一版已实现）
 
-已提供宿主级 Session，统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host mounts。Core runtime 首次调用时创建并保持到停用或卸载；UI 页面销毁不影响 Session。升级迁移和 runtime 崩溃恢复仍待补充。
+已提供宿主级 Session，统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host
+mounts。Core runtime 首次调用时创建并保持到停用或卸载；UI 页面销毁不影响 Session。
+权限声明和授权不触发能力创建。Manager 通过明确的可选能力配置统一提供网络、存储和
+加密默认实现；宿主可以关闭或替换，并可继续追加 `sharedMounts`、`serviceMounts` 和
+`uiMounts`。
+Core 调用使用有界串行队列和默认超时，停用/卸载会关闭 Runtime；故障 Runtime 清理后由下次
+调用惰性重建，失败业务调用不会自动重放。升级过程中的页面与调用迁移仍待补充。
+
+后续能力注入改造必须区分两层：Runtime、模块、生命周期、错误桥接等核心能力始终注入，
+不参与权限控制；宿主可选能力由统一配置决定是否提供，不再根据权限声明临时创建 mount。
+第一版默认提供的可选能力为 `storage`、`network` 和 `crypto`；`network` 默认直接注入
+随 `quickjs_extensions` 发布的 Axios，并同时提供 Fetch/XHR。默认权限策略为完全宽松，
+宿主可以替换或关闭任一可选能力。`crypto` 默认启用 `QuickjsWebCryptoMount` 当前已经实现的
+全部能力，包括 `randomUUID()`、`getRandomValues()`、SHA-1/256/384/512 digest，以及
+HMAC-SHA-1/256 的 key import、sign 和 verify；不为尚未实现的算法声明能力。
+
+manifest 权限只表达插件可能使用的受限能力。宿主可选择不限制、询问或禁用；能力缺失与
+权限拒绝必须分别返回结构化结果。安装预检应向宿主报告插件声明但当前未实现的能力，运行时
+调用缺失能力也必须返回明确错误，不能静默降级或依赖 `ReferenceError` 表达宿主兼容性。
 
 ### 12.4 Core 与 JSUI 的绑定 service bridge（第一版已实现）
 
-已提供 `quickjs_extensions/plugin_service` 模块，根据当前 Session 自动绑定 Core，仅允许调用 manifest 的 `uiExports`，且不接受 pluginId。底层 provider 取消会向调用链传播；更细粒度的默认超时和崩溃恢复仍待补充。
+已提供 `quickjs_extensions/plugin_service` 模块，根据当前 Session 自动绑定 Core，仅允许
+调用 manifest 的 `uiExports`，且不接受 pluginId。底层 provider 取消会向调用链传播，
+默认超时、队列上限、手动重启和故障 Runtime 惰性恢复已经由 Session 统一处理。手动重启
+会丢弃 Runtime 内存状态，并在下一次调用时重新创建 Runtime、执行插件 `init()`。
 
 ### 12.5 标准数据源 contract 与结果模型
 
@@ -881,6 +902,11 @@ Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段�
 - 插件升级时正在运行的 Core 调用和 JSUI 页面如何迁移；
 - 插件签名、摘要、来源信任、ID 抢占防护、远程目录与自动更新策略；
 - 权限声明、用户授权确认和后台执行限制；
+- 可选 Cookie Jar：默认继续由 JS 手动读取、保存和发送 Cookie，不作为 Core 或混合插件
+  的必需能力；后续如实现，以可空 `cookieJar` 注入，并按插件 ID 隔离。单次请求预计用
+  `credentials: include` 启用自动发送和保存，用 `credentials: omit` 完全绕过 Jar，满足
+  同一接口在登录态与匿名态之间切换；Web 仍遵循浏览器的 CORS、SameSite 和第三方
+  Cookie 限制；
 - 标准数据 contract 的具体字段与版本演进规则。
 
 ## 14. 建议实施顺序
