@@ -1,5 +1,15 @@
 # 更新日志 / Changelog
 
+## Unreleased
+
+### 中文
+
+- 增加 pub 包内的最小可运行示例，覆盖 Runtime 创建、结构化求值和资源释放。
+
+### English
+
+- Added a minimal runnable Pub example covering runtime creation, structured evaluation, and disposal.
+
 ## 0.1.1
 
 ### 中文

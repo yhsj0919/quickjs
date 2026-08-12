@@ -65,7 +65,7 @@ Widget buildQuickjsUiFileSvg(
 }
 
 final class _QuickjsUiSvgFileLoader extends SvgFileLoader {
-  const _QuickjsUiSvgFileLoader(File file) : super(file);
+  const _QuickjsUiSvgFileLoader(super.file);
 
   @override
   String provideSvg(void message) =>

@@ -28,7 +28,7 @@ String normalizeQuickjsUiSvg(String source) {
 }
 
 final class QuickjsUiSvgStringLoader extends SvgStringLoader {
-  const QuickjsUiSvgStringLoader(String svg) : super(svg);
+  const QuickjsUiSvgStringLoader(super.svg);
 
   @override
   String provideSvg(void message) =>
@@ -36,7 +36,7 @@ final class QuickjsUiSvgStringLoader extends SvgStringLoader {
 }
 
 final class QuickjsUiSvgAssetLoader extends SvgAssetLoader {
-  const QuickjsUiSvgAssetLoader(String assetName) : super(assetName);
+  const QuickjsUiSvgAssetLoader(super.assetName);
 
   @override
   String provideSvg(ByteData? message) =>
@@ -44,8 +44,7 @@ final class QuickjsUiSvgAssetLoader extends SvgAssetLoader {
 }
 
 final class QuickjsUiSvgNetworkLoader extends SvgNetworkLoader {
-  const QuickjsUiSvgNetworkLoader(String url, {Map<String, String>? headers})
-    : super(url, headers: headers);
+  const QuickjsUiSvgNetworkLoader(super.url, {super.headers});
 
   @override
   String provideSvg(Uint8List? message) =>
