@@ -7,6 +7,7 @@ export 'package:lemon_js_ui/lemon_js_ui.dart';
 export 'src/quickjs_extension.dart';
 export 'src/quickjs_extension_capabilities.dart';
 export 'src/quickjs_extension_compatibility.dart';
+export 'src/quickjs_extension_default_store.dart';
 export 'src/quickjs_extension_flow.dart';
 export 'src/quickjs_extension_file_store.dart';
 export 'src/quickjs_extension_manifest.dart';

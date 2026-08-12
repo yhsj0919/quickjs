@@ -360,6 +360,10 @@ asset ZIP、file ZIP、network ZIP 和内存 ZIP 字节。来源层完成后统�
       "route": "authentication"
     }
   },
+  "capabilities": {
+    "required": {"network": 1},
+    "optional": {"cookieJar": 1}
+  },
   "permissions": ["network", "storage"]
 }
 ```
@@ -372,6 +376,8 @@ asset ZIP、file ZIP、network ZIP 和内存 ZIP 字节。来源层完成后统�
 - `version` 是安装、更新、降级和兼容判断使用的插件版本号，建议采用 SemVer；
 - `versionCode` 是非负整数形式的内部版本序号，用于确定更新先后，发布新版本时必须递增；
 - `compatibilityCode` 表示宿主兼容分组，并关联必需/可选公开方法策略；
+- `capabilities.required/optional` 分别声明宿主能力最低版本；必需能力缺失时拒绝安装，
+  可选能力缺失时允许安装并向宿主报告；
 - `icon` 可以是插件包内相对资源路径或绝对 HTTPS 网络地址；推荐随 ZIP 分发，网络图标作为兼容选择；
 - `homepage` 是插件介绍、帮助或项目主页；
 - `updateUrl` 是宿主检查最新版本信息的地址；
@@ -595,9 +601,10 @@ const result = await pluginService.call('submitLogin', form);
 - 包丢失或损坏时只标记对应插件为 broken，不阻塞其他插件恢复。
 
 Session、QuickJS runtime 和 JSUI Context 不持久化。恢复时重新读取受管理安装包并创建
-Session，Core runtime 仍在首次调用时懒加载。当前本地文件 Store 使用临时文件和备份
-文件替换持久化记录；后续可进一步保存不可变 ZIP 并增加摘要校验。Web 平台由宿主提供
-IndexedDB 或 Cache Storage 等等价实现。
+Session，Core runtime 仍在首次调用时懒加载。Manager 默认自动选择平台 Store：原生
+平台在应用支持目录使用文件 Store，Web 使用 SharedPreferences Web 后端；宿主仍可显式
+替换为自定义 Store。当前本地文件 Store 使用临时文件和备份文件替换持久化记录；后续可
+进一步保存不可变 ZIP 并增加摘要校验。
 
 ### 12.3 QuickjsExtensionSession 生命周期与资源边界（第一版已实现）
 
@@ -923,4 +930,5 @@ Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段�
 9. 有真实场景后再实现 Service `onDemand/resident/background` 策略和受控后台任务调度。
 10. 已完成 `QuickjsExtensionPackageFormat`，适配旧 Core ZIP、JSUI Package 和裸入口；
     默认仍为统一 Extension 格式。
-11. 最后由宿主业务层实现插件管理页面、更新源策略、用户授权确认和 Web 持久化适配。
+11. 最后由宿主业务层实现插件管理页面、更新源策略和用户授权确认；仅在默认 Store 不满足
+    业务需求时提供自定义持久化适配。

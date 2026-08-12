@@ -9,6 +9,14 @@ import 'package:http/testing.dart';
 import 'package:quickjs_extensions/quickjs_extensions.dart';
 
 void main() {
+  test('manager automatically selects a default store', () {
+    final manager = QuickjsExtensionManager(
+      compatibilityRegistry: QuickjsExtensionCompatibilityRegistry(const []),
+    );
+
+    expect(manager.store, isA<QuickjsExtensionDefaultStore>());
+  });
+
   const manifestSource = '''
 {
   "schemaVersion": 2,
@@ -48,6 +56,41 @@ void main() {
     expect(
       QuickjsExtensionManifest.parse(manifest.toJson()).toMap(),
       manifest.toMap(),
+    );
+  });
+
+  test('parses required and optional host capability versions', () {
+    final source = manifestSource.replaceFirst(
+      '"permissions": ["network", "storage"]',
+      '''"capabilities": {
+    "required": {"network": 1},
+    "optional": {"cookieJar": 1}
+  },
+  "permissions": ["network", "storage"]''',
+    );
+    final manifest = QuickjsExtensionManifest.parse(source);
+
+    expect(manifest.capabilities.required, {'network': 1});
+    expect(manifest.capabilities.optional, {'cookieJar': 1});
+    expect(
+      QuickjsExtensionManifest.parse(manifest.toJson()).capabilities.toMap(),
+      manifest.capabilities.toMap(),
+    );
+  });
+
+  test('rejects duplicated and invalid capability declarations', () {
+    expect(
+      () => QuickjsExtensionCapabilityManifest.fromMap({
+        'required': {'network': 1},
+        'optional': {'network': 1},
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => QuickjsExtensionCapabilityManifest.fromMap({
+        'required': {'network': 0},
+      }),
+      throwsFormatException,
     );
   });
 
@@ -402,6 +445,54 @@ export function submitLogin() { return true; }
       QuickjsExtensionKind.hybrid,
     );
   });
+
+  test(
+    'manager reports optional capabilities and rejects missing required',
+    () async {
+      final manager = QuickjsExtensionManager(
+        store: InMemoryQuickjsExtensionStore(),
+        compatibilityRegistry: _compatibilityRegistry(),
+        optionalCapabilities: const QuickjsExtensionOptionalCapabilities.none(),
+        runtimeFactory: (options) async => _FakeRuntime(options),
+      );
+      String withCapabilities(String declaration) =>
+          manifestSource.replaceFirst(
+            '"permissions": ["network", "storage"]',
+            '$declaration,\n  "permissions": ["network", "storage"]',
+          );
+      final optionalPackage = _hybridPackage(
+        withCapabilities('''"capabilities": {
+    "optional": {"network": 1, "cookieJar": 1}
+  }'''),
+      );
+
+      final inspection = await manager.inspectPackage(optionalPackage);
+      expect(inspection.canInstall, isTrue);
+      expect(inspection.missingOptional, {'network': 1, 'cookieJar': 1});
+      final installed = await manager.install(optionalPackage);
+      expect(installed.capabilityInspection?.missingOptional, {
+        'network': 1,
+        'cookieJar': 1,
+      });
+
+      final requiredPackage = _hybridPackage(
+        withCapabilities('''"capabilities": {
+    "required": {"crypto": 2}
+  }''').replaceFirst('site.example1', 'site.required'),
+      );
+      await expectLater(
+        manager.install(requiredPackage),
+        throwsA(
+          isA<QuickjsExtensionCapabilityException>().having(
+            (error) => error.inspection.missingRequired,
+            'missingRequired',
+            {'crypto': 2},
+          ),
+        ),
+      );
+      expect(await manager.store.load('site.required'), isNull);
+    },
+  );
 
   test('manager installs, calls by id and restores lazily', () async {
     final store = InMemoryQuickjsExtensionStore();

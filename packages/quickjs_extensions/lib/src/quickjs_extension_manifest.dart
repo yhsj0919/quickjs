@@ -21,6 +21,7 @@ final class QuickjsExtensionManifest {
     this.downloadUrl,
     Map<String, QuickjsExtensionFlowManifest> flows =
         const <String, QuickjsExtensionFlowManifest>{},
+    this.capabilities = const QuickjsExtensionCapabilityManifest(),
     List<String> permissions = const <String>[],
     Map<String, Object?> metadata = const <String, Object?>{},
   }) : flows = Map<String, QuickjsExtensionFlowManifest>.unmodifiable(flows),
@@ -77,6 +78,9 @@ final class QuickjsExtensionManifest {
           QuickjsExtensionFlowManifest.fromMap(_map(value, 'flows.$key')),
         ),
       ),
+      capabilities: QuickjsExtensionCapabilityManifest.fromMap(
+        _objectMap(map['capabilities'], 'capabilities'),
+      ),
       permissions: _stringList(map['permissions'], 'permissions'),
       metadata: _objectMap(map['metadata'], 'metadata'),
     );
@@ -97,6 +101,7 @@ final class QuickjsExtensionManifest {
   final Uri? updateUrl;
   final Uri? downloadUrl;
   final Map<String, QuickjsExtensionFlowManifest> flows;
+  final QuickjsExtensionCapabilityManifest capabilities;
   final List<String> permissions;
   final Map<String, Object?> metadata;
 
@@ -119,6 +124,7 @@ final class QuickjsExtensionManifest {
       'flows': <String, Object?>{
         for (final entry in flows.entries) entry.key: entry.value.toMap(),
       },
+    if (capabilities.isNotEmpty) 'capabilities': capabilities.toMap(),
     if (permissions.isNotEmpty) 'permissions': permissions,
     if (metadata.isNotEmpty) 'metadata': metadata,
   };
@@ -186,6 +192,55 @@ final class QuickjsExtensionManifest {
     }
     _requireUnique(permissions, 'permissions');
   }
+}
+
+/// 插件对宿主可选能力及最低版本的声明。
+final class QuickjsExtensionCapabilityManifest {
+  const QuickjsExtensionCapabilityManifest({
+    this.required = const <String, int>{},
+    this.optional = const <String, int>{},
+  });
+
+  factory QuickjsExtensionCapabilityManifest.fromMap(Map<String, Object?> map) {
+    Map<String, int> parseVersions(String field) => Map.unmodifiable(
+      _objectMap(map[field], 'capabilities.$field').map((name, value) {
+        _requireIdentifier(name, 'capabilities.$field key');
+        final version = _int(value, 'capabilities.$field.$name');
+        if (version < 1) {
+          throw FormatException(
+            'QuickJS extension capability version must be positive: $name',
+          );
+        }
+        return MapEntry(name, version);
+      }),
+    );
+
+    final required = parseVersions('required');
+    final optional = parseVersions('optional');
+    final duplicated = required.keys.toSet().intersection(
+      optional.keys.toSet(),
+    );
+    if (duplicated.isNotEmpty) {
+      throw FormatException(
+        'QuickJS extension capabilities cannot be both required and optional: '
+        '${duplicated.join(', ')}',
+      );
+    }
+    return QuickjsExtensionCapabilityManifest(
+      required: required,
+      optional: optional,
+    );
+  }
+
+  final Map<String, int> required;
+  final Map<String, int> optional;
+
+  bool get isNotEmpty => required.isNotEmpty || optional.isNotEmpty;
+
+  Map<String, Object?> toMap() => <String, Object?>{
+    if (required.isNotEmpty) 'required': required,
+    if (optional.isNotEmpty) 'optional': optional,
+  };
 }
 
 /// UI-only 小程序或可视扩展的默认启动入口。
