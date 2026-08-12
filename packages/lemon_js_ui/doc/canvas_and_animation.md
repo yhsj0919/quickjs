@@ -1,4 +1,4 @@
-# Canvas 与动画契约
+# quickjs_ui Canvas 与动画契约
 
 本文定义 Canvas、保留场景、Widget 效果和控件状态过渡的首版实验契约。这些 API 遵循
 `quickjs_ui` 的 `0.1.x` 实验版本策略：兼容新增可以进入补丁版本；不兼容 Schema 变更

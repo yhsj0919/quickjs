@@ -19,13 +19,20 @@ final class QuickjsExtensionPackage {
     Map<String, String> uiModules = const <String, String>{},
     Map<String, QuickjsUiResourceReference> uiResources =
         const <String, QuickjsUiResourceReference>{},
+    Map<String, Uint8List> resourceFiles = const <String, Uint8List>{},
     List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
   }) : serviceModules = Map<String, String>.unmodifiable(serviceModules),
        uiModules = Map<String, String>.unmodifiable(uiModules),
        uiResources = Map<String, QuickjsUiResourceReference>.unmodifiable(
          uiResources,
        ),
-       uiPlugins = List<QuickjsUiPlugin>.unmodifiable(uiPlugins);
+       resourceFiles = Map<String, Uint8List>.unmodifiable({
+         for (final entry in resourceFiles.entries)
+           entry.key: Uint8List.fromList(entry.value),
+       }),
+       uiPlugins = List<QuickjsUiPlugin>.unmodifiable(uiPlugins) {
+    _validateModulePaths(this.resourceFiles.keys, 'resourceFiles');
+  }
 
   /// 从持久化 Map 恢复扩展包源码。
   factory QuickjsExtensionPackage.fromMap(
@@ -48,6 +55,12 @@ final class QuickjsExtensionPackage {
           name: 'uiResources.${entry.key}',
         ),
     },
+    resourceFiles: <String, Uint8List>{
+      for (final entry
+          in ((map['resourceFiles'] as Map?) ?? const <String, Object?>{})
+              .entries)
+        entry.key as String: base64Decode(entry.value! as String),
+    },
     uiPlugins: uiPlugins,
   );
 
@@ -63,6 +76,10 @@ final class QuickjsExtensionPackage {
     return _loadDirectoryPackage(
       manifestSource: await assets.loadString(normalizedManifest),
       loadModule: (path) => assets.loadString(_join(root, path)),
+      loadResource: (path) async {
+        final data = await assets.load(_join(root, path));
+        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      },
       uiPlugins: uiPlugins,
     );
   }
@@ -77,6 +94,7 @@ final class QuickjsExtensionPackage {
     return _loadDirectoryPackage(
       manifestSource: await readQuickjsExtensionFileString(normalizedManifest),
       loadModule: (path) => readQuickjsExtensionFileString(_join(root, path)),
+      loadResource: (path) => readQuickjsExtensionFileBytes(_join(root, path)),
       uiPlugins: uiPlugins,
     );
   }
@@ -90,7 +108,7 @@ final class QuickjsExtensionPackage {
     final ownedClient = client == null;
     final resolvedClient = client ?? http.Client();
     final root = manifestUrl.resolve('.');
-    Future<String> load(Uri uri) async {
+    Future<Uint8List> loadBytes(Uri uri) async {
       if (!uri.toString().startsWith(root.toString())) {
         throw FormatException('Extension network path escapes root: $uri');
       }
@@ -101,13 +119,15 @@ final class QuickjsExtensionPackage {
           uri,
         );
       }
-      return utf8.decode(response.bodyBytes);
+      return response.bodyBytes;
     }
 
     try {
       return await _loadDirectoryPackage(
-        manifestSource: await load(manifestUrl),
-        loadModule: (path) => load(root.resolve(path)),
+        manifestSource: utf8.decode(await loadBytes(manifestUrl)),
+        loadModule: (path) async =>
+            utf8.decode(await loadBytes(root.resolve(path))),
+        loadResource: (path) => loadBytes(root.resolve(path)),
         uiPlugins: uiPlugins,
       );
     } finally {
@@ -284,6 +304,21 @@ final class QuickjsExtensionPackage {
         }
         return utf8.decode(source);
       },
+      loadResource: (path) async {
+        final resolved = _join(root, path);
+        final source = files[resolved];
+        if (source == null) {
+          throw FormatException('Extension ZIP resource is missing: $resolved');
+        }
+        return source;
+      },
+      additionalResources: <String, Uint8List>{
+        for (final entry in files.entries)
+          if (entry.key != manifestEntry.key &&
+              _isWithinPackageRoot(root, entry.key) &&
+              !_isJavaScriptPath(_relativeTo(root, entry.key)))
+            _relativeTo(root, entry.key): entry.value,
+      },
       uiPlugins: uiPlugins,
     );
   }
@@ -400,6 +435,9 @@ final class QuickjsExtensionPackage {
   /// JSUI 包声明的图片、字体等资源引用。
   final Map<String, QuickjsUiResourceReference> uiResources;
 
+  /// 随安装包持久化的非 JavaScript 资源字节，以包内相对路径索引。
+  final Map<String, Uint8List> resourceFiles;
+
   /// JSUI 渲染所需的第三方插件。
   final List<QuickjsUiPlugin> uiPlugins;
 
@@ -416,6 +454,11 @@ final class QuickjsExtensionPackage {
       'uiResources': <String, Object?>{
         for (final entry in uiResources.entries) entry.key: entry.value.toMap(),
       },
+    if (resourceFiles.isNotEmpty)
+      'resourceFiles': <String, String>{
+        for (final entry in resourceFiles.entries)
+          entry.key: base64Encode(entry.value),
+      },
   };
 
   /// 复制包并重新注入第三方 JSUI 插件。
@@ -425,6 +468,7 @@ final class QuickjsExtensionPackage {
         serviceModules: serviceModules,
         uiModules: uiModules,
         uiResources: uiResources,
+        resourceFiles: resourceFiles,
         uiPlugins: plugins,
       );
 
@@ -446,7 +490,12 @@ final class QuickjsExtensionPackage {
         id: manifest.id,
         version: manifest.version,
         entry: namespacedEntry,
-        exports: <String>[...service.publicExports, ...service.uiExports],
+        exports: <String>[
+          ...service.publicExports,
+          ...service.uiExports,
+          if (service.storageMigrationExport != null)
+            service.storageMigrationExport!,
+        ],
         permissions: manifest.permissions,
         metadata: service.metadata,
       ),
@@ -478,12 +527,17 @@ final class QuickjsExtensionPackage {
       entry: ui.routes.values.first.entry,
       modules: uiModules,
       permissions: manifest.permissions,
-      resources: uiResources,
+      resources: <String, QuickjsUiResourceReference>{
+        ...uiResources,
+        for (final entry in resourceFiles.entries)
+          entry.key: _embeddedResource(entry.key, entry.value),
+      },
     );
   }
 }
 
 typedef _ModuleLoader = Future<String> Function(String path);
+typedef _ResourceLoader = Future<Uint8List> Function(String path);
 typedef _EntryPackageLoader =
     Future<QuickjsExtensionPackage> Function(
       String entry,
@@ -628,11 +682,14 @@ QuickjsExtensionPackage _fromUiBundle(
 Future<QuickjsExtensionPackage> _loadDirectoryPackage({
   required String manifestSource,
   required _ModuleLoader loadModule,
+  required _ResourceLoader loadResource,
+  Map<String, Uint8List> additionalResources = const <String, Uint8List>{},
   required List<QuickjsUiPlugin> uiPlugins,
 }) async {
   final manifest = QuickjsExtensionManifest.parse(manifestSource);
   final serviceModules = <String, String>{};
   final uiModules = <String, String>{};
+  final resourceFiles = <String, Uint8List>{...additionalResources};
 
   Future<void> visit(String path, Map<String, String> target) async {
     await _visitModules(path, target, loadModule);
@@ -646,10 +703,14 @@ Future<QuickjsExtensionPackage> _loadDirectoryPackage({
       await visit(route.entry, uiModules);
     }
   }
+  for (final path in manifest.resources) {
+    resourceFiles[path] = await loadResource(path);
+  }
   return QuickjsExtensionPackage(
     manifestSource: manifestSource,
     serviceModules: serviceModules,
     uiModules: uiModules,
+    resourceFiles: resourceFiles,
     uiPlugins: uiPlugins,
   );
 }
@@ -703,6 +764,46 @@ bool _isWithinNetworkRoot(Uri root, Uri candidate) =>
 
 String _join(String root, String path) =>
     root.isEmpty ? _normalizePath(path) : _normalizePath('$root/$path');
+
+String _relativeTo(String root, String path) {
+  if (root.isEmpty) return path;
+  final prefix = '$root/';
+  if (!path.startsWith(prefix)) {
+    throw FormatException('Extension ZIP entry escapes package root: $path');
+  }
+  return path.substring(prefix.length);
+}
+
+bool _isWithinPackageRoot(String root, String path) =>
+    root.isEmpty || path.startsWith('$root/');
+
+bool _isJavaScriptPath(String path) =>
+    path.endsWith('.js') || path.endsWith('.mjs') || path.endsWith('.cjs');
+
+QuickjsUiResourceReference _embeddedResource(String path, Uint8List bytes) {
+  final mimeType = _mimeType(path);
+  return QuickjsUiResourceReference(
+    location: 'data:$mimeType;base64,${base64Encode(bytes)}',
+    kind: QuickjsUiResourceKind.data,
+    mimeType: mimeType,
+  );
+}
+
+String _mimeType(String path) => switch (path.toLowerCase().split('.').last) {
+  'png' => 'image/png',
+  'jpg' || 'jpeg' => 'image/jpeg',
+  'gif' => 'image/gif',
+  'webp' => 'image/webp',
+  'svg' => 'image/svg+xml',
+  'json' => 'application/json',
+  'ttf' => 'font/ttf',
+  'otf' => 'font/otf',
+  'woff' => 'font/woff',
+  'woff2' => 'font/woff2',
+  'mp3' => 'audio/mpeg',
+  'mp4' => 'video/mp4',
+  _ => 'application/octet-stream',
+};
 
 void _validateModulePaths(Iterable<String> paths, String name) {
   for (final path in paths) {

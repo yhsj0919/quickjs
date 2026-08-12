@@ -22,9 +22,12 @@ final class QuickjsExtensionManifest {
     Map<String, QuickjsExtensionFlowManifest> flows =
         const <String, QuickjsExtensionFlowManifest>{},
     this.capabilities = const QuickjsExtensionCapabilityManifest(),
+    this.storageVersion = 0,
+    List<String> resources = const <String>[],
     List<String> permissions = const <String>[],
     Map<String, Object?> metadata = const <String, Object?>{},
   }) : flows = Map<String, QuickjsExtensionFlowManifest>.unmodifiable(flows),
+       resources = List<String>.unmodifiable(resources),
        permissions = List<String>.unmodifiable(permissions),
        metadata = Map<String, Object?>.unmodifiable(metadata) {
     _validate();
@@ -81,6 +84,10 @@ final class QuickjsExtensionManifest {
       capabilities: QuickjsExtensionCapabilityManifest.fromMap(
         _objectMap(map['capabilities'], 'capabilities'),
       ),
+      storageVersion: map['storageVersion'] == null
+          ? 0
+          : _int(map['storageVersion'], 'storageVersion'),
+      resources: _stringList(map['resources'], 'resources'),
       permissions: _stringList(map['permissions'], 'permissions'),
       metadata: _objectMap(map['metadata'], 'metadata'),
     );
@@ -102,6 +109,8 @@ final class QuickjsExtensionManifest {
   final Uri? downloadUrl;
   final Map<String, QuickjsExtensionFlowManifest> flows;
   final QuickjsExtensionCapabilityManifest capabilities;
+  final int storageVersion;
+  final List<String> resources;
   final List<String> permissions;
   final Map<String, Object?> metadata;
 
@@ -125,6 +134,8 @@ final class QuickjsExtensionManifest {
         for (final entry in flows.entries) entry.key: entry.value.toMap(),
       },
     if (capabilities.isNotEmpty) 'capabilities': capabilities.toMap(),
+    if (storageVersion != 0) 'storageVersion': storageVersion,
+    if (resources.isNotEmpty) 'resources': resources,
     if (permissions.isNotEmpty) 'permissions': permissions,
     if (metadata.isNotEmpty) 'metadata': metadata,
   };
@@ -145,6 +156,15 @@ final class QuickjsExtensionManifest {
       throw const FormatException(
         'QuickJS extension versionCode must not be negative',
       );
+    }
+    if (storageVersion < 0) {
+      throw const FormatException(
+        'QuickJS extension storageVersion must not be negative',
+      );
+    }
+    _requireUnique(resources, 'resources');
+    for (final resource in resources) {
+      _requirePackagePath(resource, 'resources');
     }
     _requireIdentifier(compatibilityCode, 'compatibilityCode');
     if (service == null && ui == null) {
@@ -282,6 +302,7 @@ final class QuickjsServiceManifest {
     required this.contract,
     List<String> publicExports = const <String>[],
     List<String> uiExports = const <String>[],
+    this.storageMigrationExport,
     Map<String, Object?> metadata = const <String, Object?>{},
   }) : publicExports = List<String>.unmodifiable(publicExports),
        uiExports = List<String>.unmodifiable(uiExports),
@@ -301,6 +322,16 @@ final class QuickjsServiceManifest {
         '${overlap.join(', ')}',
       );
     }
+    final migrationExport = storageMigrationExport;
+    if (migrationExport != null) {
+      _requireIdentifier(migrationExport, 'service.storageMigrationExport');
+      if (publicExports.contains(migrationExport) ||
+          uiExports.contains(migrationExport)) {
+        throw const FormatException(
+          'QuickJS extension storage migration export must be internal',
+        );
+      }
+    }
   }
 
   factory QuickjsServiceManifest.fromMap(Map<String, Object?> map) =>
@@ -312,6 +343,10 @@ final class QuickjsServiceManifest {
           'service.publicExports',
         ),
         uiExports: _stringList(map['uiExports'], 'service.uiExports'),
+        storageMigrationExport: _optionalString(
+          map['storageMigrationExport'],
+          'service.storageMigrationExport',
+        ),
         metadata: _objectMap(map['metadata'], 'service.metadata'),
       );
 
@@ -319,6 +354,7 @@ final class QuickjsServiceManifest {
   final String contract;
   final List<String> publicExports;
   final List<String> uiExports;
+  final String? storageMigrationExport;
   final Map<String, Object?> metadata;
 
   Map<String, Object?> toMap() => <String, Object?>{
@@ -326,6 +362,8 @@ final class QuickjsServiceManifest {
     'contract': contract,
     if (publicExports.isNotEmpty) 'publicExports': publicExports,
     if (uiExports.isNotEmpty) 'uiExports': uiExports,
+    if (storageMigrationExport != null)
+      'storageMigrationExport': storageMigrationExport,
     if (metadata.isNotEmpty) 'metadata': metadata,
   };
 }

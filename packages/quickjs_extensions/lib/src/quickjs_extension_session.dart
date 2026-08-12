@@ -153,6 +153,18 @@ final class QuickjsExtensionSession {
     return _call(service, method, arguments, timeout: timeout);
   }
 
+  /// 调用插件声明的内部 KV 迁移函数。
+  Future<Object?> migrateStorage(int fromVersion, int toVersion) {
+    final service = _requireService();
+    final method = service.storageMigrationExport;
+    if (method == null) {
+      throw StateError(
+        'Extension "$id" does not declare service.storageMigrationExport',
+      );
+    }
+    return _call(service, method, <Object?>[fromVersion, toVersion]);
+  }
+
   List<QuickjsHostMount> mountsForRoute(
     String route, {
     List<QuickjsHostMount> routeMounts = const <QuickjsHostMount>[],

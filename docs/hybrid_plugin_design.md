@@ -606,6 +606,16 @@ Session，Core runtime 仍在首次调用时懒加载。Manager 默认自动选�
 替换为自定义 Store。当前本地文件 Store 使用临时文件和备份文件替换持久化记录；后续可
 进一步保存不可变 ZIP 并增加摘要校验。
 
+统一包现已将 manifest 声明的非 JavaScript 资源字节一并持久化；ZIP 内的非 JavaScript
+文件会自动收集。恢复时这些资源被重建为 JSUI 可使用的内嵌资源，不再依赖原安装来源。
+安装前同时检查内存、Registry 和持久化 Store，避免尚未执行 `restore()` 时覆盖同 ID
+记录；更新继续要求 ID 和兼容码一致，并按 `versionCode` 控制升级、同版和降级。
+
+manifest 可通过 `storageVersion` 描述插件 KV 结构版本。版本变化时，Manager 在激活新
+版本前调用 `service.storageMigrationExport`，参数为旧版本和新版本；迁移前完整快照当前
+插件命名空间，迁移或激活失败时恢复 KV 与旧安装记录。纯 UI 插件若需要改变 KV 结构，
+应在混合包中提供迁移 service，或保持原 `storageVersion`。
+
 ### 12.3 QuickjsExtensionSession 生命周期与资源边界（第一版已实现）
 
 已提供宿主级 Session，统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host
@@ -930,5 +940,7 @@ Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段�
 9. 有真实场景后再实现 Service `onDemand/resident/background` 策略和受控后台任务调度。
 10. 已完成 `QuickjsExtensionPackageFormat`，适配旧 Core ZIP、JSUI Package 和裸入口；
     默认仍为统一 Extension 格式。
-11. 最后由宿主业务层实现插件管理页面、更新源策略和用户授权确认；仅在默认 Store 不满足
-    业务需求时提供自定义持久化适配。
+11. 默认 Store 不满足业务需求时，由宿主提供自定义持久化适配。
+
+插件管理页面属于宿主业务层，不列入 `quickjs_extensions` 的开发计划；核心包只提供页面
+所需的无 UI 管理 API 和状态数据。

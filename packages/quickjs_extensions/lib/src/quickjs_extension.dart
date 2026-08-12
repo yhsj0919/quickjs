@@ -24,10 +24,15 @@ final class QuickjsServiceComponent {
     required this.contract,
     required List<String> publicExports,
     List<String> uiExports = const <String>[],
+    this.storageMigrationExport,
   }) : publicExports = List<String>.unmodifiable(publicExports),
        uiExports = List<String>.unmodifiable(uiExports) {
     final declared = plugin.manifest.exports.toSet();
-    final requiredExports = <String>{...publicExports, ...uiExports};
+    final requiredExports = <String>{
+      ...publicExports,
+      ...uiExports,
+      ?storageMigrationExport,
+    };
     final missing = requiredExports.difference(declared);
     if (missing.isNotEmpty) {
       throw ArgumentError(
@@ -48,6 +53,9 @@ final class QuickjsServiceComponent {
 
   /// 仅允许同一扩展 UI 调用的导出方法。
   final List<String> uiExports;
+
+  /// 仅供 Manager 在 KV 版本升级时调用的内部导出。
+  final String? storageMigrationExport;
 }
 
 /// 扩展的 JSUI 页面组件。
@@ -97,6 +105,7 @@ final class QuickjsExtension {
             contract: serviceManifest.contract,
             publicExports: serviceManifest.publicExports,
             uiExports: serviceManifest.uiExports,
+            storageMigrationExport: serviceManifest.storageMigrationExport,
           );
     final ui = uiManifest == null
         ? null
@@ -202,7 +211,9 @@ final class QuickjsExtension {
           !_sameStrings(
             serviceComponent.uiExports,
             serviceManifest.uiExports,
-          )) {
+          ) ||
+          serviceComponent.storageMigrationExport !=
+              serviceManifest.storageMigrationExport) {
         throw ArgumentError(
           'QuickJS service component does not match extension manifest',
         );

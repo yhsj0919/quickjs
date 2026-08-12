@@ -1,27 +1,74 @@
-# Lemon JS 工作区
+# Lemon JS
 
-本仓库采用 Dart Pub Workspace 管理以下软件包：
+Lemon JS 是一组面向 Flutter 的 QuickJS 与动态 UI 工具。它支持在原生平台和 Web 中运行
+JavaScript、加载隔离插件、注入宿主能力，并使用 JavaScript 描述由 Flutter 原生渲染的
+动态页面。
 
-- `packages/lemon_js`：面向 Flutter 的 QuickJS JavaScript 运行时；
-- `packages/lemon_js_ui`：由 `lemon_js` 驱动的声明式动态 UI；
-- `packages/lemon_js_ui_video_player`：供 `lemon_js_ui` 使用的视频播放器组件扩展。
-- `packages/quickjs_extensions`：组合 Core 与 JSUI 的统一扩展包、manifest 和 Session 基础层。
+## 包组成
 
-完整示例位于 `examples/lemon_js_example`。仓库级检查可运行
-`tool/verify.ps1` 或 `tool/verify.cmd`。
+| 包 | 用途 |
+| --- | --- |
+| [`lemon_js`](packages/lemon_js/README.md) | QuickJS runtime、模块、插件、网络、KV、加密和宿主能力 |
+| [`lemon_js_ui`](packages/lemon_js_ui/README.md) | JavaScript 驱动的 Flutter 原生动态 UI |
+| [`lemon_js_ui_video_player`](packages/lemon_js_ui_video_player/README.md) | JSUI 原生视频播放器插件 |
+| [`quickjs_extensions`](packages/quickjs_extensions/README.md) | Core、JSUI 与混合插件的统一安装和管理层 |
 
-原生 Release 优化和 Android 16 KB 内存页支持说明见
-[`docs/native_release_build.md`](docs/native_release_build.md)。
+## 快速开始
 
-## 文档导航
+只执行 JavaScript：
 
-- **核心运行时（`lemon_js`）**：从 [`packages/lemon_js/README.md`](packages/lemon_js/README.md) 开始，重点查看运行时、Context、模块加载、插件、宿主能力注入和类绑定生命周期。
-- **动态 UI（`lemon_js_ui`）**：使用方法见 [`packages/lemon_js_ui/docs/usage.md`](packages/lemon_js_ui/docs/usage.md)，架构见 [`packages/lemon_js_ui/docs/architecture.md`](packages/lemon_js_ui/docs/architecture.md)，组件约定见 [`docs/quickjs_ui_components.md`](docs/quickjs_ui_components.md)，Canvas 与动画见 [`packages/lemon_js_ui/docs/canvas_and_animation.md`](packages/lemon_js_ui/docs/canvas_and_animation.md)。
-- **UI 跨模块能力**：导航、事件、焦点、主题、资源和诊断等共性约定见 [`docs/quickjs_ui_cross_cutting.md`](docs/quickjs_ui_cross_cutting.md)。
-- **插件与扩展**：基础清单格式见 [`docs/plugin_manifest.md`](docs/plugin_manifest.md)，混合插件方案见 [`docs/hybrid_plugin_design.md`](docs/hybrid_plugin_design.md)，npm 资源打包见 [`docs/npm_bundling.md`](docs/npm_bundling.md)。
-- **发布与性能**：原生发布检查见 [`docs/native_release_build.md`](docs/native_release_build.md)，性能定位必须遵循 [`docs/performance_troubleshooting.md`](docs/performance_troubleshooting.md)。
+```yaml
+dependencies:
+  lemon_js: ^0.1.1
+```
 
-## 文档约定
+```dart
+import 'package:lemon_js/lemon_js.dart';
 
-仓库自有文档默认使用中文描述。包名、API、协议字段、命令、代码示例和无法准确替换的
-技术名词保留英文；引用的 QuickJS 上游及 `third_party` 文档保持原文，便于后续同步。
+final runtime = await Quickjs.create();
+try {
+  print(await runtime.evaluateValue('1 + 2')); // 3
+} finally {
+  await runtime.dispose();
+}
+```
+
+需要动态 Flutter 页面时加入 `lemon_js_ui`，需要统一插件安装、更新、恢复和按 ID 调用时
+加入 `quickjs_extensions`。各包 README 提供独立的最小用法。
+
+## 运行完整示例
+
+```bash
+cd examples/lemon_js_example
+flutter pub get
+flutter run
+```
+
+[示例应用](examples/lemon_js_example/README.md)包含 Core、JSUI、Canvas、动画、视频组件和
+混合插件演示。
+
+## 文档
+
+- [插件 manifest](docs/plugin_manifest.md)
+- [混合插件设计](docs/hybrid_plugin_design.md)
+- [JSUI 组件](docs/quickjs_ui_components.md)
+- [JSUI 跨组件能力](docs/quickjs_ui_cross_cutting.md)
+- [npm 打包](docs/npm_bundling.md)
+- [原生发布构建](docs/native_release_build.md)
+- [性能排查](docs/performance_troubleshooting.md)
+
+## 开发验证
+
+Windows 可使用统一脚本：
+
+```powershell
+.\tool\verify.cmd -Mode full
+.\tool\verify.cmd -Mode ui
+```
+
+性能问题请先按照[性能排查流程](docs/performance_troubleshooting.md)建立基线，再修改生产
+行为。
+
+## 许可证
+
+项目许可证见 [LICENSE](LICENSE)，第三方组件说明见各包的 `THIRD_PARTY_NOTICES.md`。

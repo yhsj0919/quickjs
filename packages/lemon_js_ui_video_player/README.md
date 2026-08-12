@@ -1,7 +1,12 @@
 # lemon_js_ui_video_player
 
-`lemon_js_ui_video_player` 为 `lemon_js_ui` 提供原生 `VideoPlayer` 组件，JS
-页面可通过 `quickjs_ui/video_player` 模块声明播放器节点。
+`lemon_js_ui_video_player` 是 `lemon_js_ui` 的官方视频组件插件。它同时注册：
+
+- Flutter 原生 `VideoPlayer` 渲染组件；
+- JS 模块 `quickjs_ui/video_player`；
+- Windows、macOS、Linux 使用的 FVP 后端。
+
+宿主只需要注入插件，不需要直接依赖或初始化 `video_player`、`fvp`。
 
 ## 安装
 
@@ -10,16 +15,93 @@ dependencies:
   lemon_js_ui_video_player: ^0.1.0
 ```
 
-插件内部负责依赖 `video_player`，并在 Windows、macOS 和 Linux 上自动注册
-FVP 后端。宿主通常不需要直接依赖或初始化这两个底层包。
+## Flutter 端注册
+
+把插件传给使用它的 `QuickjsUiView`：
 
 ```dart
-final plugins = <QuickjsUiPlugin>[
-  QuickjsUiVideoPlayerPlugin.plugin,
-];
+import 'package:flutter/material.dart';
+import 'package:lemon_js_ui/lemon_js_ui.dart';
+import 'package:lemon_js_ui_video_player/lemon_js_ui_video_player.dart';
+
+class VideoPage extends StatelessWidget {
+  const VideoPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return QuickjsUiView.asset(
+      path: 'assets/pages/video_page.mjs',
+      uiPlugins: <QuickjsUiPlugin>[
+        QuickjsUiVideoPlayerPlugin.plugin,
+      ],
+    );
+  }
+}
 ```
 
-只有需要定制桌面端 FVP 参数时，才需要在创建 UI Session 前调用：
+并在应用的 `pubspec.yaml` 中声明 JS 页面：
+
+```yaml
+flutter:
+  assets:
+    - assets/pages/video_page.mjs
+```
+
+生成编辑器提示时加入插件自带的声明文件：
+
+```bash
+dart run lemon_js_ui:codegen \
+  --root assets/pages \
+  --types path/to/lemon_js_ui_video_player/js/quickjs_ui_video_player.d.ts
+```
+
+## JS 页面使用
+
+```js
+import { Page } from 'quickjs_ui';
+import { VideoPlayer } from 'quickjs_ui/video_player';
+
+export default Page({
+  name: 'VideoPage',
+
+  createState() {
+    return { playing: true, positionMs: 0 };
+  },
+
+  build(state, props, page) {
+    return VideoPlayer({
+      key: 'main-player',
+      source: props.source ??
+        'https://media.w3.org/2010/05/sintel/trailer.mp4',
+      playing: state.playing,
+      loop: true,
+      fit: 'contain',
+      onReady: page.ready(),
+      onProgress: page.progress(),
+      onEnded: page.ended(),
+      onError: page.failed()
+    });
+  },
+
+  progress(state, _payload, _props, event) {
+    return { positionMs: event.positionMs ?? 0 };
+  },
+
+  ready() {},
+  ended() { return { playing: false }; },
+  failed(state, _payload, _props, event) {
+    return { playing: false, error: event.message };
+  }
+});
+```
+
+`source` 支持 HTTP(S) 网络地址和原生平台文件地址。主要属性包括 `playing`、`loop`、
+`fit`、`playbackSpeed`、`seekToken`、`seekPositionMs` 和 `restartToken`；事件包括
+`onReady`、`onProgress`、`onEnded`、`onError`。
+
+## 桌面端自定义
+
+插件默认自动注册 FVP。只有需要修改桌面解码参数时，才在创建 UI Session 前调用：
 
 ```dart
 QuickjsUiVideoPlayerPlugin.registerDesktopBackend(
@@ -29,5 +111,10 @@ QuickjsUiVideoPlayerPlugin.registerDesktopBackend(
 );
 ```
 
-更多页面协议和代码提示配置见
-[lemon_js_ui 使用指南](https://github.com/yhsj0919/quickjs/blob/main/packages/lemon_js_ui/docs/usage.md)。
+## 完整示例
+
+- [Flutter 页面](https://github.com/yhsj0919/quickjs/blob/main/examples/lemon_js_example/lib/pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart)
+- [独立 JS 页面](https://github.com/yhsj0919/quickjs/blob/main/examples/lemon_js_example/assets/quickjs_ui/video_player_plugin_page.mjs)
+- [lemon_js_ui 使用指南](https://github.com/yhsj0919/quickjs/blob/main/packages/lemon_js_ui/doc/usage.md)
+
+完整示例位于 GitHub 仓库；pub 包 README 中的代码用于最小接入。
