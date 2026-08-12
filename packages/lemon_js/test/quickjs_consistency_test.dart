@@ -3070,7 +3070,7 @@ fail();
       final engine = await Quickjs.create(
         options: QuickjsRuntimeOptions(
           memoryLimitBytes: 512 * 1024,
-          stackLimitBytes: 128 * 1024,
+          stackLimitBytes: 256 * 1024,
           moduleLoader: (name) => switch (name) {
             'dep.mjs' => 'export const value = 41;',
             _ => null,
@@ -3096,7 +3096,7 @@ fail();
       expect(snapshot.running, isFalse);
       expect(snapshot.pendingEvaluations, 0);
       expect(snapshot.memoryLimitBytes, 512 * 1024);
-      expect(snapshot.stackLimitBytes, 128 * 1024);
+      expect(snapshot.stackLimitBytes, 256 * 1024);
       expect(snapshot.registeredCallbacks, contains('debugAdd'));
       expect(snapshot.moduleNames, containsAll(['main.mjs', 'dep.mjs']));
       expect(snapshot.sourceMapNames, contains(sourceName));

@@ -110,6 +110,11 @@ runtime 内置 `setTimeout`、`clearTimeout`、`setInterval`、`clearInterval`�
 native / web 的 Promise job pump。长同步 JS 仍符合 JS 单线程语义：它会阻塞同 runtime
 后续 timer、Promise job 和 eval，但不会阻塞 Flutter UI isolate 或浏览器 UI thread。
 
+Runtime 调用默认串行。`QuickjsRuntimeOptions.maxPendingEvaluations` 控制等待队列上限，
+超出时抛出 `JsQueueFullException`；timeout 从入队时开始计算，`stop()` 会取消当前和
+排队调用并重建 Runtime。框架异常可通过 `QuickjsException.kind` 判断 timeout、取消、
+队列满、Runtime 关闭或崩溃等类别，插件业务和宿主 Provider 异常仍表现为 JavaScript 异常。
+
 `bindSink()` 用于 JS 多次向 Dart 推送增量数据；每次 `await sink.emit(value)` 会等待
 Dart 侧确认，避免 worker message 队列无界增长。
 
@@ -211,7 +216,8 @@ print(await engine.evalAsync('return await app.double(21);')); // 42
 cache。插件不内置完整 npm resolver；npm 包建议用 esbuild / Rollup / webpack 预打包。
 完整策略和可运行示例见 [`docs/npm_bundling.md`](docs/npm_bundling.md)。
 
-`QuickjsFetchMount` 可显式安装最小 Fetch API。必须声明允许访问的 origin：
+`QuickjsFetchMount` 可显式安装最小 Fetch API。默认允许全部 HTTP(S) origin；生产环境建议
+通过 `allowedOrigins` 声明白名单：
 
 ```dart
 final engine = await Quickjs.create(
@@ -236,6 +242,23 @@ Native 底层使用 `HttpClient`，Web 底层使用浏览器原生 `fetch`。Web
 （默认 `follow`，可配置 `maxRedirects`）。请求体支持 string / ArrayBuffer / Uint8Array /
 FormData / URLSearchParams；Response 支持 `text()`、`json()`、`arrayBuffer()`、`blob()`、
 `bytes()`、`clone()` 等。
+
+当前 Fetch 不内置 Cookie Jar：原生端可由 JS 手动读取最终响应头并保存、发送 Cookie，
+Web 端仍受浏览器限制。自动 Cookie Jar 属于后续可选增强，不是使用 Fetch、Core 插件或
+混合插件的前置条件；未启用时将保持现有手动行为。
+
+连续请求可共享网络 Session，使 Fetch、XHR 和 Axios 复用同一个 HTTP Client、默认
+Header 与限制配置：
+
+```dart
+final session = QuickjsHttpSession(
+  allowedOrigins: {'https://api.example.com'},
+  defaultHeaders: {'user-agent': 'Example/1.0'},
+);
+final fetchMount = QuickjsFetchMount.session(session);
+// Axios 使用 QuickjsAxiosMount.session(...)
+// 不再使用时，由会话所有者调用 session.close()。
+```
 
 ### 函数句柄
 

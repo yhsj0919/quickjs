@@ -52,6 +52,26 @@ void main() {
     },
   );
 
+  test('rejects new work when the configured queue is full', () async {
+    final runtime = _FakeRuntime();
+    final engine = Quickjs.test(
+      _FakeBackend(),
+      runtime,
+      options: const QuickjsRuntimeOptions(maxPendingEvaluations: 1),
+    );
+
+    final running = engine.eval('hold');
+    final queued = engine.eval('queued');
+    await expectLater(
+      engine.eval('overflow'),
+      throwsA(isA<JsQueueFullException>()),
+    );
+
+    runtime.completeCurrent('done');
+    expect(await running, 'done');
+    expect(await queued, 'queued');
+  });
+
   test('stop moves running runtime through stopping back to ready', () async {
     final runtime = _FakeRuntime();
     final replacement = _FakeRuntime();

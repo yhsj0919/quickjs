@@ -7,6 +7,33 @@ sealed class QuickjsException implements Exception {
   String get message;
 }
 
+/// 宿主可以稳定判断的框架错误分类；不解释插件自己的业务错误内容。
+enum QuickjsErrorKind {
+  javascript,
+  valueConversion,
+  timeout,
+  cancelled,
+  queueFull,
+  runtimeClosed,
+  runtimeCrash,
+  outOfMemory,
+  stackOverflow,
+}
+
+extension QuickjsExceptionKind on QuickjsException {
+  QuickjsErrorKind get kind => switch (this) {
+    JsException() => QuickjsErrorKind.javascript,
+    JsValueConversionException() => QuickjsErrorKind.valueConversion,
+    JsTimeoutException() => QuickjsErrorKind.timeout,
+    JsCancelledException() => QuickjsErrorKind.cancelled,
+    JsQueueFullException() => QuickjsErrorKind.queueFull,
+    JsRuntimeClosedException() => QuickjsErrorKind.runtimeClosed,
+    JsRuntimeCrashException() => QuickjsErrorKind.runtimeCrash,
+    JsOutOfMemoryException() => QuickjsErrorKind.outOfMemory,
+    JsStackOverflowException() => QuickjsErrorKind.stackOverflow,
+  };
+}
+
 /// JavaScript 代码主动 throw 或求值异常时的错误。
 final class JsException implements QuickjsException {
   const JsException(
@@ -121,6 +148,19 @@ final class JsTimeoutException implements QuickjsException {
 final class JsCancelledException implements QuickjsException {
   const JsCancelledException([
     this.message = 'QuickJS evaluation was cancelled',
+  ]);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// runtime 的串行调用队列已经达到宿主配置的上限。
+final class JsQueueFullException implements QuickjsException {
+  const JsQueueFullException([
+    this.message = 'QuickJS evaluation queue is full',
   ]);
 
   @override

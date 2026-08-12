@@ -10,6 +10,61 @@ import '../runtime/quickjs_runtime_options.dart';
 
 const _fetchProviderName = 'fetch.request';
 
+/// 可由多个 Fetch/XHR 请求复用的宿主网络会话。
+///
+/// 调用方拥有会话生命周期；不再使用时必须调用 [close]。Cookie Jar 后续可以在此边界
+/// 以可选能力加入，不改变 JavaScript Fetch API。
+final class QuickjsHttpSession {
+  QuickjsHttpSession({
+    http.Client? client,
+    Set<String>? allowedOrigins,
+    this.timeout = const Duration(seconds: 30),
+    this.maxRequestBytes = 1024 * 1024,
+    this.maxResponseBytes = 10 * 1024 * 1024,
+    this.maxRedirects = 5,
+    Map<String, String> defaultHeaders = const <String, String>{},
+  }) : _client = client ?? http.Client(),
+       allowedOrigins = allowedOrigins == null || allowedOrigins.isEmpty
+           ? null
+           : Set<String>.unmodifiable(
+               allowedOrigins.map(_normalizeAllowedOrigin),
+             ),
+       defaultHeaders = Map<String, String>.unmodifiable(
+         _normalizeRequestHeaders(defaultHeaders),
+       ) {
+    _validateFetchLimits(
+      timeout,
+      maxRequestBytes,
+      maxResponseBytes,
+      maxRedirects,
+    );
+  }
+
+  final http.Client _client;
+  final Set<String>? allowedOrigins;
+  final Duration timeout;
+  final int maxRequestBytes;
+  final int maxResponseBytes;
+  final int maxRedirects;
+  final Map<String, String> defaultHeaders;
+  bool _closed = false;
+
+  bool get isClosed => _closed;
+
+  http.Client get _activeClient {
+    if (_closed) {
+      throw const JsRuntimeClosedException('QuickJS HTTP session is closed');
+    }
+    return _client;
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _client.close();
+  }
+}
+
 /// 可选的 Fetch API mount，由平台 HTTP 客户端提供 `fetch` 实现。
 ///
 /// 原生平台通过 `package:http`（底层为 `dart:io` 的 `HttpClient`）发起请求；
@@ -18,12 +73,24 @@ const _fetchProviderName = 'fetch.request';
 /// 传入非空的 [allowedOrigins] 可限制请求与重定向只能访问列出的 HTTP(S) 源；
 /// 留空或 `null` 表示允许所有 HTTP(S) 源。
 final class QuickjsFetchMount extends QuickjsHostMount {
+  /// 使用一个会话的 Client、限制和默认 Header 创建 Fetch/XHR mount。
+  factory QuickjsFetchMount.session(QuickjsHttpSession session) =>
+      QuickjsFetchMount._create(
+        allowedOrigins: session.allowedOrigins,
+        timeout: session.timeout,
+        maxRequestBytes: session.maxRequestBytes,
+        maxResponseBytes: session.maxResponseBytes,
+        maxRedirects: session.maxRedirects,
+        defaultHeaders: session.defaultHeaders,
+        session: session,
+      );
+
   /// 创建 Fetch mount。
   ///
   /// - [allowedOrigins]：允许访问的 HTTP(S) 源白名单；`null` 或空表示不限制。
   /// - [timeout]：单次请求超时时间，必须为正数。
-  /// - [maxRequestBytes]：请求体最大字节数，`-1` 表示不限制。
-  /// - [maxResponseBytes]：响应体最大字节数，`-1` 表示不限制。
+  /// - [maxRequestBytes]：请求体最大字节数，必须为非负数。
+  /// - [maxResponseBytes]：响应体最大字节数，必须为非负数。
   /// - [maxRedirects]：允许跟随的最大重定向次数。
   /// - [defaultHeaders]：注入到每次请求中的默认 HTTP 头。
   factory QuickjsFetchMount({
@@ -33,31 +100,30 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     int maxResponseBytes = 10 * 1024 * 1024,
     int maxRedirects = 5,
     Map<String, String> defaultHeaders = const <String, String>{},
+  }) => QuickjsFetchMount._create(
+    allowedOrigins: allowedOrigins,
+    timeout: timeout,
+    maxRequestBytes: maxRequestBytes,
+    maxResponseBytes: maxResponseBytes,
+    maxRedirects: maxRedirects,
+    defaultHeaders: defaultHeaders,
+  );
+
+  static QuickjsFetchMount _create({
+    required Set<String>? allowedOrigins,
+    required Duration timeout,
+    required int maxRequestBytes,
+    required int maxResponseBytes,
+    required int maxRedirects,
+    required Map<String, String> defaultHeaders,
+    QuickjsHttpSession? session,
   }) {
-    if (timeout <= Duration.zero) {
-      throw ArgumentError.value(timeout, 'timeout', 'must be positive');
-    }
-    if (maxRequestBytes < 0) {
-      throw ArgumentError.value(
-        maxRequestBytes,
-        'maxRequestBytes',
-        'must not be negative',
-      );
-    }
-    if (maxResponseBytes < 0) {
-      throw ArgumentError.value(
-        maxResponseBytes,
-        'maxResponseBytes',
-        'must not be negative',
-      );
-    }
-    if (maxRedirects < 0) {
-      throw ArgumentError.value(
-        maxRedirects,
-        'maxRedirects',
-        'must not be negative',
-      );
-    }
+    _validateFetchLimits(
+      timeout,
+      maxRequestBytes,
+      maxResponseBytes,
+      maxRedirects,
+    );
 
     final origins = allowedOrigins == null || allowedOrigins.isEmpty
         ? null
@@ -78,6 +144,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
         maxResponseBytes: maxResponseBytes,
         maxRedirects: maxRedirects,
         defaultHeaders: normalizedDefaultHeaders,
+        session: session,
       ),
     );
     return QuickjsFetchMount._(
@@ -87,6 +154,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
       maxResponseBytes: maxResponseBytes,
       maxRedirects: maxRedirects,
       defaultHeaders: normalizedDefaultHeaders,
+      session: session,
       provider: provider,
     );
   }
@@ -98,6 +166,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     required this.maxResponseBytes,
     required this.maxRedirects,
     required this.defaultHeaders,
+    required this.session,
     required QuickjsHostProvider provider,
   }) : super(
          name: 'fetch',
@@ -139,6 +208,29 @@ final class QuickjsFetchMount extends QuickjsHostMount {
 
   /// Headers merged into every request unless overridden by JavaScript.
   final Map<String, String> defaultHeaders;
+
+  /// 可选的共享网络会话；为空时保持原有的单请求 Client 行为。
+  final QuickjsHttpSession? session;
+}
+
+void _validateFetchLimits(
+  Duration timeout,
+  int maxRequestBytes,
+  int maxResponseBytes,
+  int maxRedirects,
+) {
+  if (timeout <= Duration.zero) {
+    throw ArgumentError.value(timeout, 'timeout', 'must be positive');
+  }
+  for (final limit in <(String, int)>[
+    ('maxRequestBytes', maxRequestBytes),
+    ('maxResponseBytes', maxResponseBytes),
+    ('maxRedirects', maxRedirects),
+  ]) {
+    if (limit.$2 < 0) {
+      throw ArgumentError.value(limit.$2, limit.$1, 'must not be negative');
+    }
+  }
 }
 
 Future<Object?> _sendFetchRequest(
@@ -150,6 +242,7 @@ Future<Object?> _sendFetchRequest(
   required int maxResponseBytes,
   required int maxRedirects,
   required Map<String, String> defaultHeaders,
+  required QuickjsHttpSession? session,
 }) async {
   if (args.length != 1 || args.single is! Map) {
     throw const JsValueConversionException(
@@ -198,8 +291,14 @@ Future<Object?> _sendFetchRequest(
     );
   }
 
-  final client = http.Client();
-  unawaited(context.cancelled.then((_) => client.close()));
+  final ownedClient = session == null;
+  final client = session?._activeClient ?? http.Client();
+  Completer<void>? currentAbort;
+  unawaited(
+    context.cancelled.then((_) {
+      if (!(currentAbort?.isCompleted ?? true)) currentAbort!.complete();
+    }),
+  );
   try {
     context.throwIfCancelled();
     var currentUri = uri;
@@ -208,10 +307,17 @@ Future<Object?> _sendFetchRequest(
     var redirectCount = 0;
     http.StreamedResponse response;
     while (true) {
-      final request = http.Request(currentMethod, currentUri)
-        ..followRedirects = kIsWeb ? redirectMode == 'follow' : false
-        ..persistentConnection = false
-        ..headers.addAll(headers);
+      final abort = Completer<void>();
+      currentAbort = abort;
+      final request =
+          http.AbortableRequest(
+              currentMethod,
+              currentUri,
+              abortTrigger: abort.future,
+            )
+            ..followRedirects = kIsWeb ? redirectMode == 'follow' : false
+            ..persistentConnection = session != null
+            ..headers.addAll(headers);
       if (currentBody.isNotEmpty) request.bodyBytes = currentBody;
       try {
         response = await client.send(request).timeout(timeout);
@@ -289,7 +395,7 @@ Future<Object?> _sendFetchRequest(
     await response.stream.timeout(timeout).forEach((chunk) {
       context.throwIfCancelled();
       if (builder.length + chunk.length > maxResponseBytes) {
-        client.close();
+        if (!(currentAbort?.isCompleted ?? true)) currentAbort!.complete();
         throw StateError(
           'QuickJS fetch response exceeds $maxResponseBytes bytes',
         );
@@ -307,12 +413,13 @@ Future<Object?> _sendFetchRequest(
       'body': builder.takeBytes(),
     };
   } on TimeoutException {
-    client.close();
+    if (!(currentAbort?.isCompleted ?? true)) currentAbort!.complete();
     throw StateError('QuickJS fetch timed out after $timeout');
   } on http.ClientException catch (error) {
+    context.throwIfCancelled();
     throw StateError('QuickJS fetch network error: ${error.message}');
   } finally {
-    client.close();
+    if (ownedClient) client.close();
   }
 }
 

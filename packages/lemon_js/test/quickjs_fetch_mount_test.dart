@@ -25,6 +25,26 @@ final class _MemoryAssetBundle extends CachingAssetBundle {
 }
 
 void main() {
+  test('QuickjsHttpSession supplies shared Fetch and XHR configuration', () {
+    final session = QuickjsHttpSession(
+      allowedOrigins: const <String>{'https://example.com'},
+      timeout: const Duration(seconds: 12),
+      defaultHeaders: const <String, String>{'X-Session': 'shared'},
+    );
+    addTearDown(session.close);
+
+    final mount = QuickjsFetchMount.session(session);
+    expect(mount.session, same(session));
+    expect(mount.allowedOrigins, const <String>{'https://example.com'});
+    expect(mount.timeout, const Duration(seconds: 12));
+    expect(mount.defaultHeaders['x-session'], 'shared');
+    expect(mount.environmentPatches.single.globals, contains('fetch'));
+    expect(mount.environmentPatches.single.globals, contains('XMLHttpRequest'));
+
+    session.close();
+    expect(session.isClosed, isTrue);
+  });
+
   test('QuickjsAxiosMount installs Axios asset with Fetch defaults', () async {
     final bundle = _MemoryAssetBundle(<String, String>{
       'assets/js/axios.js': '''

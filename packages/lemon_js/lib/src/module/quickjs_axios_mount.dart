@@ -11,6 +11,21 @@ import 'quickjs_fetch_mount.dart';
 ///
 /// [assetKey] 为必填项，用于指定要加载的 Axios 脚本所在 Flutter asset 路径。
 final class QuickjsAxiosMount extends QuickjsHostMount {
+  /// 使用共享网络会话创建 Axios mount。
+  factory QuickjsAxiosMount.session({
+    required String assetKey,
+    required QuickjsHttpSession session,
+    AssetBundle? bundle,
+    String name = 'axios',
+    String? scriptName,
+  }) => QuickjsAxiosMount._(
+    name: name,
+    assetKey: assetKey,
+    bundle: bundle,
+    fetchMount: QuickjsFetchMount.session(session),
+    scriptName: scriptName ?? assetKey,
+  );
+
   /// 创建 Axios 组合 mount。
   ///
   /// - [assetKey]：Axios JavaScript 文件的 asset 路径（必填）。
