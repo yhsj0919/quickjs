@@ -1,4 +1,4 @@
-import 'package:quickjs_extensions/quickjs_extensions.dart';
+import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 
 Future<void> main() async {
   final extension = await QuickjsExtension.load(

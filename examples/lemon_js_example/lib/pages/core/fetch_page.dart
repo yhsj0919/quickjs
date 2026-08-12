@@ -188,7 +188,7 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
         options: QuickjsRuntimeOptions(
           mounts: <QuickjsHostMount>[
             QuickjsAxiosMount(
-              assetKey: 'packages/quickjs_extensions/assets/js/axios.js',
+              assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
               allowedOrigins: const <String>{
                 _jsonPlaceholderOrigin,
                 _httpBingoOrigin,

@@ -11,7 +11,7 @@ typedef QuickjsExtensionHttpSessionFactory = QuickjsHttpSession Function();
 typedef QuickjsExtensionCryptoMountFactory = QuickjsHostMount Function();
 
 const quickjsExtensionAxiosAsset =
-    'packages/quickjs_extensions/assets/js/axios.js';
+    'packages/lemon_js_extensions/assets/js/axios.js';
 
 /// 混合插件层提供给 Core 与 JSUI 的可选宿主能力集合。
 ///

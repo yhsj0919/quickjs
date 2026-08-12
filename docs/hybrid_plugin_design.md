@@ -41,12 +41,12 @@
 
 ### 3.1 架构决策：使用独立基础包
 
-混合插件采用独立基础包实现，不放入最底层的 `package:lemon_js`，也不作为 quickjs_ui 内部的附属功能。包名确定为 `quickjs_extensions`。
+混合插件采用独立基础包实现，不放入最底层的 `package:lemon_js`，也不作为 quickjs_ui 内部的附属功能。包名确定为 `lemon_js_extensions`。
 
 ```text
 业务宿主
     ↓
-quickjs_extensions
+lemon_js_extensions
 ├── 依赖 lemon_js
 └── 依赖 lemon_js_ui
         ↓
@@ -55,12 +55,12 @@ lemon_js_ui -> lemon_js
 
 依赖方向必须保持单向：
 
-- `lemon_js` 只负责 JS runtime、模块、Core 插件、mount/provider 和底层生命周期，不依赖 lemon_js_ui 或 `quickjs_extensions`；
-- lemon_js_ui 负责通用 JSUI 加载、渲染、事件、导航与页面生命周期，继续依赖 `lemon_js`，但不依赖 `quickjs_extensions`；
-- `quickjs_extensions` 同时依赖 `lemon_js` 与 lemon_js_ui，提供二者的通用组合能力；
-- 业务宿主可以直接使用 `lemon_js`、lemon_js_ui，也可以选择依赖 `quickjs_extensions`，由业务层解释登录、内容源、播放器等具体语义。
+- `lemon_js` 只负责 JS runtime、模块、Core 插件、mount/provider 和底层生命周期，不依赖 lemon_js_ui 或 `lemon_js_extensions`；
+- lemon_js_ui 负责通用 JSUI 加载、渲染、事件、导航与页面生命周期，继续依赖 `lemon_js`，但不依赖 `lemon_js_extensions`；
+- `lemon_js_extensions` 同时依赖 `lemon_js` 与 lemon_js_ui，提供二者的通用组合能力；
+- 业务宿主可以直接使用 `lemon_js`、lemon_js_ui，也可以选择依赖 `lemon_js_extensions`，由业务层解释登录、内容源、播放器等具体语义。
 
-`quickjs_extensions` 是可选的插件系统与组合语法糖层。它不取代 `lemon_js` 和 `lemon_js_ui` 的独立使用方式。它负责：
+`lemon_js_extensions` 是可选的插件系统与组合语法糖层。它不取代 `lemon_js` 和 `lemon_js_ui` 的独立使用方式。它负责：
 
 - 统一混合插件包和 manifest；
 - `InstalledQuickjsExtension` 与 `QuickjsExtensionSession`；
@@ -78,16 +78,16 @@ lemon_js_ui -> lemon_js
 - 用户选择哪个替代页面；
 - 插件 UI 失败后回退哪个系统页面。
 
-后续的可选页面替换能力属于业务宿主：系统 UI 永远作为默认和兜底，业务层可以选择通用 JSUI 页面提供者，失败时回退系统 UI。通用 UI 插件自身仍有安装 ID，但不固定绑定某个站点 ID；运行时由业务层建立受限的页面 Session。该模型可以使用 `quickjs_extensions` 提供的包、UI route 和隔离基础设施，但页面插槽及回退规则不进入 `quickjs_extensions` 的通用协议。
+后续的可选页面替换能力属于业务宿主：系统 UI 永远作为默认和兜底，业务层可以选择通用 JSUI 页面提供者，失败时回退系统 UI。通用 UI 插件自身仍有安装 ID，但不固定绑定某个站点 ID；运行时由业务层建立受限的页面 Session。该模型可以使用 `lemon_js_extensions` 提供的包、UI route 和隔离基础设施，但页面插槽及回退规则不进入 `lemon_js_extensions` 的通用协议。
 
 ### 3.2 统一公开命名与构造变体
 
-`quickjs_extensions` 只公开一套主体命名，不为 JS、UI 和混合形态建立三套平行的 package、installer、session 或 installed 类型。
+`lemon_js_extensions` 只公开一套主体命名，不为 JS、UI 和混合形态建立三套平行的 package、installer、session 或 installed 类型。
 
 统一公开入口：
 
 ```dart
-import 'package:quickjs_extensions/quickjs_extensions.dart';
+import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 ```
 
 统一主体类型与构造变体：
@@ -130,14 +130,14 @@ QuickjsUiComponent
 底层能力仍保持独立可用：
 
 ```dart
-// 不经过 quickjs_extensions，直接使用 Core 插件。
+// 不经过 lemon_js_extensions，直接使用 Core 插件。
 final plugin = QuickjsPlugin(...);
 
-// 不经过 quickjs_extensions，直接使用 JSUI bundle。
+// 不经过 lemon_js_extensions，直接使用 JSUI bundle。
 final bundle = QuickjsUiBundle(...);
 ```
 
-`quickjs_extensions` 必须通过 `lemon_js` 与 `lemon_js_ui` 的公开 API 完成组合，不要求简单使用者先包装成 `QuickjsExtension`，也不应让底层 API 依赖扩展系统。
+`lemon_js_extensions` 必须通过 `lemon_js` 与 `lemon_js_ui` 的公开 API 完成组合，不要求简单使用者先包装成 `QuickjsExtension`，也不应让底层 API 依赖扩展系统。
 
 ### 3.3 View 命名与职责
 
@@ -152,9 +152,9 @@ QuickjsUiView.hybrid(...)
 QuickjsUiView.extension(...)
 ```
 
-其中 `.js` 没有可渲染 UI，`.ui` 与类本身语义重复；`.hybrid`/`.extension` 会迫使 quickjs_ui 理解上层扩展系统，并造成 quickjs_ui 反向依赖 `quickjs_extensions`。
+其中 `.js` 没有可渲染 UI，`.ui` 与类本身语义重复；`.hybrid`/`.extension` 会迫使 quickjs_ui 理解上层扩展系统，并造成 quickjs_ui 反向依赖 `lemon_js_extensions`。
 
-`quickjs_extensions` 新增 Session 感知的包装 View：
+`lemon_js_extensions` 新增 Session 感知的包装 View：
 
 ```dart
 QuickjsExtensionView.route(
@@ -198,7 +198,7 @@ QuickjsExtensionView
 └── .route
 ```
 
-`package:quickjs_extensions/quickjs_extensions.dart` 作为扩展系统的统一导出入口，可以同时导出 `QuickjsExtension`、`QuickjsExtensionView` 等扩展 API，以及使用扩展 API 时必要的 `lemon_js`、`lemon_js_ui` 公共类型。直接依赖 `lemon_js_ui` 的使用者仍从其原入口使用 `QuickjsUiView`，不需要引入扩展包。
+`package:lemon_js_extensions/lemon_js_extensions.dart` 作为扩展系统的统一导出入口，可以同时导出 `QuickjsExtension`、`QuickjsExtensionView` 等扩展 API，以及使用扩展 API 时必要的 `lemon_js`、`lemon_js_ui` 公共类型。直接依赖 `lemon_js_ui` 的使用者仍从其原入口使用 `QuickjsUiView`，不需要引入扩展包。
 
 ## 4. QuickjsExtensionSession
 
@@ -581,7 +581,7 @@ const result = await pluginService.call('submitLogin', form);
 
 ### 12.1 统一的混合插件包与 manifest（基础模型已开始实现）
 
-`quickjs_extensions` 已提供统一 manifest、service/UI/flow 描述、`.js/.ui/.hybrid`
+`lemon_js_extensions` 已提供统一 manifest、service/UI/flow 描述、`.js/.ui/.hybrid`
 构造和一致性校验，并支持 asset、file、network 目录以及 ZIP 物理包加载。
 目前尚缺少签名、资源完整性校验和兼容版本策略。该能力保持在独立包中，
 不修改 `lemon_js` 使其反向依赖 lemon_js_ui。
@@ -629,7 +629,7 @@ Core 调用使用有界串行队列和默认超时，停用/卸载会关闭 Runt
 后续能力注入改造必须区分两层：Runtime、模块、生命周期、错误桥接等核心能力始终注入，
 不参与权限控制；宿主可选能力由统一配置决定是否提供，不再根据权限声明临时创建 mount。
 第一版默认提供的可选能力为 `storage`、`network` 和 `crypto`；`network` 默认直接注入
-随 `quickjs_extensions` 发布的 Axios，并同时提供 Fetch/XHR。默认权限策略为完全宽松，
+随 `lemon_js_extensions` 发布的 Axios，并同时提供 Fetch/XHR。默认权限策略为完全宽松，
 宿主可以替换或关闭任一可选能力。`crypto` 默认启用 `QuickjsWebCryptoMount` 当前已经实现的
 全部能力，包括 `randomUUID()`、`getRandomValues()`、SHA-1/256/384/512 digest，以及
 HMAC-SHA-1/256 的 key import、sign 和 verify；不为尚未实现的算法声明能力。
@@ -640,7 +640,7 @@ manifest 权限只表达插件可能使用的受限能力。宿主可选择不�
 
 ### 12.4 Core 与 JSUI 的绑定 service bridge（第一版已实现）
 
-已提供 `quickjs_extensions/plugin_service` 模块，根据当前 Session 自动绑定 Core，仅允许
+已提供 `lemon_js_extensions/plugin_service` 模块，根据当前 Session 自动绑定 Core，仅允许
 调用 manifest 的 `uiExports`，且不接受 pluginId。底层 provider 取消会向调用链传播，
 默认超时、队列上限、手动重启和故障 Runtime 惰性恢复已经由 Session 统一处理。手动重启
 会丢弃 Runtime 内存状态，并在下一次调用时重新创建 Runtime、执行插件 `init()`。
@@ -815,7 +815,7 @@ manifest 的正式字段，不继续放在无约束的 `metadata` 中。安装�
 
 ### 12.15 现有 Core、JSUI 与统一扩展包兼容（已实现）
 
-`quickjs_extensions` 是上层组合和管理能力，不替代原有 `lemon_js` Core 插件或
+`lemon_js_extensions` 是上层组合和管理能力，不替代原有 `lemon_js` Core 插件或
 `lemon_js_ui` 页面包。三种格式继续各自存在，并由 Manager 在安装入口显式选择输入格式：
 
 ```dart
@@ -906,7 +906,7 @@ JSUI runtime protocol version
 ```
 
 Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段替代 Core 或 JSUI 自己的
-协议版本，也不要求底层两个包反向依赖 `quickjs_extensions`。
+协议版本，也不要求底层两个包反向依赖 `lemon_js_extensions`。
 
 ## 13. 后续待讨论问题
 
@@ -942,5 +942,5 @@ Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段�
     默认仍为统一 Extension 格式。
 11. 默认 Store 不满足业务需求时，由宿主提供自定义持久化适配。
 
-插件管理页面属于宿主业务层，不列入 `quickjs_extensions` 的开发计划；核心包只提供页面
+插件管理页面属于宿主业务层，不列入 `lemon_js_extensions` 的开发计划；核心包只提供页面
 所需的无 UI 管理 API 和状态数据。

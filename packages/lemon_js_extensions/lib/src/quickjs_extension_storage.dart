@@ -14,7 +14,7 @@ final class QuickjsExtensionStorageMount extends QuickjsKeyValueStorageMount {
   }) : super.custom(
          store: storage,
          namespace: extensionId,
-         moduleSpecifier: 'quickjs_extensions/storage',
-         name: 'quickjs_extensions.storage.$extensionId',
+         moduleSpecifier: 'lemon_js_extensions/storage',
+         name: 'lemon_js_extensions.storage.$extensionId',
        );
 }

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:quickjs_extensions/quickjs_extensions.dart';
+import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 
 const _assetRoot = 'assets/extensions/hybrid_demo';
 

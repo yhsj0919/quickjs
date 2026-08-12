@@ -381,10 +381,10 @@ bool _isTerminalRuntimeFailure(
 final class QuickjsExtensionServiceBridgeMount extends QuickjsHostMount {
   QuickjsExtensionServiceBridgeMount(QuickjsExtensionSession session)
     : super(
-        name: 'quickjs_extensions.service.${session.id}',
+        name: 'lemon_js_extensions.service.${session.id}',
         providers: <QuickjsHostProvider>[
           QuickjsHostProvider.dart(
-            name: 'quickjs_extensions.service.${session.id}.call',
+            name: 'lemon_js_extensions.service.${session.id}.call',
             debugName: 'extension-service:${session.id}',
             callback: (arguments, context) async {
               if (arguments.length != 2 || arguments.first is! String) {
@@ -410,7 +410,7 @@ final class QuickjsExtensionServiceBridgeMount extends QuickjsHostMount {
         ],
         modules: <QuickjsHostModule>[
           QuickjsHostModule.esModule(
-            specifier: 'quickjs_extensions/plugin_service',
+            specifier: 'lemon_js_extensions/plugin_service',
             source: _serviceModuleSource(session.id),
           ),
         ],
@@ -420,7 +420,7 @@ final class QuickjsExtensionServiceBridgeMount extends QuickjsHostMount {
 String _serviceModuleSource(String extensionId) =>
     '''
 const provider = globalThis.__quickjsHostProviders[
-  'quickjs_extensions.service.$extensionId.call'
+  'lemon_js_extensions.service.$extensionId.call'
 ];
 
 export const pluginService = Object.freeze({

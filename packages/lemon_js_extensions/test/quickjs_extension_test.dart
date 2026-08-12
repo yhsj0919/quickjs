@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:quickjs_extensions/quickjs_extensions.dart';
+import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 
 void main() {
   test('manager automatically selects a default store', () {
@@ -278,13 +278,13 @@ export function submitLogin() { return true; }
     expect(
       modules.map((module) => module.specifier),
       containsAll(<String>[
-        'quickjs_extensions/storage',
-        'quickjs_extensions/plugin_service',
+        'lemon_js_extensions/storage',
+        'lemon_js_extensions/plugin_service',
       ]),
     );
     final bridgeSource = modules
         .singleWhere(
-          (module) => module.specifier == 'quickjs_extensions/plugin_service',
+          (module) => module.specifier == 'lemon_js_extensions/plugin_service',
         )
         .source!;
     expect(bridgeSource, contains('call(method, ...args)'));
@@ -314,7 +314,7 @@ export function submitLogin() { return true; }
           .mountsForRoute('authentication')
           .expand((mount) => mount.modules)
           .map((module) => module.specifier),
-      isNot(contains('quickjs_extensions/storage')),
+      isNot(contains('lemon_js_extensions/storage')),
     );
   });
 

@@ -5,7 +5,7 @@
 - `lemon_js` 的执行、模块、插件、回调、网络和宿主能力；
 - `lemon_js_ui` 的原生控件、表单、列表、Canvas、动画和调试工具；
 - `lemon_js_ui_video_player` 的 Flutter 注册与独立 JS 页面；
-- `quickjs_extensions` 的 Core、JSUI 和混合插件流程。
+- `lemon_js_extensions` 的 Core、JSUI 和混合插件流程。
 
 ## 运行
 

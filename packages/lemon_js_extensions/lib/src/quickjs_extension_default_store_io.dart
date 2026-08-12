@@ -33,6 +33,6 @@ final class QuickjsExtensionDefaultStore implements QuickjsExtensionStore {
 Future<QuickjsExtensionStore> _createDefaultStore() async {
   final directory = await getApplicationSupportDirectory();
   return QuickjsExtensionFileStore(
-    directoryPath: '${directory.path}/quickjs_extensions',
+    directoryPath: '${directory.path}/lemon_js_extensions',
   );
 }

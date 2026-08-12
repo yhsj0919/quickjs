@@ -33,7 +33,7 @@ void main() {
 
       expect(sources[0], contains('content-source/v1'));
       expect(sources[1], contains('export function getHome'));
-      expect(sources[2], contains("from 'quickjs_extensions/plugin_service'"));
+      expect(sources[2], contains("from 'lemon_js_extensions/plugin_service'"));
     },
   );
 
