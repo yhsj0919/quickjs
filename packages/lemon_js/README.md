@@ -26,6 +26,30 @@ Future<void> main() async {
 }
 ```
 
+### 默认 KV 存储
+
+`QuickjsKeyValueStorageMount` 默认使用 `SharedPreferencesAsync` 持久化，适合配置、登录
+状态和少量缓存；`namespace` 可以省略。JS 只能访问 Dart 绑定的命名空间：
+
+```dart
+final storageMount = QuickjsKeyValueStorageMount(namespace: 'site.example');
+final engine = await Quickjs.create(
+  options: QuickjsRuntimeOptions(mounts: [storageMount]),
+);
+```
+
+```js
+import storage from 'lemon_js/storage';
+
+await storage.set('session', {token: 'example'});
+const session = await storage.get('session');
+const exists = await storage.containsKey('session');
+const keys = await storage.keys();
+```
+
+宿主可实现 `QuickjsKeyValueStore` 并通过 `store` 参数替换默认实现。支持 JSON 可表达的
+值；它不提供事务、查询、加密或关键数据可靠刷盘保证，大数据应使用后续独立数据库适配。
+
 ### 结构化返回
 
 `eval()` 和 `evaluate()` 继续返回字符串，保持兼容。需要 Dart 值时使用

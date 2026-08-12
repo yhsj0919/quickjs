@@ -11,6 +11,7 @@
 - 新增统一 Manager、文件持久化、重启恢复、更新回滚和按插件 ID 调用。
 - 新增 manifest v2、兼容策略、旧 Core/JSUI 格式适配、数字版本和远程更新流程。
 - 保留并持久化旧 JSUI 包中的资源引用。
+- 默认复用 lemon_js 的 SharedPreferencesAsync KV，并按插件 ID 隔离命名空间。
 
 ### English
 
@@ -21,3 +22,4 @@
 - Added the unified manager, file persistence, restart restoration, update rollback, and calls by plugin ID.
 - Added manifest v2, compatibility policies, legacy Core/JSUI adapters, numeric versions, and remote updates.
 - Preserved and persisted resource references from legacy JSUI packages.
+- Reused the lemon_js SharedPreferencesAsync KV by default with extension ID namespaces.

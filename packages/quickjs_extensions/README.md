@@ -265,7 +265,9 @@ final loginFlow = registry.findFlow('site.example', 'authentication');
 
 ## 存储与卸载
 
-默认 `InMemoryQuickjsExtensionStorage` 仅适合开发和测试。正式宿主应实现 `QuickjsExtensionStorage`，接入自己的持久化存储。
+Manager 默认使用核心提供的 `SharedPreferencesQuickjsKeyValueStore` 持久化 KV，并自动将
+插件 ID 绑定为 namespace。宿主也可以实现 `QuickjsKeyValueStore` 后通过 `storage` 注入；
+测试可使用 `InMemoryQuickjsExtensionStorage` 兼容名称。
 
 ```dart
 await registry.disable('site.example');

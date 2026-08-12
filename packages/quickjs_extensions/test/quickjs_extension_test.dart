@@ -156,14 +156,14 @@ export function submitLogin() { return true; }
 
   test('storage is isolated by extension id', () async {
     final storage = InMemoryQuickjsExtensionStorage();
-    await storage.set('site.one', 'session', 'one');
-    await storage.set('site.two', 'session', 'two');
+    await storage.set('session', 'one', namespace: 'site.one');
+    await storage.set('session', 'two', namespace: 'site.two');
 
-    expect(await storage.get('site.one', 'session'), 'one');
-    expect(await storage.get('site.two', 'session'), 'two');
-    await storage.clear('site.one');
-    expect(await storage.get('site.one', 'session'), isNull);
-    expect(await storage.get('site.two', 'session'), 'two');
+    expect(await storage.get('session', namespace: 'site.one'), 'one');
+    expect(await storage.get('session', namespace: 'site.two'), 'two');
+    await storage.clear(namespace: 'site.one');
+    expect(await storage.get('session', namespace: 'site.one'), isNull);
+    expect(await storage.get('session', namespace: 'site.two'), 'two');
   });
 
   test('route mounts inject storage and bound service without plugin id', () {

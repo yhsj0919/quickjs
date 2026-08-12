@@ -30,7 +30,7 @@ final class QuickjsExtensionSession {
     List<QuickjsHostMount> serviceMounts = const <QuickjsHostMount>[],
     List<QuickjsHostMount> uiMounts = const <QuickjsHostMount>[],
     QuickjsExtensionRuntimeFactory? runtimeFactory,
-  }) : storage = storage ?? InMemoryQuickjsExtensionStorage(),
+  }) : storage = storage ?? SharedPreferencesQuickjsKeyValueStore(),
        grantedPermissions = Set<String>.unmodifiable(grantedPermissions),
        sharedMounts = List<QuickjsHostMount>.unmodifiable(sharedMounts),
        serviceMounts = List<QuickjsHostMount>.unmodifiable(serviceMounts),
@@ -136,7 +136,7 @@ final class QuickjsExtensionSession {
     if (_state == QuickjsExtensionSessionState.disposed) return;
     _state = QuickjsExtensionSessionState.disposed;
     await _closeRuntime();
-    if (clearStorage) await storage.clear(id);
+    if (clearStorage) await storage.clear(namespace: id);
   }
 
   QuickjsServiceComponent _requireService() {

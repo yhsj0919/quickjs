@@ -269,7 +269,9 @@ manifest 权限声明不等于实际注入。宿主授权后才可进入相应 r
 
 ## 5. KV 存储边界
 
-宿主提供可被 JS 调用的 KV 存储，并按照插件 ID 隔离。Core 与 JSUI 使用同一个插件命名空间。
+核心提供可被 JS 调用的 `QuickjsKeyValueStore`，默认实现使用
+`SharedPreferencesAsync`。混合插件 Manager 按照插件 ID 绑定 namespace，Core 与 JSUI
+使用同一个插件命名空间；宿主可以替换具体 Store。
 
 宿主负责：
 
@@ -292,6 +294,9 @@ manifest 权限声明不等于实际注入。宿主授权后才可进入相应 r
 await storage.get('session');
 await storage.set('session', value);
 await storage.remove('session');
+await storage.containsKey('session');
+await storage.keys();
+await storage.clear();
 ```
 
 不提供以下形式：
