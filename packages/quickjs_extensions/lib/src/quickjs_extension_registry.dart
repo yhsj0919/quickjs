@@ -94,7 +94,7 @@ final class QuickjsExtensionInstaller {
   QuickjsExtensionInstaller({
     required this.registry,
     QuickjsExtensionStorage? storage,
-  }) : storage = storage ?? InMemoryQuickjsExtensionStorage();
+  }) : storage = storage ?? SharedPreferencesQuickjsKeyValueStore();
 
   final QuickjsExtensionRegistry registry;
   final QuickjsExtensionStorage storage;

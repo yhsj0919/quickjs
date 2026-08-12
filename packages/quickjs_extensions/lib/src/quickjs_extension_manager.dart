@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 import 'quickjs_extension.dart';
@@ -208,7 +209,7 @@ final class QuickjsExtensionManager {
     this.uiPluginsResolver,
     this.runtimeFactory,
   }) : registry = registry ?? QuickjsExtensionRegistry(),
-       storage = storage ?? InMemoryQuickjsExtensionStorage() {
+       storage = storage ?? SharedPreferencesQuickjsKeyValueStore() {
     _installer = QuickjsExtensionInstaller(
       registry: this.registry,
       storage: this.storage,

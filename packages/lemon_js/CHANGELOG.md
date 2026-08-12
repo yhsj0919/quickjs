@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.1.1
+
+- 新增通用命名空间 KV 接口、SharedPreferencesAsync 默认实现和 `lemon_js/storage` 挂载。
+
 ## 0.1.0
 
 - 提供 Flutter 原生平台上的 QuickJS FFI 运行时。
