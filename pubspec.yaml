@@ -9,4 +9,5 @@ workspace:
   - packages/lemon_js
   - packages/lemon_js_ui
   - packages/lemon_js_ui_video_player
+  - packages/quickjs_extensions
   - examples/lemon_js_example

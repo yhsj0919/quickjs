@@ -13,7 +13,7 @@ void main() {
       'assets/quickjs_ui/bundle_counter/components/counter_card.mjs',
       'assets/quickjs_ui/package_demo/main.mjs',
       'assets/quickjs_ui/package_demo/components/package_summary.mjs',
-      'assets/quickjs_ui/weatherIcon/avalanche-danger-alert.svg',
+      'assets/quickjs_ui/weatherIcon/clear-day.svg',
       'assets/plugins/zip_demo.zip',
     ]) {
       final data = await rootBundle.load(path);
