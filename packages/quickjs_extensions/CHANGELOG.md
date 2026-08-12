@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-## 0.1.0-dev.1
+## 0.1.0
 
 ### 中文
 
@@ -20,6 +20,8 @@
   替换，可选能力不由权限声明触发。
 - 增加共享网络 Session 构件、调用上限、默认超时、
   手动重启和故障 Runtime 惰性恢复；重启会明确丢弃 Runtime 内存状态。
+- 重写 README，补充完整的 manifest、Core/JSUI 互调、Manager、资源持久化、KV 迁移和管理
+  API 示例，并修正 GitHub 文档链接。
 
 ### English
 
@@ -29,10 +31,18 @@
 - Added asset, file, network, and ZIP extension package loaders.
 - Added the unified manager, file persistence, restart restoration, update rollback, and calls by plugin ID.
 - Added manifest v2, compatibility policies, legacy Core/JSUI adapters, numeric versions, and remote updates.
+- Added versioned required and optional host capability declarations, installation inspection, and structured
+  missing-capability errors.
 - Preserved and persisted resource references from legacy JSUI packages.
 - Persisted embedded non-JavaScript package resources for restart restoration.
 - Added versioned KV migrations with namespace rollback on failure.
 - Prevented stored extension IDs from being overwritten before restoration.
-- Reused the lemon_js SharedPreferencesAsync KV by default with extension ID namespaces.
+- Added automatic default Store selection: application-support files on native platforms and
+  SharedPreferences on Web.
+- Reused the lemon_js SharedPreferencesAsync KV by default with extension ID namespaces, and provided
+  storage, network/Axios, and Web Crypto as replaceable optional capabilities.
 - Added shared extension HTTP sessions, bounded calls, default timeouts,
-  cancellation, manual restart, and lazy recovery from failed runtimes.
+  manual restart, and lazy recovery from failed runtimes; runtime restart explicitly discards in-memory
+  JavaScript state.
+- Reworked the README with complete manifest, Core/JSUI interop, manager, embedded resources, KV migration,
+  and management API examples, and corrected GitHub documentation links.

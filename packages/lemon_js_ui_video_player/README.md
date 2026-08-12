@@ -12,7 +12,7 @@
 
 ```yaml
 dependencies:
-  lemon_js_ui_video_player: ^0.1.0
+  lemon_js_ui_video_player: ^0.1.1
 ```
 
 ## Flutter 端注册

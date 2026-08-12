@@ -8,7 +8,7 @@
 
 ```yaml
 dependencies:
-  quickjs_extensions: ^0.1.0-dev.1
+  quickjs_extensions: ^0.1.0
 ```
 
 ```dart
