@@ -208,8 +208,8 @@ Manager 只提供无 UI 的状态和管理 API，安装列表、权限确认和�
 ## 示例与设计
 
 - [pub 包最小示例](example/quickjs_extensions_example.dart)
-- [可运行混合插件](https://github.com/yhsj0919/quickjs/tree/main/examples/lemon_js_example/assets/extensions/hybrid_demo)
-- [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/main/examples/lemon_js_example)
-- [混合插件设计](https://github.com/yhsj0919/quickjs/blob/main/docs/hybrid_plugin_design.md)
+- [可运行混合插件](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example/assets/extensions/hybrid_demo)
+- [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example)
+- [混合插件设计](https://github.com/yhsj0919/quickjs/blob/master/docs/hybrid_plugin_design.md)
 
 完整可运行工程位于 GitHub；pub 包中保留最小 Dart 示例。

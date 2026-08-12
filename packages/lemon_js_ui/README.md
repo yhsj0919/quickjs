@@ -146,9 +146,9 @@ QuickjsUiView.asset(
 - [使用指南](doc/usage.md)
 - [架构与生命周期](doc/architecture.md)
 - [Canvas 与动画](doc/canvas_and_animation.md)
-- [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/main/examples/lemon_js_example)
-- [JS 页面目录](https://github.com/yhsj0919/quickjs/tree/main/examples/lemon_js_example/assets/quickjs_ui)
-- [组件参考](https://github.com/yhsj0919/quickjs/blob/main/docs/quickjs_ui_components.md)
-- [跨组件能力](https://github.com/yhsj0919/quickjs/blob/main/docs/quickjs_ui_cross_cutting.md)
+- [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example)
+- [JS 页面目录](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example/assets/quickjs_ui)
+- [组件参考](https://github.com/yhsj0919/quickjs/blob/master/docs/quickjs_ui_components.md)
+- [跨组件能力](https://github.com/yhsj0919/quickjs/blob/master/docs/quickjs_ui_cross_cutting.md)
 
 完整组件、Canvas 和性能示例保留在 GitHub 仓库；README 只提供最小接入路径。

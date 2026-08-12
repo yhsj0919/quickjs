@@ -135,10 +135,10 @@ final result = await runtime.callPlugin(plugin, 'getHome', const []);
 
 ## 示例与文档
 
-- [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/main/examples/lemon_js_example)
-- [插件 manifest](https://github.com/yhsj0919/quickjs/blob/main/docs/plugin_manifest.md)
-- [npm 打包](https://github.com/yhsj0919/quickjs/blob/main/docs/npm_bundling.md)
-- [Class binding 生命周期](https://github.com/yhsj0919/quickjs/blob/main/docs/class_binding_lifecycle.md)
-- [性能排查](https://github.com/yhsj0919/quickjs/blob/main/docs/performance_troubleshooting.md)
+- [完整 Flutter 示例](https://github.com/yhsj0919/quickjs/tree/master/examples/lemon_js_example)
+- [插件 manifest](https://github.com/yhsj0919/quickjs/blob/master/docs/plugin_manifest.md)
+- [npm 打包](https://github.com/yhsj0919/quickjs/blob/master/docs/npm_bundling.md)
+- [Class binding 生命周期](https://github.com/yhsj0919/quickjs/blob/master/docs/class_binding_lifecycle.md)
+- [性能排查](https://github.com/yhsj0919/quickjs/blob/master/docs/performance_troubleshooting.md)
 
 完整示例保留在 GitHub 仓库，pub 包 README 只覆盖最小接入和主要能力。
