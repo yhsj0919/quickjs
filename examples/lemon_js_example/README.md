@@ -1,12 +1,11 @@
 # Lemon JS 示例应用
 
-该应用集中演示 `lemon_js`、`lemon_js_ui` 和
-`lemon_js_ui_video_player` 的主要能力，包括：
+这是仓库中的完整 Flutter 示例，用于验证和演示：
 
-- JavaScript 执行、模块、回调和宿主能力注入；
-- JS 插件加载、隔离 Context 和结构化数据交互；
-- JS 驱动的 Flutter 原生页面与组件；
-- 视频播放器等可选 UI 扩展。
+- `lemon_js` 的执行、模块、插件、回调、网络和宿主能力；
+- `lemon_js_ui` 的原生控件、表单、列表、Canvas、动画和调试工具；
+- `lemon_js_ui_video_player` 的 Flutter 注册与独立 JS 页面；
+- `quickjs_extensions` 的 Core、JSUI 和混合插件流程。
 
 ## 运行
 
@@ -15,17 +14,29 @@ flutter pub get
 flutter run
 ```
 
-Windows 调试构建：
+指定设备：
 
 ```bash
-flutter build windows --debug
+flutter devices
+flutter run -d <device-id>
 ```
 
-Android 调试包：
+## 常用构建
 
 ```bash
 flutter build apk --debug
+flutter build windows --debug
+flutter build web --release
 ```
 
-示例中的 `video_player_android: 2.7.1` override 用于规避部分 Android
-开发板的视频绿屏问题，请勿在未完成对应设备回归前随意升级。
+示例中的 `video_player_android: 2.7.1` override 用于规避部分 Android 开发板的视频绿屏
+问题，请勿在没有对应设备回归的情况下删除或升级。
+
+## 主要示例文件
+
+- [JSUI 页面](assets/quickjs_ui)
+- [视频播放器 JS 页面](assets/quickjs_ui/video_player_plugin_page.mjs)
+- [视频播放器 Flutter 页面](lib/pages/quickjs_ui/getting_started/quickjs_ui_video_player_plugin_page.dart)
+- [混合插件](assets/extensions/hybrid_demo)
+
+包的最小接入方式请分别查看仓库根目录下 `packages/*/README.md`。

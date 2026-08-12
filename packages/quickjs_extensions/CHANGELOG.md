@@ -13,6 +13,9 @@
 - 新增 manifest v2、兼容策略、旧 Core/JSUI 格式适配、数字版本和远程更新流程。
 - 新增版本化的必需/可选宿主能力声明、安装预检和结构化缺失能力错误。
 - 保留并持久化旧 JSUI 包中的资源引用。
+- 持久化统一包内的非 JavaScript 资源，并在恢复后重建为 JSUI 内嵌资源。
+- 增加 `storageVersion` 与插件内部 KV 迁移导出，失败时恢复原命名空间。
+- 安装和更新严格校验插件 ID、兼容码与数字版本，阻止未恢复状态下的同 ID 覆盖。
 - 默认组合隔离 KV、Fetch/XHR 和 Web Crypto 全部现有实现；宿主可以整体关闭或按 factory
   替换，可选能力不由权限声明触发。
 - 增加共享网络 Session 构件、调用上限、默认超时、
@@ -27,6 +30,9 @@
 - Added the unified manager, file persistence, restart restoration, update rollback, and calls by plugin ID.
 - Added manifest v2, compatibility policies, legacy Core/JSUI adapters, numeric versions, and remote updates.
 - Preserved and persisted resource references from legacy JSUI packages.
+- Persisted embedded non-JavaScript package resources for restart restoration.
+- Added versioned KV migrations with namespace rollback on failure.
+- Prevented stored extension IDs from being overwritten before restoration.
 - Reused the lemon_js SharedPreferencesAsync KV by default with extension ID namespaces.
 - Added shared extension HTTP sessions, bounded calls, default timeouts,
   cancellation, manual restart, and lazy recovery from failed runtimes.

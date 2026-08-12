@@ -1,4 +1,4 @@
-# quickjs_ui 架构说明
+# lemon_js_ui（quickjs_ui）架构说明
 
 本文说明 `quickjs_ui` 当前的运行栈、路由、事件流、生命周期模型，以及这次 `Maximum call stack size exceeded` 问题的根因和重构方案。
 

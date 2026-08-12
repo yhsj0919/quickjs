@@ -371,17 +371,27 @@ export function submitLogin() { return true; }
   );
 
   test('loads a hybrid package from assets', () async {
+    final manifestWithResource = manifestSource.replaceFirst(
+      '"permissions": ["network", "storage"]',
+      '"resources": ["images/logo.png"],\n  '
+          '"permissions": ["network", "storage"]',
+    );
     final package = await QuickjsExtensionPackage.asset(
       manifestAsset: 'extensions/demo/manifest.json',
       bundle: _MemoryAssetBundle(<String, String>{
-        'extensions/demo/manifest.json': manifestSource,
+        'extensions/demo/manifest.json': manifestWithResource,
         ..._hybridModuleFiles('extensions/demo/'),
+        'extensions/demo/images/logo.png': 'image-bytes',
       }),
     );
 
     expect(
       (await QuickjsExtension.load(package)).kind,
       QuickjsExtensionKind.hybrid,
+    );
+    expect(
+      package.resourceFiles['images/logo.png'],
+      utf8.encode('image-bytes'),
     );
   });
 
@@ -431,7 +441,8 @@ export function submitLogin() { return true; }
 
   test('loads a hybrid package from ZIP bytes', () async {
     final archive = Archive()
-      ..addFile(ArchiveFile.string('manifest.json', manifestSource));
+      ..addFile(ArchiveFile.string('manifest.json', manifestSource))
+      ..addFile(ArchiveFile('images/logo.png', 4, <int>[0, 1, 2, 3]));
     for (final module in _hybridModuleFiles().entries) {
       archive.addFile(ArchiveFile.string(module.key, module.value));
     }
@@ -444,6 +455,7 @@ export function submitLogin() { return true; }
       (await QuickjsExtension.load(package)).kind,
       QuickjsExtensionKind.hybrid,
     );
+    expect(package.resourceFiles['images/logo.png'], <int>[0, 1, 2, 3]);
   });
 
   test(
@@ -566,6 +578,126 @@ export function submitLogin() { return true; }
 
     expect(manager.find('site.example1')?.version, '2.0.0');
     expect((await store.load('site.example1'))?.record.version, '2.0.0');
+  });
+
+  test('manager rejects an update with a different extension id', () async {
+    final store = InMemoryQuickjsExtensionStore();
+    final manager = QuickjsExtensionManager(
+      store: store,
+      compatibilityRegistry: _compatibilityRegistry(),
+      runtimeFactory: (options) async => _FakeRuntime(options),
+    );
+    await manager.install(_hybridPackage(manifestSource));
+    final replacement = manifestSource
+        .replaceFirst('"id": "site.example1"', '"id": "site.example2"')
+        .replaceFirst('"versionCode": 10000', '"versionCode": 20000');
+
+    await expectLater(
+      manager.update('site.example1', _hybridPackage(replacement)),
+      throwsArgumentError,
+    );
+    expect((await store.load('site.example1'))?.record.versionCode, 10000);
+    expect(await store.load('site.example2'), isNull);
+  });
+
+  test('install cannot overwrite a stored id before restore', () async {
+    final store = InMemoryQuickjsExtensionStore();
+    final first = QuickjsExtensionManager(
+      store: store,
+      compatibilityRegistry: _compatibilityRegistry(),
+      runtimeFactory: (options) async => _FakeRuntime(options),
+    );
+    await first.install(_hybridPackage(manifestSource));
+    final second = QuickjsExtensionManager(
+      store: store,
+      compatibilityRegistry: _compatibilityRegistry(),
+      runtimeFactory: (options) async => _FakeRuntime(options),
+    );
+
+    await expectLater(
+      second.install(_hybridPackage(manifestSource)),
+      throwsStateError,
+    );
+    expect((await store.load('site.example1'))?.record.versionCode, 10000);
+  });
+
+  test('manager migrates versioned KV before activating an update', () async {
+    final store = InMemoryQuickjsExtensionStore();
+    final storage = InMemoryQuickjsExtensionStorage();
+    await storage.set('token', 'old', namespace: 'site.example1');
+    final migrations = <List<Object?>>[];
+    final manager = QuickjsExtensionManager(
+      store: store,
+      storage: storage,
+      compatibilityRegistry: _compatibilityRegistry(),
+      runtimeFactory: (options) async => _FakeRuntime(
+        options,
+        onCall: (method, arguments) async {
+          if (method == 'migrateStorage') {
+            migrations.add(arguments);
+            await storage.set('token', 'new', namespace: 'site.example1');
+          }
+          return null;
+        },
+      ),
+    );
+    await manager.install(_hybridPackage(manifestSource));
+    final next = manifestSource
+        .replaceFirst('"version": "1.0.0"', '"version": "2.0.0"')
+        .replaceFirst(
+          '"versionCode": 10000',
+          '"versionCode": 20000,\n  "storageVersion": 1',
+        )
+        .replaceFirst(
+          '"contract": "content-source/v1",',
+          '"contract": "content-source/v1",\n    "storageMigrationExport": "migrateStorage",',
+        );
+
+    await manager.update('site.example1', _hybridPackage(next));
+
+    expect(migrations, <List<Object?>>[
+      <Object?>[0, 1],
+    ]);
+    expect(await storage.get('token', namespace: 'site.example1'), 'new');
+    expect((await store.load('site.example1'))?.record.storageVersion, 1);
+  });
+
+  test('failed KV migration restores the previous namespace', () async {
+    final storage = InMemoryQuickjsExtensionStorage();
+    await storage.set('token', 'old', namespace: 'site.example1');
+    final manager = QuickjsExtensionManager(
+      store: InMemoryQuickjsExtensionStore(),
+      storage: storage,
+      compatibilityRegistry: _compatibilityRegistry(),
+      runtimeFactory: (options) async => _FakeRuntime(
+        options,
+        onCall: (method, arguments) async {
+          if (method == 'migrateStorage') {
+            await storage.set('token', 'partial', namespace: 'site.example1');
+            throw StateError('migration failed');
+          }
+          return null;
+        },
+      ),
+    );
+    await manager.install(_hybridPackage(manifestSource));
+    final next = manifestSource
+        .replaceFirst('"version": "1.0.0"', '"version": "2.0.0"')
+        .replaceFirst(
+          '"versionCode": 10000',
+          '"versionCode": 20000,\n  "storageVersion": 1',
+        )
+        .replaceFirst(
+          '"contract": "content-source/v1",',
+          '"contract": "content-source/v1",\n    "storageMigrationExport": "migrateStorage",',
+        );
+
+    await expectLater(
+      manager.update('site.example1', _hybridPackage(next)),
+      throwsStateError,
+    );
+    expect(await storage.get('token', namespace: 'site.example1'), 'old');
+    expect(manager.find('site.example1')?.versionCode, 10000);
   });
 
   test(
@@ -762,6 +894,24 @@ export function submitLogin() { return true; }
       restored.buildUiBundle(restored.manifest).resources,
       contains('logo'),
     );
+  });
+
+  test('persists embedded non-JavaScript package resources', () {
+    final bytes = Uint8List.fromList(<int>[0, 1, 2, 255]);
+    final package = QuickjsExtensionPackage(
+      manifestSource: manifestSource,
+      serviceModules: _hybridPackage(manifestSource).serviceModules,
+      uiModules: _hybridPackage(manifestSource).uiModules,
+      resourceFiles: <String, Uint8List>{'images/logo.png': bytes},
+    );
+
+    final restored = QuickjsExtensionPackage.fromMap(package.toMap());
+    expect(restored.resourceFiles['images/logo.png'], bytes);
+    final reference = restored
+        .buildUiBundle(restored.manifest)
+        .resources['images/logo.png'];
+    expect(reference?.kind, QuickjsUiResourceKind.data);
+    expect(reference?.location, startsWith('data:image/png;base64,'));
   });
 
   test(

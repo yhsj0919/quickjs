@@ -27,6 +27,7 @@ final class QuickjsExtensionInstallRecord {
     required this.description,
     required this.version,
     required this.versionCode,
+    this.storageVersion = 0,
     required this.compatibilityCode,
     this.icon,
     this.homepage,
@@ -45,6 +46,7 @@ final class QuickjsExtensionInstallRecord {
       description: map['description']! as String,
       version: map['version']! as String,
       versionCode: map['versionCode']! as int,
+      storageVersion: (map['storageVersion'] as int?) ?? 0,
       compatibilityCode: map['compatibilityCode']! as String,
       icon: map['icon'] as String?,
       homepage: _recordUri(map['homepage']),
@@ -66,6 +68,7 @@ final class QuickjsExtensionInstallRecord {
   final String description;
   final String version;
   final int versionCode;
+  final int storageVersion;
   final String compatibilityCode;
   final String? icon;
   final Uri? homepage;
@@ -79,6 +82,7 @@ final class QuickjsExtensionInstallRecord {
   QuickjsExtensionInstallRecord copyWith({
     String? version,
     int? versionCode,
+    int? storageVersion,
     QuickjsExtensionInstallState? state,
     List<String>? grantedPermissions,
     DateTime? updatedAt,
@@ -88,6 +92,7 @@ final class QuickjsExtensionInstallRecord {
     description: description,
     version: version ?? this.version,
     versionCode: versionCode ?? this.versionCode,
+    storageVersion: storageVersion ?? this.storageVersion,
     compatibilityCode: compatibilityCode,
     icon: icon,
     homepage: homepage,
@@ -107,6 +112,7 @@ final class QuickjsExtensionInstallRecord {
     'description': description,
     'version': version,
     'versionCode': versionCode,
+    if (storageVersion != 0) 'storageVersion': storageVersion,
     'compatibilityCode': compatibilityCode,
     if (icon != null) 'icon': icon,
     if (homepage != null) 'homepage': homepage.toString(),
@@ -301,7 +307,8 @@ final class QuickjsExtensionManager {
     compatibilityRegistry.validate(extension.manifest);
     _requireCapabilities(extension.manifest.capabilities);
     if (_managed.containsKey(extension.id) ||
-        registry.find(extension.id) != null) {
+        registry.find(extension.id) != null ||
+        await store.load(extension.id) != null) {
       throw StateError('Extension is already installed: ${extension.id}');
     }
     final now = DateTime.now().toUtc();
@@ -311,6 +318,7 @@ final class QuickjsExtensionManager {
       description: extension.manifest.description,
       version: extension.version,
       versionCode: extension.manifest.versionCode,
+      storageVersion: extension.manifest.storageVersion,
       compatibilityCode: extension.manifest.compatibilityCode,
       icon: extension.manifest.icon,
       homepage: extension.manifest.homepage,
@@ -548,9 +556,28 @@ final class QuickjsExtensionManager {
     if (nextCode == currentCode && !allowSameVersion) {
       throw StateError('Extension versionCode is already installed: $nextCode');
     }
+    Map<String, Object?>? storageSnapshot;
+    final nextStorageVersion = extension.manifest.storageVersion;
+    final currentStorageVersion = previous.record.storageVersion;
+    if (nextStorageVersion != currentStorageVersion) {
+      storageSnapshot = await _snapshotStorage(id);
+      try {
+        await _runStorageMigration(
+          extension,
+          fromVersion: currentStorageVersion,
+          toVersion: nextStorageVersion,
+          grantedPermissions:
+              grantedPermissions ?? previous.record.grantedPermissions,
+        );
+      } catch (_) {
+        await _restoreStorage(id, storageSnapshot);
+        rethrow;
+      }
+    }
     final record = previous.record.copyWith(
       version: extension.version,
       versionCode: extension.manifest.versionCode,
+      storageVersion: nextStorageVersion,
       grantedPermissions: grantedPermissions?.toSet().toList(growable: false),
       updatedAt: DateTime.now().toUtc(),
     );
@@ -558,12 +585,15 @@ final class QuickjsExtensionManager {
       record: record,
       package: package,
     );
-    await store.save(replacement);
     try {
+      await store.save(replacement);
       await registry.uninstall(id);
       return await _activate(replacement, extension);
     } catch (_) {
       await store.save(previous);
+      if (storageSnapshot != null) {
+        await _restoreStorage(id, storageSnapshot);
+      }
       if (registry.find(id) == null) {
         await _restoreOne(previous);
       }
@@ -716,6 +746,7 @@ final class QuickjsExtensionManager {
         );
       }
       if (extension.manifest.versionCode != stored.record.versionCode ||
+          extension.manifest.storageVersion != stored.record.storageVersion ||
           extension.manifest.compatibilityCode !=
               stored.record.compatibilityCode) {
         throw const FormatException(
@@ -790,6 +821,49 @@ final class QuickjsExtensionManager {
     final inspection = _inspectCapabilities(declaration);
     if (!inspection.canInstall) {
       throw QuickjsExtensionCapabilityException(inspection);
+    }
+  }
+
+  Future<Map<String, Object?>> _snapshotStorage(String id) async {
+    final snapshot = <String, Object?>{};
+    for (final key in await storage.keys(namespace: id)) {
+      snapshot[key] = await storage.get(key, namespace: id);
+    }
+    return snapshot;
+  }
+
+  Future<void> _restoreStorage(String id, Map<String, Object?> snapshot) async {
+    await storage.clear(namespace: id);
+    for (final entry in snapshot.entries) {
+      await storage.set(entry.key, entry.value, namespace: id);
+    }
+  }
+
+  Future<void> _runStorageMigration(
+    QuickjsExtension extension, {
+    required int fromVersion,
+    required int toVersion,
+    required Iterable<String> grantedPermissions,
+  }) async {
+    if (extension.service?.storageMigrationExport == null) {
+      throw StateError(
+        'Extension ${extension.id} changes storageVersion from $fromVersion '
+        'to $toVersion without service.storageMigrationExport',
+      );
+    }
+    final session = QuickjsExtensionSession(
+      extension: extension,
+      storage: storage,
+      grantedPermissions: grantedPermissions,
+      optionalCapabilities: optionalCapabilities,
+      maxPendingCoreCalls: maxPendingCoreCalls,
+      defaultCallTimeout: defaultCallTimeout,
+      runtimeFactory: runtimeFactory,
+    );
+    try {
+      await session.migrateStorage(fromVersion, toVersion);
+    } finally {
+      await session.dispose();
     }
   }
 }

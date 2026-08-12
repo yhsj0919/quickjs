@@ -1,4 +1,4 @@
-# quickjs_ui 使用指南
+# lemon_js_ui（quickjs_ui）使用指南
 
 本文档说明如何在 Flutter 应用中使用 `quickjs_ui`：编写 JS 页面、使用内置控件、注入第三方模块，以及宿主与 JS 之间的互操作。
 
