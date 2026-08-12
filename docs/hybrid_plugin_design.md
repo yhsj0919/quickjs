@@ -316,14 +316,26 @@ assets/
   icon.png
 ```
 
+来源加载统一收敛到 `QuickjsExtensionPackage`。开发期支持以 `manifest.json`
+为入口从 asset、file 或 network 目录递归加载相对模块；生产分发支持
+asset ZIP、file ZIP、network ZIP 和内存 ZIP 字节。来源层完成后统一交给
+`QuickjsExtension.load(...)`，安装、Session 和调用层不区分物理来源。
+
 讨论阶段的 manifest 示例：
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "site.example1",
   "name": "站点1",
+  "description": "提供站点1的数据查询和认证能力",
   "version": "1.0.0",
+  "versionCode": 10000,
+  "compatibilityCode": "lemon-content-source-v1",
+  "icon": "assets/icon.png",
+  "homepage": "https://example.com",
+  "updateUrl": "https://example.com/plugin/manifest.json",
+  "downloadUrl": "https://example.com/plugin/site.example1.zip",
   "service": {
     "entry": "service/main.mjs",
     "contract": "content-source/v1",
@@ -347,13 +359,57 @@ assets/
 }
 ```
 
-字段名称和最终 schemaVersion 尚未确定。当前确定的是职责划分：
+当前统一 Extension manifest 使用 `schemaVersion: 2`。职责划分：
 
+- `id` 是不可变的插件唯一标识；
+- `name` 是展示给用户的插件名称；
+- `description` 是插件用途的简短说明；统一 Extension manifest 中必须提供且不能为空；
+- `version` 是安装、更新、降级和兼容判断使用的插件版本号，建议采用 SemVer；
+- `versionCode` 是非负整数形式的内部版本序号，用于确定更新先后，发布新版本时必须递增；
+- `compatibilityCode` 表示宿主兼容分组，并关联必需/可选公开方法策略；
+- `icon` 可以是插件包内相对资源路径或绝对 HTTPS 网络地址；推荐随 ZIP 分发，网络图标作为兼容选择；
+- `homepage` 是插件介绍、帮助或项目主页；
+- `updateUrl` 是宿主检查最新版本信息的地址；
+- `downloadUrl` 是当前版本或更新版本安装包的下载地址；
 - `service` 描述程序调用入口和数据协议；
 - `ui.routes` 描述 JSUI 页面；
 - `flows` 描述宿主可以启动的自定义交互流程；
 - route 默认绑定同一个混合插件中的 service；
 - 第一版优先支持一个 service，不提前引入跨包或多 service 依赖。
+
+统一 Extension 格式必须包含 manifest，不支持把裸 `.mjs` 当作 Extension 自动推断。
+`description` 属于统一安装、权限确认和插件管理页面需要的基本信息，因此与 `id`、`name`、
+`version` 一样作为必填字段，而不是放在可选 `metadata` 中。
+
+`version` 用于向用户展示，不要求宿主仅依赖其文本进行排序；`versionCode` 用于机器比较，
+新包的 `versionCode` 大于已安装值才视为升级，等于时视为同一构建，小于时视为降级并默认
+拒绝。`versionCode` 不代表接口版本，接口兼容仍由 `compatibilityCode` 判断。
+
+`id` 在同一宿主安装空间内全局唯一。普通 `install` 遇到已经存在的 ID 必须拒绝，不能
+隐式覆盖；只有显式 `update(installedId, package)` 可以替换现有安装项。更新包必须满足：
+
+- manifest `id` 与目标已安装 ID 完全一致；
+- `versionCode` 默认必须大于已安装值；
+- `compatibilityCode` 必须与当前安装项及宿主策略兼容；
+- 包必须重新通过 manifest、接口、权限、资源和完整性校验；
+- 更新失败时继续使用原安装包和安装记录；
+- 显示名称 `name` 可以变化，不参与唯一性和所有权判断。
+
+以下完整所有权校验属于后期安全优化，不阻塞第一阶段功能发布。仅比较 ID 不能阻止恶意作者制作同 ID 的安装包。完整的所有权校验需要在首次安装时记录
+签名公钥或签名者指纹，后续更新必须由同一密钥签名。未实现签名之前，宿主应将更新限制
+为原安装来源、宿主可信目录或用户明确确认的本地包；即使 `updateUrl` 相同，也仍需防范
+域名失陷和内容被替换。
+
+URL 字段使用绝对 HTTPS 地址。`homepage` 可以仅用于展示或跳转；`updateUrl` 返回的更新
+描述应至少包含插件 ID、版本、下载地址以及后续引入的摘要/签名信息；`downloadUrl` 必须
+下载完整的统一插件包，不能指向单独的 Core 或 JSUI 文件。通过 asset/file 安装的插件
+可以不声明更新和下载地址，由宿主应用自己的插件目录或更新源管理。
+
+这些地址全部来自不可信插件数据。宿主不得自动打开主页或无条件下载更新，应执行协议、
+域名、重定向、文件大小和权限策略检查。网络 `icon` 同样只允许 HTTPS，必须应用独立的
+图片 MIME、尺寸、响应体大小、缓存和超时限制；加载失败时使用系统默认图标，不能影响
+插件安装、恢复或启动。`compatibilityCode`、主页、图标和下载地址都不能替代签名与内容
+摘要。
 
 混合插件不一定提供 JSUI 主页。默认用户入口仍可以是宿主通用原生页面，JSUI 只在认证等流程中出现。插件自定义的可视入口必须指向 JSUI route；Core entry 是程序调用入口，不是页面入口。
 
@@ -512,29 +568,47 @@ const result = await pluginService.call('submitLogin', form);
 
 以下是相对于本设计的主要缺口，并不表示现有 Core 或 quickjs_ui 没有基础实现。
 
-### 12.1 统一的混合插件包与 manifest
+### 12.1 统一的混合插件包与 manifest（基础模型已开始实现）
 
-目前 Core 插件 manifest 与 lemon_js_ui package manifest 是两套平行契约。尚未有一个应用级 manifest 同时描述 service、UI routes、flows、统一权限和兼容版本，也没有对应的统一包加载器与校验器。该能力确定由独立的 `quickjs_extensions` 包承载，而不是修改 `lemon_js` 使其反向依赖 lemon_js_ui。
+`quickjs_extensions` 已提供统一 manifest、service/UI/flow 描述、`.js/.ui/.hybrid`
+构造和一致性校验，并支持 asset、file、network 目录以及 ZIP 物理包加载。
+目前尚缺少签名、资源完整性校验和兼容版本策略。该能力保持在独立包中，
+不修改 `lemon_js` 使其反向依赖 lemon_js_ui。
 
-### 12.2 安装管理和持久化注册表
+### 12.2 安装管理和持久化注册表（第一版已实现）
 
-尚缺少混合包的原子安装、升级、停用、卸载、版本兼容检查，以及已安装插件记录的持久化管理。Core 与 UI 的注册目前不是由统一的 `InstalledQuickjsExtension` 聚合管理。
+已提供 `QuickjsExtensionInstaller`、`InstalledQuickjsExtension` 和
+`QuickjsExtensionRegistry`，支持注册、停用、启用、卸载以及按 contract/flow
+查询。现已增加统一的 `QuickjsExtensionManager`，负责：
 
-### 12.3 QuickjsExtensionSession 生命周期与资源边界
+- 从 asset、file、network、ZIP 等来源安装，并将来源归一化为受管理的安装包；
+- 查看全部安装项以及 enabled、disabled、broken 等状态；
+- 启用、停用、卸载，并明确卸载时是否保留插件隔离 KV；
+- 更新和失败回滚；显式降级和版本兼容策略仍待补充；
+- 持久化插件 ID、版本、权限授权、启用状态、manifest 和模块源码；
+- App 重启后读取安装记录并恢复 Registry，但不提前启动 Core runtime；
+- 包丢失或损坏时只标记对应插件为 broken，不阻塞其他插件恢复。
 
-尚缺少正式的宿主级 Session 抽象，用来统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host capabilities，并定义启动、停用、页面销毁、runtime 崩溃、升级和卸载时的生命周期。
+Session、QuickJS runtime 和 JSUI Context 不持久化。恢复时重新读取受管理安装包并创建
+Session，Core runtime 仍在首次调用时懒加载。当前本地文件 Store 使用临时文件和备份
+文件替换持久化记录；后续可进一步保存不可变 ZIP 并增加摘要校验。Web 平台由宿主提供
+IndexedDB 或 Cache Storage 等等价实现。
 
-### 12.4 Core 与 JSUI 的绑定 service bridge
+### 12.3 QuickjsExtensionSession 生命周期与资源边界（第一版已实现）
 
-quickjs_ui 已支持注入 mounts，但尚缺少面向混合插件的受限 bridge：根据当前 Session 自动绑定 Core、区分标准公开能力与 UI 私有能力、阻止跨插件调用，并处理取消、超时和 Core runtime 不可用。
+已提供宿主级 Session，统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host mounts。Core runtime 首次调用时创建并保持到停用或卸载；UI 页面销毁不影响 Session。升级迁移和 runtime 崩溃恢复仍待补充。
+
+### 12.4 Core 与 JSUI 的绑定 service bridge（第一版已实现）
+
+已提供 `quickjs_extensions/plugin_service` 模块，根据当前 Session 自动绑定 Core，仅允许调用 manifest 的 `uiExports`，且不接受 pluginId。底层 provider 取消会向调用链传播；更细粒度的默认超时和崩溃恢复仍待补充。
 
 ### 12.5 标准数据源 contract 与结果模型
 
 需要正式定义 `content-source/v1` 的方法集合、请求参数、分页、统一数据结构、错误模型以及 `(pluginId, remoteId)` 来源标识。宿主遍历逻辑只能依赖版本化 contract，不能依赖任意 exports。
 
-### 12.6 标准交互结果与 FlowRunner
+### 12.6 标准交互结果与 FlowRunner（基础版本已实现）
 
-需要定义 `interactionRequired`、flow 参数、`completed/cancelled/failed` 结果、一次重试上限、页面关闭和超时语义，并实现宿主侧 `FlowRunner` 将 Core 调用与 JSUI route 串联起来。
+已定义 `interactionRequired`、`completed/cancelled/failed` 基础结果，并实现宿主侧 `FlowRunner` 串联 Core 调用与 JSUI route；交互完成后只重试一次。页面关闭与业务超时由宿主提供的 flow launcher 决定。
 
 ### 12.7 多来源聚合调度与原生页面状态
 
@@ -552,15 +626,270 @@ quickjs_ui manifest 已经能够解析 `routes`，但 bundle 加载和宿主入�
 
 manifest 中声明权限不等于授权。需要将声明、用户授权与实际注入 capability 对齐，并定义 Core/JSUI 协议版本不兼容、模块损坏、Core 崩溃、JSUI 启动失败和插件超时时的隔离及恢复行为。
 
+### 12.11 按插件 ID 调用与多实现选择
+
+同一个 contract 可以安装多个实现，例如三个站点同时实现 `content-source/v1`。Flutter
+宿主必须能够通过插件 ID 精确调用：
+
+```dart
+await manager.call(
+  pluginId: 'site.example1',
+  method: 'getHome',
+  arguments: const [],
+);
+```
+
+调用与选择规则：
+
+- Flutter 宿主可以指定任意已安装、已启用且已授权插件的 ID 调用 `publicExports`；
+- 宿主可以按 contract 枚举多个插件，逐个或受控并发调用并保留来源 ID；
+- 未指定插件 ID 且 contract 只有一个实现时可以便捷调用；存在多个实现时必须报歧义错误，不能随机选择；
+- Flow 使用 `pluginId + flowId` 精确定位，认证完成后只重试原插件调用；
+- JSUI 只能通过当前 Session 的绑定 bridge 调用 `uiExports`，不接收 pluginId，禁止跨插件调用；
+- Core 不可主动调用 UI，只能返回 `interactionRequired`，由 Flutter 宿主决定是否打开对应 route。
+
+### 12.12 简化的兼容码与不饱和接口校验（已实现）
+
+第一阶段不引入完整的参数和返回值 Schema 系统，而是在统一 manifest 增加
+`compatibilityCode`，由宿主注册对应的兼容策略。该字段只表示插件声称兼容某一套宿主
+接口，不是签名或安全校验，不能用于证明来源可信或防止包被篡改。
+
+```json
+{
+  "compatibilityCode": "lemon-content-source-v1",
+  "service": {
+    "publicExports": ["getPluginInfo", "search"]
+  }
+}
+```
+
+宿主策略同时声明必需和可选公开方法：
+
+```dart
+QuickjsExtensionCompatibilityPolicy(
+  compatibilityCode: 'lemon-content-source-v1',
+  requiredPublicExports: const {'getPluginInfo'},
+  optionalPublicExports: const {
+    'getHome',
+    'search',
+    'getDetail',
+    'getCategories',
+  },
+)
+```
+
+安装、更新和重启恢复时执行相同校验：
+
+- `compatibilityCode` 必须存在，并与宿主注册的策略精确匹配；
+- 必须存在 Core service；
+- `requiredPublicExports` 必须全部声明并真实导出为函数；
+- 插件允许不饱和实现，可只选择部分 `optionalPublicExports`；
+- manifest 中声明的 `publicExports` 必须属于必需或可选方法集合；
+- manifest 声明的方法必须由入口模块真实导出为函数；
+- 插件内部辅助函数以及未写入 manifest 的额外导出不参与兼容性校验，也不能由宿主调用；
+- 不匹配的安装和更新在写入 Store 前拒绝；重启恢复时不匹配的旧插件标记为 `broken`；
+- Manager 已提供 `supports(pluginId, method)`，并允许按 contract 和 method 筛选实现者。
+
+示例结果：
+
+```text
+getPluginInfo + search       -> 允许安装
+getPluginInfo + getHome      -> 允许安装
+只有 search                  -> 拒绝，缺少必需方法
+getPluginInfo + unknownApi   -> 拒绝，声明了未知公开接口
+```
+
+`uiExports` 第一版仍作为插件 UI 与自身 Core 之间的私有契约，只校验 manifest 声明的方法
+真实存在，不纳入宿主公共接口白名单。若以后出现需要统一的登录 UI 协议，再单独为其增加策略。
+
+### 12.13 插件展示与更新元数据（基础字段和更新流程已实现）
+
+将 `name`、`version`、`versionCode` 以及新增的 `icon`、`homepage`、`updateUrl`、
+`downloadUrl` 作为统一
+manifest 的正式字段，不继续放在无约束的 `metadata` 中。安装记录保存安装时解析出的元数据，
+插件列表无需启动 Core runtime 即可展示名称、图标、版本、主页和更新状态。
+
+计划补充：
+
+- 包内及 HTTPS 网络图标读取、缓存、MIME/尺寸限制和失败时的系统默认图标；
+- `versionCode` 整数比较、重复版本识别和禁止默认降级；`version` 仅作为展示版本；
+- 更新描述模型，校验其插件 ID 与当前安装项一致；
+- `updateUrl` 检查更新并解析目标版本、下载地址、摘要和发行说明；
+- `downloadUrl` 下载后仍走临时包解析、兼容码、公开接口、权限和完整性校验；
+- 网络失败、无更新和更新包损坏不改变当前已安装版本；
+- 宿主可以覆盖或禁用插件自带更新地址，统一使用自己的可信插件目录。
+
+更新身份校验分为两层：第一阶段使用当前 Manager 已有的重复 ID 安装拒绝和更新目标 ID
+一致性检查；后期安全优化再补充 `versionCode`、兼容码、原始来源绑定、摘要与签名者指纹
+校验。只有签名者一致才能
+从安全意义上防止第三方使用相同 ID 覆盖原插件。
+
+### 12.14 Service 运行模式与后台限制（记录，暂不实现）
+
+存在 Core service 的插件后续需要声明期望的运行模式，但 manifest 只能提出请求，最终由
+宿主平台能力、宿主策略和用户授权共同决定。纯 UI 插件没有 service，不涉及 Core 后台
+运行；JSUI Context 在页面关闭时正常销毁。
+
+计划中的结构：
+
+```json
+{
+  "service": {
+    "entry": "service/main.mjs",
+    "runtime": {
+      "mode": "onDemand",
+      "idleTimeoutSeconds": 300,
+      "background": false
+    }
+  }
+}
+```
+
+运行模式语义：
+
+- `onDemand`：默认模式，首次调用时创建，空闲达到宿主允许的时间后可以回收；
+- `resident`：首次调用后仅在 App 前台生命周期内常驻，进入后台时宿主仍可暂停或销毁；
+- `background`：表示插件需要受控后台任务，不代表允许无限循环或无限期常驻。
+
+不允许插件仅依靠 `setInterval` 等方式自行获得后台常驻能力。真正的后台工作应声明有限的
+任务 ID、导出方法和建议执行条件，由宿主调度一次性调用，并应用超时、取消、并发、电量、
+网络和平台后台限制。插件停用、卸载或更新时必须取消对应任务。
+
+```text
+插件声明的运行模式
+        ∩
+宿主允许的运行模式
+        ∩
+用户授予的后台权限
+        =
+实际运行能力
+```
+
+当前 `QuickjsExtensionSession` 在 Core 首次调用后保持到停用、卸载、Manager 释放或进程
+结束，行为接近 `resident`。本阶段不改变现有行为，也不增加 runtime manifest 字段、空闲
+回收器或后台调度 API；待有真实后台任务场景后再实现，并优先将默认模式收敛为
+`onDemand`。
+
+### 12.15 现有 Core、JSUI 与统一扩展包兼容（已实现）
+
+`quickjs_extensions` 是上层组合和管理能力，不替代原有 `lemon_js` Core 插件或
+`lemon_js_ui` 页面包。三种格式继续各自存在，并由 Manager 在安装入口显式选择输入格式：
+
+```dart
+enum QuickjsExtensionPackageFormat {
+  extension,
+  core,
+  ui,
+}
+```
+
+建议保留 `QuickjsExtensionPackageFormat` 这个名称，不使用 `ExtensionType`。原因是现有
+`QuickjsExtensionKind.js/ui/hybrid` 已表示加载完成后实际包含的能力类型，而这里表示安装
+来源的物理包格式。分开命名可避免把“输入格式”和“派生能力形态”混为一谈。
+
+Manager 安装入口默认使用统一扩展格式：
+
+```dart
+await manager.installAssetZip(
+  assetKey: 'assets/plugins/site.zip',
+  format: QuickjsExtensionPackageFormat.extension,
+);
+```
+
+`format` 默认值为 `extension`，旧格式必须显式指定：
+
+```dart
+await manager.installAssetZip(
+  assetKey: 'assets/plugins/legacy_core.zip',
+  format: QuickjsExtensionPackageFormat.core,
+);
+
+await manager.installAssetZip(
+  assetKey: 'assets/plugins/legacy_ui.zip',
+  format: QuickjsExtensionPackageFormat.ui,
+);
+```
+
+格式职责：
+
+- `extension`：读取统一 Extension manifest，可派生为 Core-only、UI-only 或 hybrid；
+- `core`：使用现有 `QuickjsZipPlugin`/`QuickjsPlugin` 规则读取旧 Core 插件，再由显式适配信息包装为 Core-only Extension；
+- `ui`：使用现有 `QuickjsUiBundle` 包格式读取旧 JSUI 包，再由显式适配信息包装为 UI-only Extension；
+- 不根据 ZIP 内文件进行模糊猜测，避免多个 `manifest.json` 或相似目录导致错误识别；
+- 原 Core 和 JSUI API 继续可以绕过 Manager 单独使用，缺少统一 manifest 或兼容码不会破坏原加载方式；
+- 旧插件进入 Manager 时需要宿主提供统一管理所缺少的 ID、展示元数据、兼容码、默认 route 或 contract 等适配信息；
+- 只有能够持久化包内容和适配信息的安装项才能在 App 重启后自动恢复。
+
+三种格式的入口规则明确如下：
+
+| PackageFormat | 统一 manifest | 裸 `main.mjs` | 多文件相对导入 | asset/file/network 递归 |
+|---|---:|---:|---:|---:|
+| `extension` | 必须 | 不支持 | 支持 | 支持 |
+| `core` | 可选 | 支持 | 支持 | 支持 |
+| `ui` | 可选 | 支持 | 支持 | 支持 |
+
+`core` 和 `ui` 裸文件模式都以显式传入的 `main.mjs` 为入口，递归解析相对模块与资源：
+
+```text
+main.mjs
+├── import './modules/api.mjs'
+├── import './components/card.mjs'
+└── 引用 ./assets/icon.png
+```
+
+asset、file 和 network 使用相同的插件根边界，递归路径不能通过 `..`、绝对路径、重定向
+或 URL 变形逃出根目录。裸文件没有统一 manifest，因此 Manager 安装时必须显式提供适配
+信息：
+
+- Core 裸文件：插件 ID、名称、描述、版本、contract、`publicExports`、`uiExports` 和权限；
+- UI 裸文件：插件 ID、名称、描述、版本、默认 route、权限和需要重新注入的第三方 UI 插件；
+- Manager 将入口源码、递归 JavaScript 模块、JSUI 资源引用和这些适配信息一起持久化，
+  保证 App 重启后可以恢复；
+- 不扫描 JavaScript 源码猜测 exports、contract、插件 ID 或权限。
+
+裸 Core/UI 兼容模式是对旧基础插件的显式包装，不改变它们独立于 Manager 使用时的原有
+API。需要混合 Core 与 UI、统一更新或完整展示元数据时，应制作带 manifest 的
+`extension` 包。
+
+协议版本继续各管各的：
+
+```text
+Extension schemaVersion
+        ├── 管理统一 manifest 结构
+Core contract / compatibilityCode
+        ├── 管理宿主公共接口兼容
+JSUI runtime protocol version
+        └── 管理页面渲染协议兼容
+```
+
+Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段替代 Core 或 JSUI 自己的
+协议版本，也不要求底层两个包反向依赖 `quickjs_extensions`。
+
 ## 13. 后续待讨论问题
 
-以下问题暂不在本文中定案：
+前四阶段完成后，仍留待后续阶段处理的问题如下：
 
-- 最终 manifest 字段名、schemaVersion 和向旧 Core/JSUI 包的兼容策略；
 - 内存压力下是否需要提供显式的 Core runtime 空闲回收策略；默认是首次使用后常驻；
 - 一个混合包是否允许多个 service；
 - 是否允许 UI 声明对其他插件 service 的依赖；第一版建议禁止；
 - KV 是否需要 compare-and-set/事务，还是由 Session 保证串行；
 - 插件升级时正在运行的 Core 调用和 JSUI 页面如何迁移；
-- 插件签名、来源信任、远程目录与自动更新是否属于库层还是应用层；
+- 插件签名、摘要、来源信任、ID 抢占防护、远程目录与自动更新策略；
+- 权限声明、用户授权确认和后台执行限制；
 - 标准数据 contract 的具体字段与版本演进规则。
+
+## 14. 建议实施顺序
+
+1. 已完成 `QuickjsExtensionInstallRecord`、持久化 Store 接口和本地文件 Store。
+2. 已完成 `QuickjsExtensionManager.restore()`、损坏隔离和懒加载 Session。
+3. 已完成 asset、file、network、ZIP 统一加载，以及安装、更新回滚和可恢复卸载流程。
+4. 已完成 `install/update/uninstall/list/enable/disable` 管理 API。
+5. 已完成按 `pluginId` 调用、按 contract 枚举及多实现歧义检查。
+6. 已完成 manifest schema 与 `compatibilityCode` 校验、必需/可选公开方法策略、
+   `supports()` 与按方法筛选。
+7. 已完成图标、主页、更新地址、下载地址、数字 `versionCode` 比较和更新描述模型。
+8. 后续接入签名、摘要、来源绑定、ID 抢占防护、自动更新策略和更完整的权限模型。
+9. 有真实场景后再实现 Service `onDemand/resident/background` 策略和受控后台任务调度。
+10. 已完成 `QuickjsExtensionPackageFormat`，适配旧 Core ZIP、JSUI Package 和裸入口；
+    默认仍为统一 Extension 格式。
+11. 最后由宿主业务层实现插件管理页面、更新源策略、用户授权确认和 Web 持久化适配。

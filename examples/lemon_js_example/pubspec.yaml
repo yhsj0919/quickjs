@@ -25,6 +25,8 @@ dependencies:
     path: ../../packages/lemon_js_ui
   lemon_js_ui_video_player:
     path: ../../packages/lemon_js_ui_video_player
+  quickjs_extensions:
+    path: ../../packages/quickjs_extensions
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -76,6 +78,9 @@ flutter:
     - assets/quickjs_ui/modules/weather_background/assets/sunny/
     - assets/quickjs_ui/modules/weather_background/assets/thunderstorm/
     - assets/plugins/
+    - assets/extensions/hybrid_demo/
+    - assets/extensions/hybrid_demo/service/
+    - assets/extensions/hybrid_demo/ui/
     - web/icons/Icon-192.png
 
   # To add assets to your application, add an assets section, like this:

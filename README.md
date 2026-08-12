@@ -5,6 +5,7 @@
 - `packages/lemon_js`：面向 Flutter 的 QuickJS JavaScript 运行时；
 - `packages/lemon_js_ui`：由 `lemon_js` 驱动的声明式动态 UI；
 - `packages/lemon_js_ui_video_player`：供 `lemon_js_ui` 使用的视频播放器组件扩展。
+- `packages/quickjs_extensions`：组合 Core 与 JSUI 的统一扩展包、manifest 和 Session 基础层。
 
 完整示例位于 `examples/lemon_js_example`。仓库级检查可运行
 `tool/verify.ps1` 或 `tool/verify.cmd`。

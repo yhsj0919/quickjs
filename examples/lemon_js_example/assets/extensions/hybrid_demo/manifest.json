@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "id": "dev.lemon.hybrid_demo",
+  "name": "混合插件示例",
+  "description": "演示 Flutter、Core 和 JSUI 的统一安装与调用",
+  "version": "1.0.0",
+  "versionCode": 10000,
+  "compatibilityCode": "lemon-content-source-v1",
+  "service": {
+    "entry": "service/main.mjs",
+    "contract": "content-source/v1",
+    "publicExports": ["getHome"],
+    "uiExports": ["submitLogin"]
+  },
+  "ui": {
+    "routes": {
+      "login": {
+        "entry": "ui/login.mjs",
+        "title": "插件登录"
+      }
+    }
+  },
+  "flows": {
+    "login": {"route": "login"}
+  },
+  "permissions": ["storage"]
+}

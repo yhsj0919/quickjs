@@ -10,6 +10,7 @@ import 'pages/core/fetch_page.dart';
 import 'pages/core/function_handle_page.dart';
 import 'pages/core/host_modules_page.dart';
 import 'pages/core/host_mounts_page.dart';
+import 'pages/core/hybrid_extension_page.dart';
 import 'pages/core/js_call_dart_plugin_page.dart';
 import 'pages/core/memory_limit_page.dart';
 import 'pages/core/module_eval_page.dart';
@@ -175,5 +176,11 @@ final List<ExamplePageSpec> examplePages = [
     description:
         '安装 QuickjsWebSocketMount，验证 open/message/close 事件和 Origin 白名单。',
     builder: (_) => const WebSocketPage(),
+  ),
+  ExamplePageSpec(
+    title: '混合插件',
+    description: '从独立 manifest 与 MJS 文件安装扩展，原生页调用 Core，登录流程由插件 JSUI 提供。',
+    builder: (_) => const HybridExtensionPage(),
+    sourcePath: 'lib/pages/core/hybrid_extension_page.dart',
   ),
 ];
