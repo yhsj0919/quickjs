@@ -54,11 +54,17 @@ import 'package:quickjs_extensions/quickjs_extensions.dart';
   "flows": {
     "authentication": {"route": "authentication"}
   },
+  "capabilities": {
+    "required": {"network": 1},
+    "optional": {"cookieJar": 1}
+  },
   "permissions": ["network", "storage"]
 }
 ```
 
 manifest 中的模块路径是安装包内的相对路径。`quickjs_extensions` 会在加载 Core 时自动添加插件 ID 命名空间。
+`capabilities.required` 缺失或版本不足时拒绝安装；`optional` 只报告，不阻止安装。安装前可调用
+`manager.inspectPackage(package)`，安装结果也可通过 `capabilityInspection` 查看完整比对结果。
 
 ## 加载与安装
 
@@ -91,7 +97,9 @@ final package = await QuickjsExtensionPackage.assetZip(
 
 ## 统一插件管理
 
-应用启动时创建 Manager。桌面和移动端可以使用文件 Store 持久化安装记录与插件源码：
+应用启动时创建 Manager。`store` 可以省略：桌面和移动端默认保存在应用支持目录的
+`quickjs_extensions` 子目录，Web 默认使用 SharedPreferences Web 后端保存安装索引与
+插件源码。宿主需要自定义目录或接入其他数据库时，仍可显式传入 Store：
 
 ```dart
 final manager = QuickjsExtensionManager(
@@ -117,7 +125,8 @@ await manager.restore();
 
 `restore()` 只恢复安装项、Registry 和 Session，Core runtime 保持懒加载。第三方
 `QuickjsUiPlugin` 包含宿主原生对象，不能写入 JSON，因此由 `uiPluginsResolver` 按插件
-ID 重新注入。Web 平台应实现 `QuickjsExtensionStore`，接入 IndexedDB 或其他持久化方案。
+ID 重新注入。默认 Store 会按平台自动选择；宿主也可以实现 `QuickjsExtensionStore`，
+接入 IndexedDB、数据库或其他持久化方案。
 
 ```dart
 await manager.installAsset(
@@ -303,7 +312,7 @@ await registry.uninstall('site.example', clearStorage: true);
 
 ## 当前边界
 
-当前已提供 manifest v2、兼容策略、旧 Core/UI 适配、内存 Store、本地文件 Store、安装
-恢复、更新检查和更新失败回滚；旧 JSUI 包声明的资源引用也会随统一安装包持久化。包内
-非 JS 资源字节副本、网络图标缓存、Web 持久化 Store、
+当前已提供 manifest v2、兼容策略、旧 Core/UI 适配、内存 Store、自动选择的平台持久化
+Store、安装恢复、更新检查和更新失败回滚；旧 JSUI 包声明的资源引用也会随统一安装包
+持久化。包内非 JS 资源字节副本、网络图标缓存、
 插件签名、摘要校验、远程目录、自动更新策略和数据库版 KV 由宿主接入或后续版本提供。

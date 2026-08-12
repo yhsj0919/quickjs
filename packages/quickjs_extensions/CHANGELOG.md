@@ -9,7 +9,9 @@
 - 新增 Core/JSUI 调用桥接、页面路由与交互流程处理。
 - 新增 asset、file、network 与 ZIP 扩展包加载入口。
 - 新增统一 Manager、文件持久化、重启恢复、更新回滚和按插件 ID 调用。
+- Manager 的 Store 改为可选，原生平台与 Web 会自动选择默认持久化实现。
 - 新增 manifest v2、兼容策略、旧 Core/JSUI 格式适配、数字版本和远程更新流程。
+- 新增版本化的必需/可选宿主能力声明、安装预检和结构化缺失能力错误。
 - 保留并持久化旧 JSUI 包中的资源引用。
 - 默认组合隔离 KV、Fetch/XHR 和 Web Crypto 全部现有实现；宿主可以整体关闭或按 factory
   替换，可选能力不由权限声明触发。

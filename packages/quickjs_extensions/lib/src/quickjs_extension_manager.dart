@@ -8,6 +8,8 @@ import 'package:lemon_js_ui/lemon_js_ui.dart';
 import 'quickjs_extension.dart';
 import 'quickjs_extension_capabilities.dart';
 import 'quickjs_extension_compatibility.dart';
+import 'quickjs_extension_default_store.dart';
+import 'quickjs_extension_manifest.dart';
 import 'quickjs_extension_package.dart';
 import 'quickjs_extension_package_format.dart';
 import 'quickjs_extension_registry.dart';
@@ -187,12 +189,14 @@ final class ManagedQuickjsExtension {
     required this.record,
     required this.state,
     this.installed,
+    this.capabilityInspection,
     this.error,
   });
 
   final QuickjsExtensionInstallRecord record;
   final ManagedQuickjsExtensionState state;
   final InstalledQuickjsExtension? installed;
+  final QuickjsExtensionCapabilityInspection? capabilityInspection;
   final Object? error;
 
   String get id => record.id;
@@ -203,7 +207,7 @@ final class ManagedQuickjsExtension {
 /// 统一管理扩展安装、恢复、更新、调用和卸载。
 final class QuickjsExtensionManager {
   QuickjsExtensionManager({
-    required this.store,
+    QuickjsExtensionStore? store,
     required this.compatibilityRegistry,
     QuickjsExtensionRegistry? registry,
     QuickjsExtensionStorage? storage,
@@ -212,7 +216,8 @@ final class QuickjsExtensionManager {
     QuickjsExtensionOptionalCapabilities? optionalCapabilities,
     this.uiPluginsResolver,
     this.runtimeFactory,
-  }) : optionalCapabilities =
+  }) : store = store ?? QuickjsExtensionDefaultStore(),
+       optionalCapabilities =
            optionalCapabilities ??
            QuickjsExtensionOptionalCapabilities.defaults(),
        registry = registry ?? QuickjsExtensionRegistry(),
@@ -269,6 +274,15 @@ final class QuickjsExtensionManager {
   QuickjsExtensionFlowReference? findFlow(String pluginId, String flowId) =>
       registry.findFlow(pluginId, flowId);
 
+  /// 解析安装包并报告其能力在当前宿主中的可用性，不写入安装状态。
+  Future<QuickjsExtensionCapabilityInspection> inspectPackage(
+    QuickjsExtensionPackage package,
+  ) async {
+    final extension = await QuickjsExtension.load(package);
+    compatibilityRegistry.validate(extension.manifest);
+    return _inspectCapabilities(extension.manifest.capabilities);
+  }
+
   Future<void> restore() async {
     for (final current in _managed.values.toList()) {
       if (current.installed != null) await registry.uninstall(current.id);
@@ -285,6 +299,7 @@ final class QuickjsExtensionManager {
   }) async {
     final extension = await QuickjsExtension.load(package);
     compatibilityRegistry.validate(extension.manifest);
+    _requireCapabilities(extension.manifest.capabilities);
     if (_managed.containsKey(extension.id) ||
         registry.find(extension.id) != null) {
       throw StateError('Extension is already installed: ${extension.id}');
@@ -511,6 +526,7 @@ final class QuickjsExtensionManager {
     }
     final extension = await QuickjsExtension.load(package);
     compatibilityRegistry.validate(extension.manifest);
+    _requireCapabilities(extension.manifest.capabilities);
     if (extension.id != id) {
       throw ArgumentError(
         'Updated extension id does not match: ${extension.id}',
@@ -707,6 +723,7 @@ final class QuickjsExtensionManager {
         );
       }
       compatibilityRegistry.validate(extension.manifest);
+      _requireCapabilities(extension.manifest.capabilities);
       await _activate(normalized, extension);
     } catch (error) {
       _managed[stored.record.id] = ManagedQuickjsExtension(
@@ -738,6 +755,9 @@ final class QuickjsExtensionManager {
           ? ManagedQuickjsExtensionState.enabled
           : ManagedQuickjsExtensionState.disabled,
       installed: installed,
+      capabilityInspection: _inspectCapabilities(
+        extension.manifest.capabilities,
+      ),
     );
     _managed[extension.id] = managed;
     return managed;
@@ -747,6 +767,30 @@ final class QuickjsExtensionManager {
     final stored = await store.load(id);
     if (stored == null) throw StateError('Extension is not installed: $id');
     return stored;
+  }
+
+  QuickjsExtensionCapabilityInspection _inspectCapabilities(
+    QuickjsExtensionCapabilityManifest declaration,
+  ) {
+    final supported = optionalCapabilities.versions;
+    Map<String, int> missing(Map<String, int> requested) => Map.unmodifiable({
+      for (final entry in requested.entries)
+        if ((supported[entry.key] ?? 0) < entry.value) entry.key: entry.value,
+    });
+    return QuickjsExtensionCapabilityInspection(
+      required: declaration.required,
+      optional: declaration.optional,
+      supported: supported,
+      missingRequired: missing(declaration.required),
+      missingOptional: missing(declaration.optional),
+    );
+  }
+
+  void _requireCapabilities(QuickjsExtensionCapabilityManifest declaration) {
+    final inspection = _inspectCapabilities(declaration);
+    if (!inspection.canInstall) {
+      throw QuickjsExtensionCapabilityException(inspection);
+    }
   }
 }
 
