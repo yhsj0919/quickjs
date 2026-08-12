@@ -140,5 +140,6 @@ final result = await runtime.callPlugin(plugin, 'getHome', const []);
 - [npm 打包](https://github.com/yhsj0919/quickjs/blob/master/docs/npm_bundling.md)
 - [Class binding 生命周期](https://github.com/yhsj0919/quickjs/blob/master/docs/class_binding_lifecycle.md)
 - [性能排查](https://github.com/yhsj0919/quickjs/blob/master/docs/performance_troubleshooting.md)
+- [pub 包最小示例](example/main.dart)
 
 完整示例保留在 GitHub 仓库，pub 包 README 只覆盖最小接入和主要能力。
