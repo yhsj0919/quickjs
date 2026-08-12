@@ -3,15 +3,27 @@ import 'dart:async';
 import 'package:lemon_js/lemon_js.dart';
 
 import 'quickjs_extension.dart';
+import 'quickjs_extension_capabilities.dart';
 import 'quickjs_extension_storage.dart';
 
 /// 扩展 Session 的生命周期状态。
-enum QuickjsExtensionSessionState { inactive, active, disabled, disposed }
+enum QuickjsExtensionSessionState {
+  inactive,
+  active,
+  failed,
+  disabled,
+  disposed,
+}
 
 /// 可由宿主替换的 Core 服务运行时接口。
 abstract interface class QuickjsExtensionServiceRuntime
     implements QuickjsPluginHost {
   Future<void> close();
+}
+
+/// 可向 Session 报告底层执行状态的 Runtime 可选能力。
+abstract interface class QuickjsExtensionStatefulRuntime {
+  QuickjsRuntimeState get runtimeState;
 }
 
 /// 创建扩展 Core 服务运行时的工厂。
@@ -29,13 +41,27 @@ final class QuickjsExtensionSession {
     List<QuickjsHostMount> sharedMounts = const <QuickjsHostMount>[],
     List<QuickjsHostMount> serviceMounts = const <QuickjsHostMount>[],
     List<QuickjsHostMount> uiMounts = const <QuickjsHostMount>[],
+    QuickjsExtensionOptionalCapabilities? optionalCapabilities,
+    this.maxPendingCoreCalls = 64,
+    this.defaultCallTimeout = const Duration(seconds: 30),
     QuickjsExtensionRuntimeFactory? runtimeFactory,
   }) : storage = storage ?? SharedPreferencesQuickjsKeyValueStore(),
        grantedPermissions = Set<String>.unmodifiable(grantedPermissions),
-       sharedMounts = List<QuickjsHostMount>.unmodifiable(sharedMounts),
-       serviceMounts = List<QuickjsHostMount>.unmodifiable(serviceMounts),
-       uiMounts = List<QuickjsHostMount>.unmodifiable(uiMounts),
        _runtimeFactory = runtimeFactory ?? _defaultRuntimeFactory {
+    if (maxPendingCoreCalls < 1) {
+      throw ArgumentError.value(
+        maxPendingCoreCalls,
+        'maxPendingCoreCalls',
+        'must be positive',
+      );
+    }
+    if (defaultCallTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        defaultCallTimeout,
+        'defaultCallTimeout',
+        'must be positive',
+      );
+    }
     final undeclared = this.grantedPermissions.difference(
       extension.manifest.permissions.toSet(),
     );
@@ -45,23 +71,59 @@ final class QuickjsExtensionSession {
         '${undeclared.join(', ')}',
       );
     }
+    final capabilities =
+        optionalCapabilities ?? QuickjsExtensionOptionalCapabilities.defaults();
+    final capabilityMounts = <QuickjsHostMount>[];
+    final storageFactory = capabilities.storageMountFactory;
+    if (storageFactory != null) {
+      capabilityMounts.add(storageFactory(id, this.storage));
+    }
+    final httpFactory = capabilities.httpSessionFactory;
+    if (httpFactory != null) {
+      _ownedHttpSession = httpFactory();
+      capabilityMounts.add(
+        QuickjsAxiosMount.session(
+          assetKey: quickjsExtensionAxiosAsset,
+          session: _ownedHttpSession!,
+        ),
+      );
+    }
+    final cryptoFactory = capabilities.cryptoMountFactory;
+    if (cryptoFactory != null) capabilityMounts.add(cryptoFactory());
+    this.sharedMounts = List<QuickjsHostMount>.unmodifiable(<QuickjsHostMount>[
+      ...sharedMounts,
+      ...capabilityMounts,
+    ]);
+    this.serviceMounts = List<QuickjsHostMount>.unmodifiable(serviceMounts);
+    this.uiMounts = List<QuickjsHostMount>.unmodifiable(uiMounts);
   }
 
   final QuickjsExtension extension;
   final QuickjsExtensionStorage storage;
   final Set<String> grantedPermissions;
-  final List<QuickjsHostMount> sharedMounts;
-  final List<QuickjsHostMount> serviceMounts;
-  final List<QuickjsHostMount> uiMounts;
+  late final List<QuickjsHostMount> sharedMounts;
+  late final List<QuickjsHostMount> serviceMounts;
+  late final List<QuickjsHostMount> uiMounts;
+  final int maxPendingCoreCalls;
+  final Duration defaultCallTimeout;
   final QuickjsExtensionRuntimeFactory _runtimeFactory;
 
   QuickjsExtensionSessionState _state = QuickjsExtensionSessionState.inactive;
   QuickjsExtensionServiceRuntime? _serviceRuntime;
   Future<QuickjsExtensionServiceRuntime>? _startingRuntime;
+  Future<void>? _runtimeCleanup;
+  QuickjsHttpSession? _ownedHttpSession;
 
   String get id => extension.id;
   QuickjsExtensionSessionState get state => _state;
   bool get hasStartedService => _serviceRuntime != null;
+
+  /// 释放当前 Core Runtime；其内存状态会丢失，下次调用将重新创建并执行插件初始化。
+  Future<void> restart() async {
+    _ensureUsable();
+    await _closeRuntime();
+    _state = QuickjsExtensionSessionState.inactive;
+  }
 
   Future<Object?> callPublic(
     String method, {
@@ -112,8 +174,6 @@ final class QuickjsExtensionSession {
     return List<QuickjsHostMount>.unmodifiable(<QuickjsHostMount>[
       ...sharedMounts,
       ...uiMounts,
-      if (grantedPermissions.contains('storage'))
-        QuickjsExtensionStorageMount(extensionId: id, storage: storage),
       if (extension.service != null) QuickjsExtensionServiceBridgeMount(this),
       ...routeMounts,
     ]);
@@ -135,8 +195,13 @@ final class QuickjsExtensionSession {
   Future<void> dispose({bool clearStorage = false}) async {
     if (_state == QuickjsExtensionSessionState.disposed) return;
     _state = QuickjsExtensionSessionState.disposed;
-    await _closeRuntime();
-    if (clearStorage) await storage.clear(namespace: id);
+    try {
+      await _closeRuntime();
+      if (clearStorage) await storage.clear(namespace: id);
+    } finally {
+      _ownedHttpSession?.close();
+      _ownedHttpSession = null;
+    }
   }
 
   QuickjsServiceComponent _requireService() {
@@ -164,17 +229,25 @@ final class QuickjsExtensionSession {
     Duration? timeout,
   }) async {
     final runtime = await _ensureRuntime(service);
-    return runtime.callPlugin(
-      service.plugin,
-      method,
-      arguments,
-      timeout: timeout,
-    );
+    try {
+      return await runtime.callPlugin(
+        service.plugin,
+        method,
+        arguments,
+        timeout: timeout ?? defaultCallTimeout,
+      );
+    } catch (error) {
+      if (_isTerminalRuntimeFailure(error, runtime)) {
+        await _discardFailedRuntime(runtime);
+      }
+      rethrow;
+    }
   }
 
   Future<QuickjsExtensionServiceRuntime> _ensureRuntime(
     QuickjsServiceComponent service,
   ) async {
+    await _runtimeCleanup;
     _ensureUsable();
     final current = _serviceRuntime;
     if (current != null) return current;
@@ -202,12 +275,11 @@ final class QuickjsExtensionSession {
   ) async {
     final runtime = await _runtimeFactory(
       QuickjsRuntimeOptions(
+        maxPendingEvaluations: maxPendingCoreCalls,
         mounts: <QuickjsHostMount>[
           ...sharedMounts,
           ...serviceMounts,
           service.plugin.asMount(),
-          if (grantedPermissions.contains('storage'))
-            QuickjsExtensionStorageMount(extensionId: id, storage: storage),
         ],
       ),
     );
@@ -228,6 +300,7 @@ final class QuickjsExtensionSession {
   }
 
   Future<void> _closeRuntime() async {
+    await _runtimeCleanup;
     final starting = _startingRuntime;
     if (starting != null) {
       try {
@@ -239,8 +312,13 @@ final class QuickjsExtensionSession {
     final runtime = _serviceRuntime;
     _serviceRuntime = null;
     if (runtime == null) return;
+    final stateful = runtime is QuickjsExtensionStatefulRuntime
+        ? runtime as QuickjsExtensionStatefulRuntime
+        : null;
     final plugin = extension.service?.plugin;
-    if (plugin != null) {
+    if (plugin != null &&
+        (stateful == null ||
+            stateful.runtimeState == QuickjsRuntimeState.ready)) {
       try {
         await runtime.disposePlugin(plugin);
       } catch (_) {
@@ -249,6 +327,42 @@ final class QuickjsExtensionSession {
     }
     await runtime.close();
   }
+
+  Future<void> _discardFailedRuntime(
+    QuickjsExtensionServiceRuntime runtime,
+  ) async {
+    if (!identical(_serviceRuntime, runtime)) return;
+    _serviceRuntime = null;
+    _state = QuickjsExtensionSessionState.failed;
+    final cleanup = () async {
+      try {
+        await runtime.close();
+      } catch (_) {
+        // 故障 Runtime 的资源清理是 best effort，原始调用错误必须保留。
+      }
+    }();
+    _runtimeCleanup = cleanup;
+    try {
+      await cleanup;
+    } finally {
+      if (identical(_runtimeCleanup, cleanup)) _runtimeCleanup = null;
+    }
+  }
+}
+
+bool _isTerminalRuntimeFailure(
+  Object error,
+  QuickjsExtensionServiceRuntime runtime,
+) {
+  if (error is JsRuntimeCrashException ||
+      error is JsRuntimeClosedException ||
+      error is JsOutOfMemoryException) {
+    return true;
+  }
+  if (runtime is! QuickjsExtensionStatefulRuntime) return false;
+  final stateful = runtime as QuickjsExtensionStatefulRuntime;
+  return stateful.runtimeState == QuickjsRuntimeState.failed ||
+      stateful.runtimeState == QuickjsRuntimeState.closed;
 }
 
 /// 将同一 Session 的受限 Core 方法暴露给 JSUI。
@@ -310,10 +424,14 @@ Future<QuickjsExtensionServiceRuntime> _defaultRuntimeFactory(
   QuickjsRuntimeOptions options,
 ) async => _QuickjsRuntimeAdapter(await Quickjs.create(options: options));
 
-final class _QuickjsRuntimeAdapter implements QuickjsExtensionServiceRuntime {
+final class _QuickjsRuntimeAdapter
+    implements QuickjsExtensionServiceRuntime, QuickjsExtensionStatefulRuntime {
   _QuickjsRuntimeAdapter(this.engine);
 
   final Quickjs engine;
+
+  @override
+  QuickjsRuntimeState get runtimeState => engine.state;
 
   @override
   Future<void> close() => engine.dispose();

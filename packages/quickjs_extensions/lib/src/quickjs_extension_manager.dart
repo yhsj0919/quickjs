@@ -6,6 +6,7 @@ import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 import 'quickjs_extension.dart';
+import 'quickjs_extension_capabilities.dart';
 import 'quickjs_extension_compatibility.dart';
 import 'quickjs_extension_package.dart';
 import 'quickjs_extension_package_format.dart';
@@ -206,10 +207,21 @@ final class QuickjsExtensionManager {
     required this.compatibilityRegistry,
     QuickjsExtensionRegistry? registry,
     QuickjsExtensionStorage? storage,
+    this.maxPendingCoreCalls = 64,
+    this.defaultCallTimeout = const Duration(seconds: 30),
+    QuickjsExtensionOptionalCapabilities? optionalCapabilities,
     this.uiPluginsResolver,
     this.runtimeFactory,
-  }) : registry = registry ?? QuickjsExtensionRegistry(),
+  }) : optionalCapabilities =
+           optionalCapabilities ??
+           QuickjsExtensionOptionalCapabilities.defaults(),
+       registry = registry ?? QuickjsExtensionRegistry(),
        storage = storage ?? SharedPreferencesQuickjsKeyValueStore() {
+    if (maxPendingCoreCalls < 1 || defaultCallTimeout <= Duration.zero) {
+      throw ArgumentError(
+        'Extension call queue limit and default timeout must be positive',
+      );
+    }
     _installer = QuickjsExtensionInstaller(
       registry: this.registry,
       storage: this.storage,
@@ -220,6 +232,9 @@ final class QuickjsExtensionManager {
   final QuickjsExtensionCompatibilityRegistry compatibilityRegistry;
   final QuickjsExtensionRegistry registry;
   final QuickjsExtensionStorage storage;
+  final int maxPendingCoreCalls;
+  final Duration defaultCallTimeout;
+  final QuickjsExtensionOptionalCapabilities optionalCapabilities;
   final QuickjsExtensionUiPluginsResolver? uiPluginsResolver;
   final QuickjsExtensionRuntimeFactory? runtimeFactory;
   late final QuickjsExtensionInstaller _installer;
@@ -617,12 +632,22 @@ final class QuickjsExtensionManager {
     _managed.clear();
   }
 
+  /// 重建指定插件的 Core Runtime；内存状态会丢失，且不会自动重放业务调用。
+  Future<void> restartRuntime(String pluginId) =>
+      _requireEnabled(pluginId).session.restart();
+
   Future<Object?> call(
     String pluginId,
     String method, {
     List<Object?> arguments = const <Object?>[],
     Duration? timeout,
   }) {
+    return _requireEnabled(
+      pluginId,
+    ).session.callPublic(method, arguments: arguments, timeout: timeout);
+  }
+
+  InstalledQuickjsExtension _requireEnabled(String pluginId) {
     final managed = _managed[pluginId];
     if (managed == null) {
       throw StateError('Extension is not installed: $pluginId');
@@ -631,11 +656,7 @@ final class QuickjsExtensionManager {
         managed.installed == null) {
       throw StateError('Extension is not enabled: $pluginId');
     }
-    return managed.installed!.session.callPublic(
-      method,
-      arguments: arguments,
-      timeout: timeout,
-    );
+    return managed.installed!;
   }
 
   Future<Object?> callContract(
@@ -703,6 +724,9 @@ final class QuickjsExtensionManager {
     final installed = _installer.install(
       extension,
       grantedPermissions: stored.record.grantedPermissions,
+      maxPendingCoreCalls: maxPendingCoreCalls,
+      defaultCallTimeout: defaultCallTimeout,
+      optionalCapabilities: optionalCapabilities,
       runtimeFactory: runtimeFactory,
     );
     if (stored.record.state == QuickjsExtensionInstallState.disabled) {

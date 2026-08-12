@@ -49,7 +49,7 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
         options: QuickjsRuntimeOptions(
           mounts: <QuickjsHostMount>[
             QuickjsAxiosMount(
-              assetKey: 'assets/js/axios.js',
+              assetKey: 'packages/quickjs_extensions/assets/js/axios.js',
               allowedOrigins: <String>{_originOf(widget.axiosUrl)},
               maxResponseBytes: 1024 * 1024,
               timeout: const Duration(seconds: 15),

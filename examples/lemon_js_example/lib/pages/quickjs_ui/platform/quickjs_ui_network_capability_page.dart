@@ -44,7 +44,7 @@ class _QuickjsUiNetworkCapabilityPageState
     );
     _mounts = <QuickjsHostMount>[
       QuickjsAxiosMount(
-        assetKey: 'assets/js/axios.js',
+        assetKey: 'packages/quickjs_extensions/assets/js/axios.js',
         allowedOrigins: const <String>{
           QuickjsUiNetworkCapabilityPage._apiOrigin,
         },

@@ -130,6 +130,38 @@ export function submitLogin() { return true; }
         runtimes.single.options.mounts.whereType<QuickjsPluginMount>(),
         hasLength(1),
       );
+      expect(
+        runtimes.single.options.mounts.expand((mount) => mount.providers),
+        contains(
+          isA<QuickjsHostProvider>().having(
+            (provider) => provider.name,
+            'name',
+            'fetch.request',
+          ),
+        ),
+      );
+      expect(
+        runtimes.single.options.mounts
+            .expand((mount) => mount.providers)
+            .map((provider) => provider.name),
+        containsAll(<String>[
+          'webcrypto.subtle.digest',
+          'webcrypto.subtle.hmac',
+        ]),
+      );
+      expect(
+        runtimes.single.options.mounts
+            .expand((mount) => mount.environmentPatches)
+            .expand((script) => script.globals),
+        contains('crypto'),
+      );
+      expect(
+        runtimes.single.options.mounts
+            .whereType<QuickjsAxiosMount>()
+            .single
+            .assetKey,
+        quickjsExtensionAxiosAsset,
+      );
       expect(session.state, QuickjsExtensionSessionState.active);
       expect(() => session.callPublic('submitLogin'), throwsStateError);
 
@@ -138,6 +170,30 @@ export function submitLogin() { return true; }
       expect(() => session.callPublic('getHome'), throwsStateError);
     },
   );
+
+  test('restarted session rebuilds and initializes its Core runtime', () async {
+    final runtimes = <_FakeRuntime>[];
+    final session = QuickjsExtensionSession(
+      extension: _hybridExtension(
+        QuickjsExtensionManifest.parse(manifestSource),
+      ),
+      grantedPermissions: const <String>['network', 'storage'],
+      runtimeFactory: (options) async {
+        final runtime = _FakeRuntime(options);
+        runtimes.add(runtime);
+        return runtime;
+      },
+    );
+
+    expect(await session.callPublic('getHome'), 'getHome:0');
+    await session.restart();
+    expect(runtimes.single.closed, isTrue);
+    expect(session.state, QuickjsExtensionSessionState.inactive);
+
+    expect(await session.callPublic('getHome'), 'getHome:0');
+    expect(runtimes, hasLength(2));
+    expect(runtimes.last.initialized, isTrue);
+  });
 
   test('registry exposes service and flow views from one installation', () {
     final manifest = QuickjsExtensionManifest.parse(manifestSource);
@@ -166,7 +222,7 @@ export function submitLogin() { return true; }
     expect(await storage.get('session', namespace: 'site.two'), 'two');
   });
 
-  test('route mounts inject storage and bound service without plugin id', () {
+  test('route mounts inject default storage and the bound service', () {
     final manifest = QuickjsExtensionManifest.parse(manifestSource);
     final session = QuickjsExtensionSession(
       extension: _hybridExtension(manifest),
@@ -190,6 +246,33 @@ export function submitLogin() { return true; }
         .source!;
     expect(bridgeSource, contains('call(method, ...args)'));
     expect(bridgeSource, isNot(contains('pluginId')));
+  });
+
+  test('optional host capabilities can all be disabled', () async {
+    final runtimes = <_FakeRuntime>[];
+    final session = QuickjsExtensionSession(
+      extension: _hybridExtension(
+        QuickjsExtensionManifest.parse(manifestSource),
+      ),
+      grantedPermissions: const <String>['network', 'storage'],
+      optionalCapabilities: const QuickjsExtensionOptionalCapabilities.none(),
+      runtimeFactory: (options) async {
+        final runtime = _FakeRuntime(options);
+        runtimes.add(runtime);
+        return runtime;
+      },
+    );
+
+    await session.callPublic('getHome');
+    final mounts = runtimes.single.options.mounts;
+    expect(mounts.expand((mount) => mount.providers), isEmpty);
+    expect(
+      session
+          .mountsForRoute('authentication')
+          .expand((mount) => mount.modules)
+          .map((module) => module.specifier),
+      isNot(contains('quickjs_extensions/storage')),
+    );
   });
 
   test('session rejects permissions not declared by manifest', () {
@@ -589,6 +672,44 @@ export function submitLogin() { return true; }
       contains('logo'),
     );
   });
+
+  test(
+    'failed Core runtime is discarded and rebuilt on the next call',
+    () async {
+      final runtimes = <_FakeRuntime>[];
+      var creations = 0;
+      final session = QuickjsExtensionSession(
+        extension: _hybridExtension(
+          QuickjsExtensionManifest.parse(manifestSource),
+        ),
+        storage: InMemoryQuickjsExtensionStorage(),
+        grantedPermissions: const <String>['network', 'storage'],
+        runtimeFactory: (options) async {
+          creations++;
+          final runtime = _FakeRuntime(
+            options,
+            onCall: (_, _) {
+              if (creations == 1) throw const JsRuntimeCrashException();
+              return 'recovered';
+            },
+          );
+          runtimes.add(runtime);
+          return runtime;
+        },
+      );
+
+      await expectLater(
+        session.callPublic('getHome'),
+        throwsA(isA<JsRuntimeCrashException>()),
+      );
+      expect(session.state, QuickjsExtensionSessionState.failed);
+      expect(runtimes.first.closed, isTrue);
+
+      expect(await session.callPublic('getHome'), 'recovered');
+      expect(creations, 2);
+      expect(session.state, QuickjsExtensionSessionState.active);
+    },
+  );
 }
 
 Map<String, String> _hybridModuleFiles([String prefix = '']) =>
