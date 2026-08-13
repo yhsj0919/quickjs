@@ -1,22 +1,22 @@
 part of '../runtime/quickjs_runtime_options.dart';
 
-QuickjsHostMount _quickjsEssentialHostMount({required bool globalBuffer}) {
-  return QuickjsHostMount(
+JsFeatures _quickjsEssentialHostMount({required bool globalBuffer}) {
+  return JsFeatures(
     name: 'essential',
-    environmentPatches: <QuickjsHostScript>[
+    scripts: <JsScript>[
       if (globalBuffer)
-        const QuickjsHostScript.js(
+        const JsScript.js(
           name: 'host:essential-buffer-global.js',
           globals: <String>['Buffer'],
           source: _essentialBufferGlobalScript,
         ),
     ],
-    modules: const <QuickjsHostModule>[
-      QuickjsHostModule.esModule(
+    modules: const <JsModule>[
+      JsModule.esModule(
         specifier: 'buffer',
         source: _essentialBufferEsModuleSource,
       ),
-      QuickjsHostModule.commonJs(
+      JsModule.commonJs(
         specifier: 'buffer',
         source: _essentialBufferCommonJsSource,
       ),

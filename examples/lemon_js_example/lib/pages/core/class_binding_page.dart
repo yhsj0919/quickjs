@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// Class Binding Demo：使用 [Quickjs.bindClass] 注册 Dart 类，
+/// Class Binding Demo：使用 [Quickjs.injectClass] 注册 Dart 类，
 /// 演示 `new User`、`await` getter/method 与显式释放。
 class ClassBindingPage extends StatefulWidget {
   const ClassBindingPage({super.key});
@@ -20,7 +20,7 @@ final class _ExampleUser {
 
 class _ClassBindingPageState extends State<ClassBindingPage> {
   Quickjs? _quickjs;
-  QuickjsClassHandle? _userClass;
+  JsClassHandle? _userClass;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -46,21 +46,27 @@ class _ClassBindingPageState extends State<ClassBindingPage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create();
-      final userClass = await quickjs.bindClass<_ExampleUser>(
+      final userClass = await quickjs.injectClass<_ExampleUser>(
         'User',
-        QuickjsClass<_ExampleUser>(
-          constructor: (args) => _ExampleUser(args.single as String),
-          accessors: {
-            'name': QuickjsInstanceAccessor<_ExampleUser>(
-              get: (user) => user.name,
-              set: (user, value) {
-                user.name = value as String;
-              },
-            ),
-          },
-          methods: {
-            'greet': (user, args) => '你好 ${args.single}，我是 ${user.name}',
-          },
+        JsClass<_ExampleUser>(
+          create: (args) => _ExampleUser(args.single as String),
+          members: JsMembers<_ExampleUser>(
+            accessors: [
+              JsAccessor<_ExampleUser>(
+                'name',
+                get: (user) => user.name,
+                set: (user, value) {
+                  user.name = value as String;
+                },
+              ),
+            ],
+            methods: [
+              JsMethod<_ExampleUser>(
+                'greet',
+                (user, args) => '你好 ${args.single}，我是 ${user.name}',
+              ),
+            ],
+          ),
         ),
       );
       if (!mounted || _disposed) {
@@ -86,7 +92,7 @@ class _ClassBindingPageState extends State<ClassBindingPage> {
 
   Future<void> _constructAndRead() async {
     await _capture('构造并读取实例', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 globalThis.currentUser = new User('Tom');
 return await currentUser.name;
 ''');
@@ -96,7 +102,7 @@ return await currentUser.name;
 
   Future<void> _changeName() async {
     await _capture('修改动态属性', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 globalThis.currentUser ??= new User('Tom');
 const before = await currentUser.name;
 currentUser.name = 'Jerry';
@@ -109,7 +115,7 @@ return before + ' -> ' + after;
 
   Future<void> _callMethod() async {
     await _capture('调用实例方法', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 globalThis.currentUser ??= new User('Tom');
 return await currentUser.greet('Alice');
 ''');
@@ -123,12 +129,12 @@ return await currentUser.greet('Alice');
       if (handle == null) {
         throw JsRuntimeClosedException('QuickJS class binding is not ready');
       }
-      await _requireRuntime().evalAsync('''
+      await _requireRuntime().run('''
 globalThis.leakedUser = globalThis.currentUser ?? new User('Tom');
 return await leakedUser.name;
 ''');
       await handle.dispose();
-      _appendLog('QuickjsClassHandle.dispose() 已释放 constructor 和实例表');
+      _appendLog('JsClassHandle.dispose() 已释放 constructor 和实例表');
       if (!mounted || _disposed) {
         return;
       }
@@ -140,7 +146,7 @@ return await leakedUser.name;
 
   Future<void> _checkDisposedInstance() async {
     await _capture('检查释放后的实例', () async {
-      await _requireRuntime().evalAsync('return await leakedUser.name;');
+      await _requireRuntime().run('return await leakedUser.name;');
     });
   }
 
@@ -212,7 +218,7 @@ return await leakedUser.name;
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              '使用 bindClass 注册 Dart class；JS 可以 new User(...)，getter 和 method 通过 Promise await 访问。',
+              '使用 injectClass 注入 Dart class；JS 可以 new User(...)，getter 和 method 通过 Promise await 访问。',
             ),
             const SizedBox(height: 16),
             Wrap(

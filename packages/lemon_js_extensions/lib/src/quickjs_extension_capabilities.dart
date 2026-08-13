@@ -2,13 +2,10 @@ import 'package:lemon_js/lemon_js.dart';
 
 import 'quickjs_extension_storage.dart';
 
-typedef QuickjsExtensionStorageMountFactory =
-    QuickjsHostMount Function(
-      String extensionId,
-      QuickjsExtensionStorage storage,
-    );
-typedef QuickjsExtensionHttpSessionFactory = QuickjsHttpSession Function();
-typedef QuickjsExtensionCryptoMountFactory = QuickjsHostMount Function();
+typedef QuickjsExtensionStorageFeaturesFactory =
+    JsFeatures Function(String extensionId, QuickjsExtensionStorage storage);
+typedef QuickjsExtensionHttpSessionFactory = JsHttpSession Function();
+typedef QuickjsExtensionCryptoMountFactory = JsFeatures Function();
 
 const quickjsExtensionAxiosAsset =
     'packages/lemon_js_extensions/assets/js/axios.js';
@@ -19,7 +16,7 @@ const quickjsExtensionAxiosAsset =
 /// 也可以传入 factory 替换默认实现。
 final class QuickjsExtensionOptionalCapabilities {
   const QuickjsExtensionOptionalCapabilities({
-    this.storageMountFactory,
+    this.storageFeaturesFactory,
     this.httpSessionFactory,
     this.cryptoMountFactory,
     this.additionalVersions = const <String, int>{},
@@ -27,18 +24,18 @@ final class QuickjsExtensionOptionalCapabilities {
 
   factory QuickjsExtensionOptionalCapabilities.defaults() =>
       QuickjsExtensionOptionalCapabilities(
-        storageMountFactory: _defaultStorageMount,
-        httpSessionFactory: QuickjsHttpSession.new,
+        storageFeaturesFactory: _defaultStorageFeatures,
+        httpSessionFactory: JsHttpSession.new,
         cryptoMountFactory: _defaultCryptoMount,
       );
 
   const QuickjsExtensionOptionalCapabilities.none()
-    : storageMountFactory = null,
+    : storageFeaturesFactory = null,
       httpSessionFactory = null,
       cryptoMountFactory = null,
       additionalVersions = const <String, int>{};
 
-  final QuickjsExtensionStorageMountFactory? storageMountFactory;
+  final QuickjsExtensionStorageFeaturesFactory? storageFeaturesFactory;
   final QuickjsExtensionHttpSessionFactory? httpSessionFactory;
   final QuickjsExtensionCryptoMountFactory? cryptoMountFactory;
   final Map<String, int> additionalVersions;
@@ -54,7 +51,7 @@ final class QuickjsExtensionOptionalCapabilities {
       }
     }
     return Map<String, int>.unmodifiable(<String, int>{
-      if (storageMountFactory != null) 'storage': 1,
+      if (storageFeaturesFactory != null) 'storage': 1,
       if (httpSessionFactory != null) 'network': 1,
       if (cryptoMountFactory != null) 'crypto': 1,
       ...additionalVersions,
@@ -93,12 +90,13 @@ final class QuickjsExtensionCapabilityException implements Exception {
       '${inspection.missingRequired.entries.map((e) => '${e.key}@${e.value}').join(', ')}';
 }
 
-QuickjsHostMount _defaultStorageMount(
+JsFeatures _defaultStorageFeatures(
   String extensionId,
   QuickjsExtensionStorage storage,
-) => QuickjsExtensionStorageMount(extensionId: extensionId, storage: storage);
+) =>
+    QuickjsExtensionStorageFeatures(extensionId: extensionId, storage: storage);
 
-QuickjsHostMount _defaultCryptoMount() => QuickjsWebCryptoMount(
+JsFeatures _defaultCryptoMount() => WebCryptoFeatures(
   randomUUID: true,
   getRandomValues: true,
   subtleDigest: true,

@@ -50,7 +50,7 @@ const String _pumpContextTimersMessage = 'pumpContextTimers';
 const String _pumpTimersMessage = 'pumpTimers';
 const String _evalModuleContextMessage = 'evalModuleContext';
 const String _evalModuleMessage = 'evalModule';
-const String _evalAsyncMessage = 'evalAsync';
+const String _evalAsyncMessage = 'run';
 const String _bindCallbackMessage = 'bindCallback';
 const String _bindContextCallbackMessage = 'bindContextCallback';
 const String _callbackRequestMessage = 'callbackRequest';
@@ -160,7 +160,7 @@ _nativeHostSinkActionPointer =
 /// native 平台的 QuickJS runtime。
 ///
 /// 这个对象运行在调用方 isolate 中，只持有 worker isolate 的端口和 pending Future。
-/// 真正的 `QuickjsRuntime*` 指针只存在于 [_nativeQuickjsWorkerMain]。
+/// 真正的 `JsRuntime*` 指针只存在于 [_nativeQuickjsWorkerMain]。
 final class NativeQuickjsWorkerRuntime
     implements
         QuickjsJsRuntimeBase,
@@ -238,7 +238,7 @@ final class NativeQuickjsWorkerRuntime
   Future<void>? _disposeFuture;
 
   static Future<NativeQuickjsWorkerRuntime> create({
-    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+    JsOptions options = const JsOptions(),
   }) async {
     final readyPort = ReceivePort();
     final responsePort = ReceivePort();
@@ -379,7 +379,7 @@ final class NativeQuickjsWorkerRuntime
     int contextId,
     String code, {
     Duration? timeout,
-    String name = '<context-evalAsync>',
+    String name = '<context-run>',
   }) {
     return _sendRequest<String>(_evalContextAsyncMessage, <String, Object?>{
       _messageContextIdKey: contextId,
@@ -512,7 +512,7 @@ final class NativeQuickjsWorkerRuntime
   Future<String> evaluateAsync(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
   }) async {
     if (_closed) {
       throw JsRuntimeClosedException();
@@ -851,8 +851,8 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
   final commandPort = ReceivePort();
 
   late final QuickjsBindings bindings;
-  Pointer<QuickjsRuntime> runtime = nullptr;
-  final contexts = <int, Pointer<QuickjsContext>>{};
+  Pointer<JsRuntime> runtime = nullptr;
+  final contexts = <int, Pointer<JsContext>>{};
   var nextContextId = 1;
   var closed = false;
 
@@ -994,8 +994,7 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
               bindings,
               context,
               message[_messageCodeKey] as String,
-              message[_messageSourceNameKey] as String? ??
-                  '<context-evalAsync>',
+              message[_messageSourceNameKey] as String? ?? '<context-run>',
               message[_messageTimeoutMsKey] as int?,
               cancelFlag,
             );
@@ -1051,8 +1050,7 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
             _sendOk(responseSendPort, requestId, result);
           case _evalAsyncMessage:
             final code = message[_messageCodeKey] as String;
-            final name =
-                message[_messageSourceNameKey] as String? ?? '<evalAsync>';
+            final name = message[_messageSourceNameKey] as String? ?? '<run>';
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
             final result = await _evalAsync(
               bindings,
@@ -1120,7 +1118,7 @@ void _nativeQuickjsWorkerMain(Map<String, Object> ports) {
 
 void _bindSink(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   int sinkId,
   String name,
 ) {
@@ -1137,7 +1135,7 @@ void _bindSink(
 
 void _bindContextSink(
   QuickjsBindings bindings,
-  Pointer<QuickjsContext> context,
+  Pointer<JsContext> context,
   int sinkId,
   String name,
 ) {
@@ -1153,7 +1151,7 @@ void _bindContextSink(
 
 void _bindCallback(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   int callbackId,
   String name,
 ) {
@@ -1175,7 +1173,7 @@ void _bindCallback(
 
 void _bindContextCallback(
   QuickjsBindings bindings,
-  Pointer<QuickjsContext> context,
+  Pointer<JsContext> context,
   int callbackId,
   String name,
 ) {
@@ -1197,7 +1195,7 @@ void _bindContextCallback(
 
 void _resolveCallback(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   int callbackRequestId,
   bool success,
   String payloadJson,
@@ -1223,7 +1221,7 @@ void _resolveCallback(
 
 void _resolveStreamPull(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   int pullRequestId,
   bool success,
   String payloadJson,
@@ -1247,7 +1245,7 @@ void _resolveStreamPull(
 
 void _resolveSinkAction(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   int actionRequestId,
   bool success,
   String message,
@@ -1271,7 +1269,7 @@ void _resolveSinkAction(
 
 String _evalModule(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   String source,
   String name,
   String modules,
@@ -1293,7 +1291,7 @@ String _evalModule(
 
 String _evalModuleContext(
   QuickjsBindings bindings,
-  Pointer<QuickjsContext> context,
+  Pointer<JsContext> context,
   String source,
   String name,
   String modules,
@@ -1329,7 +1327,7 @@ String _encodeModuleTable(Map<String, String> modules) {
 
 String _eval(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   String code,
   String name,
   int? timeoutMs,
@@ -1369,7 +1367,7 @@ String _eval(
 
 String _evalContext(
   QuickjsBindings bindings,
-  Pointer<QuickjsContext> context,
+  Pointer<JsContext> context,
   String code,
   String name,
   int? timeoutMs,
@@ -1389,7 +1387,7 @@ String _evalContext(
 
 Future<String> _evalAsync(
   QuickjsBindings bindings,
-  Pointer<QuickjsRuntime> runtime,
+  Pointer<JsRuntime> runtime,
   String code,
   String name,
   int? timeoutMs,
@@ -1427,7 +1425,7 @@ Future<String> _evalAsync(
 
 Future<String> _evalContextAsync(
   QuickjsBindings bindings,
-  Pointer<QuickjsContext> context,
+  Pointer<JsContext> context,
   String code,
   String name,
   int? timeoutMs,
@@ -1491,7 +1489,7 @@ void _sendOk(SendPort sendPort, int requestId, Object? result) {
 void _sendError(SendPort sendPort, int requestId, Object error) {
   // Dart 侧异常跨 isolate 发送时统一压成字符串，再由主 isolate 映射回异常类型。
   final message = switch (error) {
-    JsException() => '$_exceptionSentinel${_encodeJsException(error)}',
+    JsThrownException() => '$_exceptionSentinel${_encodeJsException(error)}',
     _ => '$error',
   };
   sendPort.send(<String, Object?>{
@@ -1502,7 +1500,7 @@ void _sendError(SendPort sendPort, int requestId, Object error) {
   });
 }
 
-String _encodeJsException(JsException error) {
+String _encodeJsException(JsThrownException error) {
   return jsonEncode(<String, Object?>{
     'message': error.message,
     if (error.name != null) 'name': error.name,

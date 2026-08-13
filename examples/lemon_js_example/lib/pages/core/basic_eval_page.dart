@@ -28,7 +28,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
   Future<void> _createAndRun() async {
     try {
       final quickjs = await Quickjs.create();
-      final result = await quickjs.evaluate(_code);
+      final result = await quickjs.evalRaw(_code);
 
       // 页面可能在 async create/eval 完成前被关闭，必须及时释放刚创建的 runtime。
       if (_disposed) {

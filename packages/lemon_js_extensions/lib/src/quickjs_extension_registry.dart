@@ -95,7 +95,7 @@ final class QuickjsExtensionInstaller {
   QuickjsExtensionInstaller({
     required this.registry,
     QuickjsExtensionStorage? storage,
-  }) : storage = storage ?? SharedPreferencesQuickjsKeyValueStore();
+  }) : storage = storage ?? SharedPreferencesJsKvStore();
 
   final QuickjsExtensionRegistry registry;
   final QuickjsExtensionStorage storage;
@@ -103,9 +103,9 @@ final class QuickjsExtensionInstaller {
   InstalledQuickjsExtension install(
     QuickjsExtension extension, {
     Iterable<String> grantedPermissions = const <String>[],
-    List<QuickjsHostMount> sharedMounts = const <QuickjsHostMount>[],
-    List<QuickjsHostMount> serviceMounts = const <QuickjsHostMount>[],
-    List<QuickjsHostMount> uiMounts = const <QuickjsHostMount>[],
+    List<JsFeatures> sharedFeatures = const <JsFeatures>[],
+    List<JsFeatures> serviceFeatures = const <JsFeatures>[],
+    List<JsFeatures> uiFeatures = const <JsFeatures>[],
     QuickjsExtensionOptionalCapabilities? optionalCapabilities,
     int maxPendingCoreCalls = 64,
     Duration defaultCallTimeout = const Duration(seconds: 30),
@@ -115,9 +115,9 @@ final class QuickjsExtensionInstaller {
       extension: extension,
       storage: storage,
       grantedPermissions: grantedPermissions,
-      sharedMounts: sharedMounts,
-      serviceMounts: serviceMounts,
-      uiMounts: uiMounts,
+      sharedFeatures: sharedFeatures,
+      serviceFeatures: serviceFeatures,
+      uiFeatures: uiFeatures,
       optionalCapabilities: optionalCapabilities,
       maxPendingCoreCalls: maxPendingCoreCalls,
       defaultCallTimeout: defaultCallTimeout,

@@ -37,15 +37,13 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsWebCryptoMount(
-              allowInsecureRandomFallback: true,
-              subtleDigest: true,
-              subtleHmac: true,
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          WebCryptoFeatures(
+            allowInsecureRandomFallback: true,
+            subtleDigest: true,
+            subtleHmac: true,
+          ),
+        ],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -89,7 +87,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
 
   Future<void> _runRandomUuid() async {
     await _capture('生成 UUID', () async {
-      final result = await _requireRuntime().eval('''
+      final result = await _requireRuntime().evalRaw('''
 (() => {
   const first = crypto.randomUUID();
   const second = crypto.randomUUID();
@@ -106,7 +104,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
 
   Future<void> _runGetRandomValues() async {
     await _capture('生成随机字节', () async {
-      final result = await _requireRuntime().eval('''
+      final result = await _requireRuntime().evalRaw('''
 (() => {
   const bytes = new Uint8Array(8);
   const returned = crypto.getRandomValues(bytes);
@@ -120,7 +118,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
 
   Future<void> _runDigest() async {
     await _capture('SHA-256 摘要', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 const data = new Uint8Array([104, 101, 108, 108, 111]);
 const digest = await crypto.subtle.digest("SHA-256", data);
 return Array.from(new Uint8Array(digest))
@@ -134,7 +132,7 @@ return Array.from(new Uint8Array(digest))
 
   Future<void> _runHmac() async {
     await _capture('HMAC-SHA-256', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 const keyBytes = new Uint8Array([107, 101, 121]);
 const data = new Uint8Array([104, 101, 108, 108, 111]);
 const key = await crypto.subtle.importKey(
@@ -163,7 +161,7 @@ return hex + "\\nvalid=" + valid;
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       await running;
       final result = await quickjs.eval(
         'typeof crypto.randomUUID() === "string" && '
@@ -211,7 +209,7 @@ return hex + "\\nvalid=" + valid;
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -239,7 +237,7 @@ return hex + "\\nvalid=" + valid;
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsWebCryptoMount()：显式安装 crypto.randomUUID()、crypto.getRandomValues() 和 Flutter 原生 crypto.subtle.digest()。',
+              'WebCryptoFeatures()：显式安装 crypto.randomUUID()、crypto.getRandomValues() 和 Flutter 原生 crypto.subtle.digest()。',
             ),
             const Text('HMAC uses crypto.subtle.sign() / verify().'),
             const SizedBox(height: 16),

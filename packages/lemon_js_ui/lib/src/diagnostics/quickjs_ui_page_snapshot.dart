@@ -66,7 +66,7 @@ final class QuickjsUiPageSnapshot {
     };
   }
 
-  static Map<String, Object?>? manifestFor(QuickjsPlugin? plugin) {
+  static Map<String, Object?>? manifestFor(JsPlugin? plugin) {
     if (plugin == null) {
       return null;
     }
@@ -87,14 +87,14 @@ final class QuickjsUiPageSnapshot {
     return node?.toMap();
   }
 
-  static List<String> resourcesFor(QuickjsPlugin? plugin) {
+  static List<String> resourcesFor(JsPlugin? plugin) {
     if (plugin == null) {
       return const <String>[];
     }
     return <String>[for (final module in plugin.modules) module.specifier];
   }
 
-  static List<String> hostApisFor(List<QuickjsHostMount> mounts) {
-    return <String>[for (final mount in mounts) mount.name];
+  static List<String> hostApisFor(List<JsFeatures> features) {
+    return <String>[for (final features in features) features.name];
   }
 }

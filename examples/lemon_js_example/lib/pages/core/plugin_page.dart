@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-final _singleFilePlugin = QuickjsPlugin.singleFile(
+final _singleFilePlugin = JsPlugin.singleFile(
   id: 'api1',
   version: '1.0.0',
   exports: const <String>['hello', 'bytes'],
@@ -23,15 +23,15 @@ export function bytes(input) {
 ''',
 );
 
-final _packagePlugin = QuickjsPlugin(
-  manifest: const QuickjsPluginManifest(
+final _packagePlugin = JsPlugin(
+  manifest: const JsPluginManifest(
     id: 'api2',
     version: '1.0.0',
     entry: 'api2/main',
     exports: <String>['hello'],
   ),
-  modules: const <QuickjsPluginModule>[
-    QuickjsPluginModule(
+  modules: const <JsPluginModule>[
+    JsPluginModule(
       specifier: 'api2/main',
       source: '''
 import { suffix } from './modules/helper';
@@ -41,21 +41,21 @@ export function hello(name) {
 }
 ''',
     ),
-    QuickjsPluginModule(
+    JsPluginModule(
       specifier: 'api2/modules/helper',
       source: "export const suffix = ' from package module';",
     ),
   ],
 );
 
-final _invalidPlugin = QuickjsPlugin.singleFile(
+final _invalidPlugin = JsPlugin.singleFile(
   id: 'api3',
   version: '1.0.0',
   exports: const <String>['hello'],
   source: 'export const hello = 1;',
 );
 
-final _missingDependencyPlugin = QuickjsPlugin.singleFile(
+final _missingDependencyPlugin = JsPlugin.singleFile(
   id: 'api4',
   version: '1.0.0',
   exports: const <String>['hello'],
@@ -101,22 +101,20 @@ class _PluginPageState extends State<PluginPage> {
       final previous = _quickjs;
       _quickjs = null;
       await previous?.dispose();
-      final assetPlugin = QuickjsPlugin.singleFileAsset(
+      final assetPlugin = JsPlugin.singleFileAsset(
         id: 'assetApi',
         version: '1.0.0',
         assetKey: 'assets/js/js_call_dart_plugin.mjs',
         exports: const <String>['test', 'test2'],
       );
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            _singleFilePlugin.asMount(),
-            _packagePlugin.asMount(),
-            _invalidPlugin.asMount(),
-            _missingDependencyPlugin.asMount(),
-            assetPlugin.asMount(),
-          ],
-        ),
+        features: <JsFeatures>[
+          _singleFilePlugin.asFeatures(),
+          _packagePlugin.asFeatures(),
+          _invalidPlugin.asFeatures(),
+          _missingDependencyPlugin.asFeatures(),
+          assetPlugin.asFeatures(),
+        ],
         onConsole: (event) {
           if (!mounted || _disposed) {
             return;
@@ -149,7 +147,7 @@ class _PluginPageState extends State<PluginPage> {
   }
 
   Future<void> _bindDartMethods(Quickjs quickjs) async {
-    await quickjs.bind('alert', (args) async {
+    await quickjs.injectFunction('alert', (args) async {
       final output = args.join(' ');
       if (!mounted || _disposed) {
         return null;
@@ -175,15 +173,15 @@ class _PluginPageState extends State<PluginPage> {
       );
       return null;
     });
-    await quickjs.bind('getDataAsync', (args) {
+    await quickjs.injectFunction('getDataAsync', (args) {
       _log.insert(0, 'getDataAsync() <= $args');
       return '来自 Dart 的消息';
     });
-    await quickjs.bind('dartMethod', (args) {
+    await quickjs.injectFunction('dartMethod', (args) {
       _log.insert(0, 'dartMethod() <= $args');
       return '这是静态消息';
     });
-    await quickjs.bind('asyncWithError', (_) async {
+    await quickjs.injectFunction('asyncWithError', (_) async {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       throw StateError('Some error');
     });
@@ -286,7 +284,7 @@ class _PluginPageState extends State<PluginPage> {
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       await running;
       final result = await quickjs.callPlugin(
         _packagePlugin,
@@ -294,7 +292,7 @@ class _PluginPageState extends State<PluginPage> {
         const <Object?>['after stop'],
       );
       _log.insert(0, 'stop 后 api2.hello() => $result');
-      _status = 'stop 重建后插件 mount 已恢复';
+      _status = 'stop 重建后插件 features 已恢复';
     });
   }
 
@@ -332,7 +330,7 @@ class _PluginPageState extends State<PluginPage> {
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -359,7 +357,7 @@ class _PluginPageState extends State<PluginPage> {
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsPlugin → QuickjsHostMount → validatePlugin() / invokePlugin()',
+              'JsPlugin → JsFeatures → validatePlugin() / invokePlugin()',
             ),
             const SizedBox(height: 16),
             Wrap(

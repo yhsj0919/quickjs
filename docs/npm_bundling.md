@@ -10,9 +10,9 @@ npm 标识的普通 JavaScript 源码。
 - 每个公开插件或能力入口优先生成一个自包含 ESM 文件。
 - 默认以 `platform=browser` 检查兼容性。依赖 Node 内置模块的包应在构建期失败，
   除非应用显式提供 polyfill 或将依赖标记为 external。
-- 只有通过 `QuickjsRuntimeOptions.modules` 注册了相同模块标识时，才能把 npm 依赖
+- 只有通过 `JsOptions.modules` 注册了相同模块标识时，才能把 npm 依赖
   标记为 external。
-- 文件系统、网络、数据库和平台 API 应留在发布包之外，通过宿主 provider 或 mount
+- 文件系统、网络、数据库和平台 API 应留在发布包之外，通过宿主 provider 或 features
   按需暴露。
 
 ## 内置 esbuild 示例
@@ -38,7 +38,7 @@ esbuild src/index.js `
 ```
 
 `--bundle` 在构建期跟踪 npm 导入；`--format=esm` 为
-`QuickjsHostModule.esModule` 保留入口导出；`--platform=browser` 防止意外依赖
+`JsModule.esModule` 保留入口导出；`--platform=browser` 防止意外依赖
 Node 运行时全局对象和内置模块。
 
 ## 注册生成的资源
@@ -56,14 +56,12 @@ flutter:
 ```dart
 final source = await rootBundle.loadString('assets/js/npm_bundle.mjs');
 final engine = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    modules: <QuickjsHostModule>[
-      QuickjsHostModule.esModule(
+  modules: <JsModule>[
+      JsModule.esModule(
         specifier: 'example/npm-bundle',
         source: source,
       ),
     ],
-  ),
 );
 
 await engine.evalModule('''
@@ -89,7 +87,7 @@ npm 安装成功不代表与 QuickJS 兼容。需要检查依赖以下能力的�
 
 - `fs`、`net`、`tls`、`child_process` 等 Node 内置模块或原生扩展；
 - 打包器无法静态解析的动态 `require()`；
-- 所选宿主 mount 未提供的浏览器 DOM API；
+- 所选宿主 features 未提供的浏览器 DOM API；
 - `eval`、动态生成代码、WebAssembly 或体积很大的启动载荷；
 - 预期运行时存在的环境变量或包文件。
 

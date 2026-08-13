@@ -227,7 +227,7 @@ final class QuickjsExtensionManager {
            optionalCapabilities ??
            QuickjsExtensionOptionalCapabilities.defaults(),
        registry = registry ?? QuickjsExtensionRegistry(),
-       storage = storage ?? SharedPreferencesQuickjsKeyValueStore() {
+       storage = storage ?? SharedPreferencesJsKvStore() {
     if (maxPendingCoreCalls < 1 || defaultCallTimeout <= Duration.zero) {
       throw ArgumentError(
         'Extension call queue limit and default timeout must be positive',

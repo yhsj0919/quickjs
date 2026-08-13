@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'quickjs_source_map.dart';
 
 /// QuickJS 插件对外暴露的异常基类。
-sealed class QuickjsException implements Exception {
+sealed class JsException implements Exception {
   String get message;
 }
 
 /// 宿主可以稳定判断的框架错误分类；不解释插件自己的业务错误内容。
-enum QuickjsErrorKind {
+enum JsErrorKind {
   javascript,
   valueConversion,
   timeout,
@@ -20,23 +20,23 @@ enum QuickjsErrorKind {
   stackOverflow,
 }
 
-extension QuickjsExceptionKind on QuickjsException {
-  QuickjsErrorKind get kind => switch (this) {
-    JsException() => QuickjsErrorKind.javascript,
-    JsValueConversionException() => QuickjsErrorKind.valueConversion,
-    JsTimeoutException() => QuickjsErrorKind.timeout,
-    JsCancelledException() => QuickjsErrorKind.cancelled,
-    JsQueueFullException() => QuickjsErrorKind.queueFull,
-    JsRuntimeClosedException() => QuickjsErrorKind.runtimeClosed,
-    JsRuntimeCrashException() => QuickjsErrorKind.runtimeCrash,
-    JsOutOfMemoryException() => QuickjsErrorKind.outOfMemory,
-    JsStackOverflowException() => QuickjsErrorKind.stackOverflow,
+extension JsExceptionKind on JsException {
+  JsErrorKind get kind => switch (this) {
+    JsThrownException() => JsErrorKind.javascript,
+    JsValueConversionException() => JsErrorKind.valueConversion,
+    JsTimeoutException() => JsErrorKind.timeout,
+    JsCancelledException() => JsErrorKind.cancelled,
+    JsQueueFullException() => JsErrorKind.queueFull,
+    JsRuntimeClosedException() => JsErrorKind.runtimeClosed,
+    JsRuntimeCrashException() => JsErrorKind.runtimeCrash,
+    JsOutOfMemoryException() => JsErrorKind.outOfMemory,
+    JsStackOverflowException() => JsErrorKind.stackOverflow,
   };
 }
 
 /// JavaScript 代码主动 throw 或求值异常时的错误。
-final class JsException implements QuickjsException {
-  const JsException(
+final class JsThrownException implements JsException {
+  const JsThrownException(
     this.message, {
     this.name,
     this.stack,
@@ -53,10 +53,10 @@ final class JsException implements QuickjsException {
   final String? fileName;
   final int? line;
   final int? column;
-  final QuickjsSourceMap? sourceMap;
+  final JsSourceMap? sourceMap;
 
-  JsException withSourceMap(
-    QuickjsSourceMap? sourceMap, {
+  JsThrownException withSourceMap(
+    JsSourceMap? sourceMap, {
     String? stack,
     String? fileName,
     int? line,
@@ -69,7 +69,7 @@ final class JsException implements QuickjsException {
         column == null) {
       return this;
     }
-    return JsException(
+    return JsThrownException(
       message,
       name: name,
       stack: stack ?? this.stack,
@@ -88,12 +88,12 @@ final class JsException implements QuickjsException {
 ///
 /// Older bridges sent plain text after the sentinel. Newer bridges send a JSON
 /// object with optional structured fields. Keep both formats valid.
-JsException parseJsExceptionPayload(String payload) {
+JsThrownException parseJsExceptionPayload(String payload) {
   try {
     final decoded = jsonDecode(payload);
     if (decoded is Map<String, Object?>) {
       final message = _readString(decoded['message']);
-      return JsException(
+      return JsThrownException(
         message?.isNotEmpty == true ? message! : payload,
         name: _readString(decoded['name']),
         stack: _readString(decoded['stack']),
@@ -105,7 +105,7 @@ JsException parseJsExceptionPayload(String payload) {
   } catch (_) {
     // Legacy payload: the whole payload is the message.
   }
-  return JsException(payload);
+  return JsThrownException(payload);
 }
 
 String? _readString(Object? value) => value is String ? value : null;
@@ -120,8 +120,8 @@ int? _readInt(Object? value) {
   return null;
 }
 
-/// `evaluateValue()` 遇到无法直接映射为 Dart 值的 JS 值。
-final class JsValueConversionException implements QuickjsException {
+/// `eval()` 遇到无法直接映射为 Dart 值的 JS 值。
+final class JsValueConversionException implements JsException {
   const JsValueConversionException([
     this.message = 'QuickJS value cannot be converted to a Dart value',
   ]);
@@ -134,7 +134,7 @@ final class JsValueConversionException implements QuickjsException {
 }
 
 /// JS 执行超过调用方指定的 timeout。
-final class JsTimeoutException implements QuickjsException {
+final class JsTimeoutException implements JsException {
   const JsTimeoutException([this.message = 'QuickJS evaluation timed out']);
 
   @override
@@ -144,8 +144,8 @@ final class JsTimeoutException implements QuickjsException {
   String toString() => message;
 }
 
-/// JS 执行被 `stop()` 或后续取消机制中断。
-final class JsCancelledException implements QuickjsException {
+/// JS 执行被 `restart()` 或其他取消机制中断。
+final class JsCancelledException implements JsException {
   const JsCancelledException([
     this.message = 'QuickJS evaluation was cancelled',
   ]);
@@ -158,7 +158,7 @@ final class JsCancelledException implements QuickjsException {
 }
 
 /// runtime 的串行调用队列已经达到宿主配置的上限。
-final class JsQueueFullException implements QuickjsException {
+final class JsQueueFullException implements JsException {
   const JsQueueFullException([
     this.message = 'QuickJS evaluation queue is full',
   ]);
@@ -171,7 +171,7 @@ final class JsQueueFullException implements QuickjsException {
 }
 
 /// runtime 已经关闭后继续调用 API。
-final class JsRuntimeClosedException implements QuickjsException {
+final class JsRuntimeClosedException implements JsException {
   const JsRuntimeClosedException([this.message = 'QuickJS runtime is closed']);
 
   @override
@@ -182,7 +182,7 @@ final class JsRuntimeClosedException implements QuickjsException {
 }
 
 /// runtime worker 崩溃或异常退出。
-final class JsRuntimeCrashException implements QuickjsException {
+final class JsRuntimeCrashException implements JsException {
   const JsRuntimeCrashException([
     this.message = 'QuickJS runtime worker crashed',
   ]);
@@ -195,7 +195,7 @@ final class JsRuntimeCrashException implements QuickjsException {
 }
 
 /// runtime 分配内存超过配置限制。
-final class JsOutOfMemoryException implements QuickjsException {
+final class JsOutOfMemoryException implements JsException {
   const JsOutOfMemoryException([
     this.message = 'QuickJS runtime out of memory',
   ]);
@@ -208,7 +208,7 @@ final class JsOutOfMemoryException implements QuickjsException {
 }
 
 /// runtime 调用栈超过配置限制。
-final class JsStackOverflowException implements QuickjsException {
+final class JsStackOverflowException implements JsException {
   const JsStackOverflowException([
     this.message = 'QuickJS runtime stack overflow',
   ]);

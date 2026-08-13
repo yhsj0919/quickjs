@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// 结构化返回演示：对比 eval 字符串结果和 evaluateValue Dart 值结果。
+/// 结构化返回演示：对比 eval 字符串结果和 eval Dart 值结果。
 class StructuredValuesPage extends StatefulWidget {
   const StructuredValuesPage({super.key});
 
@@ -62,7 +62,7 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
   Future<void> _runPrimitiveValues() async {
     setState(() {
       _busy = true;
-      _status = '正在执行 evaluateValue...';
+      _status = '正在执行 eval...';
       _log.clear();
     });
 
@@ -82,15 +82,15 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
       ];
       final rows = <String>[];
       for (final code in cases) {
-        final value = await quickjs.evaluateValue(code);
+        final value = await quickjs.eval(code);
         rows.add('$code => ${_describeValue(value)}');
       }
       try {
-        await quickjs.evaluateValue('[1, Symbol("id")]');
+        await quickjs.eval('[1, Symbol("id")]');
       } on JsValueConversionException catch (error) {
         rows.add('[1, Symbol("id")] => ${error.runtimeType}: ${error.message}');
       }
-      final globalsValue = await quickjs.evaluateValue(
+      final globalsValue = await quickjs.eval(
         '({ total: count + price, bytes: Array.from(bytes), date: date.toISOString() })',
         globals: {
           'count': 40,
@@ -107,7 +107,7 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
       }
       setState(() {
         _busy = false;
-        _status = 'evaluateValue 已完成';
+        _status = 'eval 已完成';
         _log.addAll(rows);
       });
     } catch (error) {
@@ -160,7 +160,7 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text('evaluateValue 返回 Dart 值；eval 保持字符串兼容语义。'),
+            const Text('eval 返回 Dart 值；eval 保持字符串兼容语义。'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,

@@ -1,6 +1,6 @@
 part of '../runtime/quickjs_runtime_options.dart';
 
-QuickjsHostMount _quickjsNodeHostMount({
+JsFeatures _quickjsNodeHostMount({
   required bool globalBuffer,
   required bool globalProcess,
   required Map<String, String> env,
@@ -12,62 +12,62 @@ QuickjsHostMount _quickjsNodeHostMount({
     platform: platform,
     cwd: cwd,
   );
-  return QuickjsHostMount(
+  return JsFeatures(
     name: 'node',
-    environmentPatches: <QuickjsHostScript>[
+    scripts: <JsScript>[
       if (globalBuffer)
-        const QuickjsHostScript.js(
+        const JsScript.js(
           name: 'host:node-buffer-global.js',
           globals: <String>['Buffer'],
           source: _essentialBufferGlobalScript,
         ),
       if (globalProcess)
-        QuickjsHostScript.js(
+        JsScript.js(
           name: 'host:node-process-global.js',
           globals: const <String>['process'],
           source:
               '$processCoreSource\nObject.defineProperty(globalThis, "process", { value: process, configurable: true, enumerable: false, writable: true });\n',
         ),
     ],
-    modules: <QuickjsHostModule>[
-      const QuickjsHostModule.esModule(
+    modules: <JsModule>[
+      const JsModule.esModule(
         specifier: 'buffer',
         source: _essentialBufferEsModuleSource,
       ),
-      const QuickjsHostModule.commonJs(
+      const JsModule.commonJs(
         specifier: 'buffer',
         source: _essentialBufferCommonJsSource,
       ),
-      const QuickjsHostModule.esModule(
+      const JsModule.esModule(
         specifier: 'crypto',
         source: _nodeCryptoEsModuleSource,
       ),
-      const QuickjsHostModule.commonJs(
+      const JsModule.commonJs(
         specifier: 'crypto',
         source: _nodeCryptoCommonJsSource,
       ),
-      const QuickjsHostModule.esModule(
+      const JsModule.esModule(
         specifier: 'path',
         source: _nodePathEsModuleSource,
       ),
-      const QuickjsHostModule.commonJs(
+      const JsModule.commonJs(
         specifier: 'path',
         source: _nodePathCommonJsSource,
       ),
-      QuickjsHostModule.esModule(
+      JsModule.esModule(
         specifier: 'process',
         source:
             '$processCoreSource\nexport const env = process.env;\nexport const platform = process.platform;\nexport const versions = process.versions;\nexport const cwd = process.cwd;\nexport default process;\n',
       ),
-      QuickjsHostModule.commonJs(
+      JsModule.commonJs(
         specifier: 'process',
         source: '$processCoreSource\nmodule.exports = process;\n',
       ),
-      const QuickjsHostModule.esModule(
+      const JsModule.esModule(
         specifier: 'timers',
         source: _nodeTimersEsModuleSource,
       ),
-      const QuickjsHostModule.commonJs(
+      const JsModule.commonJs(
         specifier: 'timers',
         source: _nodeTimersCommonJsSource,
       ),

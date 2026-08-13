@@ -126,7 +126,7 @@ await manager.restore();
 
 `store` 可以省略：原生平台默认保存到应用支持目录，Web 默认使用 SharedPreferences Web
 后端。宿主可传入自定义 `QuickjsExtensionStore`。插件 KV 默认使用
-`SharedPreferencesQuickjsKeyValueStore`，并按插件 ID 隔离。
+`SharedPreferencesJsKvStore`，并按插件 ID 隔离。
 
 ## 加载、安装和调用
 

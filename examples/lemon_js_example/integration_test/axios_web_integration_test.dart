@@ -6,26 +6,24 @@ import 'package:lemon_js/lemon_js.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('runs bundled Axios through QuickjsFetchMount on Web', (
+  testWidgets('runs bundled Axios through FetchFeatures on Web', (
     tester,
   ) async {
     expect(kIsWeb, isTrue, reason: 'Run this test with -d chrome');
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        mounts: <QuickjsHostMount>[
-          QuickjsAxiosMount(
-            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
-            scriptName: 'test:axios.js',
-            allowedOrigins: const <String>{'https://httpbingo.org'},
-            timeout: const Duration(seconds: 15),
-          ),
-        ],
-      ),
+      features: <JsFeatures>[
+        AxiosFeatures(
+          assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
+          scriptName: 'test:axios.js',
+          allowedOrigins: const <String>{'https://httpbingo.org'},
+          timeout: const Duration(seconds: 15),
+        ),
+      ],
     );
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evalAsync(r'''
+      await engine.run(r'''
 const get = await axios.get('https://httpbingo.org/get');
 const post = await axios.post('https://httpbingo.org/post', {
   source: 'quickjs', value: 42

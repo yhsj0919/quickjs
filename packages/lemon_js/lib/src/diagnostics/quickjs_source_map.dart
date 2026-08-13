@@ -4,8 +4,8 @@ import 'dart:convert';
 ///
 /// This registry slice intentionally stores source map data without applying
 /// mappings yet. Stack rewriting is handled by the later stack remap phase.
-final class QuickjsSourceMap {
-  QuickjsSourceMap({
+final class JsSourceMap {
+  JsSourceMap({
     required this.version,
     required this.sources,
     required this.names,
@@ -16,15 +16,15 @@ final class QuickjsSourceMap {
     this.raw = const <String, Object?>{},
   }) : _lines = _parseMappings(mappings, sources);
 
-  factory QuickjsSourceMap.fromJson(String sourceMapJson) {
+  factory JsSourceMap.fromJson(String sourceMapJson) {
     final decoded = jsonDecode(sourceMapJson);
     if (decoded is! Map<String, Object?>) {
       throw const FormatException('QuickJS source map must be a JSON object');
     }
-    return QuickjsSourceMap.fromMap(decoded);
+    return JsSourceMap.fromMap(decoded);
   }
 
-  factory QuickjsSourceMap.fromMap(Map<String, Object?> sourceMap) {
+  factory JsSourceMap.fromMap(Map<String, Object?> sourceMap) {
     final version = sourceMap['version'];
     final sources = sourceMap['sources'];
     final names = sourceMap['names'];
@@ -60,7 +60,7 @@ final class QuickjsSourceMap {
         rawSourcesContent.cast<String?>(),
       );
     }
-    return QuickjsSourceMap(
+    return JsSourceMap(
       version: version,
       file: _readOptionalString(sourceMap, 'file'),
       sourceRoot: _readOptionalString(sourceMap, 'sourceRoot'),
@@ -84,7 +84,7 @@ final class QuickjsSourceMap {
 
   /// Returns the original source location for a generated 1-based [line] and
   /// 0-based [column], or null when the map has no matching original position.
-  QuickjsSourceMapLocation? lookup({required int line, required int column}) {
+  JsSourceLocation? lookup({required int line, required int column}) {
     if (line <= 0 || column < 0 || line > _lines.length) {
       return null;
     }
@@ -105,7 +105,7 @@ final class QuickjsSourceMap {
     if (sourceIndex < 0 || sourceIndex >= sources.length) {
       return null;
     }
-    return QuickjsSourceMapLocation(
+    return JsSourceLocation(
       source: _resolveSource(sources[sourceIndex]),
       line: best.sourceLine! + 1,
       column: best.sourceColumn!,
@@ -131,8 +131,8 @@ final class QuickjsSourceMap {
 }
 
 /// Original source location resolved from a source map.
-final class QuickjsSourceMapLocation {
-  const QuickjsSourceMapLocation({
+final class JsSourceLocation {
+  const JsSourceLocation({
     required this.source,
     required this.line,
     required this.column,

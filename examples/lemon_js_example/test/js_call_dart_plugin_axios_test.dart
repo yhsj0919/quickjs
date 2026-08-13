@@ -30,24 +30,22 @@ void main() {
     final pluginSource = await File(
       'assets/js/js_call_dart_plugin.mjs',
     ).readAsString();
-    final plugin = QuickjsPlugin.singleFile(
+    final plugin = JsPlugin.singleFile(
       id: 'assetApi',
       version: '1.0.0',
       source: pluginSource,
       exports: const <String>['axiosGet'],
     );
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        mounts: <QuickjsHostMount>[
-          QuickjsAxiosMount(
-            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
-            bundle: _FileAssetBundle(),
-            allowedOrigins: <String>{origin},
-            scriptName: 'example:axios.js',
-          ),
-          plugin.asMount(),
-        ],
-      ),
+      features: <JsFeatures>[
+        AxiosFeatures(
+          assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
+          bundle: _FileAssetBundle(),
+          allowedOrigins: <String>{origin},
+          scriptName: 'example:axios.js',
+        ),
+        plugin.asFeatures(),
+      ],
     );
     addTearDown(engine.dispose);
 

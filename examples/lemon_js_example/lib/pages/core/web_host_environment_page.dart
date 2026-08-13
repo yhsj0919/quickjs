@@ -37,14 +37,12 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.web(
-              locationHref: 'https://example.com:8443/app?q=1#top',
-              userAgent: 'quickjs-example',
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.web(
+            locationHref: 'https://example.com:8443/app?q=1#top',
+            userAgent: 'quickjs-example',
+          ),
+        ],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -91,7 +89,7 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
 
   Future<void> _runGlobalCheck() async {
     await _capture('全局对象检查', () async {
-      final result = await _requireRuntime().eval('''
+      final result = await _requireRuntime().evalRaw('''
 [
   window === globalThis,
   self === globalThis,
@@ -109,7 +107,7 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
 
   Future<void> _runStorageCheck() async {
     await _capture('Storage 检查', () async {
-      final result = await _requireRuntime().eval('''
+      final result = await _requireRuntime().evalRaw('''
 localStorage.clear();
 sessionStorage.clear();
 localStorage.setItem('answer', 42);
@@ -129,7 +127,7 @@ sessionStorage.setItem('answer', 7);
 
   Future<void> _runUrlCheck() async {
     await _capture('URL 检查', () async {
-      final result = await _requireRuntime().eval('''
+      final result = await _requireRuntime().evalRaw('''
 (() => {
   const url = new URL('https://dart.dev/docs?tab=api#top');
   return [
@@ -154,7 +152,7 @@ sessionStorage.setItem('answer', 7);
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       await running;
       final result = await quickjs.eval(
         'window === globalThis && location.hostname === "example.com"',
@@ -199,7 +197,7 @@ sessionStorage.setItem('answer', 7);
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -226,9 +224,7 @@ sessionStorage.setItem('answer', 7);
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text(
-              'QuickjsHostMount.web(locationHref: ..., userAgent: ...)',
-            ),
+            const Text('JsFeatures.web(locationHref: ..., userAgent: ...)'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,

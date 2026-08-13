@@ -40,22 +40,20 @@ class _ModuleEvalPageState extends State<ModuleEvalPage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'example/dep.mjs' => 'export const value = 40;',
-            'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
-            'shared/counter.mjs' =>
-              'globalThis.moduleImportCount = (globalThis.moduleImportCount || 0) + 1;'
-                  'export const count = globalThis.moduleImportCount;',
-            'common/dep.js' => 'exports.value = 40;',
-            'shared/add.js' =>
-              'module.exports = function add(a, b) { return a + b; };',
-            'shared/counter.js' =>
-              'globalThis.commonJsImportCount = (globalThis.commonJsImportCount || 0) + 1;'
-                  'exports.count = globalThis.commonJsImportCount;',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'example/dep.mjs' => 'export const value = 40;',
+          'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
+          'shared/counter.mjs' =>
+            'globalThis.moduleImportCount = (globalThis.moduleImportCount || 0) + 1;'
+                'export const count = globalThis.moduleImportCount;',
+          'common/dep.js' => 'exports.value = 40;',
+          'shared/add.js' =>
+            'module.exports = function add(a, b) { return a + b; };',
+          'shared/counter.js' =>
+            'globalThis.commonJsImportCount = (globalThis.commonJsImportCount || 0) + 1;'
+                'exports.count = globalThis.commonJsImportCount;',
+          _ => null,
+        },
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();

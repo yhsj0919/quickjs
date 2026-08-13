@@ -6,28 +6,28 @@ import '../diagnostics/quickjs_exception.dart';
 import 'quickjs_runtime_options.dart';
 
 /// Minimal execution contract shared by standalone engines and child contexts.
-abstract interface class QuickjsPluginHost {
-  Future<void> validatePlugin(QuickjsPlugin plugin, {Duration? timeout});
+abstract interface class JsPluginHost {
+  Future<void> validatePlugin(JsPlugin plugin, {Duration? timeout});
 
   Future<Object?> initPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     Map<String, Object?> context = const <String, Object?>{},
     Duration? timeout,
   });
 
   Future<Object?> callPlugin(
-    QuickjsPlugin plugin,
+    JsPlugin plugin,
     String method,
     List<Object?> args, {
     Duration? timeout,
   });
 
-  Future<Object?> disposePlugin(QuickjsPlugin plugin, {Duration? timeout});
+  Future<Object?> disposePlugin(JsPlugin plugin, {Duration? timeout});
 }
 
 /// Manifest describing a JavaScript plugin contract.
-final class QuickjsPluginManifest {
-  const QuickjsPluginManifest({
+final class JsPluginManifest {
+  const JsPluginManifest({
     required this.id,
     required this.version,
     required this.entry,
@@ -63,27 +63,24 @@ final class QuickjsPluginManifest {
   final Map<String, Object?> metadata;
 }
 
-/// One ES module inside a [QuickjsPlugin].
-final class QuickjsPluginModule {
-  const QuickjsPluginModule({required this.specifier, required this.source})
+/// One ES module inside a [JsPlugin].
+final class JsPluginModule {
+  const JsPluginModule({required this.specifier, required this.source})
     : assetKey = null,
       bundle = null;
 
-  const QuickjsPluginModule.asset({
+  const JsPluginModule.asset({
     required this.specifier,
     required this.assetKey,
     this.bundle,
   }) : source = null;
 
-  factory QuickjsPluginModule.bytes({
+  factory JsPluginModule.bytes({
     required String specifier,
     required Uint8List bytes,
     Encoding encoding = utf8,
   }) {
-    return QuickjsPluginModule(
-      specifier: specifier,
-      source: encoding.decode(bytes),
-    );
+    return JsPluginModule(specifier: specifier, source: encoding.decode(bytes));
   }
 
   final String specifier;
@@ -91,13 +88,10 @@ final class QuickjsPluginModule {
   final String? assetKey;
   final AssetBundle? bundle;
 
-  QuickjsHostModule toHostModule() {
+  JsModule toHostModule() {
     final inlineSource = source;
     if (inlineSource != null) {
-      return QuickjsHostModule.esModule(
-        specifier: specifier,
-        source: inlineSource,
-      );
+      return JsModule.esModule(specifier: specifier, source: inlineSource);
     }
     final key = assetKey;
     if (key == null) {
@@ -105,7 +99,7 @@ final class QuickjsPluginModule {
         'QuickJS plugin module "$specifier" has no source or assetKey',
       );
     }
-    return QuickjsHostModule.esModuleAsset(
+    return JsModule.esModuleAsset(
       specifier: specifier,
       assetKey: key,
       bundle: bundle,
@@ -114,15 +108,13 @@ final class QuickjsPluginModule {
 }
 
 /// Explicit plugin package made from a manifest and a module graph.
-final class QuickjsPlugin {
-  QuickjsPlugin({
-    required this.manifest,
-    required List<QuickjsPluginModule> modules,
-  }) : modules = List<QuickjsPluginModule>.unmodifiable(modules) {
+final class JsPlugin {
+  JsPlugin({required this.manifest, required List<JsPluginModule> modules})
+    : modules = List<JsPluginModule>.unmodifiable(modules) {
     _validatePlugin();
   }
 
-  factory QuickjsPlugin.singleFile({
+  factory JsPlugin.singleFile({
     required String id,
     required String version,
     required String source,
@@ -134,8 +126,8 @@ final class QuickjsPlugin {
     String entryName = 'main',
   }) {
     final entry = '$id/$entryName';
-    return QuickjsPlugin(
-      manifest: QuickjsPluginManifest(
+    return JsPlugin(
+      manifest: JsPluginManifest(
         id: id,
         version: version,
         entry: entry,
@@ -145,13 +137,13 @@ final class QuickjsPlugin {
         permissions: permissions,
         metadata: metadata,
       ),
-      modules: <QuickjsPluginModule>[
-        QuickjsPluginModule(specifier: entry, source: source),
+      modules: <JsPluginModule>[
+        JsPluginModule(specifier: entry, source: source),
       ],
     );
   }
 
-  factory QuickjsPlugin.singleFileAsset({
+  factory JsPlugin.singleFileAsset({
     required String id,
     required String version,
     required String assetKey,
@@ -164,8 +156,8 @@ final class QuickjsPlugin {
     String entryName = 'main',
   }) {
     final entry = '$id/$entryName';
-    return QuickjsPlugin(
-      manifest: QuickjsPluginManifest(
+    return JsPlugin(
+      manifest: JsPluginManifest(
         id: id,
         version: version,
         entry: entry,
@@ -175,8 +167,8 @@ final class QuickjsPlugin {
         permissions: permissions,
         metadata: metadata,
       ),
-      modules: <QuickjsPluginModule>[
-        QuickjsPluginModule.asset(
+      modules: <JsPluginModule>[
+        JsPluginModule.asset(
           specifier: entry,
           assetKey: assetKey,
           bundle: bundle,
@@ -185,16 +177,16 @@ final class QuickjsPlugin {
     );
   }
 
-  factory QuickjsPlugin.asset({
-    required QuickjsPluginManifest manifest,
+  factory JsPlugin.asset({
+    required JsPluginManifest manifest,
     required Map<String, String> modules,
     AssetBundle? bundle,
   }) {
-    return QuickjsPlugin(
+    return JsPlugin(
       manifest: manifest,
-      modules: <QuickjsPluginModule>[
+      modules: <JsPluginModule>[
         for (final entry in modules.entries)
-          QuickjsPluginModule.asset(
+          JsPluginModule.asset(
             specifier: entry.key,
             assetKey: entry.value,
             bundle: bundle,
@@ -207,30 +199,28 @@ final class QuickjsPlugin {
   ///
   /// The [modules] map uses module specifiers as keys and JavaScript source
   /// values.
-  factory QuickjsPlugin.sources({
-    required QuickjsPluginManifest manifest,
+  factory JsPlugin.sources({
+    required JsPluginManifest manifest,
     required Map<String, String> modules,
   }) {
-    return QuickjsPlugin(
+    return JsPlugin(
       manifest: manifest,
-      modules: <QuickjsPluginModule>[
+      modules: <JsPluginModule>[
         for (final entry in modules.entries)
-          QuickjsPluginModule(specifier: entry.key, source: entry.value),
+          JsPluginModule(specifier: entry.key, source: entry.value),
       ],
     );
   }
 
-  final QuickjsPluginManifest manifest;
-  final List<QuickjsPluginModule> modules;
+  final JsPluginManifest manifest;
+  final List<JsPluginModule> modules;
 
-  /// Converts this plugin into a normal host mount.
-  QuickjsPluginMount asMount({String? name}) {
-    return QuickjsPluginMount(
+  /// Converts this plugin into a normal host features.
+  JsPluginFeatures asFeatures({String? name}) {
+    return JsPluginFeatures(
       name: name ?? 'plugin:${manifest.id}',
       plugin: this,
-      modules: <QuickjsHostModule>[
-        for (final module in modules) module.toHostModule(),
-      ],
+      modules: <JsModule>[for (final module in modules) module.toHostModule()],
     );
   }
 
@@ -311,16 +301,16 @@ final class QuickjsPlugin {
   }
 }
 
-/// Host mount that preserves the plugin manifest for runtime-level lookup.
-final class QuickjsPluginMount extends QuickjsHostMount {
-  const QuickjsPluginMount({
+/// Host features that preserves the plugin manifest for runtime-level lookup.
+final class JsPluginFeatures extends JsFeatures {
+  const JsPluginFeatures({
     required super.name,
     required this.plugin,
-    super.capabilities,
-    super.environmentPatches,
+    super.browserGlobals,
+    super.scripts,
     super.modules,
     super.providers,
   });
 
-  final QuickjsPlugin plugin;
+  final JsPlugin plugin;
 }

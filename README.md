@@ -1,5 +1,7 @@
 # Lemon JS
 
+公开 API 的命名和方向语义以 [API 命名语义](docs/api_naming_conventions.md) 为准。
+
 Lemon JS 是一组面向 Flutter 的 QuickJS 与动态 UI 工具。它支持在原生平台和 Web 中运行
 JavaScript、加载隔离插件、注入宿主能力，并使用 JavaScript 描述由 Flutter 原生渲染的
 动态页面。
@@ -27,7 +29,7 @@ import 'package:lemon_js/lemon_js.dart';
 
 final runtime = await Quickjs.create();
 try {
-  print(await runtime.evaluateValue('1 + 2')); // 3
+  print(await runtime.eval('1 + 2')); // 3
 } finally {
   await runtime.dispose();
 }

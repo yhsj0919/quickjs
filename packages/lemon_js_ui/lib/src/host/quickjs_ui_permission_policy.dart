@@ -2,9 +2,9 @@ import 'package:lemon_js/lemon_js.dart';
 
 /// Optional application-layer permission policy for quickjs_ui pages.
 ///
-/// The policy only validates the page manifest. It does not mount host APIs or
+/// The policy only validates the page manifest. It does not expose host APIs or
 /// grant native capabilities by itself; callable APIs still come from explicit
-/// [QuickjsHostMount] values.
+/// [JsFeatures] values.
 final class QuickjsUiPermissionPolicy {
   const QuickjsUiPermissionPolicy.unrestricted()
     : _restricted = false,
@@ -21,7 +21,7 @@ final class QuickjsUiPermissionPolicy {
   Set<String> get allowedPermissions => _allowedPermissions;
 
   void validate({
-    required QuickjsPlugin plugin,
+    required JsPlugin plugin,
     Iterable<String> grantedPermissions = const <String>[],
   }) {
     if (!_restricted) {
@@ -83,7 +83,7 @@ final class QuickjsUiPermissionException implements Exception {
     }
     if (missingGrants.isNotEmpty) {
       details.add(
-        'not granted by mounts: ${_sorted(missingGrants).join(', ')}',
+        'not granted by features: ${_sorted(missingGrants).join(', ')}',
       );
     }
     return 'QuickjsUiPermissionException(plugin: $pluginId, ${details.join('; ')})';

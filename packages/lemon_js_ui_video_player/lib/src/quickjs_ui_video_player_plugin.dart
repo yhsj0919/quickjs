@@ -45,18 +45,18 @@ export function VideoPlayer(props = {}) {
 
 /// QuickJS UI 瑙嗛鎾斁鍣ㄧ殑瀹樻柟鎻掍欢鍏ュ彛銆?
 ///
-/// 瀵瑰鍙毚闇?[plugin]锛氬悓鏃跺寘鍚?JS 妯″潡 mount 涓?Flutter `VideoPlayer` 娓叉煋娉ㄥ唽銆?
-/// 鍦?[QuickjsUiView] 鐨?`uiPlugins` 涓紶鍏ュ嵆鍙紝鏃犻渶鍗曠嫭閰嶇疆 mount 鎴?registry銆?
+/// 瀵瑰鍙毚闇?[plugin]锛氬悓鏃跺寘鍚?JS 妯″潡 features 涓?Flutter `VideoPlayer` 娓叉煋娉ㄥ唽銆?
+/// 鍦?[QuickjsUiView] 鐨?`uiPlugins` 涓紶鍏ュ嵆鍙紝鏃犻渶鍗曠嫭閰嶇疆 features 鎴?registry銆?
 final class QuickjsUiVideoPlayerPlugin {
   const QuickjsUiVideoPlayerPlugin._();
 
   static bool _desktopBackendRegistered = false;
 
   /// 鍐呴儴 JS runtime mount锛屾敞鍐?`quickjs_ui/video_player` 妯″潡銆?
-  static const QuickjsHostMount _mount = QuickjsHostMount(
+  static const JsFeatures _mount = JsFeatures(
     name: 'quickjs_ui:plugin:video_player',
-    modules: <QuickjsHostModule>[
-      QuickjsHostModule.esModule(
+    modules: <JsModule>[
+      JsModule.esModule(
         specifier: quickjsUiVideoPlayerModuleSpecifier,
         source: quickjsUiVideoPlayerModuleSource,
       ),
@@ -66,7 +66,7 @@ final class QuickjsUiVideoPlayerPlugin {
   /// 鍙洿鎺ヤ紶缁?[QuickjsUiView.uiPlugins] 鐨?UI 鎻掍欢瀹炰緥銆?
   static final QuickjsUiPlugin plugin = QuickjsUiPlugin(
     name: 'quickjs_ui:plugin:video_player',
-    mounts: const <QuickjsHostMount>[_mount],
+    features: const <JsFeatures>[_mount],
     configureRegistry: _configureRegistry,
   );
 
@@ -393,7 +393,10 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
         return;
       }
       await controller.setLooping(loop);
-      await _applyPlaybackSpeed(controller, _playbackSpeedFromNode(widget.node));
+      await _applyPlaybackSpeed(
+        controller,
+        _playbackSpeedFromNode(widget.node),
+      );
       if (position > Duration.zero) {
         await controller.seekTo(position);
       }

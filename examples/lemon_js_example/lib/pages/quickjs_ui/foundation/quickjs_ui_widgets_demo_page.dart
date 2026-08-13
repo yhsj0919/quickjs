@@ -18,13 +18,13 @@ class QuickjsUiWidgetsDemoPage extends StatefulWidget {
 /// 为 Demo 页面注入自定义 `quickjsUiDemo.back()` 宿主能力。
 class _QuickjsUiWidgetsDemoPageState extends State<QuickjsUiWidgetsDemoPage> {
   /// 业务 JS 能力：提供 JS 侧调用原生返回导航的 provider。
-  late final List<QuickjsHostMount> _mounts = <QuickjsHostMount>[_backMount()];
+  late final List<JsFeatures> _features = <JsFeatures>[_backFeatures()];
 
   @override
   Widget build(BuildContext context) {
     return QuickjsUiView.asset(
       path: QuickjsUiWidgetsDemoPage.path,
-      mounts: _mounts,
+      features: _features,
       loadingBuilder: (_) =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       errorBuilder: (_, error) => Scaffold(
@@ -37,12 +37,12 @@ class _QuickjsUiWidgetsDemoPageState extends State<QuickjsUiWidgetsDemoPage> {
     );
   }
 
-  /// 构建 Demo 专用 mount：注册 `quickjsUiDemo.back` 全局对象与对应 provider。
-  QuickjsHostMount _backMount() {
-    return QuickjsHostMount(
+  /// 构建 Demo 专用 features：注册 `quickjsUiDemo.back` 全局对象与对应 provider。
+  JsFeatures _backFeatures() {
+    return JsFeatures(
       name: 'quickjs_ui.example.widgets_demo',
-      providers: <QuickjsHostProvider>[
-        QuickjsHostProvider.dart(
+      providers: <JsProvider>[
+        JsProvider.dart(
           name: 'quickjs_ui.example.widgets_demo.back',
           callback: (_, _) {
             final navigator = Navigator.of(context);
@@ -53,8 +53,8 @@ class _QuickjsUiWidgetsDemoPageState extends State<QuickjsUiWidgetsDemoPage> {
           },
         ),
       ],
-      environmentPatches: const <QuickjsHostScript>[
-        QuickjsHostScript.js(
+      scripts: const <JsScript>[
+        JsScript.js(
           name: 'quickjs_ui.example.widgets_demo.globals.js',
           globals: <String>['quickjsUiDemo'],
           source: '''

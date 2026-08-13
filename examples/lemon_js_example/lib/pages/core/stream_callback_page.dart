@@ -68,7 +68,7 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
   }
 
   Future<void> _bindCallbacks(Quickjs quickjs) async {
-    await QuickjsStreamBridge.bindDartStream(quickjs, 'hostCount', (args) {
+    await quickjs.injectFunction('hostCount', (args) {
       final max = (args.single as num).toInt();
       return Stream<Object?>.periodic(
         const Duration(seconds: 1),
@@ -76,10 +76,7 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
       ).take(max);
     });
 
-    final sinkStream = await QuickjsStreamBridge.bindJsSink(
-      quickjs,
-      'progress',
-    );
+    final sinkStream = await quickjs.bindStream('progress');
     _sinkSubscription = sinkStream.listen(
       (value) => _appendLog('Dart 收到 JS sink: $value'),
       onError: (Object error) => _appendLog('JS sink error: $error'),
@@ -89,7 +86,7 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
 
   Future<void> _runDartStream() async {
     await _capture('Dart Stream -> JS for-await', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 const values = [];
 const stream = await hostCount(3);
 for await (const value of stream) {
@@ -104,7 +101,7 @@ return values.join(',');
 
   Future<void> _runJsSink() async {
     await _capture('JS sink -> Dart Stream', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 let n = 0;
 while (n < 3) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -119,7 +116,7 @@ return 'done';
 
   Future<void> _runJsSinkError() async {
     await _capture('JS sink error', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 await progress.error('stream failed from JS');
 return 'error sent';
 ''');

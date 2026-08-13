@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// Function Handle Demo：通过 [Quickjs.evaluateHandle] 获取 JS 函数，
-/// 并使用 `call` / `callAsync` / `dispose` 管理生命周期。
+/// Function Handle Demo：通过 [Quickjs.bindFunction] 获取 JS 函数，
+/// 并使用 `call` / `run` / `dispose` 管理生命周期。
 class FunctionHandlePage extends StatefulWidget {
   const FunctionHandlePage({super.key});
 
@@ -14,8 +14,8 @@ class FunctionHandlePage extends StatefulWidget {
 
 class _FunctionHandlePageState extends State<FunctionHandlePage> {
   Quickjs? _quickjs;
-  QuickjsFunctionHandle? _add;
-  QuickjsFunctionHandle? _asyncAdd;
+  JsFunctionHandle? _add;
+  JsFunctionHandle? _asyncAdd;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -42,13 +42,13 @@ class _FunctionHandlePageState extends State<FunctionHandlePage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create();
-      final add = await quickjs.evaluateHandle('''
+      final add = await quickjs.bindFunction('''
 function add(a, b) {
   return a + b;
 }
 add
 ''');
-      final asyncAdd = await quickjs.evaluateHandle('''
+      final asyncAdd = await quickjs.bindFunction('''
 async (a, b) => {
   await new Promise((resolve) => setTimeout(resolve, 1));
   return a + b;
@@ -83,16 +83,16 @@ async (a, b) => {
     });
   }
 
-  Future<void> _callAsyncAdd() async {
-    await _capture('handle.callAsync', () async {
-      final result = await _requireAsyncHandle().callAsync([20, 22]);
-      _appendLog('asyncAdd.callAsync([20, 22]) => $result');
+  Future<void> _runAsyncAdd() async {
+    await _capture('handle.run', () async {
+      final result = await _requireAsyncHandle().run([20, 22]);
+      _appendLog('asyncAdd.run([20, 22]) => $result');
     });
   }
 
   Future<void> _runTimeout() async {
     await _capture('handle timeout', () async {
-      final loop = await _requireRuntime().evaluateHandle(
+      final loop = await _requireRuntime().bindFunction(
         '() => { while (true) {} }',
       );
       await loop.call(const [], timeout: const Duration(milliseconds: 50));
@@ -151,7 +151,7 @@ async (a, b) => {
     return quickjs;
   }
 
-  QuickjsFunctionHandle _requireHandle() {
+  JsFunctionHandle _requireHandle() {
     final handle = _add;
     if (handle == null) {
       throw JsRuntimeClosedException('QuickJS function handle is not ready');
@@ -159,7 +159,7 @@ async (a, b) => {
     return handle;
   }
 
-  QuickjsFunctionHandle _requireAsyncHandle() {
+  JsFunctionHandle _requireAsyncHandle() {
     final handle = _asyncAdd;
     if (handle == null) {
       throw JsRuntimeClosedException(
@@ -201,9 +201,7 @@ async (a, b) => {
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text(
-              '使用 evaluateHandle 获取 JS function，并通过 handle.call 重复调用。',
-            ),
+            const Text('使用 bindFunction 获取 JS function，并通过 handle.call 重复调用。'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -214,7 +212,7 @@ async (a, b) => {
                   child: const Text('调用 add handle'),
                 ),
                 FilledButton.tonal(
-                  onPressed: _busy || !hasRuntime ? null : _callAsyncAdd,
+                  onPressed: _busy || !hasRuntime ? null : _runAsyncAdd,
                   child: const Text('Call async handle'),
                 ),
                 OutlinedButton(

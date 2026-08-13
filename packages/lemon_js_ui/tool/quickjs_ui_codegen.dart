@@ -39,7 +39,9 @@ Future<void> runQuickjsUiCodegen(List<String> args) async {
     if (!file.existsSync()) {
       throw ArgumentError('类型声明不存在: ${file.path}');
     }
-    if (!declarationFiles.any((item) => item.absolute.path == file.absolute.path)) {
+    if (!declarationFiles.any(
+      (item) => item.absolute.path == file.absolute.path,
+    )) {
       declarationFiles.add(file);
     }
   }
@@ -49,8 +51,9 @@ Future<void> runQuickjsUiCodegen(List<String> args) async {
   };
   for (final file in declarationFiles.skip(1)) {
     final source = file.readAsStringSync();
-    final matches = RegExp(r'''declare\s+module\s+['"]([^'"]+)['"]''')
-        .allMatches(source);
+    final matches = RegExp(
+      r'''declare\s+module\s+['"]([^'"]+)['"]''',
+    ).allMatches(source);
     for (final match in matches) {
       modules[match.group(1)!] = _relativeImport(outputDirectory, file);
     }
@@ -94,9 +97,7 @@ Future<void> runQuickjsUiCodegen(List<String> args) async {
   }
 
   stdout.writeln(
-    options.check
-        ? '代码提示配置检查通过: ${output.path}'
-        : '已生成代码提示配置: ${output.path}',
+    options.check ? '代码提示配置检查通过: ${output.path}' : '已生成代码提示配置: ${output.path}',
   );
   stdout.writeln('已注册模块: ${modules.keys.join(', ')}');
 }
@@ -109,7 +110,9 @@ String _relativeImport(Directory from, FileSystemEntity target) {
 String _relativePath(String from, String to) {
   final fromParts = _normalise(from).split('/');
   final toParts = _normalise(to).split('/');
-  while (fromParts.isNotEmpty && toParts.isNotEmpty && fromParts.first == toParts.first) {
+  while (fromParts.isNotEmpty &&
+      toParts.isNotEmpty &&
+      fromParts.first == toParts.first) {
     fromParts.removeAt(0);
     toParts.removeAt(0);
   }

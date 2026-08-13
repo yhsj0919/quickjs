@@ -19,7 +19,7 @@ final class _FileAssetBundle extends CachingAssetBundle {
 }
 
 void main() {
-  test('runs bundled Axios through QuickjsFetchMount XHR', () async {
+  test('runs bundled Axios through FetchFeatures XHR', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
@@ -43,21 +43,19 @@ void main() {
 
     final origin = 'http://${server.address.address}:${server.port}';
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        mounts: <QuickjsHostMount>[
-          QuickjsAxiosMount(
-            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
-            bundle: _FileAssetBundle(),
-            allowedOrigins: <String>{origin},
-            scriptName: 'test:axios.js',
-          ),
-        ],
-      ),
+      features: <JsFeatures>[
+        AxiosFeatures(
+          assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
+          bundle: _FileAssetBundle(),
+          allowedOrigins: <String>{origin},
+          scriptName: 'test:axios.js',
+        ),
+      ],
     );
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evalAsync('''
+      await engine.run('''
 const get = await axios.get('$origin/echo', {
   headers: { 'x-axios-test': 'get' }
 });

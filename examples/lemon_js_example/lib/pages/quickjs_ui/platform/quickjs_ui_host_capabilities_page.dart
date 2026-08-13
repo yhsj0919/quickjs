@@ -20,7 +20,7 @@ class _QuickjsUiHostCapabilitiesPageState
     extends State<QuickjsUiHostCapabilitiesPage> {
   late final QuickjsUiController _controller;
   late final QuickjsUiHostCapabilities _capabilities;
-  late final List<QuickjsHostMount> _mounts;
+  late final List<JsFeatures> _features;
   late final Map<String, Object?> _initialProps;
   String _status = '等待 JS 页面加载';
 
@@ -76,7 +76,7 @@ class _QuickjsUiHostCapabilitiesPageState
         _customEchoGroup(),
       ],
     );
-    _mounts = _capabilities.mounts;
+    _features = _capabilities.features;
     _initialProps = <String, Object?>{
       'methods': _capabilities.methods.map((method) => method.name).toList()
         ..sort(),
@@ -114,7 +114,7 @@ class _QuickjsUiHostCapabilitiesPageState
             child: QuickjsUiView.asset(
               path: QuickjsUiHostCapabilitiesPage.path,
               controller: _controller,
-              mounts: _mounts,
+              features: _features,
               initialProps: _initialProps,
               loadingBuilder: (_) =>
                   const Center(child: CircularProgressIndicator()),

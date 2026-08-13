@@ -68,7 +68,7 @@ lifecycle(event) => {
 
 ## P0：core 原生模块调用通道（暂缓）
 
-当前 `Quickjs.callModule()` 每次调用都会动态生成 JS 包装代码，并重复注入 `inflate()`、`convert()`、breadcrumb 和 JSON 转换逻辑，然后通过 `evalAsync` 执行。
+当前 `Quickjs.callModule()` 每次调用都会动态生成 JS 包装代码，并重复注入 `inflate()`、`convert()`、breadcrumb 和 JSON 转换逻辑，然后通过异步执行通道（现公开为 `run()`）执行。
 
 2026-07-14 使用 50 次 warm-up、500 次空模块调用测得：
 
@@ -137,7 +137,7 @@ QuickjsUiResourceCache.shared.clear()
 
 ## P1：批量 Context 初始化（已完成）
 
-创建 Context 后当前会依次安装 console、text encoding、capabilities、providers、provider registry、environment patches 和 mounts。多个步骤会形成独立 worker 请求。
+创建 Context 后当前会依次安装 console、text encoding、capabilities、providers、provider registry、environment patches 和 features。多个步骤会形成独立 worker 请求。
 
 当前实现将 Context 创建配置作为一个初始化计划处理：
 
@@ -151,7 +151,7 @@ createContext + bind callbacks + install environment + register modules
 - console、text encoding、capabilities、provider registry 和 environment patches 合并为一次 bootstrap eval。
 - 每段源码仍通过独立 indirect global eval 执行，保留原先的全局作用域和失败顺序语义。
 - `QuickjsRuntime.createContext()` 在任一步失败时释放整个 Context；`activeContextCount` 可用于容量诊断。
-- quickjs_ui 创建共享 Context 时将 helper、业务 mounts 和页面 plugin mount 一起传入，不再创建后进行第二次页面挂载。
+- quickjs_ui 创建共享 Context 时将 helper、业务 features 和页面 plugin features 一起传入，不再创建后进行第二次页面挂载。
 
 2026-07-14 Release native DLL、8 个启动脚本、30 次 Context 创建/释放基准：批量初始化 median 约 1.517ms，逐脚本安装约 1.771ms，中位数减少约 0.25ms。基础页面收益较小；脚本和 capability 越多，减少 worker 往返的收益越明显。基准入口为 `benchmark/context_initialization_benchmark_test.dart`。
 

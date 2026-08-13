@@ -14,30 +14,27 @@ part '../module/quickjs_web_host_mount.dart';
 /// Relative specifiers are normalized by [Quickjs] before the loader is called,
 /// so a loader can use the incoming [moduleName] as its cache key. Returning
 /// `null` means the module cannot be resolved.
-typedef QuickjsModuleLoader = FutureOr<String?> Function(String moduleName);
+typedef JsModuleLoader = FutureOr<String?> Function(String moduleName);
 
 /// Callback used by a Dart host provider.
 ///
 /// JavaScript wrappers call providers through a Promise-returning bridge. The
 /// callback receives already-converted JavaScript arguments and may return any
 /// value supported by the structured value codec.
-typedef QuickjsHostProviderCallback =
-    FutureOr<Object?> Function(
-      List<Object?> args,
-      QuickjsHostProviderContext context,
-    );
+typedef JsProviderCallback =
+    FutureOr<Object?> Function(List<Object?> args, JsProviderContext context);
 
 /// Lifecycle context for one async host-provider invocation.
 ///
 /// [cancelled] completes when the owning runtime is stopped, disposed, or
 /// rebuilt. Provider implementations that own cancellable work should stop it
 /// promptly, then call [throwIfCancelled] before returning a value.
-final class QuickjsHostProviderContext {
+final class JsProviderContext {
   /// Creates an invocation context.
   ///
   /// Provider users normally receive this from the runtime rather than
   /// constructing one directly.
-  QuickjsHostProviderContext();
+  JsProviderContext();
 
   final Completer<void> _cancelled = Completer<void>();
   Object? _cancellationReason;
@@ -70,8 +67,8 @@ final class QuickjsHostProviderContext {
 }
 
 /// Browser-like global aliases that can be explicitly installed into a runtime.
-final class QuickjsBrowserGlobals {
-  const QuickjsBrowserGlobals({this.window = false, this.self = false});
+final class JsGlobals {
+  const JsGlobals({this.window = false, this.self = false});
 
   /// Installs `globalThis.window = globalThis` when true.
   final bool window;
@@ -82,36 +79,18 @@ final class QuickjsBrowserGlobals {
   bool get isEmpty => !window && !self;
 }
 
-/// Optional host capabilities exposed to JavaScript.
-///
-/// Capabilities are opt-in so a runtime does not expose browser or platform
-/// objects unless the caller explicitly asks for them.
-final class QuickjsHostCapabilities {
-  const QuickjsHostCapabilities({
-    this.browserGlobals = const QuickjsBrowserGlobals(),
-  });
-
-  /// No extra host capabilities.
-  static const none = QuickjsHostCapabilities();
-
-  /// Browser-like aliases for code that checks `window` or `self`.
-  final QuickjsBrowserGlobals browserGlobals;
-
-  bool get isEmpty => browserGlobals.isEmpty;
-}
-
 /// 安装到每个新建 runtime 的启动/引导 JavaScript 脚本描述。
 ///
-/// 宿主脚本在内置 console 与显式宿主能力安装之后执行；runtime 在 `stop()`
+/// 宿主脚本在内置 console 与显式宿主能力安装之后执行；runtime 在 `restart()`
 /// 后重建时也会重新执行。适用于注入可选全局对象或 polyfill，例如 `crypto`、
 /// `Buffer`、`location` 或应用自定义对象。
-final class QuickjsHostScript {
+final class JsScript {
   /// 使用内联 JavaScript 源码创建宿主脚本。
   ///
   /// - [name]：QuickJS 堆栈中显示的脚本名称。
   /// - [source]：要执行的 JavaScript 源码。
   /// - [globals]：本脚本声明会安装到 `globalThis` 的全局变量名列表。
-  const QuickjsHostScript.js({
+  const JsScript.js({
     required this.name,
     required this.source,
     this.globals = const <String>[],
@@ -120,21 +99,21 @@ final class QuickjsHostScript {
 
   /// 使用 Flutter asset 创建宿主脚本描述（同步构造）。
   ///
-  /// 可在 mount 列表中直接书写，无需 `await`。asset 内容在 runtime 安装宿主
+  /// 可在 features 列表中直接书写，无需 `await`。asset 内容在 runtime 安装宿主
   /// 脚本时通过 [loadSource] 延迟加载。
   ///
   /// - [name]：QuickJS 堆栈中显示的脚本名称。
   /// - [assetKey]：脚本所在的 Flutter asset 路径。
   /// - [bundle]：读取 asset 时使用的 bundle；为 `null` 时使用 [rootBundle]。
   /// - [globals]：本脚本声明会安装到 `globalThis` 的全局变量名列表。
-  const QuickjsHostScript.asset({
+  const JsScript.asset({
     required this.name,
     required this.assetKey,
     this.bundle,
     this.globals = const <String>[],
   }) : source = null;
 
-  factory QuickjsHostScript.providerGlobals({
+  factory JsScript.providerGlobals({
     required String name,
     required Map<String, String> globals,
   }) {
@@ -146,7 +125,7 @@ globalThis[${jsonEncode(globalName)}] = (...args) =>
   globalThis.__quickjsHostProviders[${jsonEncode(providerName)}](...args);
 ''';
     }).join();
-    return QuickjsHostScript.js(
+    return JsScript.js(
       name: name,
       source: entries,
       globals: List<String>.unmodifiable(globals.keys),
@@ -167,7 +146,7 @@ globalThis[${jsonEncode(globalName)}] = (...args) =>
 
   /// 本脚本安装到 `globalThis` 的全局变量名列表。
   ///
-  /// mount 校验会在重建 runtime 前拒绝重复声明的全局名。不安装全局对象的脚本
+  /// features 校验会在重建 runtime 前拒绝重复声明的全局名。不安装全局对象的脚本
   /// 可留空。
   final List<String> globals;
 
@@ -215,16 +194,16 @@ String _validateHostScriptProviderName(String name) {
 ///
 /// ES 模块在 JS `import` [specifier] 时加载；CommonJS 模块在通过
 /// [Quickjs.evalCommonJs] 执行 `require(specifier)` 时加载。
-final class QuickjsHostModule {
+final class JsModule {
   /// 使用内联源码创建宿主模块。
   ///
   /// - [specifier]：JS `import` / `require` 使用的模块标识符。
   /// - [source]：模块 JavaScript 源码。
   /// - [format]：模块格式（ES module 或 CommonJS）。
-  const QuickjsHostModule({
+  const JsModule({
     required this.specifier,
     required this.source,
-    this.format = QuickjsHostModuleFormat.esModule,
+    this.format = JsModuleFormat.esModule,
   }) : assetKey = null,
        bundle = null;
 
@@ -236,25 +215,23 @@ final class QuickjsHostModule {
   /// - [assetKey]：模块源码所在的 Flutter asset 路径。
   /// - [bundle]：读取 asset 时使用的 bundle。
   /// - [format]：模块格式（ES module 或 CommonJS）。
-  const QuickjsHostModule.asset({
+  const JsModule.asset({
     required this.specifier,
     required this.assetKey,
     this.bundle,
-    this.format = QuickjsHostModuleFormat.esModule,
+    this.format = JsModuleFormat.esModule,
   }) : source = null;
 
   /// 创建 ES 格式宿主模块（内联源码）。
-  const QuickjsHostModule.esModule({
-    required String specifier,
-    required String source,
-  }) : this(
-         specifier: specifier,
-         source: source,
-         format: QuickjsHostModuleFormat.esModule,
-       );
+  const JsModule.esModule({required String specifier, required String source})
+    : this(
+        specifier: specifier,
+        source: source,
+        format: JsModuleFormat.esModule,
+      );
 
   /// 创建 ES 格式宿主模块（Flutter asset，同步构造）。
-  const QuickjsHostModule.esModuleAsset({
+  const JsModule.esModuleAsset({
     required String specifier,
     required String assetKey,
     AssetBundle? bundle,
@@ -262,21 +239,19 @@ final class QuickjsHostModule {
          specifier: specifier,
          assetKey: assetKey,
          bundle: bundle,
-         format: QuickjsHostModuleFormat.esModule,
+         format: JsModuleFormat.esModule,
        );
 
   /// 创建 CommonJS 格式宿主模块（内联源码）。
-  const QuickjsHostModule.commonJs({
-    required String specifier,
-    required String source,
-  }) : this(
-         specifier: specifier,
-         source: source,
-         format: QuickjsHostModuleFormat.commonJs,
-       );
+  const JsModule.commonJs({required String specifier, required String source})
+    : this(
+        specifier: specifier,
+        source: source,
+        format: JsModuleFormat.commonJs,
+      );
 
   /// 创建 CommonJS 格式宿主模块（Flutter asset，同步构造）。
-  const QuickjsHostModule.commonJsAsset({
+  const JsModule.commonJsAsset({
     required String specifier,
     required String assetKey,
     AssetBundle? bundle,
@@ -284,7 +259,7 @@ final class QuickjsHostModule {
          specifier: specifier,
          assetKey: assetKey,
          bundle: bundle,
-         format: QuickjsHostModuleFormat.commonJs,
+         format: JsModuleFormat.commonJs,
        );
 
   /// JS `import` 或 `require` 使用的模块标识符。
@@ -300,7 +275,7 @@ final class QuickjsHostModule {
   final AssetBundle? bundle;
 
   /// 模块格式（ES module 或 CommonJS）。
-  final QuickjsHostModuleFormat format;
+  final JsModuleFormat format;
 
   /// 加载模块源码：优先返回内联 [source]，否则从 [assetKey] 读取 asset。
   Future<String> loadSource() async {
@@ -319,7 +294,7 @@ final class QuickjsHostModule {
 }
 
 /// Supported host module source formats.
-enum QuickjsHostModuleFormat {
+enum JsModuleFormat {
   /// ES module source for `import` / dynamic `import()`.
   esModule,
 
@@ -332,24 +307,23 @@ enum QuickjsHostModuleFormat {
 /// Providers are intentionally not exposed as user-facing globals by
 /// themselves. A startup script or host module should wrap a provider into the
 /// desired JavaScript API shape, such as `fetch()` or `crypto.subtle.digest()`.
-final class QuickjsHostProvider {
-  const QuickjsHostProvider.dart({
+final class JsProvider {
+  const JsProvider.dart({
     required this.name,
     required this.callback,
     this.debugName,
     this.globalName,
-    this.implementation = QuickjsHostProviderImplementation.dart,
+    this.implementation = JsProviderImplementation.dart,
   });
 
-  factory QuickjsHostProvider.global({
+  factory JsProvider.global({
     required String name,
-    required QuickjsHostProviderCallback callback,
+    required JsProviderCallback callback,
     String? debugName,
-    QuickjsHostProviderImplementation implementation =
-        QuickjsHostProviderImplementation.dart,
+    JsProviderImplementation implementation = JsProviderImplementation.dart,
   }) {
     final globalName = _validateHostScriptGlobalName(name);
-    return QuickjsHostProvider.dart(
+    return JsProvider.dart(
       name: 'global.$globalName',
       globalName: globalName,
       debugName: debugName,
@@ -375,18 +349,18 @@ final class QuickjsHostProvider {
   ///
   /// This is inspector metadata and does not change callback behavior. All
   /// current providers use the asynchronous callback bridge.
-  final QuickjsHostProviderImplementation implementation;
+  final JsProviderImplementation implementation;
 
   /// Dart/Flutter implementation. JS receives a Promise for each call.
   ///
-  /// The per-call context is cancelled when the runtime stops, is disposed,
-  /// or is rebuilt. Await [QuickjsHostProviderContext.cancelled] when the
+  /// The per-call context is cancelled when the runtime restarts, is disposed,
+  /// or is rebuilt. Await [JsProviderContext.cancelled] when the
   /// underlying operation supports cooperative cancellation.
-  final QuickjsHostProviderCallback callback;
+  final JsProviderCallback callback;
 }
 
 /// Source of a host-provider implementation.
-enum QuickjsHostProviderImplementation {
+enum JsProviderImplementation {
   /// Pure Dart or Flutter code running in the host isolate.
   dart,
 
@@ -399,14 +373,14 @@ enum QuickjsHostProviderImplementation {
 
 /// Named bundle of environment patches, modules, and host providers.
 ///
-/// A mount installs one composable capability bundle into a runtime.
-base class QuickjsHostMount {
-  const QuickjsHostMount({
+/// A features installs one composable capability bundle into a runtime.
+base class JsFeatures {
+  const JsFeatures({
     required this.name,
-    this.capabilities = QuickjsHostCapabilities.none,
-    this.environmentPatches = const <QuickjsHostScript>[],
-    this.modules = const <QuickjsHostModule>[],
-    this.providers = const <QuickjsHostProvider>[],
+    this.browserGlobals = const JsGlobals(),
+    this.scripts = const <JsScript>[],
+    this.modules = const <JsModule>[],
+    this.providers = const <JsProvider>[],
   });
 
   /// Creates a minimal browser-like global environment.
@@ -415,7 +389,7 @@ base class QuickjsHostMount {
   /// startup-script implementations for `location`, `navigator`, `URL`,
   /// `localStorage`, and `sessionStorage`. It does not install `fetch`, Web
   /// Crypto, DOM APIs, networking, or platform storage.
-  factory QuickjsHostMount.web({
+  factory JsFeatures.web({
     String locationHref = 'about:blank',
     String userAgent = 'QuickJS',
     bool window = true,
@@ -434,7 +408,7 @@ base class QuickjsHostMount {
   /// The current essential preset installs `buffer` / `node:buffer` as both an
   /// ES module and a CommonJS module. Set [globalBuffer] to true to also install
   /// `globalThis.Buffer` as a startup global.
-  factory QuickjsHostMount.essential({bool globalBuffer = false}) =>
+  factory JsFeatures.essential({bool globalBuffer = false}) =>
       _quickjsEssentialHostMount(globalBuffer: globalBuffer);
 
   /// Creates a minimal Node-like module environment.
@@ -445,7 +419,7 @@ base class QuickjsHostMount {
   /// `Buffer` and `process` are not installed as globals unless explicitly
   /// requested. It does not install Node `fs`, networking, or a full npm
   /// resolver. The `crypto` module is a minimal compatibility subset.
-  factory QuickjsHostMount.node({
+  factory JsFeatures.node({
     bool globalBuffer = false,
     bool globalProcess = false,
     Map<String, String> env = const <String, String>{},
@@ -462,31 +436,25 @@ base class QuickjsHostMount {
   /// Stable name used for conflict detection and debug inspection.
   final String name;
 
-  /// Runtime capabilities installed before environment patches.
-  final QuickjsHostCapabilities capabilities;
+  /// Browser-like global aliases installed before scripts.
+  final JsGlobals browserGlobals;
 
   /// Ordered scripts that complete the runtime global environment.
-  final List<QuickjsHostScript> environmentPatches;
+  final List<JsScript> scripts;
 
-  /// ES module and CommonJS definitions included in this mount.
-  final List<QuickjsHostModule> modules;
+  /// ES module and CommonJS definitions included in this features.
+  final List<JsModule> modules;
 
-  /// Dart/Flutter providers included in this mount.
-  final List<QuickjsHostProvider> providers;
+  /// Dart/Flutter providers included in this features.
+  final List<JsProvider> providers;
 }
 
-/// Resource and module-loading options used when creating a QuickJS runtime.
-final class QuickjsRuntimeOptions {
-  const QuickjsRuntimeOptions({
+/// Resource and execution-queue limits used when creating a QuickJS runtime.
+final class JsOptions {
+  const JsOptions({
     this.memoryLimitBytes,
     this.stackLimitBytes,
-    this.maxPendingEvaluations = 256,
-    this.moduleLoader,
-    this.hostCapabilities = QuickjsHostCapabilities.none,
-    this.environmentPatches = const <QuickjsHostScript>[],
-    this.modules = const <QuickjsHostModule>[],
-    this.providers = const <QuickjsHostProvider>[],
-    this.mounts = const <QuickjsHostMount>[],
+    this.maxPendingTasks = 256,
   });
 
   /// Maximum memory for a single runtime, in bytes.
@@ -501,40 +469,13 @@ final class QuickjsRuntimeOptions {
   /// current web backend does not expose an equivalent WASM option yet.
   final int? stackLimitBytes;
 
-  /// 等待执行的最大请求数，不包含当前正在运行的请求。
+  /// Maximum number of tasks allowed to wait in this runtime's execution queue.
   ///
-  /// 达到上限时新请求立即抛出 [JsQueueFullException]，避免未知插件无限堆积任务。
-  final int maxPendingEvaluations;
-
-  /// Runtime-scoped ES module source loader.
-  ///
-  /// [Quickjs.evalModule] uses this loader to prebuild the dependency graph
-  /// before sending a module evaluation request to the native isolate or web
-  /// worker.
-  final QuickjsModuleLoader? moduleLoader;
-
-  /// Explicit host capabilities installed into this runtime.
-  ///
-  /// Defaults to [QuickjsHostCapabilities.none].
-  final QuickjsHostCapabilities hostCapabilities;
-
-  /// User-provided JavaScript installed into this runtime at creation time.
-  ///
-  /// Defaults to an empty list. Scripts are installed in list order.
-  final List<QuickjsHostScript> environmentPatches;
-
-  /// User-provided modules available to `import` and `require`.
-  ///
-  /// Defaults to an empty list. Host module specifiers are runtime-scoped.
-  final List<QuickjsHostModule> modules;
-
-  /// User-provided providers available to startup scripts and host modules.
-  ///
-  /// Providers are installed before [environmentPatches]. They are exposed through the
-  /// non-enumerable `globalThis.__quickjsHostProviders` registry and return
-  /// Promises when called from JavaScript.
-  final List<QuickjsHostProvider> providers;
-
-  /// Named capability bundles installed before direct host configuration.
-  final List<QuickjsHostMount> mounts;
+  /// The task currently executing is not counted. For example, a value of `1`
+  /// allows one running task and one waiting task. While the queue is at this
+  /// limit, a new eval, module call, or plugin call fails immediately with
+  /// [JsQueueFullException]. This bounds memory growth and latency when a long
+  /// JavaScript task causes callers to submit work faster than it can run.
+  /// Must be greater than zero. Defaults to `256`.
+  final int maxPendingTasks;
 }

@@ -1,6 +1,6 @@
 # QuickJS 插件清单
 
-`QuickjsPluginManifest` 描述 JavaScript 插件的可调用契约。它刻意保持精简：
+`JsPluginManifest` 描述 JavaScript 插件的可调用契约。它刻意保持精简：
 运行时只用它校验和调用导出函数；安装、更新、签名及远程目录均由应用层负责。
 
 ## 字段
@@ -11,11 +11,11 @@
 | `version` | 是 | string | 应用定义的插件版本；运行时不比较版本。 |
 | `entry` | 是 | string | ES 模块入口标识，例如 `demo/main`。 |
 | `exports` | 是 | string array | 暴露给 Dart 调用的导出函数。 |
-| `init` | 否 | string | 可选生命周期导出，由 `initPlugin()` / `QuickjsPluginClient.init()` 调用。 |
-| `dispose` | 否 | string | 可选生命周期导出，由 `disposePlugin()` / `QuickjsPluginClient.dispose()` 调用。 |
+| `init` | 否 | string | 可选生命周期导出，由 `initPlugin()` / `JsPluginClient.init()` 调用。 |
+| `dispose` | 否 | string | 可选生命周期导出，由 `disposePlugin()` / `JsPluginClient.dispose()` 调用。 |
 | `permissions` | 否 | string array | 应用定义的权限标签；运行时不会依据该字段自动授权能力。 |
 | `metadata` | 否 | object | 应用定义的展示或目录元数据。 |
-| `files` | 仅 zip | object | `QuickjsZipPlugin` 使用的可选路径映射；键为模块标识，值为 zip 内相对路径。 |
+| `files` | 仅 zip | object | `JsZipPlugin` 使用的可选路径映射；键为模块标识，值为 zip 内相对路径。 |
 
 ## 最小示例
 
@@ -36,7 +36,7 @@
 
 ## Zip 发布包
 
-`QuickjsZipPlugin.asset()` 和 `QuickjsZipPlugin.bytes()` 会查找
+`JsZipPlugin.asset()` 和 `JsZipPlugin.bytes()` 会查找
 `quickjs-plugin.json` 或 `manifest.json`。假设目录结构如下：
 
 ```text
@@ -77,6 +77,6 @@ zip 路径不符合默认映射时，使用 `files` 显式声明：
 ## 运行时边界
 
 - 清单中的 `permissions` 只是标签；宿主能力仍须显式配置
-  `QuickjsHostMount` / provider。
+  `JsFeatures` / provider。
 - 清单中的 `version` 不代表更新策略；由应用决定挂载哪个插件版本。
 - 文件系统扫描、安装状态、哈希/签名校验和更新源均不属于运行时职责。

@@ -27,7 +27,7 @@ final class QuickjsUiInspectorPanel extends StatelessWidget {
           state: controller.state,
           node: controller.node,
           plugin: controller.plugin,
-          mounts: controller.session.mounts,
+          features: controller.session.features,
           error: controller.error,
         );
         return DefaultTabController(

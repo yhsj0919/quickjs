@@ -3,124 +3,111 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
-/// C 侧 QuickjsRuntime 的不透明指针。
-final class QuickjsRuntime extends Opaque {}
+/// C 侧 JsRuntime 的不透明指针。
+final class JsRuntime extends Opaque {}
 
-final class QuickjsContext extends Opaque {}
+final class JsContext extends Opaque {}
 
 typedef QuickjsVersionNative = Pointer<Utf8> Function();
 typedef QuickjsVersion = Pointer<Utf8> Function();
 
-typedef QuickjsRuntimeNewNative = Pointer<QuickjsRuntime> Function();
-typedef QuickjsRuntimeNew = Pointer<QuickjsRuntime> Function();
+typedef QuickjsRuntimeNewNative = Pointer<JsRuntime> Function();
+typedef QuickjsRuntimeNew = Pointer<JsRuntime> Function();
 
-typedef QuickjsRuntimeFreeNative = Void Function(Pointer<QuickjsRuntime>);
-typedef QuickjsRuntimeFree = void Function(Pointer<QuickjsRuntime>);
+typedef QuickjsRuntimeFreeNative = Void Function(Pointer<JsRuntime>);
+typedef QuickjsRuntimeFree = void Function(Pointer<JsRuntime>);
 typedef QuickjsContextNewNative =
-    Pointer<QuickjsContext> Function(Pointer<QuickjsRuntime>);
-typedef QuickjsContextNew =
-    Pointer<QuickjsContext> Function(Pointer<QuickjsRuntime>);
-typedef QuickjsContextFreeNative = Void Function(Pointer<QuickjsContext>);
-typedef QuickjsContextFree = void Function(Pointer<QuickjsContext>);
+    Pointer<JsContext> Function(Pointer<JsRuntime>);
+typedef QuickjsContextNew = Pointer<JsContext> Function(Pointer<JsRuntime>);
+typedef QuickjsContextFreeNative = Void Function(Pointer<JsContext>);
+typedef QuickjsContextFree = void Function(Pointer<JsContext>);
 typedef QuickjsContextEvalTimeoutNamedNative =
     Pointer<Utf8> Function(
-      Pointer<QuickjsContext>,
+      Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Int64,
     );
 typedef QuickjsContextEvalTimeoutNamed =
     Pointer<Utf8> Function(
-      Pointer<QuickjsContext>,
+      Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       int,
     );
 typedef QuickjsContextEvalModuleNative =
     Pointer<Utf8> Function(
-      Pointer<QuickjsContext>,
+      Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );
 typedef QuickjsContextEvalModule =
     Pointer<Utf8> Function(
-      Pointer<QuickjsContext>,
+      Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );
 typedef QuickjsContextBindCallbackNative =
     Int32 Function(
-      Pointer<QuickjsContext>,
+      Pointer<JsContext>,
       Int64,
       Pointer<Utf8>,
       Pointer<NativeFunction<QuickjsHostCallbackNative>>,
     );
 typedef QuickjsContextBindCallback =
     int Function(
-      Pointer<QuickjsContext>,
+      Pointer<JsContext>,
       int,
       Pointer<Utf8>,
       Pointer<NativeFunction<QuickjsHostCallbackNative>>,
     );
 typedef QuickjsContextEvalAsyncStartNamedNative =
-    Pointer<Utf8> Function(
-      Pointer<QuickjsContext>,
-      Pointer<Utf8>,
-      Pointer<Utf8>,
-    );
+    Pointer<Utf8> Function(Pointer<JsContext>, Pointer<Utf8>, Pointer<Utf8>);
 typedef QuickjsContextEvalAsyncStartNamed =
-    Pointer<Utf8> Function(
-      Pointer<QuickjsContext>,
-      Pointer<Utf8>,
-      Pointer<Utf8>,
-    );
+    Pointer<Utf8> Function(Pointer<JsContext>, Pointer<Utf8>, Pointer<Utf8>);
 typedef QuickjsContextEvalAsyncPollNative =
-    Pointer<Utf8> Function(Pointer<QuickjsContext>);
+    Pointer<Utf8> Function(Pointer<JsContext>);
 typedef QuickjsContextEvalAsyncPoll =
-    Pointer<Utf8> Function(Pointer<QuickjsContext>);
-typedef QuickjsContextPumpTimersNative =
-    Int64 Function(Pointer<QuickjsContext>);
-typedef QuickjsContextPumpTimers = int Function(Pointer<QuickjsContext>);
+    Pointer<Utf8> Function(Pointer<JsContext>);
+typedef QuickjsContextPumpTimersNative = Int64 Function(Pointer<JsContext>);
+typedef QuickjsContextPumpTimers = int Function(Pointer<JsContext>);
 typedef QuickjsContextBindSinkNative =
-    Int32 Function(Pointer<QuickjsContext>, Int64, Pointer<Utf8>);
+    Int32 Function(Pointer<JsContext>, Int64, Pointer<Utf8>);
 typedef QuickjsContextBindSink =
-    int Function(Pointer<QuickjsContext>, int, Pointer<Utf8>);
+    int Function(Pointer<JsContext>, int, Pointer<Utf8>);
 
 typedef QuickjsRuntimeSetMemoryLimitNative =
-    Void Function(Pointer<QuickjsRuntime>, Int64);
-typedef QuickjsRuntimeSetMemoryLimit =
-    void Function(Pointer<QuickjsRuntime>, int);
+    Void Function(Pointer<JsRuntime>, Int64);
+typedef QuickjsRuntimeSetMemoryLimit = void Function(Pointer<JsRuntime>, int);
 
 typedef QuickjsRuntimeSetStackLimitNative =
-    Void Function(Pointer<QuickjsRuntime>, Int64);
-typedef QuickjsRuntimeSetStackLimit =
-    void Function(Pointer<QuickjsRuntime>, int);
+    Void Function(Pointer<JsRuntime>, Int64);
+typedef QuickjsRuntimeSetStackLimit = void Function(Pointer<JsRuntime>, int);
 
 typedef QuickjsRuntimeSetCancelFlagNative =
-    Void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
+    Void Function(Pointer<JsRuntime>, Pointer<Int32>);
 typedef QuickjsRuntimeSetCancelFlag =
-    void Function(Pointer<QuickjsRuntime>, Pointer<Int32>);
-typedef QuickjsRuntimePumpTimersNative =
-    Int64 Function(Pointer<QuickjsRuntime>);
-typedef QuickjsRuntimePumpTimers = int Function(Pointer<QuickjsRuntime>);
+    void Function(Pointer<JsRuntime>, Pointer<Int32>);
+typedef QuickjsRuntimePumpTimersNative = Int64 Function(Pointer<JsRuntime>);
+typedef QuickjsRuntimePumpTimers = int Function(Pointer<JsRuntime>);
 
 typedef QuickjsEvalTimeoutNative =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, Int64);
+    Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, Int64);
 typedef QuickjsEvalTimeout =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>, int);
+    Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, int);
 
 typedef QuickjsEvalTimeoutNamedNative =
     Pointer<Utf8> Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Int64,
     );
 typedef QuickjsEvalTimeoutNamed =
     Pointer<Utf8> Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       int,
@@ -128,14 +115,14 @@ typedef QuickjsEvalTimeoutNamed =
 
 typedef QuickjsEvalModuleNative =
     Pointer<Utf8> Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );
 typedef QuickjsEvalModule =
     Pointer<Utf8> Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
@@ -151,45 +138,36 @@ typedef QuickjsHostCallback =
 
 typedef QuickjsRuntimeBindCallbackNative =
     Int32 Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Int64,
       Pointer<Utf8>,
       Pointer<NativeFunction<QuickjsHostCallbackNative>>,
     );
 typedef QuickjsRuntimeBindCallback =
     int Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       int,
       Pointer<Utf8>,
       Pointer<NativeFunction<QuickjsHostCallbackNative>>,
     );
 
 typedef QuickjsEvalAsyncStartNative =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
+    Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>);
 typedef QuickjsEvalAsyncStart =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>, Pointer<Utf8>);
+    Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>);
 
 typedef QuickjsEvalAsyncStartNamedNative =
-    Pointer<Utf8> Function(
-      Pointer<QuickjsRuntime>,
-      Pointer<Utf8>,
-      Pointer<Utf8>,
-    );
+    Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, Pointer<Utf8>);
 typedef QuickjsEvalAsyncStartNamed =
-    Pointer<Utf8> Function(
-      Pointer<QuickjsRuntime>,
-      Pointer<Utf8>,
-      Pointer<Utf8>,
-    );
+    Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, Pointer<Utf8>);
 
-typedef QuickjsEvalAsyncPollNative =
-    Pointer<Utf8> Function(Pointer<QuickjsRuntime>);
-typedef QuickjsEvalAsyncPoll = Pointer<Utf8> Function(Pointer<QuickjsRuntime>);
+typedef QuickjsEvalAsyncPollNative = Pointer<Utf8> Function(Pointer<JsRuntime>);
+typedef QuickjsEvalAsyncPoll = Pointer<Utf8> Function(Pointer<JsRuntime>);
 
 typedef QuickjsRuntimeResolveCallbackNative =
-    Int32 Function(Pointer<QuickjsRuntime>, Int64, Int32, Pointer<Utf8>);
+    Int32 Function(Pointer<JsRuntime>, Int64, Int32, Pointer<Utf8>);
 typedef QuickjsRuntimeResolveCallback =
-    int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
+    int Function(Pointer<JsRuntime>, int, int, Pointer<Utf8>);
 
 typedef QuickjsHostStreamPullNative = Int64 Function(Int64 streamId);
 typedef QuickjsHostStreamPull = int Function(int streamId);
@@ -208,33 +186,33 @@ typedef QuickjsHostSinkAction =
 
 typedef QuickjsRuntimeSetStreamHandlersNative =
     Void Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Pointer<NativeFunction<QuickjsHostStreamPullNative>>,
       Pointer<NativeFunction<QuickjsHostStreamCancelNative>>,
       Pointer<NativeFunction<QuickjsHostSinkActionNative>>,
     );
 typedef QuickjsRuntimeSetStreamHandlers =
     void Function(
-      Pointer<QuickjsRuntime>,
+      Pointer<JsRuntime>,
       Pointer<NativeFunction<QuickjsHostStreamPullNative>>,
       Pointer<NativeFunction<QuickjsHostStreamCancelNative>>,
       Pointer<NativeFunction<QuickjsHostSinkActionNative>>,
     );
 
 typedef QuickjsRuntimeResolveStreamPullNative =
-    Int32 Function(Pointer<QuickjsRuntime>, Int64, Int32, Pointer<Utf8>);
+    Int32 Function(Pointer<JsRuntime>, Int64, Int32, Pointer<Utf8>);
 typedef QuickjsRuntimeResolveStreamPull =
-    int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
+    int Function(Pointer<JsRuntime>, int, int, Pointer<Utf8>);
 
 typedef QuickjsRuntimeResolveSinkActionNative =
-    Int32 Function(Pointer<QuickjsRuntime>, Int64, Int32, Pointer<Utf8>);
+    Int32 Function(Pointer<JsRuntime>, Int64, Int32, Pointer<Utf8>);
 typedef QuickjsRuntimeResolveSinkAction =
-    int Function(Pointer<QuickjsRuntime>, int, int, Pointer<Utf8>);
+    int Function(Pointer<JsRuntime>, int, int, Pointer<Utf8>);
 
 typedef QuickjsRuntimeBindSinkNative =
-    Int32 Function(Pointer<QuickjsRuntime>, Int64, Pointer<Utf8>);
+    Int32 Function(Pointer<JsRuntime>, Int64, Pointer<Utf8>);
 typedef QuickjsRuntimeBindSink =
-    int Function(Pointer<QuickjsRuntime>, int, Pointer<Utf8>);
+    int Function(Pointer<JsRuntime>, int, Pointer<Utf8>);
 
 /// QuickJS native 动态库的 Dart FFI 绑定。
 ///

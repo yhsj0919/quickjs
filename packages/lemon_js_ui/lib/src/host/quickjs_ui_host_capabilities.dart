@@ -63,7 +63,7 @@ final class QuickjsUiHostMethod {
   });
 
   final String name;
-  final QuickjsHostProviderCallback callback;
+  final JsProviderCallback callback;
   final String? permission;
   final Map<String, Object?> inputSchema;
   final Map<String, Object?> outputSchema;
@@ -161,7 +161,7 @@ final class QuickjsUiHostMethodDeclaration {
 final class QuickjsUiCapabilityGroup {
   const QuickjsUiCapabilityGroup({
     required this.name,
-    required this.mounts,
+    required this.features,
     this.namespace,
     this.permissions = const <String>{},
     this.methods = const <QuickjsUiHostMethodDeclaration>[],
@@ -177,7 +177,7 @@ final class QuickjsUiCapabilityGroup {
     return QuickjsUiCapabilityGroup(
       name: name,
       namespace: 'system',
-      mounts: <QuickjsHostMount>[
+      features: <JsFeatures>[
         _buildSystemMount(
           name: name,
           options: options,
@@ -197,7 +197,7 @@ final class QuickjsUiCapabilityGroup {
     String globalName = 'quickjsUiApp',
     Set<String> permissions = const <String>{},
   }) {
-    final providerEntries = <QuickjsHostProvider>[];
+    final providerEntries = <JsProvider>[];
     final declarations = <QuickjsUiHostMethodDeclaration>[];
     final apiEntries = <String>[];
     final resolvedPermissions = <String>{...permissions};
@@ -206,7 +206,7 @@ final class QuickjsUiCapabilityGroup {
       final methodName = _validateMethodName(method.name);
       final providerName = '$namespace.$methodName';
       providerEntries.add(
-        QuickjsHostProvider.dart(
+        JsProvider.dart(
           name: providerName,
           debugName: method.debugName ?? '$name.$methodName',
           callback: method.callback,
@@ -232,12 +232,12 @@ final class QuickjsUiCapabilityGroup {
       namespace: namespace,
       permissions: Set<String>.unmodifiable(resolvedPermissions),
       methods: List<QuickjsUiHostMethodDeclaration>.unmodifiable(declarations),
-      mounts: <QuickjsHostMount>[
-        QuickjsHostMount(
+      features: <JsFeatures>[
+        JsFeatures(
           name: name,
-          providers: List<QuickjsHostProvider>.unmodifiable(providerEntries),
-          environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript.js(
+          providers: List<JsProvider>.unmodifiable(providerEntries),
+          scripts: <JsScript>[
+            JsScript.js(
               name: '$name:globals.js',
               globals: <String>[globalName],
               source:
@@ -282,7 +282,7 @@ final class QuickjsUiCapabilityGroup {
 
   final String name;
   final String? namespace;
-  final List<QuickjsHostMount> mounts;
+  final List<JsFeatures> features;
   final Set<String> permissions;
   final List<QuickjsUiHostMethodDeclaration> methods;
 }
@@ -316,7 +316,7 @@ final class QuickjsUiHostCapabilities {
   final List<QuickjsUiCapabilityGroup> groups;
   final QuickjsUiCapabilityConflictPolicy conflictPolicy;
 
-  List<QuickjsHostMount> get mounts => toMounts();
+  List<JsFeatures> get features => toMounts();
 
   Set<String> get permissions {
     return <String>{for (final group in groups) ...group.permissions};
@@ -334,50 +334,50 @@ final class QuickjsUiHostCapabilities {
     );
   }
 
-  List<QuickjsHostMount> toMounts() {
-    final resolved = <QuickjsHostMount>[];
+  List<JsFeatures> toMounts() {
+    final resolved = <JsFeatures>[];
     for (final group in groups) {
       _validateMethodDeclarations(group);
-      for (final mount in group.mounts) {
-        _appendMount(resolved, group, mount);
+      for (final features in group.features) {
+        _appendFeatures(resolved, group, features);
       }
     }
-    return List<QuickjsHostMount>.unmodifiable(resolved);
+    return List<JsFeatures>.unmodifiable(resolved);
   }
 
-  void _appendMount(
-    List<QuickjsHostMount> resolved,
+  void _appendFeatures(
+    List<JsFeatures> resolved,
     QuickjsUiCapabilityGroup group,
-    QuickjsHostMount mount,
+    JsFeatures features,
   ) {
     final conflicts = <int>{
       for (var i = 0; i < resolved.length; i++)
-        if (_mountsConflict(resolved[i], mount)) i,
+        if (_featuresConflict(resolved[i], features)) i,
     };
     if (conflicts.isEmpty) {
-      resolved.add(mount);
+      resolved.add(features);
       return;
     }
     switch (conflictPolicy) {
       case QuickjsUiCapabilityConflictPolicy.reject:
         throw StateError(
-          'quickjs_ui host capability conflict for mount "${mount.name}"',
+          'quickjs_ui host capability conflict for features "${features.name}"',
         );
       case QuickjsUiCapabilityConflictPolicy.replace:
         for (final index in conflicts.toList().reversed) {
           resolved.removeAt(index);
         }
-        resolved.add(mount);
+        resolved.add(features);
       case QuickjsUiCapabilityConflictPolicy.namespace:
-        resolved.add(_namespaceMount(group, mount, resolved.length));
+        resolved.add(_namespaceFeatures(group, features, resolved.length));
     }
   }
 }
 
 void _validateMethodDeclarations(QuickjsUiCapabilityGroup group) {
   final providerNames = <String>{
-    for (final mount in group.mounts)
-      for (final provider in mount.providers) provider.name,
+    for (final features in group.features)
+      for (final provider in features.providers) provider.name,
   };
   final declaredProviderNames = <String>{};
 
@@ -593,25 +593,25 @@ List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
   return List<QuickjsUiHostMethodDeclaration>.unmodifiable(methods);
 }
 
-QuickjsHostMount _buildSystemMount({
+JsFeatures _buildSystemMount({
   required String name,
   required QuickjsUiHostCapabilityOptions options,
   required QuickjsUiHostApiHandlers handlers,
   required Map<String, Object?> storage,
 }) {
-  final providers = <QuickjsHostProvider>[];
+  final providers = <JsProvider>[];
   final apiEntries = <String>[];
 
   void provider(
     QuickjsUiHostCapability capability,
     String name,
-    QuickjsHostProviderCallback callback,
+    JsProviderCallback callback,
   ) {
     if (!options.isEnabled(capability)) {
       return;
     }
     providers.add(
-      QuickjsHostProvider.dart(
+      JsProvider.dart(
         name: name,
         debugName: 'quickjs_ui host ${capability.name}',
         callback: callback,
@@ -700,7 +700,7 @@ QuickjsHostMount _buildSystemMount({
   if (options.isEnabled(QuickjsUiHostCapability.clipboard)) {
     providers
       ..add(
-        QuickjsHostProvider.dart(
+        JsProvider.dart(
           name: 'quickjs_ui.host.clipboard.readText',
           debugName: 'quickjs_ui host clipboard readText',
           callback: (_, _) {
@@ -709,7 +709,7 @@ QuickjsHostMount _buildSystemMount({
         ),
       )
       ..add(
-        QuickjsHostProvider.dart(
+        JsProvider.dart(
           name: 'quickjs_ui.host.clipboard.writeText',
           debugName: 'quickjs_ui host clipboard writeText',
           callback: (args, _) {
@@ -728,7 +728,7 @@ clipboard: {
   if (options.isEnabled(QuickjsUiHostCapability.storage)) {
     providers
       ..add(
-        QuickjsHostProvider.dart(
+        JsProvider.dart(
           name: 'quickjs_ui.host.storage.getItem',
           debugName: 'quickjs_ui host storage getItem',
           callback: (args, _) {
@@ -737,7 +737,7 @@ clipboard: {
         ),
       )
       ..add(
-        QuickjsHostProvider.dart(
+        JsProvider.dart(
           name: 'quickjs_ui.host.storage.setItem',
           debugName: 'quickjs_ui host storage setItem',
           callback: (args, _) {
@@ -749,7 +749,7 @@ clipboard: {
         ),
       )
       ..add(
-        QuickjsHostProvider.dart(
+        JsProvider.dart(
           name: 'quickjs_ui.host.storage.removeItem',
           debugName: 'quickjs_ui host storage removeItem',
           callback: (args, _) {
@@ -811,11 +811,11 @@ storage: {
     );
   }
 
-  return QuickjsHostMount(
+  return JsFeatures(
     name: name,
     providers: providers,
-    environmentPatches: <QuickjsHostScript>[
-      QuickjsHostScript.js(
+    scripts: <JsScript>[
+      JsScript.js(
         name: '$name:globals.js',
         globals: const <String>['quickjsUiHost'],
         source:
@@ -832,15 +832,15 @@ storage: {
   );
 }
 
-bool _mountsConflict(QuickjsHostMount left, QuickjsHostMount right) {
+bool _featuresConflict(JsFeatures left, JsFeatures right) {
   return left.name == right.name ||
       _intersects(
         left.providers.map((provider) => provider.name),
         right.providers.map((provider) => provider.name),
       ) ||
       _intersects(
-        left.environmentPatches.expand((script) => script.globals),
-        right.environmentPatches.expand((script) => script.globals),
+        left.scripts.expand((script) => script.globals),
+        right.scripts.expand((script) => script.globals),
       ) ||
       _intersects(
         left.modules.map((module) => module.specifier),
@@ -880,18 +880,18 @@ Map<String, Object?> _stringSchema() {
   return const <String, Object?>{'type': 'string'};
 }
 
-QuickjsHostMount _namespaceMount(
+JsFeatures _namespaceFeatures(
   QuickjsUiCapabilityGroup group,
-  QuickjsHostMount mount,
+  JsFeatures features,
   int index,
 ) {
   final namespace = group.namespace ?? group.name;
-  return QuickjsHostMount(
-    name: '$namespace:${mount.name}:$index',
-    capabilities: mount.capabilities,
-    environmentPatches: mount.environmentPatches,
-    modules: mount.modules,
-    providers: mount.providers,
+  return JsFeatures(
+    name: '$namespace:${features.name}:$index',
+    browserGlobals: features.browserGlobals,
+    scripts: features.scripts,
+    modules: features.modules,
+    providers: features.providers,
   );
 }
 

@@ -13,7 +13,7 @@
   input bridge 和生命周期挂接。
 - [x] Flutter 不默认接管业务状态；除非宿主显式暴露 provider / host API，否则状态来源只在 JS 页面内。
 - [x] JS 与 Flutter 可以互相调用，但必须通过显式注册的 host API、action handler、原生 route registry 或
-  `QuickjsHostMount`，不做隐式全局能力注入。
+  `JsFeatures`，不做隐式全局能力注入。
 - [x] 双向调用只传递 structured value，不传递 Flutter Widget、Dart object handle、JS function handle
   或不可序列化对象。
 - [ ] 每个新增 quickjs_ui 能力必须同步补 example 测试页或更新现有测试页，并注册到示例入口；后续开发默认执行，
@@ -28,10 +28,10 @@
 
 ### 核心边界
 
-- [x] `quickjs` core 只继续提供 runtime、plugin、module、host mount、structured value codec 和 debug 能力。
+- [x] `quickjs` core 只继续提供 runtime、plugin、module、host features、structured value codec 和 debug 能力。
 - [x] `quickjs_ui` 独立承载页面协议、UI schema、Flutter renderer、组件库、事件分发和页面生命周期。
 - [x] JS 不直接操作 Flutter Widget，不暴露 DOM/CSSOM/WebView，也不把 Flutter class 暴露给 JS 页面。
-- [x] JS 页面默认没有网络、存储、文件系统等能力；需要时由宿主显式传入 `QuickjsHostMount` / provider。
+- [x] JS 页面默认没有网络、存储、文件系统等能力；需要时由宿主显式传入 `JsFeatures` / provider。
 - [x] 第一版先做协议和渲染，不先做 `.ux` / template 语法；后续 DSL 只作为编译到协议的语法糖。
 
 ### 页面协议
@@ -120,18 +120,18 @@ final networkView = QuickjsUiView.network(
 QuickjsUiView.plugin(
   plugin,
   initialProps: const <String, Object?>{},
-  mounts: <QuickjsHostMount>[
-    appApiMount,
+  features: <JsFeatures>[
+    appFeatures,
   ],
 );
 ```
 
-- [x] `QuickjsUiView.plugin(plugin, {initialProps, mounts})`：直接渲染一个已构建的 `QuickjsPlugin` 页面。
-- [x] `QuickjsUiView.asset(path, {initialProps, mounts})`：从 Flutter asset 加载 JS module 页面；单文件和多文件入口统一走
+- [x] `QuickjsUiView.plugin(plugin, {initialProps, features})`：直接渲染一个已构建的 `JsPlugin` 页面。
+- [x] `QuickjsUiView.asset(path, {initialProps, features})`：从 Flutter asset 加载 JS module 页面；单文件和多文件入口统一走
   `path`。
-- [x] `QuickjsUiView.file(path, {initialProps, mounts})`：从本地文件系统入口加载 JS module 页面，用于桌面调试、开发工具和
+- [x] `QuickjsUiView.file(path, {initialProps, features})`：从本地文件系统入口加载 JS module 页面，用于桌面调试、开发工具和
   外部页面目录。
-- [x] `QuickjsUiView.network(url, {initialProps, mounts})`：从 network 入口加载 JS module 页面；默认只做显式入口加载，
+- [x] `QuickjsUiView.network(url, {initialProps, features})`：从 network 入口加载 JS module 页面；默认只做显式入口加载，
   缓存、校验和权限由后续 network loader 策略补齐。
 - [x] `QuickjsUiController`：提供 `reload()`、`dispatch(event)`、`state`、`dispose()` 和错误状态观察。
 - [x] `QuickjsUiErrorBuilder`：渲染 JS exception、schema error、runtime closed、资源加载失败等错误状态。
@@ -492,7 +492,7 @@ Flutter 风格对象写法：
 ### 0.3：宿主能力与页面能力边界
 
 - [x] 支持 `mounts` 显式传入。
-- [x] 提供 `QuickjsUiHostCapabilities` 封装包：在 `QuickjsHostMount` 之上组织 UI 层宿主能力，支持系统默认能力和用户自定义能力组合。
+- [x] 提供 `QuickjsUiHostCapabilities` 封装包：在 `JsFeatures` 之上组织 UI 层宿主能力，支持系统默认能力和用户自定义能力组合。
 - [x] `QuickjsUiHostCapabilities` 支持参数配置启用/禁用能力，例如 `toast`、`confirm`、`dialog`、`navigation`、
   `clipboard`、`storage`、`network`、`fileSystem`、`nativeCall`，默认只启用安全的基础能力。
 - [x] `QuickjsUiHostCapabilities` 支持传入多个 capability group，并按顺序合并为 mounts；冲突时提供明确策略

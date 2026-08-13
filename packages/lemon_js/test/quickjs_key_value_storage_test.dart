@@ -9,7 +9,7 @@ void main() {
     () async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.empty();
-      final store = SharedPreferencesQuickjsKeyValueStore();
+      final store = SharedPreferencesJsKvStore();
 
       await store.set('session', <String, Object?>{
         'token': 'one',
@@ -40,8 +40,8 @@ void main() {
   );
 
   test('storage mount binds namespace without exposing it to JavaScript', () {
-    final mount = QuickjsKeyValueStorageMount(
-      store: InMemoryQuickjsKeyValueStore(),
+    final mount = StorageFeatures(
+      store: MemoryJsKvStore(),
       namespace: 'site.one',
     );
 

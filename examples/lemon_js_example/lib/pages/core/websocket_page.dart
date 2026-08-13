@@ -48,14 +48,12 @@ class _WebSocketPageState extends State<WebSocketPage> {
       _quickjs = null;
       await previous?.dispose();
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsWebSocketMount(
-              allowedOrigins: <String>{origin},
-              connectTimeout: const Duration(seconds: 15),
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          WebSocketFeatures(
+            allowedOrigins: <String>{origin},
+            connectTimeout: const Duration(seconds: 15),
+          ),
+        ],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -78,7 +76,7 @@ class _WebSocketPageState extends State<WebSocketPage> {
   Future<void> _runEcho() async {
     await _capture('文本回显', () async {
       final encodedUrl = jsonEncode(_currentUrl);
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().runRaw('''
 return await new Promise((resolve, reject) => {
   const ws = new WebSocket($encodedUrl);
   const started = Date.now();
@@ -102,7 +100,7 @@ return await new Promise((resolve, reject) => {
 
   Future<void> _runProtocolCheck() async {
     await _capture('协议检查', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 return [
   typeof WebSocket,
   WebSocket.CONNECTING,
@@ -119,7 +117,7 @@ return [
   Future<void> _runPolicyCheck() async {
     await _capture('策略检查', () async {
       try {
-        await _requireRuntime().evalAsync('''
+        await _requireRuntime().run('''
 return await new Promise((resolve, reject) => {
   const ws = new WebSocket('wss://example.com/socket');
   ws.onopen = () => resolve('unexpected open');
@@ -177,7 +175,7 @@ return await new Promise((resolve, reject) => {
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -204,7 +202,7 @@ return await new Promise((resolve, reject) => {
           children: <Widget>[
             Text(_status),
             const SizedBox(height: 8),
-            const Text('QuickjsWebSocketMount 会安装 globalThis.WebSocket。'),
+            const Text('WebSocketFeatures 会安装 globalThis.WebSocket。'),
             const SizedBox(height: 12),
             TextField(
               controller: _urlController,

@@ -239,7 +239,7 @@ final bundle = await QuickjsUiBundle.networkPackage(
 
 ## 与 quickjs core 的边界
 
-发布包格式属于 `quickjs_ui`，不进入 `quickjs` core。core 仍然只接收最终转换出的 `QuickjsPlugin`、module source、manifest metadata 和 host mounts。
+发布包格式属于 `quickjs_ui`，不进入 `quickjs` core。core 仍然只接收最终转换出的 `JsPlugin`、module source、manifest metadata 和 host features。
 
 也就是说：
 
@@ -247,7 +247,7 @@ final bundle = await QuickjsUiBundle.networkPackage(
 发布包 root/zip/network
   -> quickjs_ui loader 校验 manifest/resources
   -> QuickjsUiBundle
-  -> QuickjsPlugin
+  -> JsPlugin
   -> quickjs core runtime
 ```
 

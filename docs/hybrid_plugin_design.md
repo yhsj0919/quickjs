@@ -55,7 +55,7 @@ lemon_js_ui -> lemon_js
 
 依赖方向必须保持单向：
 
-- `lemon_js` 只负责 JS runtime、模块、Core 插件、mount/provider 和底层生命周期，不依赖 lemon_js_ui 或 `lemon_js_extensions`；
+- `lemon_js` 只负责 JS runtime、模块、Core 插件、features/provider 和底层生命周期，不依赖 lemon_js_ui 或 `lemon_js_extensions`；
 - lemon_js_ui 负责通用 JSUI 加载、渲染、事件、导航与页面生命周期，继续依赖 `lemon_js`，但不依赖 `lemon_js_extensions`；
 - `lemon_js_extensions` 同时依赖 `lemon_js` 与 lemon_js_ui，提供二者的通用组合能力；
 - 业务宿主可以直接使用 `lemon_js`、lemon_js_ui，也可以选择依赖 `lemon_js_extensions`，由业务层解释登录、内容源、播放器等具体语义。
@@ -131,7 +131,7 @@ QuickjsUiComponent
 
 ```dart
 // 不经过 lemon_js_extensions，直接使用 Core 插件。
-final plugin = QuickjsPlugin(...);
+final plugin = JsPlugin(...);
 
 // 不经过 lemon_js_extensions，直接使用 JSUI bundle。
 final bundle = QuickjsUiBundle(...);
@@ -168,13 +168,13 @@ QuickjsExtensionView.route(
 
 - 从 `QuickjsExtensionSession` 解析指定 UI route；
 - 取得对应 bundle/plugin；
-- 绑定宿主明确配置的 scoped KV、权限策略与 host mounts；
+- 绑定宿主明确配置的 scoped KV、权限策略与 host features；
 - 对 hybrid 变体注入绑定到同一 Session Core 的 service bridge；
 - 最终委托现有 `QuickjsUiView` 完成加载和渲染。
 
 ```text
 QuickjsExtensionView.route
-        ↓ 解析 extension/session/route/mounts
+        ↓ 解析 extension/session/route/features
 QuickjsUiView
         ↓
 Flutter Widget
@@ -243,33 +243,33 @@ Session 是宿主级的身份和资源边界，不等同于 QuickJS Context。JS
 
 常驻对象与常驻 runtime 是两个层次。extension 和默认 Session 固定常驻；Core runtime 允许首次调用时懒创建，但不采用每次调用后销毁的默认策略。未来如增加内存压力下的空闲回收，应作为显式可配置策略，并保证 Session 身份和持久状态不变。
 
-由于 runtime 默认长期存在，能力配置应在 Session 启动前完成。启动后修改 mounts 不能被视为普通字段更新；如果底层需要重建 runtime，应通过明确的 reconfigure/restart 或扩展替换流程，并处理在途调用。
+由于 runtime 默认长期存在，能力配置应在 Session 启动前完成。启动后修改 features 不能被视为普通字段更新；如果底层需要重建 runtime，应通过明确的 reconfigure/restart 或扩展替换流程，并处理在途调用。
 
 ### 4.2 能力的统一管理与分别注入
 
 基础能力由 `QuickjsExtensionSession` 统一配置和授权，但 Core 与 JSUI 通常处于不同 Context，创建各自 runtime 时分别注入：
 
 ```text
-Core runtime = authorized sharedMounts + serviceMounts
+Core runtime = authorized sharedFeaturess + serviceFeaturess
 
-UI runtime = authorized sharedMounts
-           + uiMounts
-           + routeMounts
+UI runtime = authorized sharedFeaturess
+           + uiFeaturess
+           + routeFeaturess
            + hybrid service bridge
-           + quickjs_ui runtime mounts
+           + quickjs_ui runtime features
 ```
 
-- `sharedMounts` 同时提供给 Core 与 UI，例如连接同一个 Session 后端的 scoped KV；
-- `serviceMounts` 只提供给 Core，例如完整网络、认证和数据处理能力；
-- `uiMounts` 只提供给 JSUI，例如剪贴板、文件选择和页面交互能力；
-- `routeMounts` 在 `QuickjsExtensionView.route()` 创建具体页面时补充，例如只有扫码登录页获得相机能力；
+- `sharedFeaturess` 同时提供给 Core 与 UI，例如连接同一个 Session 后端的 scoped KV；
+- `serviceFeaturess` 只提供给 Core，例如完整网络、认证和数据处理能力；
+- `uiFeaturess` 只提供给 JSUI，例如剪贴板、文件选择和页面交互能力；
+- `routeFeaturess` 在 `QuickjsExtensionView.route()` 创建具体页面时补充，例如只有扫码登录页获得相机能力；
 - hybrid service bridge 默认绑定当前 Session 的 Core，不接收任意 pluginId，也不把 Core 的全部底层能力暴露给 UI。
 
-manifest 权限声明不等于实际注入。宿主授权后才可进入相应 runtime 的有效 mounts。
+manifest 权限声明不等于实际注入。宿主授权后才可进入相应 runtime 的有效 features。
 
 ## 5. KV 存储边界
 
-核心提供可被 JS 调用的 `QuickjsKeyValueStore`，默认实现使用
+核心提供可被 JS 调用的 `JsKvStore`，默认实现使用
 `SharedPreferencesAsync`。混合插件 Manager 按照插件 ID 绑定 namespace，Core 与 JSUI
 使用同一个插件命名空间；宿主可以替换具体 Store。
 
@@ -445,7 +445,7 @@ URL 字段使用绝对 HTTPS 地址。`homepage` 可以仅用于展示或跳转�
 final class InstalledQuickjsExtension {
   final QuickjsExtensionManifest manifest;
   final QuickjsExtensionSession session;
-  final QuickjsPlugin? servicePlugin;
+  final JsPlugin? servicePlugin;
   final QuickjsUiBundle? uiBundle;
 }
 ```
@@ -619,18 +619,18 @@ manifest 可通过 `storageVersion` 描述插件 KV 结构版本。版本变化�
 ### 12.3 QuickjsExtensionSession 生命周期与资源边界（第一版已实现）
 
 已提供宿主级 Session，统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host
-mounts。Core runtime 首次调用时创建并保持到停用或卸载；UI 页面销毁不影响 Session。
+features。Core runtime 首次调用时创建并保持到停用或卸载；UI 页面销毁不影响 Session。
 权限声明和授权不触发能力创建。Manager 通过明确的可选能力配置统一提供网络、存储和
-加密默认实现；宿主可以关闭或替换，并可继续追加 `sharedMounts`、`serviceMounts` 和
-`uiMounts`。
+加密默认实现；宿主可以关闭或替换，并可继续追加 `sharedFeaturess`、`serviceFeaturess` 和
+`uiFeaturess`。
 Core 调用使用有界串行队列和默认超时，停用/卸载会关闭 Runtime；故障 Runtime 清理后由下次
 调用惰性重建，失败业务调用不会自动重放。升级过程中的页面与调用迁移仍待补充。
 
 后续能力注入改造必须区分两层：Runtime、模块、生命周期、错误桥接等核心能力始终注入，
-不参与权限控制；宿主可选能力由统一配置决定是否提供，不再根据权限声明临时创建 mount。
+不参与权限控制；宿主可选能力由统一配置决定是否提供，不再根据权限声明临时创建 features。
 第一版默认提供的可选能力为 `storage`、`network` 和 `crypto`；`network` 默认直接注入
 随 `lemon_js_extensions` 发布的 Axios，并同时提供 Fetch/XHR。默认权限策略为完全宽松，
-宿主可以替换或关闭任一可选能力。`crypto` 默认启用 `QuickjsWebCryptoMount` 当前已经实现的
+宿主可以替换或关闭任一可选能力。`crypto` 默认启用 `WebCryptoFeatures` 当前已经实现的
 全部能力，包括 `randomUUID()`、`getRandomValues()`、SHA-1/256/384/512 digest，以及
 HMAC-SHA-1/256 的 key import、sign 和 verify；不为尚未实现的算法声明能力。
 
@@ -856,7 +856,7 @@ await manager.installAssetZip(
 格式职责：
 
 - `extension`：读取统一 Extension manifest，可派生为 Core-only、UI-only 或 hybrid；
-- `core`：使用现有 `QuickjsZipPlugin`/`QuickjsPlugin` 规则读取旧 Core 插件，再由显式适配信息包装为 Core-only Extension；
+- `core`：使用现有 `JsZipPlugin`/`JsPlugin` 规则读取旧 Core 插件，再由显式适配信息包装为 Core-only Extension；
 - `ui`：使用现有 `QuickjsUiBundle` 包格式读取旧 JSUI 包，再由显式适配信息包装为 UI-only Extension；
 - 不根据 ZIP 内文件进行模糊猜测，避免多个 `manifest.json` 或相似目录导致错误识别；
 - 原 Core 和 JSUI API 继续可以绕过 Manager 单独使用，缺少统一 manifest 或兼容码不会破坏原加载方式；

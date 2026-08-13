@@ -14,8 +14,8 @@ const _fetchProviderName = 'fetch.request';
 ///
 /// 调用方拥有会话生命周期；不再使用时必须调用 [close]。Cookie Jar 后续可以在此边界
 /// 以可选能力加入，不改变 JavaScript Fetch API。
-final class QuickjsHttpSession {
-  QuickjsHttpSession({
+final class JsHttpSession {
+  JsHttpSession({
     http.Client? client,
     Set<String>? allowedOrigins,
     this.timeout = const Duration(seconds: 30),
@@ -65,27 +65,26 @@ final class QuickjsHttpSession {
   }
 }
 
-/// 可选的 Fetch API mount，由平台 HTTP 客户端提供 `fetch` 实现。
+/// 可选的 Fetch API features，由平台 HTTP 客户端提供 `fetch` 实现。
 ///
 /// 原生平台通过 `package:http`（底层为 `dart:io` 的 `HttpClient`）发起请求；
 /// Web 平台使用浏览器原生 `fetch`。
 ///
 /// 传入非空的 [allowedOrigins] 可限制请求与重定向只能访问列出的 HTTP(S) 源；
 /// 留空或 `null` 表示允许所有 HTTP(S) 源。
-final class QuickjsFetchMount extends QuickjsHostMount {
-  /// 使用一个会话的 Client、限制和默认 Header 创建 Fetch/XHR mount。
-  factory QuickjsFetchMount.session(QuickjsHttpSession session) =>
-      QuickjsFetchMount._create(
-        allowedOrigins: session.allowedOrigins,
-        timeout: session.timeout,
-        maxRequestBytes: session.maxRequestBytes,
-        maxResponseBytes: session.maxResponseBytes,
-        maxRedirects: session.maxRedirects,
-        defaultHeaders: session.defaultHeaders,
-        session: session,
-      );
+final class FetchFeatures extends JsFeatures {
+  /// 使用一个会话的 Client、限制和默认 Header 创建 Fetch/XHR features。
+  factory FetchFeatures.session(JsHttpSession session) => FetchFeatures._create(
+    allowedOrigins: session.allowedOrigins,
+    timeout: session.timeout,
+    maxRequestBytes: session.maxRequestBytes,
+    maxResponseBytes: session.maxResponseBytes,
+    maxRedirects: session.maxRedirects,
+    defaultHeaders: session.defaultHeaders,
+    session: session,
+  );
 
-  /// 创建 Fetch mount。
+  /// 创建 Fetch features。
   ///
   /// - [allowedOrigins]：允许访问的 HTTP(S) 源白名单；`null` 或空表示不限制。
   /// - [timeout]：单次请求超时时间，必须为正数。
@@ -93,14 +92,14 @@ final class QuickjsFetchMount extends QuickjsHostMount {
   /// - [maxResponseBytes]：响应体最大字节数，必须为非负数。
   /// - [maxRedirects]：允许跟随的最大重定向次数。
   /// - [defaultHeaders]：注入到每次请求中的默认 HTTP 头。
-  factory QuickjsFetchMount({
+  factory FetchFeatures({
     Set<String>? allowedOrigins,
     Duration timeout = const Duration(seconds: 30),
     int maxRequestBytes = 1024 * 1024,
     int maxResponseBytes = 10 * 1024 * 1024,
     int maxRedirects = 5,
     Map<String, String> defaultHeaders = const <String, String>{},
-  }) => QuickjsFetchMount._create(
+  }) => FetchFeatures._create(
     allowedOrigins: allowedOrigins,
     timeout: timeout,
     maxRequestBytes: maxRequestBytes,
@@ -109,14 +108,14 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     defaultHeaders: defaultHeaders,
   );
 
-  static QuickjsFetchMount _create({
+  static FetchFeatures _create({
     required Set<String>? allowedOrigins,
     required Duration timeout,
     required int maxRequestBytes,
     required int maxResponseBytes,
     required int maxRedirects,
     required Map<String, String> defaultHeaders,
-    QuickjsHttpSession? session,
+    JsHttpSession? session,
   }) {
     _validateFetchLimits(
       timeout,
@@ -131,10 +130,10 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     final normalizedDefaultHeaders = Map<String, String>.unmodifiable(
       _normalizeRequestHeaders(defaultHeaders),
     );
-    final provider = QuickjsHostProvider.dart(
+    final provider = JsProvider.dart(
       name: _fetchProviderName,
       debugName: 'host:fetch.request',
-      implementation: QuickjsHostProviderImplementation.platform,
+      implementation: JsProviderImplementation.platform,
       callback: (args, context) => _sendFetchRequest(
         args,
         context,
@@ -147,7 +146,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
         session: session,
       ),
     );
-    return QuickjsFetchMount._(
+    return FetchFeatures._(
       allowedOrigins: origins,
       timeout: timeout,
       maxRequestBytes: maxRequestBytes,
@@ -159,7 +158,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     );
   }
 
-  QuickjsFetchMount._({
+  FetchFeatures._({
     required this.allowedOrigins,
     required this.timeout,
     required this.maxRequestBytes,
@@ -167,11 +166,11 @@ final class QuickjsFetchMount extends QuickjsHostMount {
     required this.maxRedirects,
     required this.defaultHeaders,
     required this.session,
-    required QuickjsHostProvider provider,
+    required JsProvider provider,
   }) : super(
          name: 'fetch',
-         environmentPatches: <QuickjsHostScript>[
-           QuickjsHostScript.js(
+         scripts: <JsScript>[
+           JsScript.js(
              name: 'host:fetch.js',
              globals: const <String>[
                'fetch',
@@ -185,12 +184,12 @@ final class QuickjsFetchMount extends QuickjsHostMount {
              source: _fetchHostScript(_fetchProviderName),
            ),
          ],
-         providers: <QuickjsHostProvider>[provider],
+         providers: <JsProvider>[provider],
        );
 
-  /// Exact normalized HTTP(S) origins this mount may access.
+  /// Exact normalized HTTP(S) origins this features may access.
   ///
-  /// Null means every HTTP(S) origin is allowed by this mount. On Flutter Web,
+  /// Null means every HTTP(S) origin is allowed by this features. On Flutter Web,
   /// browser CORS rules still apply.
   final Set<String>? allowedOrigins;
 
@@ -210,7 +209,7 @@ final class QuickjsFetchMount extends QuickjsHostMount {
   final Map<String, String> defaultHeaders;
 
   /// 可选的共享网络会话；为空时保持原有的单请求 Client 行为。
-  final QuickjsHttpSession? session;
+  final JsHttpSession? session;
 }
 
 void _validateFetchLimits(
@@ -235,14 +234,14 @@ void _validateFetchLimits(
 
 Future<Object?> _sendFetchRequest(
   List<Object?> args,
-  QuickjsHostProviderContext context, {
+  JsProviderContext context, {
   required Set<String>? allowedOrigins,
   required Duration timeout,
   required int maxRequestBytes,
   required int maxResponseBytes,
   required int maxRedirects,
   required Map<String, String> defaultHeaders,
-  required QuickjsHttpSession? session,
+  required JsHttpSession? session,
 }) async {
   if (args.length != 1 || args.single is! Map) {
     throw const JsValueConversionException(

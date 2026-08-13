@@ -11,7 +11,7 @@ final class QuickjsExtensionView extends StatelessWidget {
     required this.session,
     required this.route,
     this.initialProps = const <String, Object?>{},
-    this.routeMounts = const <QuickjsHostMount>[],
+    this.routeFeatures = const <JsFeatures>[],
     this.controller,
     this.placeholder,
     this.loadingBuilder,
@@ -23,7 +23,7 @@ final class QuickjsExtensionView extends StatelessWidget {
   final QuickjsExtensionSession session;
   final String route;
   final Map<String, Object?> initialProps;
-  final List<QuickjsHostMount> routeMounts;
+  final List<JsFeatures> routeFeatures;
   final QuickjsUiController? controller;
   final Widget? placeholder;
   final QuickjsUiLoadingBuilder? loadingBuilder;
@@ -47,8 +47,8 @@ final class QuickjsExtensionView extends StatelessWidget {
       routeManifest.entry,
     );
     final adapterSpecifier = '${bundle.id}/__quickjs_extension_route__$route';
-    final plugin = QuickjsPlugin(
-      manifest: QuickjsPluginManifest(
+    final plugin = JsPlugin(
+      manifest: JsPluginManifest(
         id: bundle.id,
         version: bundle.version,
         entry: adapterSpecifier,
@@ -58,16 +58,16 @@ final class QuickjsExtensionView extends StatelessWidget {
           ...routeManifest.permissions,
         }.toList(growable: false),
       ),
-      modules: <QuickjsPluginModule>[
+      modules: <JsPluginModule>[
         for (final module in bundle.modules.entries)
-          QuickjsPluginModule(
+          JsPluginModule(
             specifier: QuickjsUiResourceResolver.moduleSpecifier(
               bundle.id,
               module.key,
             ),
             source: module.value,
           ),
-        QuickjsPluginModule(
+        JsPluginModule(
           specifier: adapterSpecifier,
           source: QuickjsUiPagePlugin.adapterSource(entrySpecifier),
         ),
@@ -76,7 +76,7 @@ final class QuickjsExtensionView extends StatelessWidget {
     return QuickjsUiView.plugin(
       plugin,
       initialProps: initialProps,
-      mounts: session.mountsForRoute(route, routeMounts: routeMounts),
+      features: session.featuresForRoute(route, routeFeatures: routeFeatures),
       uiPlugins: ui.plugins,
       grantedPermissions: session.grantedPermissions,
       controller: controller,

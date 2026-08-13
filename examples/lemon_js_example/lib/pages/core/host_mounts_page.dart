@@ -3,24 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-const _initialMount = QuickjsHostMount(
+const _initialMount = JsFeatures(
   name: 'example-initial',
-  environmentPatches: <QuickjsHostScript>[
-    QuickjsHostScript.js(
+  scripts: <JsScript>[
+    JsScript.js(
       name: 'mount:example-initial.js',
       globals: <String>['initialMountValue'],
       source: 'globalThis.initialMountValue = 21;',
     ),
   ],
-  modules: <QuickjsHostModule>[
-    QuickjsHostModule.esModule(
+  modules: <JsModule>[
+    JsModule.esModule(
       specifier: 'example/initial',
       source: 'export const value = 21;',
     ),
   ],
 );
 
-/// 能力批量挂载 Demo：通过 [QuickjsRuntimeOptions.mounts] 与 [Quickjs.mount]
+/// 基础功能 Demo：通过 [JsOptions.features] 与 [Quickjs.loadFeatures]
 /// 批量安装环境补全、模块与 provider。
 class HostMountsPage extends StatefulWidget {
   const HostMountsPage({super.key});
@@ -34,7 +34,7 @@ class _HostMountsPageState extends State<HostMountsPage> {
   bool _disposed = false;
   bool _busy = false;
   bool _runtimeMounted = false;
-  String _status = '正在创建带初始化 mount 的 runtime...';
+  String _status = '正在创建带初始化 features 的 runtime...';
   final List<String> _log = <String>[];
 
   @override
@@ -47,7 +47,7 @@ class _HostMountsPageState extends State<HostMountsPage> {
     setState(() {
       _busy = true;
       _runtimeMounted = false;
-      _status = '正在创建带初始化 mount 的 runtime...';
+      _status = '正在创建带初始化 features 的 runtime...';
       _log.clear();
     });
 
@@ -56,9 +56,7 @@ class _HostMountsPageState extends State<HostMountsPage> {
       _quickjs = null;
       await previous?.dispose();
       final quickjs = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[_initialMount],
-        ),
+        features: <JsFeatures>[_initialMount],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -67,7 +65,7 @@ class _HostMountsPageState extends State<HostMountsPage> {
       setState(() {
         _quickjs = quickjs;
         _busy = false;
-        _status = 'runtime 已就绪：example-initial 已挂载';
+        _status = 'runtime 已就绪：example-initial 已加载';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -81,7 +79,7 @@ class _HostMountsPageState extends State<HostMountsPage> {
   }
 
   Future<void> _checkInitialMount() async {
-    await _capture('检查初始化挂载', () async {
+    await _capture('检查初始化功能', () async {
       final quickjs = _requireRuntime();
       await quickjs.evalModule('''
 import { value } from "example/initial";
@@ -90,46 +88,46 @@ globalThis.initialModuleValue = value;
       final result = await quickjs.eval(
         'initialMountValue + "/" + initialModuleValue',
       );
-      _log.insert(0, '初始化 mount => $result');
-      _status = '环境补全和 ES module 已通过 mounts 批量安装';
+      _log.insert(0, '初始化 features => $result');
+      _status = '环境补全和 ES module 已通过 features 批量安装';
     });
   }
 
   Future<void> _mountRuntimeBundle() async {
-    await _capture('运行时批量挂载', () async {
+    await _capture('运行时加载功能', () async {
       final quickjs = _requireRuntime();
-      await quickjs.mount(_runtimeMount(2));
+      await quickjs.loadFeatures(_runtimeMount(2));
       final result = await _evaluateRuntimeMount(quickjs);
       _runtimeMounted = true;
-      _log.insert(0, 'Quickjs.mount() => $result');
-      _status = '运行时 mount 已通过重建生效，初始化 mount 同时恢复';
+      _log.insert(0, 'Quickjs.loadFeatures() => $result');
+      _status = '运行时 features 已通过重建生效，初始化 features 同时恢复';
     });
   }
 
   Future<void> _replaceRuntimeBundle() async {
-    await _capture('替换运行时挂载', () async {
+    await _capture('替换运行时功能', () async {
       final quickjs = _requireRuntime();
-      await quickjs.mount(
+      await quickjs.loadFeatures(
         _runtimeMount(3),
-        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+        conflictPolicy: JsFeaturesConflictPolicy.replace,
       );
       final result = await _evaluateRuntimeMount(quickjs);
-      _log.insert(0, 'replace mount => $result');
-      _status = '同名 runtime mount 已原子替换并通过重建生效';
+      _log.insert(0, 'replace features => $result');
+      _status = '同名 runtime features 已原子替换并通过重建生效';
     });
   }
 
-  QuickjsHostMount _runtimeMount(int multiplier) {
-    return QuickjsHostMount(
+  JsFeatures _runtimeMount(int multiplier) {
+    return JsFeatures(
       name: 'example-runtime',
-      providers: <QuickjsHostProvider>[
-        QuickjsHostProvider.dart(
+      providers: <JsProvider>[
+        JsProvider.dart(
           name: 'example.double',
           callback: (args, _) => (args.single! as num).toInt() * multiplier,
         ),
       ],
-      environmentPatches: const <QuickjsHostScript>[
-        QuickjsHostScript.js(
+      scripts: const <JsScript>[
+        JsScript.js(
           name: 'mount:example-runtime.js',
           globals: <String>['runtimeApi'],
           source: '''
@@ -141,8 +139,8 @@ globalThis.runtimeApi = {
 ''',
         ),
       ],
-      modules: <QuickjsHostModule>[
-        QuickjsHostModule.esModule(
+      modules: <JsModule>[
+        JsModule.esModule(
           specifier: 'example/runtime',
           source: 'export const label = "runtime-module-$multiplier";',
         ),
@@ -155,7 +153,7 @@ globalThis.runtimeApi = {
 import { label } from "example/runtime";
 globalThis.runtimeModuleLabel = label;
 ''', name: 'example:mount-runtime.mjs');
-    return quickjs.evalAsync(
+    return quickjs.runRaw(
       'return initialMountValue + "/" + runtimeModuleLabel + "/" + await runtimeApi.double(21);',
     );
   }
@@ -164,18 +162,21 @@ globalThis.runtimeModuleLabel = label;
     await _capture('检查冲突回滚', () async {
       final quickjs = _requireRuntime();
       try {
-        await quickjs.mount(const QuickjsHostMount(name: 'example-initial'));
-        throw StateError('重复 mount 未被拒绝');
+        await quickjs.loadFeatures(const JsFeatures(name: 'example-initial'));
+        throw StateError('重复 features 未被拒绝');
       } on JsValueConversionException catch (error) {
         final value = await quickjs.eval('initialMountValue');
-        _log.insert(0, '重复 mount 被拒绝：${error.message}\nruntime 仍可用 => $value');
+        _log.insert(
+          0,
+          '重复 features 被拒绝：${error.message}\nruntime 仍可用 => $value',
+        );
         _status = '冲突在重建前被拒绝，当前 runtime 未受影响';
       }
     });
   }
 
   Future<void> _showDebugSnapshot() async {
-    await _capture('查看挂载列表', () async {
+    await _capture('查看功能列表', () async {
       final snapshot = await _requireRuntime().debugInspect();
       final providers = snapshot.providerDetails
           .map(
@@ -184,10 +185,10 @@ globalThis.runtimeModuleLabel = label;
           .join('\n');
       _log.insert(
         0,
-        'registeredMounts:\n${snapshot.registeredMounts.join('\n')}'
+        'registeredFeatures:\n${snapshot.registeredFeatures.join('\n')}'
         '\nproviders:\n${providers.isEmpty ? '(none)' : providers}',
       );
-      _status = 'debugInspect 可查看 mounts 和 provider 来源';
+      _status = 'debugInspect 可查看 features 和 provider 来源';
     });
   }
 
@@ -198,14 +199,14 @@ globalThis.runtimeModuleLabel = label;
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       await running;
       final expression = _runtimeMounted
           ? 'initialMountValue + "/" + typeof runtimeApi.double'
           : 'initialMountValue + "/" + typeof runtimeApi';
       final result = await quickjs.eval(expression);
-      _log.insert(0, 'stop 后 mounts => $result');
-      _status = 'stop 重建后已挂载能力自动恢复';
+      _log.insert(0, 'stop 后 features => $result');
+      _status = 'stop 重建后已加载功能自动恢复';
     });
   }
 
@@ -243,7 +244,7 @@ globalThis.runtimeModuleLabel = label;
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -261,7 +262,7 @@ globalThis.runtimeModuleLabel = label;
   Widget build(BuildContext context) {
     final hasRuntime = _quickjs != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('能力批量挂载')),
+      appBar: AppBar(title: const Text('基础功能加载')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -269,7 +270,7 @@ globalThis.runtimeModuleLabel = label;
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text('QuickjsRuntimeOptions.mounts + Quickjs.mount()'),
+            const Text('JsOptions.features + Quickjs.loadFeatures()'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -277,19 +278,19 @@ globalThis.runtimeModuleLabel = label;
               children: [
                 FilledButton(
                   onPressed: _busy || !hasRuntime ? null : _checkInitialMount,
-                  child: const Text('检查初始化挂载'),
+                  child: const Text('检查初始化功能'),
                 ),
                 FilledButton.tonal(
                   onPressed: _busy || !hasRuntime || _runtimeMounted
                       ? null
                       : _mountRuntimeBundle,
-                  child: const Text('运行时挂载'),
+                  child: const Text('运行时加载'),
                 ),
                 FilledButton.tonal(
                   onPressed: _busy || !hasRuntime || !_runtimeMounted
                       ? null
                       : _replaceRuntimeBundle,
-                  child: const Text('替换运行时挂载'),
+                  child: const Text('替换运行时功能'),
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime
@@ -299,7 +300,7 @@ globalThis.runtimeModuleLabel = label;
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _showDebugSnapshot,
-                  child: const Text('查看挂载列表'),
+                  child: const Text('查看功能列表'),
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _runStopRecovery,
@@ -319,7 +320,7 @@ globalThis.runtimeModuleLabel = label;
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: _log.isEmpty
-                    ? const Center(child: Text('点击按钮验证批量挂载行为'))
+                    ? const Center(child: Text('点击按钮验证基础功能加载行为'))
                     : ListView.builder(
                         padding: const EdgeInsets.all(12),
                         itemCount: _log.length,

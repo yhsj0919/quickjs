@@ -17,49 +17,64 @@ part '../module/quickjs_text_encoding.dart';
 
 const String _moduleCallBreadcrumbName = '__quickjsLastModuleCall';
 
-typedef QuickjsCallback = FutureOr<Object?> Function(List<Object?> args);
-typedef QuickjsConsoleSink = FutureOr<void> Function(QuickjsConsoleEvent event);
-typedef QuickjsObjectGetter = FutureOr<Object?> Function();
-typedef QuickjsObjectSetter = FutureOr<void> Function(Object? value);
-typedef QuickjsClassConstructor<T extends Object> =
+typedef JsCallback = FutureOr<Object?> Function(List<Object?> args);
+typedef JsConsoleSink = FutureOr<void> Function(JsConsoleEvent event);
+typedef JsClassConstructor<T extends Object> =
     FutureOr<T> Function(List<Object?> args);
-typedef QuickjsInstanceGetter<T extends Object> =
-    FutureOr<Object?> Function(T instance);
-typedef QuickjsInstanceSetter<T extends Object> =
-    FutureOr<void> Function(T instance, Object? value);
-typedef QuickjsInstanceMethod<T extends Object> =
-    FutureOr<Object?> Function(T instance, List<Object?> args);
+typedef JsGetter<T extends Object> = FutureOr<Object?> Function(T target);
+typedef JsSetter<T extends Object> =
+    FutureOr<void> Function(T target, Object? value);
+typedef JsMemberCallback<T extends Object> =
+    FutureOr<Object?> Function(T target, List<Object?> args);
 
 /// JavaScript console method severity.
-enum QuickjsConsoleLevel { log, warn, error }
+enum JsConsoleLevel { log, warn, error }
 
 /// A single JavaScript `console.*` event emitted by one [Quickjs] runtime.
-final class QuickjsConsoleEvent {
-  const QuickjsConsoleEvent({
+final class JsConsoleEvent {
+  const JsConsoleEvent({
     required this.level,
     required this.text,
     required this.args,
     required this.timestamp,
   });
 
-  final QuickjsConsoleLevel level;
+  final JsConsoleLevel level;
   final String text;
   final List<Object?> args;
   final DateTime timestamp;
 }
 
-/// Explicit getter / setter descriptor for a Dart object proxy property.
-final class QuickjsObjectAccessor {
-  const QuickjsObjectAccessor({this.get, this.set});
+/// A fixed Dart value exposed as a readonly JavaScript property.
+final class JsValue {
+  const JsValue(this.name, this.value);
+
+  final String name;
+  final Object? value;
+}
+
+/// A dynamic JavaScript property backed by Dart getter/setter callbacks.
+final class JsAccessor<T extends Object> {
+  const JsAccessor(this.name, {this.get, this.set});
+
+  final String name;
 
   /// Called when JS reads the property. JS receives a Promise.
-  final QuickjsObjectGetter? get;
+  final JsGetter<T>? get;
 
   /// Called when JS writes the property.
   ///
   /// JavaScript setter syntax cannot return a Promise to the assignment
   /// expression, so async setter errors are not awaitable through `obj.prop = x`.
-  final QuickjsObjectSetter? set;
+  final JsSetter<T>? set;
+}
+
+/// A Promise-returning JavaScript method backed by a Dart callback.
+final class JsMethod<T extends Object> {
+  const JsMethod(this.name, this.callback);
+
+  final String name;
+  final JsMemberCallback<T> callback;
 }
 
 /// Explicit descriptor for a Dart object exposed to JavaScript.
@@ -68,30 +83,24 @@ final class QuickjsObjectAccessor {
 /// exposed as readonly enumerable JS properties, accessors as dynamic JS properties,
 /// and methods as JS functions that return Promises through the existing
 /// callback bridge.
-final class QuickjsObjectProxy {
-  const QuickjsObjectProxy({
-    this.properties = const <String, Object?>{},
-    this.accessors = const <String, QuickjsObjectAccessor>{},
-    this.methods = const <String, QuickjsCallback>{},
+final class JsMembers<T extends Object> {
+  const JsMembers({
+    this.values = const <JsValue>[],
+    this.accessors = const [],
+    this.methods = const [],
   });
 
-  final Map<String, Object?> properties;
-  final Map<String, QuickjsObjectAccessor> accessors;
-  final Map<String, QuickjsCallback> methods;
+  final List<JsValue> values;
+  final List<JsAccessor<T>> accessors;
+  final List<JsMethod<T>> methods;
 }
 
-/// Explicit getter / setter descriptor for a Dart class instance property.
-final class QuickjsInstanceAccessor<T extends Object> {
-  const QuickjsInstanceAccessor({this.get, this.set});
+/// An existing Dart object exposed to JavaScript.
+final class JsObject<T extends Object> {
+  const JsObject({required this.target, required this.members});
 
-  /// Called when JS reads the property. JS receives a Promise.
-  final QuickjsInstanceGetter<T>? get;
-
-  /// Called when JS writes the property.
-  ///
-  /// JavaScript setter syntax cannot return a Promise to the assignment
-  /// expression, so async setter errors are not awaitable through `obj.prop = x`.
-  final QuickjsInstanceSetter<T>? set;
+  final T target;
+  final JsMembers<T> members;
 }
 
 /// Explicit descriptor for a Dart class exposed as a JavaScript constructor.
@@ -99,21 +108,62 @@ final class QuickjsInstanceAccessor<T extends Object> {
 /// The constructor returns a JS instance synchronously, while the Dart instance
 /// is created through the Promise callback bridge. Instance getters and methods
 /// wait for that constructor Promise before touching the Dart instance.
-final class QuickjsClass<T extends Object> {
-  const QuickjsClass({
-    required this.constructor,
-    this.accessors = const {},
-    this.methods = const {},
-  });
+final class JsClass<T extends Object> {
+  const JsClass({required this.create, required this.members});
 
-  final QuickjsClassConstructor<T> constructor;
-  final Map<String, QuickjsInstanceAccessor<T>> accessors;
-  final Map<String, QuickjsInstanceMethod<T>> methods;
+  final JsClassConstructor<T> create;
+  final JsMembers<T> members;
+}
+
+final class _ValidatedJsMembers<T extends Object> {
+  const _ValidatedJsMembers(this.values, this.accessors, this.methods);
+
+  final Map<String, Object> values;
+  final List<(String, JsAccessor<T>)> accessors;
+  final List<(String, JsMethod<T>)> methods;
+}
+
+_ValidatedJsMembers<T> _validateJsMembers<T extends Object>(
+  JsMembers<T> members, {
+  required String owner,
+}) {
+  final names = <String>{};
+  String validateName(String name) {
+    final validName = _validateObjectProxyMemberName(name);
+    if (!names.add(validName)) {
+      throw JsValueConversionException(
+        'QuickJS $owner member is defined more than once: $validName',
+      );
+    }
+    return validName;
+  }
+
+  final values = <String, Object>{};
+  for (final value in members.values) {
+    values[validateName(value.name)] = _encodeDartValue(
+      value.value,
+      Set<Object>.identity(),
+    );
+  }
+  final accessors = <(String, JsAccessor<T>)>[];
+  for (final accessor in members.accessors) {
+    final name = validateName(accessor.name);
+    if (accessor.get == null && accessor.set == null) {
+      throw JsValueConversionException(
+        'QuickJS $owner accessor must define get or set: $name',
+      );
+    }
+    accessors.add((name, accessor));
+  }
+  final methods = <(String, JsMethod<T>)>[
+    for (final method in members.methods) (validateName(method.name), method),
+  ];
+  return _ValidatedJsMembers(values, accessors, methods);
 }
 
 /// Runtime-owned handle to a JavaScript constructor binding.
-final class QuickjsClassHandle {
-  QuickjsClassHandle._(
+final class JsClassHandle {
+  JsClassHandle._(
     this._owner,
     this.name,
     this._classId,
@@ -151,8 +201,8 @@ final class QuickjsClassHandle {
 }
 
 /// Runtime-owned handle to a JavaScript object proxy.
-final class QuickjsObjectHandle {
-  QuickjsObjectHandle._(
+final class JsObjectHandle {
+  JsObjectHandle._(
     this._owner,
     this.name,
     this._stateName,
@@ -194,8 +244,8 @@ final class QuickjsObjectHandle {
 ///
 /// The Dart side only stores an opaque id. The actual function remains inside
 /// the owning [Quickjs] runtime and is released when that runtime is disposed.
-final class QuickjsFunctionHandle {
-  QuickjsFunctionHandle._(this._owner, this.id);
+final class JsFunctionHandle {
+  JsFunctionHandle._(this._owner, this.id);
 
   final Quickjs _owner;
   bool _disposed = false;
@@ -207,14 +257,24 @@ final class QuickjsFunctionHandle {
   /// Calls the referenced JavaScript function with [args].
   ///
   /// This path preserves synchronous interrupt semantics for long-running
-  /// JavaScript. Use [callAsync] when the function returns a Promise.
-  Future<String> call(List<Object?> args, {Duration? timeout}) {
+  /// JavaScript. Use [run] when the function returns a Promise.
+  Future<Object?> call(List<Object?> args, {Duration? timeout}) {
+    if (_disposed) {
+      return Future<Object?>.error(
+        JsRuntimeClosedException('QuickJS function handle is disposed'),
+      );
+    }
+    return _owner._callFunctionHandle(id, args, timeout: timeout);
+  }
+
+  /// Calls the function synchronously and returns the raw bridge string.
+  Future<String> callRaw(List<Object?> args, {Duration? timeout}) {
     if (_disposed) {
       return Future<String>.error(
         JsRuntimeClosedException('QuickJS function handle is disposed'),
       );
     }
-    return _owner._callFunctionHandle(id, args, timeout: timeout);
+    return _owner._callFunctionHandleRaw(id, args, timeout: timeout);
   }
 
   /// Calls the referenced JavaScript function and awaits its result.
@@ -223,13 +283,23 @@ final class QuickjsFunctionHandle {
   /// The [timeout] covers the awaited Promise lifecycle. If the function may do
   /// long synchronous work before returning a Promise or reaching its first
   /// `await`, prefer [call] so the synchronous interrupt path can stop it.
-  Future<String> callAsync(List<Object?> args, {Duration? timeout}) {
+  Future<Object?> run(List<Object?> args, {Duration? timeout}) {
+    if (_disposed) {
+      return Future<Object?>.error(
+        JsRuntimeClosedException('QuickJS function handle is disposed'),
+      );
+    }
+    return _owner._runFunctionHandle(id, args, timeout: timeout);
+  }
+
+  /// Awaits the function result and returns the raw bridge string.
+  Future<String> runRaw(List<Object?> args, {Duration? timeout}) {
     if (_disposed) {
       return Future<String>.error(
         JsRuntimeClosedException('QuickJS function handle is disposed'),
       );
     }
-    return _owner._callFunctionHandleAsync(id, args, timeout: timeout);
+    return _owner._runFunctionHandleRaw(id, args, timeout: timeout);
   }
 
   /// Releases the JavaScript function from the owning runtime registry.
@@ -246,14 +316,14 @@ final class QuickjsFunctionHandle {
     return _disposeFuture = _owner._releaseFunctionHandle(id);
   }
 
-  /// Cancels the current runtime operation, matching [Quickjs.stop] semantics.
+  /// Cancels the current runtime operation, matching [Quickjs.restart] semantics.
   Future<void> cancel() {
-    return _owner.stop();
+    return _owner.restart();
   }
 }
 
 /// `Quickjs` 实例当前可观察的生命周期状态。
-enum QuickjsRuntimeState {
+enum JsRuntimeState {
   /// Runtime 正在创建中。
   creating,
 
@@ -264,7 +334,7 @@ enum QuickjsRuntimeState {
   running,
 
   /// Runtime 正在停止当前请求并恢复可用状态。
-  stopping,
+  restarting,
 
   /// Runtime 已被 dispose，不能再使用。
   closed,
@@ -273,21 +343,21 @@ enum QuickjsRuntimeState {
   failed,
 }
 
-/// Conflict handling for [Quickjs.mount].
-enum QuickjsHostMountConflictPolicy {
-  /// Reject duplicate mount names or capability declarations.
+/// Conflict handling for [Quickjs.loadFeatures].
+enum JsFeaturesConflictPolicy {
+  /// Reject duplicate features names or capability declarations.
   reject,
 
-  /// Replace an existing runtime-installed mount with the same name.
+  /// Replace an existing runtime-installed features with the same name.
   ///
-  /// Mounts supplied through [QuickjsRuntimeOptions.mounts] remain immutable,
-  /// and conflicts with other mounts are still rejected.
+  /// Features supplied through [JsOptions.features] remain immutable,
+  /// and conflicts with other features are still rejected.
   replace,
 }
 
 /// Structured host-provider metadata exposed by the inspector prototype.
-final class QuickjsHostProviderDebugInfo {
-  const QuickjsHostProviderDebugInfo({
+final class JsProviderDebugInfo {
+  const JsProviderDebugInfo({
     required this.name,
     required this.debugName,
     required this.implementation,
@@ -295,17 +365,17 @@ final class QuickjsHostProviderDebugInfo {
 
   final String name;
   final String debugName;
-  final QuickjsHostProviderImplementation implementation;
+  final JsProviderImplementation implementation;
 }
 
 /// Structured mounted-plugin metadata exposed by the inspector prototype.
-final class QuickjsPluginDebugInfo {
-  const QuickjsPluginDebugInfo({
+final class JsPluginDebugInfo {
+  const JsPluginDebugInfo({
     required this.id,
     required this.version,
     required this.entry,
     required this.exports,
-    required this.mountName,
+    required this.featuresName,
     required this.moduleNames,
     this.init,
     this.dispose,
@@ -315,24 +385,24 @@ final class QuickjsPluginDebugInfo {
   final String version;
   final String entry;
   final List<String> exports;
-  final String mountName;
+  final String featuresName;
   final List<String> moduleNames;
   final String? init;
   final String? dispose;
 }
 
 /// Runtime debug snapshot exposed by the inspector prototype.
-final class QuickjsInspectorSnapshot {
-  const QuickjsInspectorSnapshot({
+final class JsInspectorSnapshot {
+  const JsInspectorSnapshot({
     required this.state,
     required this.quickjsVersion,
     required this.running,
     required this.pendingEvaluations,
     required this.registeredCallbacks,
     required this.registeredProviders,
-    this.providerDetails = const <QuickjsHostProviderDebugInfo>[],
-    this.pluginDetails = const <QuickjsPluginDebugInfo>[],
-    required this.registeredMounts,
+    this.providerDetails = const <JsProviderDebugInfo>[],
+    this.pluginDetails = const <JsPluginDebugInfo>[],
+    required this.registeredFeatures,
     required this.moduleNames,
     required this.sourceMapNames,
     required this.memoryLimitBytes,
@@ -340,15 +410,15 @@ final class QuickjsInspectorSnapshot {
     this.globals,
   });
 
-  final QuickjsRuntimeState state;
+  final JsRuntimeState state;
   final String quickjsVersion;
   final bool running;
   final int pendingEvaluations;
   final List<String> registeredCallbacks;
   final List<String> registeredProviders;
-  final List<QuickjsHostProviderDebugInfo> providerDetails;
-  final List<QuickjsPluginDebugInfo> pluginDetails;
-  final List<String> registeredMounts;
+  final List<JsProviderDebugInfo> providerDetails;
+  final List<JsPluginDebugInfo> pluginDetails;
+  final List<String> registeredFeatures;
   final List<String> moduleNames;
   final List<String> sourceMapNames;
   final int? memoryLimitBytes;
@@ -360,8 +430,22 @@ final class QuickjsInspectorSnapshot {
 ///
 /// 这个类只负责管理请求队列和 runtime 生命周期；真正的执行发生在平台 backend
 /// 里，native 侧是 Dart isolate + FFI，web 侧是 Web Worker + WASM。
-class Quickjs implements QuickjsPluginHost {
-  Quickjs._(this._backend, this._runtime, this._options, this._onConsole);
+class Quickjs implements JsPluginHost {
+  Quickjs._(
+    this._backend,
+    this._runtime,
+    this._options,
+    this._onConsole, {
+    JsModuleLoader? moduleLoader,
+    List<JsScript> scripts = const <JsScript>[],
+    List<JsModule> modules = const <JsModule>[],
+    List<JsProvider> providers = const <JsProvider>[],
+    List<JsFeatures> features = const <JsFeatures>[],
+  }) : _moduleLoader = moduleLoader,
+       _scripts = List<JsScript>.unmodifiable(scripts),
+       _modules = List<JsModule>.unmodifiable(modules),
+       _providers = List<JsProvider>.unmodifiable(providers),
+       _initialFeatures = List<JsFeatures>.unmodifiable(features);
 
   /// Creates a [Quickjs] wrapper around a supplied backend/runtime pair.
   ///
@@ -370,52 +454,90 @@ class Quickjs implements QuickjsPluginHost {
   Quickjs.test(
     QuickjsBackend backend,
     QuickjsJsRuntimeBase runtime, {
-    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
-    QuickjsConsoleSink? onConsole,
-  }) : this._(backend, runtime, options, onConsole);
+    JsOptions options = const JsOptions(),
+    JsConsoleSink? onConsole,
+    JsModuleLoader? moduleLoader,
+    List<JsScript> scripts = const <JsScript>[],
+    List<JsModule> modules = const <JsModule>[],
+    List<JsProvider> providers = const <JsProvider>[],
+    List<JsFeatures> features = const <JsFeatures>[],
+  }) : this._(
+         backend,
+         runtime,
+         options,
+         onConsole,
+         moduleLoader: moduleLoader,
+         scripts: scripts,
+         modules: modules,
+         providers: providers,
+         features: features,
+       );
 
   final QuickjsBackend _backend;
   QuickjsJsRuntimeBase _runtime;
-  final QuickjsRuntimeOptions _options;
-  final QuickjsConsoleSink? _onConsole;
+  final JsOptions _options;
+  final JsConsoleSink? _onConsole;
+  final JsModuleLoader? _moduleLoader;
+  final List<JsScript> _scripts;
+  final List<JsModule> _modules;
+  final List<JsProvider> _providers;
+  final List<JsFeatures> _initialFeatures;
   final Queue<_QueuedEval> _queue = Queue<_QueuedEval>();
-  QuickjsRuntimeState _state = QuickjsRuntimeState.ready;
+  JsRuntimeState _state = JsRuntimeState.ready;
   Object? _failure;
   Future<void>? _running;
   _QueuedEval? _runningRequest;
   Future<void>? _disposeFuture;
-  Future<void>? _stopFuture;
+  Future<void>? _restartFuture;
   int _nextCallbackId = 1;
   int _nextObjectProxyId = 1;
   int _nextClassBindingId = 1;
   int _nextPluginCallId = 1;
   int _nextEvalRequestId = 0;
   DateTime? _lastEvalEndedAt;
-  final Map<String, QuickjsSourceMap> _sourceMaps =
-      <String, QuickjsSourceMap>{};
+  final Map<String, JsSourceMap> _sourceMaps = <String, JsSourceMap>{};
   final Map<int, String> _callbackDebugNames = <int, String>{};
   final Set<String> _moduleDebugNames = <String>{};
   final Map<String, String> _moduleNamespaceGlobalNames = <String, String>{};
-  final List<QuickjsHostMount> _runtimeMounts = <QuickjsHostMount>[];
+  final List<JsFeatures> _runtimeFeatures = <JsFeatures>[];
   final Map<int, Map<int, Object>> _classInstances = <int, Map<int, Object>>{};
-  final Set<QuickjsHostProviderContext> _pendingHostProviderCalls =
-      <QuickjsHostProviderContext>{};
+  final Set<JsProviderContext> _pendingHostProviderCalls =
+      <JsProviderContext>{};
 
   /// 为当前平台创建一个独立的 QuickJS runtime。
   static Future<Quickjs> create({
-    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
-    QuickjsConsoleSink? onConsole,
+    JsOptions options = const JsOptions(),
+    JsModuleLoader? moduleLoader,
+    List<JsScript> scripts = const <JsScript>[],
+    List<JsModule> modules = const <JsModule>[],
+    List<JsProvider> providers = const <JsProvider>[],
+    List<JsFeatures> features = const <JsFeatures>[],
+    List<JsPlugin> plugins = const <JsPlugin>[],
+    JsConsoleSink? onConsole,
   }) async {
-    if (options.maxPendingEvaluations < 1) {
+    if (options.maxPendingTasks < 1) {
       throw ArgumentError.value(
-        options.maxPendingEvaluations,
-        'options.maxPendingEvaluations',
+        options.maxPendingTasks,
+        'options.maxPendingTasks',
         'must be positive',
       );
     }
     final backend = await createQuickjsBackend();
     final runtime = await backend.createRuntime(options);
-    final engine = Quickjs._(backend, runtime, options, onConsole);
+    final engine = Quickjs._(
+      backend,
+      runtime,
+      options,
+      onConsole,
+      moduleLoader: moduleLoader,
+      scripts: scripts,
+      modules: modules,
+      providers: providers,
+      features: <JsFeatures>[
+        ...features,
+        for (final plugin in plugins) plugin.asFeatures(),
+      ],
+    );
     try {
       await engine._installInitialEnvironmentOnCurrentRuntime();
     } catch (_) {
@@ -427,15 +549,34 @@ class Quickjs implements QuickjsPluginHost {
 
   /// Builds the high-level QuickJS API on an already-created backend context.
   ///
-  /// Context runtimes use this path so mounts and plugins reuse the canonical
+  /// Context runtimes use this path so features and plugins reuse the canonical
   /// installer without creating or rebuilding another native `JSRuntime`.
   static Future<Quickjs> attachContext(
     QuickjsBackend backend,
     QuickjsJsRuntimeBase runtime, {
-    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
-    QuickjsConsoleSink? onConsole,
+    JsOptions options = const JsOptions(),
+    JsModuleLoader? moduleLoader,
+    List<JsScript> scripts = const <JsScript>[],
+    List<JsModule> modules = const <JsModule>[],
+    List<JsProvider> providers = const <JsProvider>[],
+    List<JsFeatures> features = const <JsFeatures>[],
+    List<JsPlugin> plugins = const <JsPlugin>[],
+    JsConsoleSink? onConsole,
   }) async {
-    final engine = Quickjs._(backend, runtime, options, onConsole);
+    final engine = Quickjs._(
+      backend,
+      runtime,
+      options,
+      onConsole,
+      moduleLoader: moduleLoader,
+      scripts: scripts,
+      modules: modules,
+      providers: providers,
+      features: <JsFeatures>[
+        ...features,
+        for (final plugin in plugins) plugin.asFeatures(),
+      ],
+    );
     try {
       await engine._installInitialEnvironmentOnCurrentRuntime();
     } catch (_) {
@@ -449,103 +590,107 @@ class Quickjs implements QuickjsPluginHost {
   String get quickjsVersion => _backend.quickjsVersion;
 
   /// 当前 runtime 生命周期状态。
-  QuickjsRuntimeState get state => _state;
+  JsRuntimeState get state => _state;
 
-  /// Mounts a capability bundle and rebuilds the current runtime.
+  /// Features a capability bundle and rebuilds the current runtime.
   ///
   /// The first runtime-mounting implementation is intentionally atomic: the
-  /// runtime must be idle, the mount is validated against all existing static
-  /// and runtime mounts, then the runtime is rebuilt. Existing JavaScript
+  /// runtime must be idle, the features is validated against all existing static
+  /// and runtime features, then the runtime is rebuilt. Existing JavaScript
   /// globals, module cache, bound callbacks, and handles are not preserved.
-  /// Successfully mounted bundles are reinstalled by later [stop] rebuilds.
-  /// [QuickjsHostMountConflictPolicy.replace] replaces only a same-name mount
-  /// previously installed through this method; initialization mounts remain
+  /// Successfully loaded bundles are reinstalled by later [restart] rebuilds.
+  /// [JsFeaturesConflictPolicy.replace] replaces only a same-name features
+  /// previously installed through this method; initialization features remain
   /// immutable and unrelated capability conflicts are still rejected.
-  Future<void> mount(
-    QuickjsHostMount mount, {
-    QuickjsHostMountConflictPolicy conflictPolicy =
-        QuickjsHostMountConflictPolicy.reject,
+  Future<void> loadFeatures(
+    JsFeatures features, {
+    JsFeaturesConflictPolicy conflictPolicy = JsFeaturesConflictPolicy.reject,
   }) async {
     final terminalError = _terminalError;
     if (terminalError != null) {
       throw terminalError;
     }
-    if (_state != QuickjsRuntimeState.ready ||
+    if (_state != JsRuntimeState.ready ||
         _running != null ||
         _queue.isNotEmpty ||
-        _stopFuture != null) {
-      throw StateError('QuickJS host mounts can only be installed while idle');
-    }
-
-    final mountName = _validateHostMountName(mount.name);
-    final previousMounts = List<QuickjsHostMount>.of(_runtimeMounts);
-    final staticMountExists = _options.mounts.any(
-      (candidate) => _validateHostMountName(candidate.name) == mountName,
-    );
-    final runtimeMountIndex = _runtimeMounts.indexWhere(
-      (candidate) => _validateHostMountName(candidate.name) == mountName,
-    );
-    if (conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
-        staticMountExists) {
-      throw JsValueConversionException(
-        'QuickJS initialization mount cannot be replaced at runtime: $mountName',
+        _restartFuture != null) {
+      throw StateError(
+        'QuickJS host features can only be installed while idle',
       );
     }
-    final replacedMount =
-        conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
-            runtimeMountIndex >= 0
-        ? _runtimeMounts[runtimeMountIndex]
+
+    final featuresName = _validateFeaturesName(features.name);
+    final previousFeatures = List<JsFeatures>.of(_runtimeFeatures);
+    final staticFeaturesExist = _initialFeatures.any(
+      (candidate) => _validateFeaturesName(candidate.name) == featuresName,
+    );
+    final runtimeFeaturesIndex = _runtimeFeatures.indexWhere(
+      (candidate) => _validateFeaturesName(candidate.name) == featuresName,
+    );
+    if (conflictPolicy == JsFeaturesConflictPolicy.replace &&
+        staticFeaturesExist) {
+      throw JsValueConversionException(
+        'QuickJS initialization features cannot be replaced at runtime: $featuresName',
+      );
+    }
+    final replacedFeatures =
+        conflictPolicy == JsFeaturesConflictPolicy.replace &&
+            runtimeFeaturesIndex >= 0
+        ? _runtimeFeatures[runtimeFeaturesIndex]
         : null;
-    _validateMountAgainstLoadedModules(mount, replacedMount: replacedMount);
-    if (conflictPolicy == QuickjsHostMountConflictPolicy.replace &&
-        runtimeMountIndex >= 0) {
-      _runtimeMounts[runtimeMountIndex] = mount;
+    _validateFeaturesAgainstLoadedModules(
+      features,
+      replacedFeatures: replacedFeatures,
+    );
+    if (conflictPolicy == JsFeaturesConflictPolicy.replace &&
+        runtimeFeaturesIndex >= 0) {
+      _runtimeFeatures[runtimeFeaturesIndex] = features;
     } else {
-      _runtimeMounts.add(mount);
+      _runtimeFeatures.add(features);
     }
     try {
       _validateStaticHostConfiguration();
     } catch (_) {
-      _runtimeMounts
+      _runtimeFeatures
         ..clear()
-        ..addAll(previousMounts);
+        ..addAll(previousFeatures);
       rethrow;
     }
 
     if (_runtime is QuickjsInPlaceMountRuntime) {
       try {
-        await _installMountOnCurrentContext(mount);
+        await _installFeaturesOnCurrentContext(features);
       } catch (_) {
-        _runtimeMounts
+        _runtimeFeatures
           ..clear()
-          ..addAll(previousMounts);
+          ..addAll(previousFeatures);
         rethrow;
       }
       return;
     }
 
-    _state = QuickjsRuntimeState.stopping;
+    _state = JsRuntimeState.restarting;
     final previousRuntime = _runtime;
     try {
       await previousRuntime.dispose();
       await _replaceCurrentRuntime();
-      _state = QuickjsRuntimeState.ready;
+      _state = JsRuntimeState.ready;
     } catch (error, stackTrace) {
       try {
         await _runtime.dispose();
       } catch (_) {}
-      _runtimeMounts
+      _runtimeFeatures
         ..clear()
-        ..addAll(previousMounts);
+        ..addAll(previousFeatures);
       try {
         await _replaceCurrentRuntime();
-        _state = QuickjsRuntimeState.ready;
+        _state = JsRuntimeState.ready;
       } catch (recoveryError) {
         try {
           await _runtime.dispose();
         } catch (_) {}
         _failure = recoveryError;
-        _state = QuickjsRuntimeState.failed;
+        _state = JsRuntimeState.failed;
       }
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -555,9 +700,9 @@ class Quickjs implements QuickjsPluginHost {
   ///
   /// The [sourceName] should match the `name:` passed to eval/evaluate APIs or
   /// the module name used for module evaluation. The current registry phase
-  /// attaches matching source maps to [JsException.sourceMap]; actual stack
+  /// attaches matching source maps to [JsThrownException.sourceMap]; actual stack
   /// rewriting is handled by the later stack remap phase.
-  void registerSourceMap(String sourceName, QuickjsSourceMap sourceMap) {
+  void registerSourceMap(String sourceName, JsSourceMap sourceMap) {
     _sourceMaps[_validateSourceName(sourceName)] = sourceMap;
   }
 
@@ -567,7 +712,7 @@ class Quickjs implements QuickjsPluginHost {
   }
 
   /// Returns the source map registered for [sourceName], if any.
-  QuickjsSourceMap? sourceMapFor(String sourceName) {
+  JsSourceMap? sourceMapFor(String sourceName) {
     return _sourceMaps[_validateSourceName(sourceName)];
   }
 
@@ -581,7 +726,7 @@ class Quickjs implements QuickjsPluginHost {
   /// When [includeGlobals] is true this queues a short JavaScript expression to
   /// read `globalThis` property names. Otherwise the snapshot is produced from
   /// Dart-side runtime metadata only.
-  Future<QuickjsInspectorSnapshot> debugInspect({
+  Future<JsInspectorSnapshot> debugInspect({
     bool includeGlobals = false,
   }) async {
     final globals = includeGlobals
@@ -590,7 +735,7 @@ class Quickjs implements QuickjsPluginHost {
             name: '<inspector:globals>',
           )
         : null;
-    return QuickjsInspectorSnapshot(
+    return JsInspectorSnapshot(
       state: state,
       quickjsVersion: quickjsVersion,
       running: _running != null,
@@ -599,13 +744,13 @@ class Quickjs implements QuickjsPluginHost {
         _callbackDebugNames.values.toList()..sort(),
       ),
       registeredProviders: List<String>.unmodifiable(_debugProviderNames()),
-      providerDetails: List<QuickjsHostProviderDebugInfo>.unmodifiable(
+      providerDetails: List<JsProviderDebugInfo>.unmodifiable(
         _debugProviderDetails(),
       ),
-      pluginDetails: List<QuickjsPluginDebugInfo>.unmodifiable(
+      pluginDetails: List<JsPluginDebugInfo>.unmodifiable(
         _debugPluginDetails(),
       ),
-      registeredMounts: List<String>.unmodifiable(_debugMountNames()),
+      registeredFeatures: List<String>.unmodifiable(_debugMountNames()),
       moduleNames: List<String>.unmodifiable(_debugModuleNames()),
       sourceMapNames: List<String>.unmodifiable(
         _sourceMaps.keys.toList()..sort(),
@@ -621,20 +766,22 @@ class Quickjs implements QuickjsPluginHost {
   /// Evaluates a debug expression and converts its result to Dart values.
   ///
   /// This is the inspector's manual expression entry point. It uses the same
-  /// queue, timeout, and conversion semantics as [evaluateValue].
+  /// queue, timeout, and conversion semantics as [eval].
   Future<Object?> debugEvaluateValue(
     String expression, {
     Duration? timeout,
     String name = '<inspector>',
   }) {
-    return evaluateValue(expression, timeout: timeout, name: name);
+    return eval(expression, timeout: timeout, name: name);
   }
 
   /// 在当前 runtime 中执行 [code]。
   ///
   /// 调用只会入队，不会在 Flutter UI isolate 中同步执行 JS。
   /// [globals] 会在本次执行期间临时注入到 JS `globalThis`，执行结束后恢复。
-  Future<String> eval(
+  /// Returns QuickJS's raw bridge string without Dart value conversion.
+  /// Prefer [eval] unless the exact textual representation is required.
+  Future<String> evalRaw(
     String code, {
     Duration? timeout,
     String name = '<eval>',
@@ -648,23 +795,15 @@ class Quickjs implements QuickjsPluginHost {
     );
   }
 
-  /// [eval] 的兼容别名，保留给更自然的调用命名。
-  Future<String> evaluate(
-    String code, {
-    Duration? timeout,
-    String name = '<eval>',
-    Map<String, Object?> globals = const {},
-  }) {
-    return eval(code, timeout: timeout, name: name, globals: globals);
-  }
-
   /// 在当前 runtime 中执行异步 JavaScript 函数体，并等待返回的 Promise。
   ///
   /// [code] 会包裹在 `async () => { ... }` 中执行；需要返回值时使用 `return`。
-  Future<String> evalAsync(
+  /// Waits for the async body and returns QuickJS's raw bridge string.
+  /// Prefer [run] unless the exact textual representation is required.
+  Future<String> runRaw(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
     Map<String, Object?> globals = const {},
   }) {
     final validName = _validateSourceName(name);
@@ -674,16 +813,6 @@ class Quickjs implements QuickjsPluginHost {
       name: validName,
       async: true,
     );
-  }
-
-  /// [evalAsync] 的兼容别名。
-  Future<String> evaluateAsync(
-    String code, {
-    Duration? timeout,
-    String name = '<evalAsync>',
-    Map<String, Object?> globals = const {},
-  }) {
-    return evalAsync(code, timeout: timeout, name: name, globals: globals);
   }
 
   /// 在当前 runtime 中执行 ES module [source]。
@@ -699,7 +828,7 @@ class Quickjs implements QuickjsPluginHost {
       source,
       validName,
       _esModuleSpecifiers,
-      QuickjsHostModuleFormat.esModule,
+      JsModuleFormat.esModule,
     );
     _moduleDebugNames.addAll(modules.keys);
     return _enqueueModule(
@@ -708,15 +837,6 @@ class Quickjs implements QuickjsPluginHost {
       modules: modules,
       timeout: timeout,
     );
-  }
-
-  /// [evalModule] 的兼容别名。
-  Future<String> evaluateModule(
-    String source, {
-    String name = '<module>',
-    Duration? timeout,
-  }) {
-    return evalModule(source, name: name, timeout: timeout);
   }
 
   /// Runs due timers/jobs and returns the delay until the next native timer.
@@ -729,7 +849,7 @@ class Quickjs implements QuickjsPluginHost {
           .pumpTimers();
       return milliseconds == null ? null : Duration(milliseconds: milliseconds);
     }
-    await evalAsync(
+    await runRaw(
       'await new Promise((resolve) => setTimeout(resolve, 0)); return null;',
       name: '<quickjs:timer-pump>',
     );
@@ -738,7 +858,7 @@ class Quickjs implements QuickjsPluginHost {
 
   /// Validates that a plugin entry module exposes every declared function.
   @override
-  Future<void> validatePlugin(QuickjsPlugin plugin, {Duration? timeout}) async {
+  Future<void> validatePlugin(JsPlugin plugin, {Duration? timeout}) async {
     final entry = plugin.manifest.entry;
     final lifecycleExports = <String>[
       if (plugin.manifest.init != null) plugin.manifest.init!,
@@ -775,7 +895,7 @@ return JSON.stringify({ type: 'null' });
   /// If the manifest does not declare an init export, this is a no-op.
   @override
   Future<Object?> initPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     Map<String, Object?> context = const <String, Object?>{},
     Duration? timeout,
   }) {
@@ -796,7 +916,7 @@ return JSON.stringify({ type: 'null' });
   ///
   /// If the manifest does not declare a dispose export, this is a no-op.
   @override
-  Future<Object?> disposePlugin(QuickjsPlugin plugin, {Duration? timeout}) {
+  Future<Object?> disposePlugin(JsPlugin plugin, {Duration? timeout}) {
     final dispose = plugin.manifest.dispose;
     if (dispose == null) {
       return Future<Object?>.value(null);
@@ -813,7 +933,7 @@ return JSON.stringify({ type: 'null' });
   /// Calls a declared function from a plugin entry module.
   @override
   Future<Object?> callPlugin(
-    QuickjsPlugin plugin,
+    JsPlugin plugin,
     String method,
     List<Object?> args, {
     Duration? timeout,
@@ -923,7 +1043,7 @@ try {
       source,
       validName,
       _commonJsSpecifiers,
-      QuickjsHostModuleFormat.commonJs,
+      JsModuleFormat.commonJs,
     );
     _moduleDebugNames.addAll(modules.keys);
     return _enqueue(
@@ -933,17 +1053,8 @@ try {
     );
   }
 
-  /// [evalCommonJs] 的兼容别名。
-  Future<String> evaluateCommonJs(
-    String source, {
-    String name = '<commonjs>',
-    Duration? timeout,
-  }) {
-    return evalCommonJs(source, name: name, timeout: timeout);
-  }
-
   /// Evaluates [code] and stores the resulting JavaScript function as a handle.
-  Future<QuickjsFunctionHandle> evaluateHandle(
+  Future<JsFunctionHandle> bindFunction(
     String code, {
     Duration? timeout,
     String name = '<handle>',
@@ -958,23 +1069,14 @@ try {
     if (payload['ok'] != true) {
       throw JsValueConversionException(payload['message']! as String);
     }
-    return QuickjsFunctionHandle._(this, payload['id']! as int);
-  }
-
-  /// [evaluateHandle] 的兼容别名。
-  Future<QuickjsFunctionHandle> evalHandle(
-    String code, {
-    Duration? timeout,
-    String name = '<handle>',
-  }) {
-    return evaluateHandle(code, timeout: timeout, name: name);
+    return JsFunctionHandle._(this, payload['id']! as int);
   }
 
   /// 在 JS `globalThis` 上绑定一个 Promise-based Dart callback。
   ///
   /// JS 侧调用绑定函数时会得到 Promise；Dart callback 的返回值会 resolve 该 Promise，
   /// Dart callback 抛错会 reject 该 Promise。
-  Future<void> bind(String name, QuickjsCallback callback) {
+  Future<void> injectFunction(String name, JsCallback callback) {
     final terminalError = _terminalError;
     if (terminalError != null) {
       return Future<void>.error(terminalError);
@@ -986,130 +1088,124 @@ try {
     });
   }
 
+  /// Injects [stream] on JS `globalThis` as an async iterable.
+  ///
+  /// JavaScript consumes the values with `for await (const value of name)`.
+  /// Each pull requests the next Dart event, preserving backpressure. Stream
+  /// errors reject the pending JS iteration and completion ends the iterator.
+  Future<void> injectStream<T>(String name, Stream<T> stream) async {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<void>.error(terminalError);
+    }
+    final validName = _validateGlobalName(name);
+    final callbackId = _nextCallbackId++;
+    final callbackName = '__quickjsInjectedStream_$callbackId';
+    await _bindRuntimeCallback(callbackId, callbackName, (_) async => stream);
+    try {
+      await evalRaw('''
+(async () => {
+  globalThis[${jsonEncode(validName)}] = await globalThis[${jsonEncode(callbackName)}]();
+})()
+''', name: '<injectStream:$validName>');
+    } finally {
+      await _unbindRuntimeCallback(callbackId);
+    }
+  }
+
   /// 在 JS `globalThis` 上绑定 `{ emit, close, error }`，并返回 Dart [Stream]。
   ///
   /// JS 侧每次 `await sink.emit(value)` 会等待 Dart 侧确认，用于串行 backpressure。
   /// Binds an explicit Dart object proxy on JS `globalThis`.
   ///
-  /// [proxy.properties] become readonly enumerable properties.
-  /// [proxy.accessors] become dynamic getter / setter descriptors.
-  /// [proxy.methods] become JS functions that return Promises and route calls
+  /// [object.values] become readonly enumerable properties.
+  /// [object.accessors] become dynamic getter / setter descriptors.
+  /// [object.methods] become JS functions that return Promises and route calls
   /// through the same callback bridge used by [bind].
-  Future<QuickjsObjectHandle> bindObject(
+  Future<JsObjectHandle> injectObject<T extends Object>(
     String name,
-    QuickjsObjectProxy proxy,
+    JsObject<T> object,
   ) async {
     final terminalError = _terminalError;
     if (terminalError != null) {
-      return Future<QuickjsObjectHandle>.error(terminalError);
+      return Future<JsObjectHandle>.error(terminalError);
     }
     final validName = _validateGlobalName(name);
-    final propertyPayload = <String, Object>{};
-    final propertyNames = <String>{};
-    for (final entry in proxy.properties.entries) {
-      final propertyName = _validateObjectProxyMemberName(entry.key);
-      propertyNames.add(propertyName);
-      propertyPayload[propertyName] = _encodeDartValue(
-        entry.value,
-        Set<Object>.identity(),
-      );
-    }
+    final validated = _validateJsMembers(object.members, owner: 'object proxy');
 
     final proxyId = _nextObjectProxyId++;
     final stateName = '__quickjsObjectProxy_${proxyId}_state';
     final accessors = <Map<String, String?>>[];
-    final accessorNames = <String>{};
     final methods = <Map<String, String>>[];
-    final methodNames = <String>{};
     final callbackNames = <String>[];
     final callbackIds = <int>[];
     var methodIndex = 1;
-    for (final entry in proxy.accessors.entries) {
-      final accessorName = _validateObjectProxyMemberName(entry.key);
-      if (propertyNames.contains(accessorName)) {
-        throw JsValueConversionException(
-          'QuickJS object proxy member is defined more than once: $accessorName',
-        );
-      }
-      if (!accessorNames.add(accessorName)) {
-        throw JsValueConversionException(
-          'QuickJS object proxy member is defined more than once: $accessorName',
-        );
-      }
-      final descriptor = entry.value;
-      if (descriptor.get == null && descriptor.set == null) {
-        throw JsValueConversionException(
-          'QuickJS object proxy accessor must define get or set: $accessorName',
-        );
-      }
-      String? getCallbackName;
-      final getter = descriptor.get;
-      if (getter != null) {
-        final callbackId = _nextCallbackId++;
-        callbackIds.add(callbackId);
-        getCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
-        callbackNames.add(getCallbackName);
-        await _bindRuntimeCallback(callbackId, getCallbackName, (_) async {
-          return getter();
+    try {
+      for (final (accessorName, descriptor) in validated.accessors) {
+        String? getCallbackName;
+        final getter = descriptor.get;
+        if (getter != null) {
+          final callbackId = _nextCallbackId++;
+          getCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
+          callbackIds.add(callbackId);
+          await _bindRuntimeCallback(callbackId, getCallbackName, (_) async {
+            return getter(object.target);
+          });
+          callbackNames.add(getCallbackName);
+        }
+        String? setCallbackName;
+        final setter = descriptor.set;
+        if (setter != null) {
+          final callbackId = _nextCallbackId++;
+          setCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
+          callbackIds.add(callbackId);
+          await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
+            await setter(object.target, args.isEmpty ? null : args.first);
+            return null;
+          });
+          callbackNames.add(setCallbackName);
+        }
+        accessors.add({
+          'name': accessorName,
+          'getCallback': getCallbackName,
+          'setCallback': setCallbackName,
         });
       }
-      String? setCallbackName;
-      final setter = descriptor.set;
-      if (setter != null) {
+      for (final (methodName, method) in validated.methods) {
         final callbackId = _nextCallbackId++;
+        final callbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
         callbackIds.add(callbackId);
-        setCallbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
-        callbackNames.add(setCallbackName);
-        await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
-          await setter(args.isEmpty ? null : args.first);
-          return null;
+        await _bindRuntimeCallback(callbackId, callbackName, (args) async {
+          return method.callback(object.target, args);
         });
+        callbackNames.add(callbackName);
+        methods.add({'name': methodName, 'callback': callbackName});
       }
-      accessors.add({
-        'name': accessorName,
-        'getCallback': getCallbackName,
-        'setCallback': setCallbackName,
-      });
-    }
-    for (final entry in proxy.methods.entries) {
-      final methodName = _validateObjectProxyMemberName(entry.key);
-      if (propertyNames.contains(methodName) ||
-          accessorNames.contains(methodName)) {
-        throw JsValueConversionException(
-          'QuickJS object proxy member is defined more than once: $methodName',
-        );
-      }
-      if (!methodNames.add(methodName)) {
-        throw JsValueConversionException(
-          'QuickJS object proxy member is defined more than once: $methodName',
-        );
-      }
-      final callbackId = _nextCallbackId++;
-      callbackIds.add(callbackId);
-      final callbackName = '__quickjsObjectProxy_${proxyId}_${methodIndex++}';
-      callbackNames.add(callbackName);
-      await _bindRuntimeCallback(callbackId, callbackName, (args) async {
-        return entry.value(args);
-      });
-      methods.add({'name': methodName, 'callback': callbackName});
-    }
 
-    await _enqueue(
-      _wrapBindObjectProxy(
+      await _enqueue(
+        _wrapBindObjectProxy(
+          validName,
+          stateName,
+          validated.values,
+          accessors,
+          methods,
+        ),
+      );
+      return JsObjectHandle._(
+        this,
         validName,
         stateName,
-        propertyPayload,
-        accessors,
-        methods,
-      ),
-    );
-    return QuickjsObjectHandle._(
-      this,
-      validName,
-      stateName,
-      callbackNames,
-      callbackIds,
-    );
+        callbackNames,
+        callbackIds,
+      );
+    } catch (_) {
+      for (final callbackId in callbackIds.reversed) {
+        try {
+          await _unbindRuntimeCallback(callbackId);
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 
   /// Binds an explicit Dart class as a JavaScript constructor.
@@ -1117,15 +1213,16 @@ try {
   /// `new $name(...)` returns a JavaScript instance immediately. The Dart
   /// constructor runs through the Promise callback bridge, so instance getters
   /// and methods wait for construction before accessing the Dart instance.
-  Future<QuickjsClassHandle> bindClass<T extends Object>(
+  Future<JsClassHandle> injectClass<T extends Object>(
     String name,
-    QuickjsClass<T> definition,
+    JsClass<T> definition,
   ) async {
     final terminalError = _terminalError;
     if (terminalError != null) {
-      return Future<QuickjsClassHandle>.error(terminalError);
+      return Future<JsClassHandle>.error(terminalError);
     }
     final validName = _validateGlobalName(name);
+    final validated = _validateJsMembers(definition.members, owner: 'class');
     final classId = _nextClassBindingId++;
     final instances = <int, Object>{};
     _classInstances[classId] = instances;
@@ -1136,109 +1233,102 @@ try {
     final constructorCallbackId = _nextCallbackId++;
     callbackNames.add(constructorCallbackName);
     callbackIds.add(constructorCallbackId);
-    await _bindRuntimeCallback(constructorCallbackId, constructorCallbackName, (
-      args,
-    ) async {
-      if (args.isEmpty || args.first is! num) {
-        throw StateError('QuickJS class constructor missing instance id');
-      }
-      final instanceId = (args.first! as num).toInt();
-      final instance = await definition.constructor(args.skip(1).toList());
-      instances[instanceId] = instance;
-      return null;
-    });
-
-    final accessors = <Map<String, String?>>[];
-    final accessorNames = <String>{};
-    final methods = <Map<String, String>>[];
-    final methodNames = <String>{};
-    var callbackIndex = 1;
-    for (final entry in definition.accessors.entries) {
-      final accessorName = _validateObjectProxyMemberName(entry.key);
-      if (!accessorNames.add(accessorName)) {
-        throw JsValueConversionException(
-          'QuickJS class member is defined more than once: $accessorName',
-        );
-      }
-      final descriptor = entry.value;
-      if (descriptor.get == null && descriptor.set == null) {
-        throw JsValueConversionException(
-          'QuickJS class accessor must define get or set: $accessorName',
-        );
-      }
-      String? getCallbackName;
-      final getter = descriptor.get;
-      if (getter != null) {
-        final callbackId = _nextCallbackId++;
-        callbackIds.add(callbackId);
-        getCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
-        callbackNames.add(getCallbackName);
-        await _bindRuntimeCallback(callbackId, getCallbackName, (args) async {
-          final instance = _requireClassInstance<T>(classId, args);
-          return getter(instance);
-        });
-      }
-      String? setCallbackName;
-      final setter = descriptor.set;
-      if (setter != null) {
-        final callbackId = _nextCallbackId++;
-        callbackIds.add(callbackId);
-        setCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
-        callbackNames.add(setCallbackName);
-        await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
-          final instance = _requireClassInstance<T>(classId, args);
-          await setter(instance, args.length < 2 ? null : args[1]);
+    try {
+      await _bindRuntimeCallback(
+        constructorCallbackId,
+        constructorCallbackName,
+        (args) async {
+          if (args.isEmpty || args.first is! num) {
+            throw StateError('QuickJS class constructor missing instance id');
+          }
+          final instanceId = (args.first! as num).toInt();
+          final instance = await definition.create(args.skip(1).toList());
+          instances[instanceId] = instance;
           return null;
+        },
+      );
+
+      final accessors = <Map<String, String?>>[];
+      final methods = <Map<String, String>>[];
+      var callbackIndex = 1;
+      for (final (accessorName, descriptor) in validated.accessors) {
+        String? getCallbackName;
+        final getter = descriptor.get;
+        if (getter != null) {
+          final callbackId = _nextCallbackId++;
+          callbackIds.add(callbackId);
+          getCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
+          callbackNames.add(getCallbackName);
+          await _bindRuntimeCallback(callbackId, getCallbackName, (args) async {
+            final instance = _requireClassInstance<T>(classId, args);
+            return getter(instance);
+          });
+        }
+        String? setCallbackName;
+        final setter = descriptor.set;
+        if (setter != null) {
+          final callbackId = _nextCallbackId++;
+          callbackIds.add(callbackId);
+          setCallbackName = '__quickjsClass_${classId}_${callbackIndex++}';
+          callbackNames.add(setCallbackName);
+          await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
+            final instance = _requireClassInstance<T>(classId, args);
+            await setter(instance, args.length < 2 ? null : args[1]);
+            return null;
+          });
+        }
+        accessors.add({
+          'name': accessorName,
+          'getCallback': getCallbackName,
+          'setCallback': setCallbackName,
         });
       }
-      accessors.add({
-        'name': accessorName,
-        'getCallback': getCallbackName,
-        'setCallback': setCallbackName,
-      });
-    }
-    for (final entry in definition.methods.entries) {
-      final methodName = _validateObjectProxyMemberName(entry.key);
-      if (accessorNames.contains(methodName)) {
-        throw JsValueConversionException(
-          'QuickJS class member is defined more than once: $methodName',
-        );
+      for (final (methodName, method) in validated.methods) {
+        final callbackId = _nextCallbackId++;
+        callbackIds.add(callbackId);
+        final callbackName = '__quickjsClass_${classId}_${callbackIndex++}';
+        callbackNames.add(callbackName);
+        await _bindRuntimeCallback(callbackId, callbackName, (args) async {
+          final instance = _requireClassInstance<T>(classId, args);
+          return method.callback(instance, args.skip(1).toList());
+        });
+        methods.add({'name': methodName, 'callback': callbackName});
       }
-      if (!methodNames.add(methodName)) {
-        throw JsValueConversionException(
-          'QuickJS class member is defined more than once: $methodName',
-        );
-      }
-      final callbackId = _nextCallbackId++;
-      callbackIds.add(callbackId);
-      final callbackName = '__quickjsClass_${classId}_${callbackIndex++}';
-      callbackNames.add(callbackName);
-      await _bindRuntimeCallback(callbackId, callbackName, (args) async {
-        final instance = _requireClassInstance<T>(classId, args);
-        return entry.value(instance, args.skip(1).toList());
-      });
-      methods.add({'name': methodName, 'callback': callbackName});
-    }
 
-    await _enqueue(
-      _wrapBindClass(
+      await _enqueue(
+        _wrapBindClass(
+          validName,
+          classId,
+          constructorCallbackName,
+          validated.values,
+          accessors,
+          methods,
+        ),
+      );
+      return JsClassHandle._(
+        this,
         validName,
         classId,
-        constructorCallbackName,
-        accessors,
-        methods,
-      ),
-    );
-    return QuickjsClassHandle._(
-      this,
-      validName,
-      classId,
-      callbackNames,
-      callbackIds,
-    );
+        callbackNames,
+        callbackIds,
+      );
+    } catch (_) {
+      _classInstances.remove(classId);
+      for (final callbackId in callbackIds.reversed) {
+        try {
+          await _unbindRuntimeCallback(callbackId);
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 
-  Future<Stream<Object?>> bindSink(String name) {
+  /// Binds a JS `{ emit, close, error }` sink and returns its Dart stream.
+  ///
+  /// `await name.emit(value)` waits until Dart accepts the event, providing
+  /// backpressure. `name.close()` completes the stream and `name.error(value)`
+  /// reports a stream error.
+  Future<Stream<Object?>> bindStream(String name) {
     final terminalError = _terminalError;
     if (terminalError != null) {
       return Future<Stream<Object?>>.error(terminalError);
@@ -1258,7 +1348,7 @@ try {
         final rawArgs = rawValue is List
             ? List<Object?>.from(rawValue)
             : const <Object?>[];
-        final event = QuickjsConsoleEvent(
+        final event = JsConsoleEvent(
           level: _consoleLevelFromName('$levelName'),
           text: '$text',
           args: rawArgs,
@@ -1284,11 +1374,11 @@ try {
       (name: '<quickjs:console>', source: await _prepareConsoleInstall()),
       (name: '<quickjs:text-encoding>', source: _wrapInstallTextEncoding()),
     ];
-    final capabilities = _effectiveHostCapabilities();
-    if (!capabilities.isEmpty) {
+    final browserGlobals = _effectiveBrowserGlobals();
+    if (!browserGlobals.isEmpty) {
       sources.add((
-        name: '<quickjs:host-capabilities>',
-        source: _wrapInstallHostCapabilities(capabilities),
+        name: '<quickjs:browser-globals>',
+        source: _wrapInstallBrowserGlobals(browserGlobals),
       ));
     }
     final providerNames = await _installHostProvidersOnCurrentRuntime();
@@ -1311,7 +1401,7 @@ try {
   }
 
   Future<Map<String, String>> _installHostProvidersOnCurrentRuntime([
-    Iterable<QuickjsHostProvider>? selectedProviders,
+    Iterable<JsProvider>? selectedProviders,
   ]) async {
     final providers = selectedProviders?.toList() ?? _effectiveHostProviders();
     if (providers.isEmpty) {
@@ -1340,26 +1430,26 @@ try {
     return callbackNames;
   }
 
-  Future<void> _installMountOnCurrentContext(QuickjsHostMount mount) async {
-    final capabilities = _effectiveHostCapabilities();
-    if (!capabilities.isEmpty) {
+  Future<void> _installFeaturesOnCurrentContext(JsFeatures features) async {
+    final browserGlobals = _effectiveBrowserGlobals();
+    if (!browserGlobals.isEmpty) {
       await _runtime.evaluate(
-        _wrapInstallHostCapabilities(capabilities),
-        name: '<quickjs:context-mount-capabilities:${mount.name}>',
+        _wrapInstallBrowserGlobals(browserGlobals),
+        name: '<quickjs:context-features-capabilities:${features.name}>',
       );
     }
     final providerNames = await _installHostProvidersOnCurrentRuntime(
-      mount.providers,
+      features.providers,
     );
     if (providerNames.isNotEmpty) {
       await _runtime.evaluate(
         _wrapInstallHostProviderRegistry(providerNames),
-        name: '<quickjs:context-mount-providers:${mount.name}>',
+        name: '<quickjs:context-features-providers:${features.name}>',
       );
     }
     final globalsScript = _providerGlobalsHostScript(
-      mount.providers,
-      mount.name,
+      features.providers,
+      features.name,
     );
     if (globalsScript != null) {
       await _runtime.evaluate(
@@ -1367,7 +1457,7 @@ try {
         name: _validateSourceName(globalsScript.name),
       );
     }
-    for (final script in mount.environmentPatches) {
+    for (final script in features.scripts) {
       await _runtime.evaluate(
         await script.loadSource(),
         name: _validateSourceName(script.name),
@@ -1376,10 +1466,10 @@ try {
   }
 
   Future<Object?> _invokeHostProvider(
-    QuickjsHostProvider provider,
+    JsProvider provider,
     List<Object?> args,
   ) async {
-    final context = QuickjsHostProviderContext();
+    final context = JsProviderContext();
     _pendingHostProviderCalls.add(context);
     final callbackFuture = Future<Object?>.sync(
       () => provider.callback(args, context),
@@ -1408,7 +1498,7 @@ try {
   /// 当前阶段覆盖 number、boolean、string、null、undefined、BigInt、
   /// ArrayBuffer、Uint8Array、array 和 plain object。
   /// [globals] 会在本次执行期间临时注入到 JS `globalThis`，执行结束后恢复。
-  Future<Object?> evaluateValue(
+  Future<Object?> eval(
     String code, {
     Duration? timeout,
     String name = '<eval>',
@@ -1418,7 +1508,7 @@ try {
     final encodedSource = jsonEncode(
       _wrapWithGlobals(code, globals, name: validName),
     );
-    final encodedValue = await eval(
+    final encodedValue = await evalRaw(
       '''
 (() => {
   const unsupported = (reason) => ({
@@ -1502,7 +1592,86 @@ try {
       timeout: timeout,
       name: validName,
     );
-    final payload = jsonDecode(encodedValue) as Map<String, Object?>;
+    return _decodeStructuredPayload(encodedValue);
+  }
+
+  /// Executes an async JavaScript function body and returns a Dart value.
+  ///
+  /// The source is wrapped in an async function, so it may use `await` and
+  /// should use `return` to produce a result. The Dart API is asynchronous
+  /// because execution happens in a background isolate or worker; `run`
+  /// additionally waits for the JavaScript Promise to settle and pumps jobs
+  /// and timers while it is pending.
+  Future<Object?> run(
+    String code, {
+    Duration? timeout,
+    String name = '<run>',
+    Map<String, Object?> globals = const {},
+  }) async {
+    final payloadJson = await runRaw(
+      '''
+const convert = ${_jsValueConvertFunctionSource()};
+const value = await (async () => {
+$code
+})();
+return JSON.stringify(convert(value, new WeakSet()));
+''',
+      timeout: timeout,
+      name: name,
+      globals: globals,
+    );
+    return _decodeStructuredPayload(payloadJson);
+  }
+
+  /// Calls a function stored on `globalThis` and returns its awaited result as
+  /// a structured Dart value.
+  ///
+  /// [method] is resolved as a property name, and [args] are encoded without
+  /// interpolating their values into executable JavaScript source.
+  Future<Object?> call(String method, List<Object?> args, {Duration? timeout}) {
+    return run(
+      _wrapGlobalCall(method, args),
+      timeout: timeout,
+      name: '<call:$method>',
+    );
+  }
+
+  /// Calls a function stored on `globalThis` and returns QuickJS's raw bridge
+  /// string after awaiting its result.
+  Future<String> callRaw(
+    String method,
+    List<Object?> args, {
+    Duration? timeout,
+  }) {
+    return runRaw(
+      _wrapGlobalCall(method, args),
+      timeout: timeout,
+      name: '<call:$method>',
+    );
+  }
+
+  String _wrapGlobalCall(String method, List<Object?> args) {
+    if (method.isEmpty) {
+      throw ArgumentError.value(method, 'method', 'must not be empty');
+    }
+    final encodedMethod = jsonEncode(method);
+    final encodedArgs = jsonEncode(<Object>[
+      for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
+    ]);
+    return '''
+const method = $encodedMethod;
+const fn = globalThis[method];
+if (typeof fn !== 'function') {
+  throw new TypeError('QuickJS global is not a function: ' + method);
+}
+const inflate = ${_dartValueInflateFunctionSource()};
+const args = $encodedArgs.map((arg) => inflate(arg));
+return await Reflect.apply(fn, globalThis, args);
+''';
+  }
+
+  Object? _decodeStructuredPayload(String payloadJson) {
+    final payload = jsonDecode(payloadJson) as Map<String, Object?>;
     if (payload['type'] == 'conversionError') {
       throw JsValueConversionException(payload['message']! as String);
     }
@@ -1529,7 +1698,7 @@ try {
     };
   }
 
-  QuickjsPlugin _resolveMountedPlugin(String method, {String? pluginId}) {
+  JsPlugin _resolveMountedPlugin(String method, {String? pluginId}) {
     final plugins = _mountedPlugins();
     if (pluginId != null) {
       for (final plugin in plugins) {
@@ -1547,7 +1716,7 @@ try {
       );
     }
 
-    final matches = <QuickjsPlugin>[
+    final matches = <JsPlugin>[
       for (final plugin in plugins)
         if (plugin.manifest.exports.contains(method)) plugin,
     ];
@@ -1565,10 +1734,10 @@ try {
     return matches.single;
   }
 
-  List<QuickjsPlugin> _mountedPlugins() {
-    return <QuickjsPlugin>[
-      for (final mount in _allHostMounts)
-        if (mount is QuickjsPluginMount) mount.plugin,
+  List<JsPlugin> _mountedPlugins() {
+    return <JsPlugin>[
+      for (final features in _allFeatures)
+        if (features is JsPluginFeatures) features.plugin,
     ];
   }
 
@@ -1590,7 +1759,7 @@ try {
     final validName = _validateModuleName(name);
     late final String payloadJson;
     try {
-      payloadJson = await evalAsync(
+      payloadJson = await runRaw(
         '''
 const __quickjsModuleNamespace = globalThis[$encodedNamespaceName];
 const inflate = ${_dartValueInflateFunctionSource()};
@@ -1678,7 +1847,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
 
     final running = _running;
     final shouldCancelRunning = _runningRequest?.async == true;
-    _state = QuickjsRuntimeState.closed;
+    _state = JsRuntimeState.closed;
     _classInstances.clear();
     _cancelHostProviderCalls(JsRuntimeClosedException());
     _cancelQueued(JsRuntimeClosedException());
@@ -1692,48 +1861,47 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     return _disposeFuture!;
   }
 
-  /// 停止当前正在执行的 eval，并取消队列中的 eval。
+  /// 中止当前任务、取消等待队列并重建底层 runtime。
   ///
   /// 完成后会重新创建底层 runtime，因此同一个 [Quickjs] 实例仍可继续使用。
-  Future<void> stop() {
+  Future<void> restart() {
     final terminalError = _terminalError;
     if (terminalError != null) {
       return Future<void>.error(terminalError);
     }
 
-    final currentStop = _stopFuture;
-    if (currentStop != null) {
-      return currentStop;
+    final currentRestart = _restartFuture;
+    if (currentRestart != null) {
+      return currentRestart;
     }
 
     const cancellation = JsCancelledException();
     _cancelHostProviderCalls(cancellation);
     _cancelQueued(cancellation);
     final running = _running;
-    if (running == null) {
-      return Future<void>.value();
-    }
-
-    _state = QuickjsRuntimeState.stopping;
-    final stopped = _runtime
-        .stop()
-        .then<void>(
-          (_) => running,
-          onError: (Object _, StackTrace _) => running,
-        )
-        .catchError((Object _) {})
-        .then<void>((_) async {
-          if (!_isTerminal) {
-            await _replaceCurrentRuntime();
-            _state = QuickjsRuntimeState.ready;
-          }
-        })
-        .whenComplete(() {
-          _stopFuture = null;
-          _drainQueue();
-        });
-    _stopFuture = stopped;
-    return stopped;
+    _state = JsRuntimeState.restarting;
+    final restarted =
+        (running == null
+                ? _runtime.dispose()
+                : _runtime
+                      .stop()
+                      .then<void>(
+                        (_) => running,
+                        onError: (Object _, StackTrace _) => running,
+                      )
+                      .catchError((Object _) {}))
+            .then<void>((_) async {
+              if (!_isTerminal) {
+                await _replaceCurrentRuntime();
+                _state = JsRuntimeState.ready;
+              }
+            })
+            .whenComplete(() {
+              _restartFuture = null;
+              _drainQueue();
+            });
+    _restartFuture = restarted;
+    return restarted;
   }
 
   Future<void> _replaceCurrentRuntime() async {
@@ -1819,14 +1987,14 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
 
   Object? get _queueRejection =>
       _terminalError ??
-      (_queue.length >= _options.maxPendingEvaluations
+      (_queue.length >= _options.maxPendingTasks
           ? const JsQueueFullException()
           : null);
 
   void _drainQueue() {
-    if (_state != QuickjsRuntimeState.ready ||
+    if (_state != JsRuntimeState.ready ||
         _running != null ||
-        _stopFuture != null ||
+        _restartFuture != null ||
         _queue.isEmpty) {
       return;
     }
@@ -1878,7 +2046,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
                 ),
       },
     );
-    _state = QuickjsRuntimeState.running;
+    _state = JsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime
     // 不会被并发重入。
     _running = running.then<void>(
@@ -1888,8 +2056,8 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
         if (error is JsRuntimeClosedException ||
             error is JsRuntimeCrashException) {
           _state = error is JsRuntimeCrashException
-              ? QuickjsRuntimeState.failed
-              : QuickjsRuntimeState.closed;
+              ? JsRuntimeState.failed
+              : JsRuntimeState.closed;
           _failure = error;
           _cancelQueued(error);
         }
@@ -1916,8 +2084,8 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
           }
           _running = null;
           _runningRequest = null;
-          if (_state == QuickjsRuntimeState.running) {
-            _state = QuickjsRuntimeState.ready;
+          if (_state == JsRuntimeState.running) {
+            _state = JsRuntimeState.ready;
           }
           _drainQueue();
         },
@@ -1930,8 +2098,8 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
           );
           _running = null;
           _runningRequest = null;
-          if (_state == QuickjsRuntimeState.running) {
-            _state = QuickjsRuntimeState.ready;
+          if (_state == JsRuntimeState.running) {
+            _state = JsRuntimeState.ready;
           }
           _drainQueue();
         },
@@ -1948,7 +2116,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
   }
 
   Object _attachSourceMap(Object error, String fallbackName) {
-    if (error is! JsException) {
+    if (error is! JsThrownException) {
       return error;
     }
     final sourceName =
@@ -1988,7 +2156,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     if (stack == null || _sourceMaps.isEmpty) {
       return _StackRemapResult(stack: stack);
     }
-    QuickjsSourceMapLocation? firstLocation;
+    JsSourceLocation? firstLocation;
     final remappedLines = <String>[];
     for (final line in stack.split('\n')) {
       var remappedLine = line;
@@ -2016,10 +2184,10 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     );
   }
 
-  QuickjsSourceMapLocation? _remapExceptionLocation(
-    JsException error,
+  JsSourceLocation? _remapExceptionLocation(
+    JsThrownException error,
     String sourceName,
-    QuickjsSourceMap sourceMap,
+    JsSourceMap sourceMap,
   ) {
     final line = error.line;
     final column = error.column;
@@ -2033,18 +2201,33 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
   }
 
   bool get _isTerminal =>
-      _state == QuickjsRuntimeState.closed ||
-      _state == QuickjsRuntimeState.failed;
+      _state == JsRuntimeState.closed || _state == JsRuntimeState.failed;
 
   Object? get _terminalError {
     return switch (_state) {
-      QuickjsRuntimeState.closed => JsRuntimeClosedException(),
-      QuickjsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
+      JsRuntimeState.closed => JsRuntimeClosedException(),
+      JsRuntimeState.failed => _failure ?? JsRuntimeCrashException(),
       _ => null,
     };
   }
 
-  Future<String> _callFunctionHandle(
+  Future<Object?> _callFunctionHandle(
+    int handleId,
+    List<Object?> args, {
+    Duration? timeout,
+  }) async {
+    final terminalError = _terminalError;
+    if (terminalError != null) {
+      return Future<Object?>.error(terminalError);
+    }
+    final payload = await _enqueue(
+      _wrapStructuredFunctionHandleCall(handleId, args),
+      timeout: timeout,
+    );
+    return _decodeStructuredPayload(payload);
+  }
+
+  Future<String> _callFunctionHandleRaw(
     int handleId,
     List<Object?> args, {
     Duration? timeout,
@@ -2056,17 +2239,36 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     return _enqueue(_wrapFunctionHandleCall(handleId, args), timeout: timeout);
   }
 
-  Future<String> _callFunctionHandleAsync(
+  Future<Object?> _runFunctionHandle(
     int handleId,
     List<Object?> args, {
     Duration? timeout,
+  }) async {
+    final payload = await _runFunctionHandleRaw(
+      handleId,
+      args,
+      timeout: timeout,
+      structured: true,
+    );
+    return _decodeStructuredPayload(payload);
+  }
+
+  Future<String> _runFunctionHandleRaw(
+    int handleId,
+    List<Object?> args, {
+    Duration? timeout,
+    bool structured = false,
   }) {
     final terminalError = _terminalError;
     if (terminalError != null) {
       return Future<String>.error(terminalError);
     }
     return _enqueue(
-      _wrapAsyncFunctionBody(_wrapFunctionHandleCallAwait(handleId, args)),
+      _wrapAsyncFunctionBody(
+        structured
+            ? _wrapStructuredFunctionHandleCallAwait(handleId, args)
+            : _wrapFunctionHandleCallAwait(handleId, args),
+      ),
       timeout: timeout,
       async: true,
     );
@@ -2144,10 +2346,10 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     String rootSource,
     String rootName,
     Iterable<String> Function(String source) specifiers,
-    QuickjsHostModuleFormat format,
+    JsModuleFormat format,
   ) async {
     final configuredModules = await _hostModuleSourceMap(format);
-    final loader = _options.moduleLoader;
+    final loader = _moduleLoader;
     final modules = <String, String>{rootName: rootSource};
     final visiting = <String>{};
 
@@ -2186,7 +2388,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
   }
 
   Future<Map<String, String>> _hostModuleSourceMap(
-    QuickjsHostModuleFormat format,
+    JsModuleFormat format,
   ) async {
     final configuredModules = _effectiveHostModules();
     if (configuredModules.isEmpty) {
@@ -2208,7 +2410,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     return Map<String, String>.unmodifiable(modules);
   }
 
-  void _validateHostModuleNames(QuickjsHostModuleFormat format) {
+  void _validateHostModuleNames(JsModuleFormat format) {
     final configuredModules = _effectiveHostModules();
     if (configuredModules.isEmpty) {
       return;
@@ -2243,10 +2445,10 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     return names.toList()..sort();
   }
 
-  List<QuickjsHostProviderDebugInfo> _debugProviderDetails() {
-    final details = <QuickjsHostProviderDebugInfo>[
+  List<JsProviderDebugInfo> _debugProviderDetails() {
+    final details = <JsProviderDebugInfo>[
       for (final provider in _effectiveHostProviders())
-        QuickjsHostProviderDebugInfo(
+        JsProviderDebugInfo(
           name: _validateHostProviderName(provider.name),
           debugName: provider.debugName ?? provider.name,
           implementation: provider.implementation,
@@ -2256,22 +2458,24 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     return details;
   }
 
-  List<QuickjsPluginDebugInfo> _debugPluginDetails() {
-    final details = <QuickjsPluginDebugInfo>[
-      for (final mount in _allHostMounts)
-        if (mount is QuickjsPluginMount)
-          QuickjsPluginDebugInfo(
-            id: mount.plugin.manifest.id,
-            version: mount.plugin.manifest.version,
-            entry: mount.plugin.manifest.entry,
-            exports: List<String>.unmodifiable(mount.plugin.manifest.exports),
-            mountName: _validateHostMountName(mount.name),
+  List<JsPluginDebugInfo> _debugPluginDetails() {
+    final details = <JsPluginDebugInfo>[
+      for (final features in _allFeatures)
+        if (features is JsPluginFeatures)
+          JsPluginDebugInfo(
+            id: features.plugin.manifest.id,
+            version: features.plugin.manifest.version,
+            entry: features.plugin.manifest.entry,
+            exports: List<String>.unmodifiable(
+              features.plugin.manifest.exports,
+            ),
+            featuresName: _validateFeaturesName(features.name),
             moduleNames: List<String>.unmodifiable(
-              mount.plugin.modules.map((module) => module.specifier).toList()
+              features.plugin.modules.map((module) => module.specifier).toList()
                 ..sort(),
             ),
-            init: mount.plugin.manifest.init,
-            dispose: mount.plugin.manifest.dispose,
+            init: features.plugin.manifest.init,
+            dispose: features.plugin.manifest.dispose,
           ),
     ];
     details.sort((left, right) => left.id.compareTo(right.id));
@@ -2280,27 +2484,27 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
 
   List<String> _debugMountNames() {
     return <String>[
-      for (final mount in _allHostMounts) _validateHostMountName(mount.name),
+      for (final features in _allFeatures) _validateFeaturesName(features.name),
     ]..sort();
   }
 
   void _validateStaticHostConfiguration() {
-    final mountNames = <String>{};
-    for (final mount in _allHostMounts) {
-      final name = _validateHostMountName(mount.name);
-      if (!mountNames.add(name)) {
+    final featuresNames = <String>{};
+    for (final features in _allFeatures) {
+      final name = _validateFeaturesName(features.name);
+      if (!featuresNames.add(name)) {
         throw JsValueConversionException(
-          'QuickJS host mount is registered more than once: $name',
+          'QuickJS host features is registered more than once: $name',
         );
       }
     }
 
     final globalNames = <String>{};
-    final capabilities = _effectiveHostCapabilities();
-    if (capabilities.browserGlobals.window) {
+    final browserGlobals = _effectiveBrowserGlobals();
+    if (browserGlobals.window) {
       globalNames.add('window');
     }
-    if (capabilities.browserGlobals.self) {
+    if (browserGlobals.self) {
       globalNames.add('self');
     }
 
@@ -2332,71 +2536,69 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       }
     }
 
-    _validateHostModuleNames(QuickjsHostModuleFormat.esModule);
-    _validateHostModuleNames(QuickjsHostModuleFormat.commonJs);
+    _validateHostModuleNames(JsModuleFormat.esModule);
+    _validateHostModuleNames(JsModuleFormat.commonJs);
   }
 
-  void _validateMountAgainstLoadedModules(
-    QuickjsHostMount mount, {
-    QuickjsHostMount? replacedMount,
+  void _validateFeaturesAgainstLoadedModules(
+    JsFeatures features, {
+    JsFeatures? replacedFeatures,
   }) {
     final replaceableNames = <String>{
-      if (replacedMount != null)
-        for (final module in replacedMount.modules)
+      if (replacedFeatures != null)
+        for (final module in replacedFeatures.modules)
           _canonicalModuleName(_validateModuleName(module.specifier)),
     };
-    for (final module in mount.modules) {
+    for (final module in features.modules) {
       final name = _canonicalModuleName(_validateModuleName(module.specifier));
       if (_moduleDebugNames.contains(name) &&
           !replaceableNames.contains(name)) {
         throw JsValueConversionException(
-          'QuickJS loaded module cannot be shadowed by a runtime mount: $name',
+          'QuickJS loaded module cannot be shadowed by a runtime features: $name',
         );
       }
     }
   }
 
-  QuickjsHostCapabilities _effectiveHostCapabilities() {
-    var window = _options.hostCapabilities.browserGlobals.window;
-    var self = _options.hostCapabilities.browserGlobals.self;
-    for (final mount in _allHostMounts) {
-      final browserGlobals = mount.capabilities.browserGlobals;
+  JsGlobals _effectiveBrowserGlobals() {
+    var window = false;
+    var self = false;
+    for (final features in _allFeatures) {
+      final browserGlobals = features.browserGlobals;
       window = window || browserGlobals.window;
       self = self || browserGlobals.self;
     }
-    return QuickjsHostCapabilities(
-      browserGlobals: QuickjsBrowserGlobals(window: window, self: self),
-    );
+    return JsGlobals(window: window, self: self);
   }
 
-  List<QuickjsHostScript> _effectiveHostScripts() {
-    return <QuickjsHostScript>[
+  List<JsScript> _effectiveHostScripts() {
+    return <JsScript>[
       ..._providerGlobalsHostScripts(),
-      for (final mount in _allHostMounts) ...mount.environmentPatches,
-      ..._options.environmentPatches,
+      for (final features in _allFeatures) ...features.scripts,
+      ..._scripts,
     ];
   }
 
-  List<QuickjsHostScript> _providerGlobalsHostScripts() {
-    final scripts = <QuickjsHostScript>[];
-    for (final mount in _allHostMounts) {
-      final script = _providerGlobalsHostScript(mount.providers, mount.name);
+  List<JsScript> _providerGlobalsHostScripts() {
+    final scripts = <JsScript>[];
+    for (final features in _allFeatures) {
+      final script = _providerGlobalsHostScript(
+        features.providers,
+        features.name,
+      );
       if (script != null) {
         scripts.add(script);
       }
     }
-    final runtimeScript = _providerGlobalsHostScript(
-      _options.providers,
-      'runtime',
-    );
+    final runtimeScript = _providerGlobalsHostScript(_providers, 'runtime');
     if (runtimeScript != null) {
       scripts.add(runtimeScript);
     }
     return scripts;
   }
 
-  QuickjsHostScript? _providerGlobalsHostScript(
-    List<QuickjsHostProvider> providers,
+  JsScript? _providerGlobalsHostScript(
+    List<JsProvider> providers,
     String scopeName,
   ) {
     final globals = <String, String>{};
@@ -2414,29 +2616,29 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     if (globals.isEmpty) {
       return null;
     }
-    return QuickjsHostScript.providerGlobals(
+    return JsScript.providerGlobals(
       name: '<quickjs:provider-globals:$scopeName>',
       globals: globals,
     );
   }
 
-  List<QuickjsHostProvider> _effectiveHostProviders() {
-    return <QuickjsHostProvider>[
-      for (final mount in _allHostMounts) ...mount.providers,
-      ..._options.providers,
+  List<JsProvider> _effectiveHostProviders() {
+    return <JsProvider>[
+      for (final features in _allFeatures) ...features.providers,
+      ..._providers,
     ];
   }
 
-  List<QuickjsHostModule> _effectiveHostModules() {
-    return <QuickjsHostModule>[
-      for (final mount in _allHostMounts) ...mount.modules,
-      ..._options.modules,
+  List<JsModule> _effectiveHostModules() {
+    return <JsModule>[
+      for (final features in _allFeatures) ...features.modules,
+      ..._modules,
     ];
   }
 
-  Iterable<QuickjsHostMount> get _allHostMounts sync* {
-    yield* _options.mounts;
-    yield* _runtimeMounts;
+  Iterable<JsFeatures> get _allFeatures sync* {
+    yield* _initialFeatures;
+    yield* _runtimeFeatures;
   }
 }
 
@@ -2445,11 +2647,11 @@ Uint8List _normalizeBytes(Object? value) {
   return Uint8List.fromList([for (final byte in bytes) (byte as num).toInt()]);
 }
 
-QuickjsConsoleLevel _consoleLevelFromName(String name) {
+JsConsoleLevel _consoleLevelFromName(String name) {
   return switch (name) {
-    'warn' => QuickjsConsoleLevel.warn,
-    'error' => QuickjsConsoleLevel.error,
-    _ => QuickjsConsoleLevel.log,
+    'warn' => JsConsoleLevel.warn,
+    'error' => JsConsoleLevel.error,
+    _ => JsConsoleLevel.log,
   };
 }
 
@@ -2657,10 +2859,10 @@ String _wrapInitialEnvironmentBatch(
   return (buffer..write('})()')).toString();
 }
 
-String _wrapInstallHostCapabilities(QuickjsHostCapabilities capabilities) {
+String _wrapInstallBrowserGlobals(JsGlobals browserGlobals) {
   final aliases = <String>[
-    if (capabilities.browserGlobals.window) 'window',
-    if (capabilities.browserGlobals.self) 'self',
+    if (browserGlobals.window) 'window',
+    if (browserGlobals.self) 'self',
   ];
   final encodedAliases = jsonEncode(aliases);
   return '''
@@ -2872,6 +3074,29 @@ return await registry[$handleId](...args);
 ''';
 }
 
+String _wrapStructuredFunctionHandleCall(int handleId, List<Object?> args) {
+  return '''
+(() => {
+const convert = ${_jsValueConvertFunctionSource()};
+const value = ${_wrapFunctionHandleCall(handleId, args)};
+return JSON.stringify(convert(value, new WeakSet()));
+})()
+''';
+}
+
+String _wrapStructuredFunctionHandleCallAwait(
+  int handleId,
+  List<Object?> args,
+) {
+  return '''
+const convert = ${_jsValueConvertFunctionSource()};
+const value = await (async () => {
+${_wrapFunctionHandleCallAwait(handleId, args)}
+})();
+return JSON.stringify(convert(value, new WeakSet()));
+''';
+}
+
 String _wrapReleaseFunctionHandle(int handleId) {
   return '''
 (() => {
@@ -2909,12 +3134,14 @@ String _wrapBindClass(
   String name,
   int classId,
   String constructorCallbackName,
+  Map<String, Object> properties,
   List<Map<String, String?>> accessors,
   List<Map<String, String>> methods,
 ) {
   final encodedName = jsonEncode(name);
   final encodedStateName = jsonEncode('__quickjsClass_${classId}_state');
   final encodedConstructorCallbackName = jsonEncode(constructorCallbackName);
+  final encodedProperties = jsonEncode(properties);
   final encodedAccessors = jsonEncode(accessors);
   final encodedMethods = jsonEncode(methods);
   return '''
@@ -2972,6 +3199,16 @@ Object.defineProperty(QuickjsBoundClass, $encodedStateName, {
   enumerable: false,
   writable: false,
 });
+const inflate = ${_dartValueInflateFunctionSource()};
+const properties = $encodedProperties;
+for (const key of Object.keys(properties)) {
+  Object.defineProperty(QuickjsBoundClass.prototype, key, {
+    value: inflate(properties[key]),
+    configurable: false,
+    enumerable: true,
+    writable: false,
+  });
+}
 const accessors = $encodedAccessors;
 for (const accessor of accessors) {
   const descriptor = {
@@ -3217,15 +3454,15 @@ String _validateHostProviderName(String name) {
   return name;
 }
 
-String _validateHostMountName(String name) {
+String _validateFeaturesName(String name) {
   if (name.isEmpty) {
     throw JsValueConversionException(
-      'QuickJS host mount name must not be empty',
+      'QuickJS host features name must not be empty',
     );
   }
   if (name.contains('\u0000')) {
     throw JsValueConversionException(
-      'QuickJS host mount name must not contain NUL',
+      'QuickJS host features name must not contain NUL',
     );
   }
   return name;
@@ -3263,7 +3500,7 @@ final class _StackRemapResult {
   const _StackRemapResult({required this.stack, this.location});
 
   final String? stack;
-  final QuickjsSourceMapLocation? location;
+  final JsSourceLocation? location;
 }
 
 String _wrapCommonJsModule(

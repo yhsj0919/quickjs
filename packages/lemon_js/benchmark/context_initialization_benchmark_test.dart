@@ -10,23 +10,21 @@ void main() {
     'compares batched and sequential context environment installation',
     () async {
       const iterations = 30;
-      const scripts = <QuickjsHostScript>[
-        QuickjsHostScript.js(name: 'init-0.js', source: 'globalThis.v0 = 0'),
-        QuickjsHostScript.js(name: 'init-1.js', source: 'globalThis.v1 = 1'),
-        QuickjsHostScript.js(name: 'init-2.js', source: 'globalThis.v2 = 2'),
-        QuickjsHostScript.js(name: 'init-3.js', source: 'globalThis.v3 = 3'),
-        QuickjsHostScript.js(name: 'init-4.js', source: 'globalThis.v4 = 4'),
-        QuickjsHostScript.js(name: 'init-5.js', source: 'globalThis.v5 = 5'),
-        QuickjsHostScript.js(name: 'init-6.js', source: 'globalThis.v6 = 6'),
-        QuickjsHostScript.js(name: 'init-7.js', source: 'globalThis.v7 = 7'),
+      const scripts = <JsScript>[
+        JsScript.js(name: 'init-0.js', source: 'globalThis.v0 = 0'),
+        JsScript.js(name: 'init-1.js', source: 'globalThis.v1 = 1'),
+        JsScript.js(name: 'init-2.js', source: 'globalThis.v2 = 2'),
+        JsScript.js(name: 'init-3.js', source: 'globalThis.v3 = 3'),
+        JsScript.js(name: 'init-4.js', source: 'globalThis.v4 = 4'),
+        JsScript.js(name: 'init-5.js', source: 'globalThis.v5 = 5'),
+        JsScript.js(name: 'init-6.js', source: 'globalThis.v6 = 6'),
+        JsScript.js(name: 'init-7.js', source: 'globalThis.v7 = 7'),
       ];
-      final runtime = await QuickjsRuntime.create();
+      final runtime = await JsRuntime.create();
       addTearDown(runtime.dispose);
 
       final batched = await _measure(iterations, () async {
-        final context = await runtime.createContext(
-          options: const QuickjsContextOptions(environmentPatches: scripts),
-        );
+        final context = await runtime.createContext(scripts: scripts);
         await context.dispose();
       });
       final sequential = await _measure(iterations, () async {

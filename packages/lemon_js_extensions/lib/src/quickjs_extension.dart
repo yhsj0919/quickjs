@@ -36,14 +36,14 @@ final class QuickjsServiceComponent {
     final missing = requiredExports.difference(declared);
     if (missing.isNotEmpty) {
       throw ArgumentError(
-        'Service exports are missing from QuickjsPlugin manifest: '
+        'Service exports are missing from JsPlugin manifest: '
         '${missing.join(', ')}',
       );
     }
   }
 
   /// 承载服务模块的 Lemon JS 插件。
-  final QuickjsPlugin plugin;
+  final JsPlugin plugin;
 
   /// 服务实现的数据协议名称。
   final String contract;

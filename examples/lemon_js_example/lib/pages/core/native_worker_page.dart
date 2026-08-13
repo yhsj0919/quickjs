@@ -179,7 +179,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     // 稍后触发 stop，模拟用户主动取消正在执行的 JS。
     final stopFuture = Future<void>.delayed(
       const Duration(milliseconds: 100),
-      quickjs.stop,
+      quickjs.restart,
     );
 
     try {
@@ -274,7 +274,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
       return;
     }
     try {
-      await quickjs.stop();
+      await quickjs.restart();
     } catch (error) {
       if (!mounted || _disposed) {
         return;

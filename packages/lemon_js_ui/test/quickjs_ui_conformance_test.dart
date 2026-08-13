@@ -793,9 +793,7 @@ export default Page({
           },
         ),
       );
-      final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(mounts: capabilities.mounts),
-      );
+      final engine = await Quickjs.create(features: capabilities.features);
       final session = QuickjsUiSession(engine: engine);
       addTearDown(session.dispose);
 
