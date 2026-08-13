@@ -76,7 +76,7 @@ dart run lemon_js_ui:codegen \
 
 | 包 | 职责 |
 |---|---|
-| `lemon_js` | QuickJS 运行时、模块加载、插件协议、宿主挂载（Host Mount）、结构化值转换 |
+| `lemon_js` | QuickJS 运行时、模块加载、插件协议、基础功能（Features）、结构化值转换 |
 | `lemon_js_ui` | 页面协议、UI Schema 解析、控件渲染、事件分发、生命周期、导航 |
 
 ### 1.1 核心设计原则：JS 管逻辑，Flutter 管渲染
@@ -1153,19 +1153,19 @@ Handler 可以是 `async`，支持 `await quickjsUiHost.toast(...)` 等异步宿
 
 扩展 `quickjs_ui` 分两层：**JS 模块注入**（让页面能 `import`）和 **Dart 渲染器注册**（让 Flutter 能渲染新 `type`）。
 
-### 7.1 注入 JS 模块（QuickjsHostMount）
+### 7.1 注入 JS 模块（JsFeatures）
 
-通过 `QuickjsHostMount` 向 QuickJS 运行时注册 ES 模块。`quickjs_ui` 自身会自动注入 `quickjs_ui` helper 模块；第三方插件需额外传入 `mounts`。
+通过 `JsFeatures` 向 QuickJS 运行时注册 ES 模块。`quickjs_ui` 自身会自动注入 `quickjs_ui` helper 模块；第三方插件需额外传入 `features`。
 
 **示例：`lemon_js_ui_video_player`**
 
 Dart 侧定义模块：
 
 ```dart
-const QuickjsHostMount mount = QuickjsHostMount(
+const JsFeatures features = JsFeatures(
   name: 'quickjs_ui:plugin:video_player',
   modules: [
-    QuickjsHostModule.esModule(
+    JsModule.esModule(
       specifier: 'quickjs_ui/video_player',
       source: '''
 export function VideoPlayer(props = {}) {
@@ -1184,13 +1184,12 @@ export function VideoPlayer(props = {}) {
 );
 ```
 
-Flutter 页面挂载：
+Flutter 页面配置：
 
 ```dart
 QuickjsUiView.asset(
   path: 'assets/quickjs_ui/video_player_plugin_page.mjs',
-  mounts: const [QuickjsUiVideoPlayerPlugin.mount],
-  registry: _videoPlayerRegistry,
+  uiPlugins: const [QuickjsUiVideoPlayerPlugin.plugin],
 )
 ```
 
@@ -1261,10 +1260,10 @@ Dart 侧为 `Card` 注册 renderer 后即可在任意页面使用。
 ┌─────────────────────────────────────────────────────┐
 │  Flutter 宿主                                        │
 │  QuickjsUiView / QuickjsUiController                │
-│  QuickjsUiHostCapabilities → QuickjsHostMount       │
+│  QuickjsUiHostCapabilities → JsFeatures       │
 │  QuickjsUiComponentRegistry                         │
 └──────────────┬──────────────────────┬───────────────┘
-               │ mount / provider      │ 渲染 UiNode
+               │ features / provider   │ 渲染 UiNode
                ▼                       ▼
 ┌─────────────────────────────────────────────────────┐
 │  QuickJS 运行时                                      │
@@ -1330,7 +1329,7 @@ final capabilities = QuickjsUiHostCapabilities(
 
 QuickjsUiView.asset(
   path: 'assets/quickjs_ui/host_capabilities_page.mjs',
-  mounts: capabilities.mounts,
+  features: capabilities.features,
   grantedPermissions: capabilities.permissions,
 );
 ```
@@ -1654,7 +1653,7 @@ export default Page({
 2. **registry / capabilities 用稳定实例**，避免在 `build()` 中创建。
 3. **连续值变化控件**（Switch、Slider、进度）走 sample；**离散操作**（按钮、提交）走 command。
 4. **自定义控件**同时提供 JS helper（生成 schema）和 Dart registry（渲染）。
-5. **第三方模块**通过 `QuickjsHostMount.modules` 注入，`specifier` 与 JS `import` 路径一致。
+5. **第三方模块**通过 `JsFeatures.modules` 注入，`specifier` 与 JS `import` 路径一致。
 6. **异步宿主调用**在 handler 里 `await`，返回 patch 即可，不必手动 `setState`。
 7. 排查错误时关注日志前缀 `quickjs_ui runtime call failed call=...`，常见值：`dispatch`、`render`、`lifecycle`、`state`。
 

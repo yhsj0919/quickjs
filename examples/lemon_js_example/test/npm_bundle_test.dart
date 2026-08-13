@@ -11,14 +11,9 @@ void main() {
     expect(source, isNot(contains('from "fast-deep-equal"')));
 
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        modules: <QuickjsHostModule>[
-          QuickjsHostModule.esModule(
-            specifier: 'example/npm-bundle',
-            source: source,
-          ),
-        ],
-      ),
+      modules: <JsModule>[
+        JsModule.esModule(specifier: 'example/npm-bundle', source: source),
+      ],
     );
     addTearDown(engine.dispose);
 

@@ -4,7 +4,7 @@ import 'package:lemon_js/lemon_js.dart';
 Future<void> main() async {
   final runtime = await Quickjs.create();
   try {
-    final result = await runtime.evaluateValue('''
+    final result = await runtime.eval('''
       const values = [1, 2, 3];
       ({ total: values.reduce((sum, value) => sum + value, 0) });
     ''');

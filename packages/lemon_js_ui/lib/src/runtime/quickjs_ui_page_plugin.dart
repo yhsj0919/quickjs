@@ -20,7 +20,7 @@ const List<String> quickjsUiPagePluginExports = <String>[
 final class QuickjsUiPagePlugin {
   const QuickjsUiPagePlugin._();
 
-  static QuickjsPlugin asset({
+  static JsPlugin asset({
     required String id,
     required String path,
     String version = '0.1.0',
@@ -33,7 +33,7 @@ final class QuickjsUiPagePlugin {
       id: id,
       version: version,
       pageSpecifier: pageSpecifier,
-      pageModule: QuickjsPluginModule.asset(
+      pageModule: JsPluginModule.asset(
         specifier: pageSpecifier,
         assetKey: path,
         bundle: bundle,
@@ -43,7 +43,7 @@ final class QuickjsUiPagePlugin {
     );
   }
 
-  static QuickjsPlugin singleFile({
+  static JsPlugin singleFile({
     required String id,
     required String version,
     required String source,
@@ -55,32 +55,32 @@ final class QuickjsUiPagePlugin {
       id: id,
       version: version,
       pageSpecifier: pageSpecifier,
-      pageModule: QuickjsPluginModule(specifier: pageSpecifier, source: source),
+      pageModule: JsPluginModule(specifier: pageSpecifier, source: source),
       entryName: entryName,
       permissions: permissions,
     );
   }
 
-  static QuickjsPlugin _plugin({
+  static JsPlugin _plugin({
     required String id,
     required String version,
     required String pageSpecifier,
-    required QuickjsPluginModule pageModule,
+    required JsPluginModule pageModule,
     required String entryName,
     required List<String> permissions,
   }) {
     final adapterSpecifier = '$id/main';
-    return QuickjsPlugin(
-      manifest: QuickjsPluginManifest(
+    return JsPlugin(
+      manifest: JsPluginManifest(
         id: id,
         version: version,
         entry: adapterSpecifier,
         exports: quickjsUiPagePluginExports,
         permissions: permissions,
       ),
-      modules: <QuickjsPluginModule>[
+      modules: <JsPluginModule>[
         pageModule,
-        QuickjsPluginModule(
+        JsPluginModule(
           specifier: adapterSpecifier,
           source: adapterSource(pageSpecifier),
         ),

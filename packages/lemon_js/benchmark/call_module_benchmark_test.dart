@@ -9,25 +9,23 @@ void main() {
   test('measures fixed cost of an already-loaded module call', () async {
     const iterations = 500;
     const warmupIterations = 50;
-    final plugin = QuickjsPlugin(
-      manifest: const QuickjsPluginManifest(
+    final plugin = JsPlugin(
+      manifest: const JsPluginManifest(
         id: 'call_module_benchmark',
         version: '1.0.0',
         entry: 'call_module_benchmark/main',
         exports: <String>['empty'],
       ),
-      modules: const <QuickjsPluginModule>[
-        QuickjsPluginModule(
+      modules: const <JsPluginModule>[
+        JsPluginModule(
           specifier: 'call_module_benchmark/main',
           source: 'export function empty() { return null; }',
         ),
       ],
     );
 
-    final runtime = await QuickjsRuntime.create();
-    final context = await runtime.createContext(
-      options: QuickjsContextOptions(plugins: <QuickjsPlugin>[plugin]),
-    );
+    final runtime = await JsRuntime.create();
+    final context = await runtime.createContext(plugins: <JsPlugin>[plugin]);
     try {
       for (var index = 0; index < warmupIterations; index += 1) {
         await context.callPlugin(plugin, 'empty', const <Object?>[]);

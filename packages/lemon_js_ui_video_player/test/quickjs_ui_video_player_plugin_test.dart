@@ -43,7 +43,7 @@ export default Page({
       initialProps: const <String, Object?>{
         'source': 'https://example.com/video.mp4',
       },
-      mounts: QuickjsUiVideoPlayerPlugin.plugin.mounts,
+      features: QuickjsUiVideoPlayerPlugin.plugin.features,
     );
 
     final node = session.node;
@@ -85,7 +85,7 @@ export default Page({
       initialProps: const <String, Object?>{
         'source': 'https://example.com/video.mp4',
       },
-      mounts: QuickjsUiVideoPlayerPlugin.plugin.mounts,
+      features: QuickjsUiVideoPlayerPlugin.plugin.features,
     );
 
     final props = session.node?.props ?? const <String, Object?>{};
@@ -120,7 +120,7 @@ export default Page({
         'autoplay': true,
         'loop': true,
       },
-      mounts: QuickjsUiVideoPlayerPlugin.plugin.mounts,
+      features: QuickjsUiVideoPlayerPlugin.plugin.features,
     );
 
     await session.dispatch(<String, Object?>{

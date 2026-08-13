@@ -8,67 +8,28 @@ import 'quickjs_plugin.dart';
 import 'quickjs_runtime_base.dart';
 import 'quickjs_runtime_options.dart';
 
-/// Capabilities and plugins installed only in one [QuickjsContext].
-final class QuickjsContextOptions {
-  const QuickjsContextOptions({
-    this.moduleLoader,
-    this.hostCapabilities = QuickjsHostCapabilities.none,
-    this.environmentPatches = const <QuickjsHostScript>[],
-    this.modules = const <QuickjsHostModule>[],
-    this.providers = const <QuickjsHostProvider>[],
-    this.mounts = const <QuickjsHostMount>[],
-    this.plugins = const <QuickjsPlugin>[],
-    this.onConsole,
-  });
-
-  final QuickjsModuleLoader? moduleLoader;
-  final QuickjsHostCapabilities hostCapabilities;
-  final List<QuickjsHostScript> environmentPatches;
-  final List<QuickjsHostModule> modules;
-  final List<QuickjsHostProvider> providers;
-  final List<QuickjsHostMount> mounts;
-  final List<QuickjsPlugin> plugins;
-  final QuickjsConsoleSink? onConsole;
-
-  QuickjsRuntimeOptions _runtimeOptions(QuickjsRuntimeOptions runtime) {
-    return QuickjsRuntimeOptions(
-      memoryLimitBytes: runtime.memoryLimitBytes,
-      stackLimitBytes: runtime.stackLimitBytes,
-      moduleLoader: moduleLoader,
-      hostCapabilities: hostCapabilities,
-      environmentPatches: environmentPatches,
-      modules: modules,
-      providers: providers,
-      mounts: <QuickjsHostMount>[
-        ...mounts,
-        for (final plugin in plugins) plugin.asMount(),
-      ],
-    );
-  }
-}
-
 /// A long-lived QuickJS runtime that can host isolated JavaScript contexts.
 ///
 /// Native platforms place child contexts in one shared `JSRuntime`. Backends
 /// without multi-context support preserve the same isolation contract by
 /// creating an independent backend runtime for each context.
-final class QuickjsRuntime {
-  QuickjsRuntime._(this._backend, this._root, this.options);
+final class JsRuntime {
+  JsRuntime._(this._backend, this._root, this.options);
 
   final QuickjsBackend _backend;
   final QuickjsJsRuntimeBase _root;
-  final Set<QuickjsContext> _contexts = <QuickjsContext>{};
-  final QuickjsRuntimeOptions options;
+  final Set<JsContext> _contexts = <JsContext>{};
+  final JsOptions options;
   bool _closed = false;
   Future<void>? _disposeFuture;
   int _nextCallbackId = 1;
 
-  static Future<QuickjsRuntime> create({
-    QuickjsRuntimeOptions options = const QuickjsRuntimeOptions(),
+  static Future<JsRuntime> create({
+    JsOptions options = const JsOptions(),
   }) async {
     final backend = await createQuickjsBackend();
     final root = await backend.createRuntime(options);
-    return QuickjsRuntime._(backend, root, options);
+    return JsRuntime._(backend, root, options);
   }
 
   String get quickjsVersion => _backend.quickjsVersion;
@@ -78,11 +39,21 @@ final class QuickjsRuntime {
   int get activeContextCount => _contexts.length;
 
   /// Creates a context with an independent global object and module registry.
-  Future<QuickjsContext> createContext({
-    QuickjsContextOptions options = const QuickjsContextOptions(),
+  Future<JsContext> createContext({
+    JsModuleLoader? moduleLoader,
+    List<JsScript> scripts = const <JsScript>[],
+    List<JsModule> modules = const <JsModule>[],
+    List<JsProvider> providers = const <JsProvider>[],
+    List<JsFeatures> features = const <JsFeatures>[],
+    List<JsPlugin> plugins = const <JsPlugin>[],
+    JsConsoleSink? onConsole,
   }) async {
     _ensureOpen();
-    final contextRuntimeOptions = options._runtimeOptions(this.options);
+    final contextRuntimeOptions = JsOptions(
+      memoryLimitBytes: options.memoryLimitBytes,
+      stackLimitBytes: options.stackLimitBytes,
+      maxPendingTasks: options.maxPendingTasks,
+    );
     late final _QuickjsContextRuntimeAdapter adapter;
     if (_root case final QuickjsMultiContextRuntimeBase multi) {
       final id = await multi.createContext();
@@ -91,14 +62,20 @@ final class QuickjsRuntime {
       final isolated = await _backend.createRuntime(contextRuntimeOptions);
       adapter = _QuickjsContextRuntimeAdapter.isolated(this, isolated);
     }
-    final context = QuickjsContext._(this, adapter);
+    final context = JsContext._(this, adapter);
     _contexts.add(context);
     try {
       context._engine = await Quickjs.attachContext(
         _backend,
         adapter,
         options: contextRuntimeOptions,
-        onConsole: options.onConsole,
+        moduleLoader: moduleLoader,
+        scripts: scripts,
+        modules: modules,
+        providers: providers,
+        features: features,
+        plugins: plugins,
+        onConsole: onConsole,
       );
     } catch (_) {
       _contexts.remove(context);
@@ -126,7 +103,7 @@ final class QuickjsRuntime {
     await _root.dispose();
   }
 
-  void _detach(QuickjsContext context) => _contexts.remove(context);
+  void _detach(JsContext context) => _contexts.remove(context);
 
   int _allocateCallbackId() => _nextCallbackId++;
 
@@ -136,10 +113,10 @@ final class QuickjsRuntime {
 }
 
 /// An isolated JavaScript global and module namespace owned by a runtime.
-final class QuickjsContext implements QuickjsPluginHost {
-  QuickjsContext._(this._owner, this._adapter);
+final class JsContext implements JsPluginHost {
+  JsContext._(this._owner, this._adapter);
 
-  final QuickjsRuntime _owner;
+  final JsRuntime _owner;
   final _QuickjsContextRuntimeAdapter _adapter;
   late final Quickjs _engine;
   bool _closed = false;
@@ -147,23 +124,65 @@ final class QuickjsContext implements QuickjsPluginHost {
 
   bool get closed => _closed;
 
-  Future<String> eval(
+  Future<Object?> eval(
     String code, {
     Duration? timeout,
     String name = '<eval>',
+    Map<String, Object?> globals = const {},
   }) {
     _ensureOpen();
-    return _adapter.evaluate(code, timeout: timeout, name: name);
+    return _engine.eval(code, timeout: timeout, name: name, globals: globals);
   }
 
-  /// Evaluates code and awaits its Promise result while pumping timers/jobs.
-  Future<String> evalAsync(
+  Future<Object?> run(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
+    Map<String, Object?> globals = const {},
   }) {
     _ensureOpen();
-    return _adapter.evaluateAsync(code, timeout: timeout, name: name);
+    return _engine.run(code, timeout: timeout, name: name, globals: globals);
+  }
+
+  Future<String> evalRaw(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+    Map<String, Object?> globals = const {},
+  }) {
+    _ensureOpen();
+    return _engine.evalRaw(
+      code,
+      timeout: timeout,
+      name: name,
+      globals: globals,
+    );
+  }
+
+  Future<String> runRaw(
+    String code, {
+    Duration? timeout,
+    String name = '<run>',
+    Map<String, Object?> globals = const {},
+  }) {
+    _ensureOpen();
+    return _engine.runRaw(code, timeout: timeout, name: name, globals: globals);
+  }
+
+  /// Calls a function stored on this context's `globalThis`.
+  Future<Object?> call(String method, List<Object?> args, {Duration? timeout}) {
+    _ensureOpen();
+    return _engine.call(method, args, timeout: timeout);
+  }
+
+  /// Calls a global function and returns the raw QuickJS bridge string.
+  Future<String> callRaw(
+    String method,
+    List<Object?> args, {
+    Duration? timeout,
+  }) {
+    _ensureOpen();
+    return _engine.callRaw(method, args, timeout: timeout);
   }
 
   Future<String> evalModule(
@@ -191,7 +210,7 @@ final class QuickjsContext implements QuickjsPluginHost {
   }
 
   /// Installs a Promise-returning Dart callback on this context's global object.
-  Future<void> bindCallback(
+  Future<void> injectFunction(
     String name,
     FutureOr<Object?> Function(List<Object?> args) callback,
   ) async {
@@ -203,11 +222,17 @@ final class QuickjsContext implements QuickjsPluginHost {
         'must be a JavaScript identifier',
       );
     }
-    await _engine.bind(name, callback);
+    await _engine.injectFunction(name, callback);
+  }
+
+  /// Injects a Dart stream as a JavaScript async iterable in this context.
+  Future<void> injectStream<T>(String name, Stream<T> stream) {
+    _ensureOpen();
+    return _engine.injectStream(name, stream);
   }
 
   /// Installs a JavaScript `{emit, close, error}` sink in this context.
-  Future<Stream<Object?>> bindJsSink(String name) {
+  Future<Stream<Object?>> bindStream(String name) {
     _ensureOpen();
     if (!RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(name)) {
       throw ArgumentError.value(
@@ -216,18 +241,18 @@ final class QuickjsContext implements QuickjsPluginHost {
         'must be a JavaScript identifier',
       );
     }
-    return _engine.bindSink(name);
+    return _engine.bindStream(name);
   }
 
   @override
-  Future<void> validatePlugin(QuickjsPlugin plugin, {Duration? timeout}) {
+  Future<void> validatePlugin(JsPlugin plugin, {Duration? timeout}) {
     _ensureOpen();
     return _engine.validatePlugin(plugin, timeout: timeout);
   }
 
   @override
   Future<Object?> initPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     Map<String, Object?> context = const <String, Object?>{},
     Duration? timeout,
   }) {
@@ -237,7 +262,7 @@ final class QuickjsContext implements QuickjsPluginHost {
 
   @override
   Future<Object?> callPlugin(
-    QuickjsPlugin plugin,
+    JsPlugin plugin,
     String method,
     List<Object?> args, {
     Duration? timeout,
@@ -247,30 +272,29 @@ final class QuickjsContext implements QuickjsPluginHost {
   }
 
   @override
-  Future<Object?> disposePlugin(QuickjsPlugin plugin, {Duration? timeout}) {
+  Future<Object?> disposePlugin(JsPlugin plugin, {Duration? timeout}) {
     _ensureOpen();
     return _engine.disposePlugin(plugin, timeout: timeout);
   }
 
   /// Installs a capability bundle directly into this context.
-  Future<void> mount(
-    QuickjsHostMount mount, {
-    QuickjsHostMountConflictPolicy conflictPolicy =
-        QuickjsHostMountConflictPolicy.reject,
+  Future<void> loadFeatures(
+    JsFeatures features, {
+    JsFeaturesConflictPolicy conflictPolicy = JsFeaturesConflictPolicy.reject,
   }) {
     _ensureOpen();
-    return _engine.mount(mount, conflictPolicy: conflictPolicy);
+    return _engine.loadFeatures(features, conflictPolicy: conflictPolicy);
   }
 
-  /// Mounts, validates and optionally initializes a dynamic plugin in place.
+  /// Features, validates and optionally initializes a dynamic plugin in place.
   Future<void> loadPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     bool initialize = true,
     Map<String, Object?> initContext = const <String, Object?>{},
     Duration? timeout,
   }) async {
     _ensureOpen();
-    await mount(plugin.asMount());
+    await loadFeatures(plugin.asFeatures());
     await validatePlugin(plugin, timeout: timeout);
     if (initialize) {
       await initPlugin(plugin, context: initContext, timeout: timeout);
@@ -309,7 +333,7 @@ final class _QuickjsContextRuntimeAdapter
     : _shared = null,
       _contextId = null;
 
-  final QuickjsRuntime _owner;
+  final JsRuntime _owner;
   final QuickjsMultiContextRuntimeBase? _shared;
   final int? _contextId;
   final QuickjsJsRuntimeBase? _isolated;
@@ -338,7 +362,7 @@ final class _QuickjsContextRuntimeAdapter
   Future<String> evaluateAsync(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
   }) {
     _ensureOpen();
     final shared = _shared;

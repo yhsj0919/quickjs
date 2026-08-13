@@ -541,7 +541,7 @@ void main() {
     for (final marker in <String>[
       'memoryLimitBytes',
       'stackLimitBytes',
-      'evaluateValue',
+      'eval',
       'setTimeout',
       'setInterval',
       'for-await',
@@ -549,9 +549,9 @@ void main() {
       'runtime module cache',
       'CommonJS',
       'compareValues()',
-      'QuickjsFetchMount',
+      'FetchFeatures',
       'Axios/XHR',
-      'QuickjsZipPlugin.asset()',
+      'JsZipPlugin.asset()',
     ]) {
       final finder = find.textContaining(marker);
       await _scrollUntilFound(tester, finder);
@@ -563,7 +563,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: ZipPluginPage()));
 
     expect(find.text('ZIP 插件包'), findsOneWidget);
-    expect(find.textContaining('QuickjsZipPlugin.asset()'), findsOneWidget);
+    expect(find.textContaining('JsZipPlugin.asset()'), findsOneWidget);
     expect(find.text('hello'), findsOneWidget);
     expect(find.text('profile'), findsOneWidget);
     expect(find.text('manifest'), findsOneWidget);

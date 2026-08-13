@@ -1,19 +1,17 @@
 part of '../runtime/quickjs_runtime_options.dart';
 
-QuickjsHostMount _quickjsWebHostMount({
+JsFeatures _quickjsWebHostMount({
   required String locationHref,
   required String userAgent,
   required bool window,
   required bool self,
   required bool storage,
 }) {
-  return QuickjsHostMount(
+  return JsFeatures(
     name: 'web',
-    capabilities: QuickjsHostCapabilities(
-      browserGlobals: QuickjsBrowserGlobals(window: window, self: self),
-    ),
-    environmentPatches: <QuickjsHostScript>[
-      QuickjsHostScript.js(
+    browserGlobals: JsGlobals(window: window, self: self),
+    scripts: <JsScript>[
+      JsScript.js(
         name: 'host:web-globals.js',
         globals: <String>[
           'location',

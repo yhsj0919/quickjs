@@ -83,7 +83,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
           // 先把 running eval 的错误捕获下来，避免 stop 前后出现未处理错误。
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       final error = await running;
       if (error != null) {
         throw error;
@@ -143,7 +143,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
   }
 
   String _describeError(Object error) {
-    if (error is JsException) {
+    if (error is JsThrownException) {
       return [
         '${error.runtimeType}',
         'name: ${_formatNullable(error.name)}',
@@ -155,8 +155,8 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
       ].join('\n');
     }
 
-    // 公开 QuickjsException 都有 message，可以比普通 Object 输出更稳定。
-    if (error is QuickjsException) {
+    // 公开 JsException 都有 message，可以比普通 Object 输出更稳定。
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -192,7 +192,7 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
               children: [
                 FilledButton(
                   onPressed: _busy || !hasRuntime ? null : _runJsThrow,
-                  child: const Text('触发 JsException'),
+                  child: const Text('触发 JsThrownException'),
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _runTimeout,

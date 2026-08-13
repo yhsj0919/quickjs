@@ -1,8 +1,8 @@
 // quickjs 包的公开导出入口。
 ///
-/// 常用 mount：
-/// - [QuickjsFetchMount]：注入 Fetch API。
-/// - [QuickjsAxiosMount]：组合 Fetch 与 Axios 脚本。
+/// 常用 features：
+/// - [FetchFeatures]：注入 Fetch API。
+/// - [AxiosFeatures]：组合 Fetch 与 Axios 脚本。
 library;
 
 export 'src/runtime/quickjs.dart';

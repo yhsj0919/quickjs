@@ -60,7 +60,7 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
 
   Future<void> _runTimeout() async {
     await _capture('setTimeout', () async {
-      final result = await _requireRuntime().evalAsync(
+      final result = await _requireRuntime().run(
         'const value = await new Promise((resolve) => '
         'setTimeout(() => resolve(42), 5000));'
         'return value;',
@@ -71,7 +71,7 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
 
   Future<void> _runClearTimeout() async {
     await _capture('clearTimeout', () async {
-      final result = await _requireRuntime().evalAsync(
+      final result = await _requireRuntime().run(
         'let called = false;'
         'const id = setTimeout(() => { called = true; }, 10);'
         'clearTimeout(id);'
@@ -84,7 +84,7 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
 
   Future<void> _runInterval() async {
     await _capture('setInterval', () async {
-      final result = await _requireRuntime().evalAsync(
+      final result = await _requireRuntime().run(
         'let count = 0;'
         'await new Promise((resolve) => {'
         '  const id = setInterval(() => {'
@@ -146,7 +146,7 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -173,7 +173,7 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text('JS timer 会驱动 Promise job pump，需要通过 evalAsync await。'),
+            const Text('JS timer 会驱动 Promise job pump，需要通过 run await。'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,

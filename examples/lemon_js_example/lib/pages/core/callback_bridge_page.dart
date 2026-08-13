@@ -60,13 +60,13 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
   }
 
   Future<void> _bindCallbacks(Quickjs quickjs) async {
-    await quickjs.bind('hostAdd', (args) {
+    await quickjs.injectFunction('hostAdd', (args) {
       final left = args[0] as num;
       final right = args[1] as num;
       _appendLog('Dart hostAdd($left, $right)');
       return left + right;
     });
-    await quickjs.bind('hostFail', (_) {
+    await quickjs.injectFunction('hostFail', (_) {
       _appendLog('Dart hostFail()');
       throw StateError('hostFail from Dart');
     });
@@ -74,7 +74,7 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
 
   Future<void> _runResolve() async {
     await _capture('resolve', () async {
-      final result = await _requireRuntime().evalAsync(
+      final result = await _requireRuntime().run(
         'return await hostAdd(20, 22);',
       );
       _appendLog('JS await hostAdd(20, 22) => $result');
@@ -83,7 +83,7 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
 
   Future<void> _runReject() async {
     await _capture('reject', () async {
-      await _requireRuntime().evalAsync('return await hostFail();');
+      await _requireRuntime().run('return await hostFail();');
     });
   }
 
@@ -132,7 +132,7 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -159,7 +159,7 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text('JS 调用 Dart callback 时返回 Promise，需要通过 evalAsync await。'),
+            const Text('JS 调用 Dart callback 时返回 Promise，需要通过 run await。'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,

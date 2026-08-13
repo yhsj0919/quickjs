@@ -59,16 +59,16 @@ void main() {
       source: source,
     );
     await session.loadPlugin(
-      QuickjsPlugin(
+      JsPlugin(
         manifest: scaffold.manifest,
-        modules: <QuickjsPluginModule>[
+        modules: <JsPluginModule>[
           scaffold.modules.first,
-          QuickjsPluginModule(
+          JsPluginModule(
             specifier:
                 'adaptive_performance_lab/adaptive_performance/retained_load_scene.mjs',
             source: retainedSceneSource,
           ),
-          QuickjsPluginModule(
+          JsPluginModule(
             specifier:
                 'adaptive_performance_lab/adaptive_performance/snapshot_particle_stage.mjs',
             source: particleLayerSource,

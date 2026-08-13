@@ -13,8 +13,8 @@ class ZipPluginPage extends StatefulWidget {
 
 class _ZipPluginPageState extends State<ZipPluginPage> {
   Quickjs? _quickjs;
-  QuickjsPlugin? _plugin;
-  QuickjsPluginClient? _client;
+  JsPlugin? _plugin;
+  JsPluginClient? _client;
   bool _disposed = false;
   bool _busy = false;
   String _status = 'Creating runtime...';
@@ -40,13 +40,11 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
       _client = null;
       await previous?.dispose();
 
-      final plugin = await QuickjsZipPlugin.asset(
+      final plugin = await JsZipPlugin.asset(
         assetKey: 'assets/plugins/zip_demo.zip',
       );
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
         onConsole: (event) {
           if (!mounted || _disposed) {
             return;
@@ -56,7 +54,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
           });
         },
       );
-      final client = QuickjsPluginClient(quickjs, plugin);
+      final client = JsPluginClient(quickjs, plugin);
       await client.validate();
       final initResult = await client.init(<String, Object?>{
         'locale': 'zh-CN',
@@ -149,7 +147,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
     }
   }
 
-  QuickjsPluginClient _requireClient() {
+  JsPluginClient _requireClient() {
     final client = _client;
     if (client == null) {
       throw JsRuntimeClosedException('Zip plugin client is not ready');
@@ -157,7 +155,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
     return client;
   }
 
-  QuickjsPlugin _requirePlugin() {
+  JsPlugin _requirePlugin() {
     final plugin = _plugin;
     if (plugin == null) {
       throw JsRuntimeClosedException('Zip plugin is not ready');
@@ -166,7 +164,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -195,7 +193,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'Loads assets/plugins/zip_demo.zip with QuickjsZipPlugin.asset().',
+              'Loads assets/plugins/zip_demo.zip with JsZipPlugin.asset().',
             ),
             const SizedBox(height: 16),
             Wrap(

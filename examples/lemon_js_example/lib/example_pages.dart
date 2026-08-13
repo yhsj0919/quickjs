@@ -40,8 +40,7 @@ final List<ExamplePageSpec> examplePages = [
   ),
   ExamplePageSpec(
     title: '结构化值返回',
-    description:
-        '使用 evaluateValue 获取 number、boolean、string、null 和 undefined 的 Dart 值。',
+    description: '使用 eval 获取 number、boolean、string、null 和 undefined 的 Dart 值。',
     builder: (_) => const StructuredValuesPage(),
   ),
   ExamplePageSpec(
@@ -99,30 +98,30 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '宿主模块',
     description:
-        '使用 QuickjsRuntimeOptions.modules 注入 ES module 和 CommonJS 宿主模块，验证 cache、debugInspect、essential Buffer 与 node preset。',
+        '使用 JsOptions.modules 注入 ES module 和 CommonJS 宿主模块，验证 cache、debugInspect、essential Buffer 与 node preset。',
     builder: (_) => const HostModulesPage(),
   ),
   ExamplePageSpec(
     title: 'Web 宿主环境',
     description:
-        '使用 QuickjsHostMount.web() 注入 window、location、navigator、URL 和内存版 storage。',
+        '使用 JsFeatures.web() 注入 window、location、navigator、URL 和内存版 storage。',
     builder: (_) => const WebHostEnvironmentPage(),
   ),
   ExamplePageSpec(
     title: '函数句柄',
     description:
-        '使用 evaluateHandle 获取 JS function，并通过 handle.call / callAsync / dispose 管理。',
+        '使用 function 获取 JS function，并通过 handle.call / run / dispose 管理。',
     builder: (_) => const FunctionHandlePage(),
   ),
   ExamplePageSpec(
     title: '对象代理',
-    description: '使用 bindObject 注册 Dart proxy，暴露只读属性、Promise 方法和显式释放。',
+    description: '使用 injectObject 注入 Dart proxy，暴露只读属性、Promise 方法和显式释放。',
     builder: (_) => const ObjectProxyPage(),
   ),
   ExamplePageSpec(
     title: '类绑定',
     description:
-        '使用 bindClass 注册 Dart class，展示 new User、await getter/method 和显式释放。',
+        '使用 injectClass 注入 Dart class，展示 new User、await getter/method 和显式释放。',
     builder: (_) => const ClassBindingPage(),
   ),
   ExamplePageSpec(
@@ -134,13 +133,13 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: 'Web 加密能力',
     description:
-        '通过 QuickjsWebCryptoMount() 安装 randomUUID、getRandomValues、Flutter 原生 subtle.digest 和 HMAC-SHA-256 crypto.subtle.sign/verify。',
+        '通过 WebCryptoFeatures() 安装 randomUUID、getRandomValues、Flutter 原生 subtle.digest 和 HMAC-SHA-256 crypto.subtle.sign/verify。',
     builder: (_) => const CryptoRandomUuidPage(),
   ),
   ExamplePageSpec(
-    title: '能力批量挂载',
+    title: '基础功能加载',
     description:
-        '使用 QuickjsRuntimeOptions.mounts 和 Quickjs.mount() 批量安装环境补全、模块与 provider。',
+        '使用 JsOptions.features 和 Quickjs.loadFeatures() 批量安装环境补全、模块与 provider。',
     builder: (_) => const HostMountsPage(),
   ),
   ExamplePageSpec(
@@ -152,18 +151,18 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '网络请求 · Fetch 与 XHR',
     description:
-        '验证 QuickjsFetchMount 的 Fetch、Request、Response、重定向、自定义配置与 Axios/XHR 兼容协议。',
+        '验证 FetchFeatures 的 Fetch、Request、Response、重定向、自定义配置与 Axios/XHR 兼容协议。',
     builder: (_) => const FetchPage(),
   ),
   ExamplePageSpec(
     title: 'JS 插件',
     description:
-        '使用 QuickjsPlugin 注册单文件插件和多模块插件包，验证 validatePlugin、invokePlugin、structured codec 和错误返回。',
+        '使用 JsPlugin 注册单文件插件和多模块插件包，验证 validatePlugin、invokePlugin、structured codec 和错误返回。',
     builder: (_) => const PluginPage(),
   ),
   ExamplePageSpec(
     title: 'ZIP 插件包',
-    description: '使用 QuickjsZipPlugin.asset() 加载 ZIP 插件资源，完成校验、初始化并调用导出方法。',
+    description: '使用 JsZipPlugin.asset() 加载 ZIP 插件资源，完成校验、初始化并调用导出方法。',
     builder: (_) => const ZipPluginPage(),
   ),
   ExamplePageSpec(
@@ -173,8 +172,7 @@ final List<ExamplePageSpec> examplePages = [
   ),
   ExamplePageSpec(
     title: 'WebSocket 通信',
-    description:
-        '安装 QuickjsWebSocketMount，验证 open/message/close 事件和 Origin 白名单。',
+    description: '安装 WebSocketFeatures，验证 open/message/close 事件和 Origin 白名单。',
     builder: (_) => const WebSocketPage(),
   ),
   ExamplePageSpec(

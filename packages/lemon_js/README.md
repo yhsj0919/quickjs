@@ -1,5 +1,7 @@
 # lemon_js
 
+公开 API 的命名和方向语义以 [API 命名语义](../../docs/api_naming_conventions.md) 为准。
+
 `lemon_js` 是面向 Flutter 的 QuickJS JavaScript 运行时。原生平台使用 FFI 和随包编译的
 QuickJS，Flutter Web 使用 WASM 与 Web Worker。它提供异步执行、ES Module、插件、宿主
 能力注入、结构化值转换、网络、KV、Web Crypto 和运行时隔离。
@@ -23,7 +25,7 @@ import 'package:lemon_js/lemon_js.dart';
 Future<void> runJavaScript() async {
   final runtime = await Quickjs.create();
   try {
-    final result = await runtime.evaluateValue('''
+    final result = await runtime.eval('''
       const items = [1, 2, 3];
       ({ total: items.reduce((sum, value) => sum + value, 0) });
     ''');
@@ -34,35 +36,33 @@ Future<void> runJavaScript() async {
 }
 ```
 
-`evaluateValue()` 返回 Dart 结构化值。需要保留旧字符串结果时可使用 `eval()` 或
-`evaluate()`。每个 `Quickjs` 实例拥有独立 runtime；不用时应调用 `dispose()`。
+`eval()` 返回 Dart 结构化值。需要底层字符串结果时使用 `evalRaw()`。
+每个 `Quickjs` 实例拥有独立 runtime；不用时应调用 `dispose()`。
 
 ## Dart 与 JavaScript 互调
 
 ```dart
 final runtime = await Quickjs.create();
-await runtime.bind('addFromDart', (arguments) {
+await runtime.injectFunction('addFromDart', (arguments) {
   return (arguments[0] as num) + (arguments[1] as num);
 });
 
-final result = await runtime.evalAsync('''
+final result = await runtime.run('''
   return await addFromDart(20, 22);
 ''');
 print(result); // 42
 ```
 
-`bind()` 暴露的 Dart 函数在 JS 中返回 Promise。参数和结果支持 JSON 值以及
+`injectFunction()` 暴露的 Dart 函数在 JS 中返回 Promise。参数和结果支持 JSON 值以及
 `Uint8List`/`Uint8Array`。
 
 ## ES Module
 
 ```dart
 final runtime = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    moduleLoader: (name) => <String, String>{
+  moduleLoader: (name) => <String, String>{
       'math.mjs': 'export const answer = 42;',
     }[name],
-  ),
 );
 
 await runtime.evalModule('''
@@ -70,32 +70,30 @@ await runtime.evalModule('''
   globalThis.result = answer;
 ''', name: 'main.mjs');
 
-print(await runtime.evaluateValue('globalThis.result')); // 42
+print(await runtime.eval('globalThis.result')); // 42
 ```
 
-Flutter asset 模块可使用 `quickjsAssetModuleLoader()`。npm 依赖建议先通过 esbuild、
+Flutter asset 模块可使用 `jsAssetModuleLoader()`。npm 依赖建议先通过 esbuild、
 Rollup 或 webpack 打包，不提供完整 Node.js resolver。
 
 ## 宿主能力
 
-宿主能力通过 `QuickjsHostMount` 注入。常用内置能力包括：
+宿主能力通过 `JsFeatures` 注入。常用内置能力包括：
 
-- `QuickjsFetchMount`：Fetch、XHR、FormData、Blob 等网络 API；
-- `QuickjsKeyValueStorageMount`：按 namespace 隔离的异步 KV；
-- `QuickjsWebCryptoMount`：随机数、摘要和 HMAC；
-- `QuickjsAxiosMount`：向 JS 提供 Axios；
-- `QuickjsEssentialHostMount`、`QuickjsNodeCompatMount`：常用环境兼容能力。
+- `FetchFeatures`：Fetch、XHR、FormData、Blob 等网络 API；
+- `StorageFeatures`：按 namespace 隔离的异步 KV；
+- `WebCryptoFeatures`：随机数、摘要和 HMAC；
+- `AxiosFeatures`：向 JS 提供 Axios；
+- `JsFeatures.essential()`、`JsFeatures.node()`：常用环境兼容能力。
 
 ```dart
 final runtime = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsFetchMount(
-        allowedOrigins: <String>{'https://api.example.com'},
-      ),
-      QuickjsKeyValueStorageMount(namespace: 'site.example'),
-    ],
-  ),
+  features: <JsFeatures>[
+    FetchFeatures(
+      allowedOrigins: <String>{'https://api.example.com'},
+    ),
+    StorageFeatures(namespace: 'site.example'),
+  ],
 );
 ```
 
@@ -104,8 +102,8 @@ final runtime = await Quickjs.create(
 ## JS 插件
 
 ```dart
-final plugin = QuickjsPlugin.sources(
-  manifest: const QuickjsPluginManifest(
+final plugin = JsPlugin.sources(
+  manifest: const JsPluginManifest(
     id: 'site.example',
     version: '1.0.0',
     entry: 'site.example/main.mjs',
@@ -126,12 +124,12 @@ final result = await runtime.callPlugin(plugin, 'getHome', const []);
 
 ## 运行限制与错误
 
-`QuickjsRuntimeOptions` 可配置内存、原生栈、调用队列和默认超时。框架错误可通过
-`QuickjsException.kind` 或具体异常类型区分超时、取消、队列已满、runtime 关闭、崩溃、
+`JsOptions` 可配置内存、原生栈、调用队列和默认超时。框架错误可通过
+`JsException.kind` 或具体异常类型区分超时、取消、队列已满、runtime 关闭、崩溃、
 内存不足和栈溢出。
 
 长同步 JavaScript 不会阻塞 Flutter UI isolate，但会阻塞同一 QuickJS runtime 的后续
-任务。`stop()` 会重建底层 runtime，因此 JS 全局变量和模块临时状态会丢失。
+任务。`restart()` 会重建底层 runtime，因此 JS 全局变量和模块临时状态会丢失。
 
 ## 示例与文档
 

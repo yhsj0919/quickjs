@@ -3,30 +3,30 @@ import 'package:flutter/services.dart';
 import '../runtime/quickjs_runtime_options.dart';
 import 'quickjs_fetch_mount.dart';
 
-/// 将 Axios 与它所依赖的 Fetch/XHR 宿主能力打包为一个 [QuickjsHostMount]。
+/// 将 Axios 与它所依赖的 Fetch/XHR 宿主能力打包为一个 [JsFeatures]。
 ///
-/// 典型用法：在 [QuickjsUiView] 或 [Quickjs.create] 的 `mounts` 中传入
-/// `QuickjsAxiosMount(assetKey: 'assets/js/axios.js')`，即可在 JS 侧使用
-/// `axios`，无需再单独配置 [QuickjsFetchMount] 和 [QuickjsHostScript]。
+/// 典型用法：在 [QuickjsUiView] 或 [Quickjs.create] 的 `features` 中传入
+/// `AxiosFeatures(assetKey: 'assets/js/axios.js')`，即可在 JS 侧使用
+/// `axios`，无需再单独配置 [FetchFeatures] 和 [JsScript]。
 ///
 /// [assetKey] 为必填项，用于指定要加载的 Axios 脚本所在 Flutter asset 路径。
-final class QuickjsAxiosMount extends QuickjsHostMount {
-  /// 使用共享网络会话创建 Axios mount。
-  factory QuickjsAxiosMount.session({
+final class AxiosFeatures extends JsFeatures {
+  /// 使用共享网络会话创建 Axios features。
+  factory AxiosFeatures.session({
     required String assetKey,
-    required QuickjsHttpSession session,
+    required JsHttpSession session,
     AssetBundle? bundle,
     String name = 'axios',
     String? scriptName,
-  }) => QuickjsAxiosMount._(
+  }) => AxiosFeatures._(
     name: name,
     assetKey: assetKey,
     bundle: bundle,
-    fetchMount: QuickjsFetchMount.session(session),
+    fetchFeatures: FetchFeatures.session(session),
     scriptName: scriptName ?? assetKey,
   );
 
-  /// 创建 Axios 组合 mount。
+  /// 创建 Axios 组合 features。
   ///
   /// - [assetKey]：Axios JavaScript 文件的 asset 路径（必填）。
   /// - [bundle]：可选的 asset 读取源；默认使用 [rootBundle]。
@@ -36,9 +36,9 @@ final class QuickjsAxiosMount extends QuickjsHostMount {
   /// - [maxResponseBytes]：响应体最大字节数。
   /// - [maxRedirects]：单次请求允许跟随的最大重定向次数。
   /// - [defaultHeaders]：注入到每次请求中的默认 HTTP 头。
-  /// - [name]：mount 在 runtime 中的稳定名称，用于冲突检测与调试。
+  /// - [name]：features 在 runtime 中的稳定名称，用于冲突检测与调试。
   /// - [scriptName]：Axios 脚本在 QuickJS 堆栈中的 source 名称；默认等于 [assetKey]。
-  factory QuickjsAxiosMount({
+  factory AxiosFeatures({
     required String assetKey,
     AssetBundle? bundle,
     Set<String>? allowedOrigins,
@@ -50,7 +50,7 @@ final class QuickjsAxiosMount extends QuickjsHostMount {
     String name = 'axios',
     String? scriptName,
   }) {
-    final fetchMount = QuickjsFetchMount(
+    final fetchFeatures = FetchFeatures(
       allowedOrigins: allowedOrigins,
       timeout: timeout,
       maxRequestBytes: maxRequestBytes,
@@ -58,32 +58,32 @@ final class QuickjsAxiosMount extends QuickjsHostMount {
       maxRedirects: maxRedirects,
       defaultHeaders: defaultHeaders,
     );
-    return QuickjsAxiosMount._(
+    return AxiosFeatures._(
       name: name,
       assetKey: assetKey,
       bundle: bundle,
-      fetchMount: fetchMount,
+      fetchFeatures: fetchFeatures,
       scriptName: scriptName ?? assetKey,
     );
   }
 
-  QuickjsAxiosMount._({
+  AxiosFeatures._({
     required super.name,
     required this.assetKey,
     required this.bundle,
-    required this.fetchMount,
+    required this.fetchFeatures,
     required String scriptName,
   }) : super(
-         environmentPatches: <QuickjsHostScript>[
-           ...fetchMount.environmentPatches,
-           QuickjsHostScript.asset(
+         scripts: <JsScript>[
+           ...fetchFeatures.scripts,
+           JsScript.asset(
              name: scriptName,
              assetKey: assetKey,
              bundle: bundle,
              globals: const <String>['axios'],
            ),
          ],
-         providers: fetchMount.providers,
+         providers: fetchFeatures.providers,
        );
 
   /// Axios 脚本所在的 Flutter asset 路径。
@@ -92,6 +92,6 @@ final class QuickjsAxiosMount extends QuickjsHostMount {
   /// 读取 [assetKey] 时使用的 asset bundle；为 `null` 时使用 [rootBundle]。
   final AssetBundle? bundle;
 
-  /// 内部用于实现 `fetch` / `XMLHttpRequest` 的 [QuickjsFetchMount] 实例。
-  final QuickjsFetchMount fetchMount;
+  /// 内部用于实现 `fetch` / `XMLHttpRequest` 的 [FetchFeatures] 实例。
+  final FetchFeatures fetchFeatures;
 }

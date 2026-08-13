@@ -36,8 +36,8 @@ final List<ExamplePageSpec> quickjsUiPlatformExamplePages = [
   quickjsUiPageSpec(
     category: ExampleCategory.platform,
     title: '网络请求能力',
-    description: '注入 QuickjsFetchMount 与 Axios，在 JS 页面内加载远程 JSON。',
-    tags: const ['network', 'axios', 'mount'],
+    description: '注入 FetchFeatures 与 Axios，在 JS 页面内加载远程 JSON。',
+    tags: const ['network', 'axios', 'features'],
     builder: (_) => const QuickjsUiNetworkCapabilityPage(),
   ),
   quickjsUiPageSpec(

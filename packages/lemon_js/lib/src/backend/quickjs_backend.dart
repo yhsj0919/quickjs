@@ -9,5 +9,5 @@ abstract class QuickjsBackend {
   String get quickjsVersion;
 
   /// 创建一个隔离的 JavaScript runtime。
-  Future<QuickjsJsRuntimeBase> createRuntime(QuickjsRuntimeOptions options);
+  Future<QuickjsJsRuntimeBase> createRuntime(JsOptions options);
 }

@@ -77,7 +77,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
       final results = await Future.wait([
         // 100 个 eval 同时提交，期望底层严格按提交顺序串行执行。
         for (var i = 0; i < 100; i += 1)
-          quickjs.eval(
+          quickjs.evalRaw(
             'globalThis.queue = (globalThis.queue || "") + "$i,"; globalThis.queue',
           ),
       ]);

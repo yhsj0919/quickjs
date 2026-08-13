@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// Fetch 能力演示：验证 [QuickjsFetchMount] 的 Fetch、Request、Response、
+/// Fetch 能力演示：验证 [FetchFeatures] 的 Fetch、Request、Response、
 /// 重定向、自定义配置与 Axios/XHR 兼容协议。
 class FetchPage extends StatefulWidget {
   const FetchPage({super.key});
@@ -12,7 +12,7 @@ class FetchPage extends StatefulWidget {
   State<FetchPage> createState() => _FetchPageState();
 }
 
-/// [FetchPage] 的状态：创建带 Fetch mount 的 runtime 并依次执行测试场景。
+/// [FetchPage] 的状态：创建带 Fetch features 的 runtime 并依次执行测试场景。
 class _FetchPageState extends State<FetchPage> {
   static const _jsonPlaceholderOrigin = 'https://jsonplaceholder.typicode.com';
   static const _httpBingoOrigin = 'https://httpbingo.org';
@@ -77,7 +77,7 @@ return `PASS follow=${followed.status}/${followed.redirected}, manual=${manual.s
 ''',
     ),
     _FetchScenario(
-      name: 'Mount 自定义配置',
+      name: 'Features 自定义配置',
       description: 'defaultHeaders、请求覆盖、origin allowlist',
       source: r'''
 const response = await fetch('https://httpbingo.org/anything', {
@@ -185,24 +185,22 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
       _quickjs = null;
       await previous?.dispose();
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsAxiosMount(
-              assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
-              allowedOrigins: const <String>{
-                _jsonPlaceholderOrigin,
-                _httpBingoOrigin,
-              },
-              maxRedirects: 5,
-              maxRequestBytes: 1024 * 1024,
-              maxResponseBytes: 10 * 1024 * 1024,
-              timeout: const Duration(seconds: 15),
-              defaultHeaders: const <String, String>{
-                'x-quickjs-example': 'from-mount',
-              },
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          AxiosFeatures(
+            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
+            allowedOrigins: const <String>{
+              _jsonPlaceholderOrigin,
+              _httpBingoOrigin,
+            },
+            maxRedirects: 5,
+            maxRequestBytes: 1024 * 1024,
+            maxResponseBytes: 10 * 1024 * 1024,
+            timeout: const Duration(seconds: 15),
+            defaultHeaders: const <String, String>{
+              'x-quickjs-example': 'from-features',
+            },
+          ),
+        ],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -231,7 +229,7 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
       _results[scenario.name] = 'RUNNING';
     });
     try {
-      final result = await quickjs.evalAsync(
+      final result = await quickjs.runRaw(
         scenario.source,
         name: 'example:fetch-${scenario.name}.js',
       );

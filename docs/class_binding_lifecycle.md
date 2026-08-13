@@ -1,25 +1,31 @@
 # Dart 类绑定生命周期
 
-本文档说明 `Quickjs.bindClass<T>()` 第一版窄切片的生命周期语义。当前实现只覆盖显式 descriptor 绑定，不支持 Dart 反射、继承、静态成员或 JS GC 驱动的 Dart 对象回收。
+本文档说明 `Quickjs.injectClass<T>()` 第一版窄切片的生命周期语义。当前实现只覆盖显式 descriptor 注入，不支持 Dart 反射、继承、静态成员或 JS GC 驱动的 Dart 对象回收。
 
 ## API 形式
 
 ```dart
-final handle = await engine.bindClass<User>(
+final handle = await engine.injectClass<User>(
   'User',
-  QuickjsClass<User>(
-    constructor: (args) => User(args.single as String),
-    accessors: {
-      'name': QuickjsInstanceAccessor<User>(
+  JsClass<User>(
+    create: (args) => User(args.single as String),
+    members: JsMembers<User>(
+    accessors: [
+      JsAccessor<User>(
+        'name',
         get: (user) => user.name,
         set: (user, value) {
           user.name = value as String;
         },
       ),
-    },
-    methods: {
-      'greet': (user, args) => 'Hello ${args.single}, I am ${user.name}',
-    },
+    ],
+    methods: [
+      JsMethod<User>(
+        'greet',
+        (user, args) => 'Hello ${args.single}, I am ${user.name}',
+      ),
+    ],
+    ),
   ),
 );
 ```
@@ -78,7 +84,7 @@ Dart 实例由所属 `Quickjs` runtime 管理。当前实现的所有权边界�
 
 ## 释放
 
-`QuickjsClassHandle.dispose()` 会：
+`JsClassHandle.dispose()` 会：
 
 - 删除 JS 全局 constructor。
 - 删除隐藏 callback globals。
@@ -94,9 +100,9 @@ await leakedUser.name // throws "QuickJS class instance is disposed"
 await leakedUser.greet() // throws "QuickJS class instance is disposed"
 ```
 
-重复调用 `QuickjsClassHandle.dispose()` 是 no-op。所属 runtime 已 dispose 后再 dispose class handle 也是 no-op。
+重复调用 `JsClassHandle.dispose()` 是 no-op。所属 runtime 已 dispose 后再 dispose class handle 也是 no-op。
 
-`Quickjs.dispose()` 会释放整个 runtime，并清空 class instance table。`Quickjs.stop()` 在需要重建底层 runtime 时也会清空 class instance table；之前绑定到旧 runtime 的 constructor / instance proxy 不再可用。
+`Quickjs.dispose()` 会释放整个 runtime，并清空 class instance table。`Quickjs.restart()` 在需要重建底层 runtime 时也会清空 class instance table；之前绑定到旧 runtime 的 constructor / instance proxy 不再可用。
 
 ## JS GC 与 Dart GC
 
@@ -104,7 +110,7 @@ await leakedUser.greet() // throws "QuickJS class instance is disposed"
 
 稳定语义是：
 
-- 通过 `QuickjsClassHandle.dispose()` 显式释放某个 class binding 的所有实例。
+- 通过 `JsClassHandle.dispose()` 显式释放某个 class binding 的所有实例。
 - 通过 `Quickjs.dispose()` 释放整个 runtime 的所有实例。
 - future finalizer 只能作为兜底清理，不能替代显式 dispose。
 

@@ -13,8 +13,8 @@ final class QuickjsUiRuntime {
   QuickjsUiRuntime({
     this.idleCapacity = 1,
     this.maxCapacity = 2,
-    this.runtimeOptions = const QuickjsRuntimeOptions(),
-    this.mounts = const <QuickjsHostMount>[],
+    this.runtimeOptions = const JsOptions(),
+    this.features = const <JsFeatures>[],
     this.onConsole,
   }) : assert(idleCapacity >= 0),
        assert(maxCapacity > 0);
@@ -22,12 +22,12 @@ final class QuickjsUiRuntime {
   /// Retained for source compatibility; contexts are disposed, not pooled.
   final int idleCapacity;
   final int maxCapacity;
-  final QuickjsRuntimeOptions runtimeOptions;
-  final List<QuickjsHostMount> mounts;
-  final QuickjsConsoleSink? onConsole;
+  final JsOptions runtimeOptions;
+  final List<JsFeatures> features;
+  final JsConsoleSink? onConsole;
 
   final Set<QuickjsUiRuntimeLease> _active = <QuickjsUiRuntimeLease>{};
-  Future<QuickjsRuntime>? _initFuture;
+  Future<JsRuntime>? _initFuture;
   bool _disposed = false;
 
   bool get isInitialized => _initFuture != null && !_disposed;
@@ -38,12 +38,12 @@ final class QuickjsUiRuntime {
   /// Starts the shared worker/runtime. Concurrent calls share one future.
   Future<void> init({int? capacity}) async {
     if (_disposed) throw StateError('QuickjsUiRuntime is disposed');
-    await (_initFuture ??= QuickjsRuntime.create(options: runtimeOptions));
+    await (_initFuture ??= JsRuntime.create(options: runtimeOptions));
   }
 
   Future<QuickjsUiRuntimeLease> acquire({
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
-    QuickjsPlugin? pagePlugin,
+    List<JsFeatures> features = const <JsFeatures>[],
+    JsPlugin? pagePlugin,
   }) async {
     if (_disposed) throw StateError('QuickjsUiRuntime is disposed');
     if (_active.length >= maxCapacity) {
@@ -52,15 +52,13 @@ final class QuickjsUiRuntime {
     await init();
     final runtime = await _initFuture!;
     final context = await runtime.createContext(
-      options: QuickjsContextOptions(
-        mounts: <QuickjsHostMount>[
-          quickjsUiHelperMount,
-          ...this.mounts,
-          ...mounts,
-          if (pagePlugin != null) pagePlugin.asMount(name: 'quickjs_ui:page'),
-        ],
-        onConsole: onConsole,
-      ),
+      features: <JsFeatures>[
+        quickjsUiHelperMount,
+        ...this.features,
+        ...features,
+        if (pagePlugin != null) pagePlugin.asFeatures(name: 'quickjs_ui:page'),
+      ],
+      onConsole: onConsole,
     );
     final lease = QuickjsUiRuntimeLease._(this, context);
     _active.add(lease);
@@ -91,7 +89,7 @@ final class QuickjsUiRuntimeLease {
   QuickjsUiRuntimeLease._(this._runtime, this.context);
 
   final QuickjsUiRuntime _runtime;
-  final QuickjsContext context;
+  final JsContext context;
   bool _released = false;
 
   Future<void> release({bool reusable = true}) async {

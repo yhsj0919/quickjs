@@ -15,18 +15,18 @@ void main() {
       final runtime = _FakeRuntime();
       final engine = Quickjs.test(_FakeBackend(), runtime);
 
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
 
       final evalFuture = engine.eval('hold');
 
-      expect(engine.state, QuickjsRuntimeState.running);
+      expect(engine.state, JsRuntimeState.running);
       expect(runtime.evaluations, ['hold']);
 
       runtime.completeCurrent('done');
 
       expect(await evalFuture, 'done');
       await _flushMicrotasks();
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
     },
   );
 
@@ -39,7 +39,7 @@ void main() {
       final running = engine.eval('hold');
       final queued = engine.eval('queued');
 
-      expect(engine.state, QuickjsRuntimeState.running);
+      expect(engine.state, JsRuntimeState.running);
       expect(runtime.evaluations, ['hold']);
 
       runtime.completeCurrent('done');
@@ -48,7 +48,7 @@ void main() {
       expect(await queued, 'queued');
       await _flushMicrotasks();
       expect(runtime.evaluations, ['hold', 'queued']);
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
     },
   );
 
@@ -57,7 +57,7 @@ void main() {
     final engine = Quickjs.test(
       _FakeBackend(),
       runtime,
-      options: const QuickjsRuntimeOptions(maxPendingEvaluations: 1),
+      options: const JsOptions(maxPendingTasks: 1),
     );
 
     final running = engine.eval('hold');
@@ -72,31 +72,34 @@ void main() {
     expect(await queued, 'queued');
   });
 
-  test('stop moves running runtime through stopping back to ready', () async {
-    final runtime = _FakeRuntime();
-    final replacement = _FakeRuntime();
-    final backend = _FakeBackend([replacement]);
-    final engine = Quickjs.test(backend, runtime);
+  test(
+    'restart moves running runtime through stopping back to ready',
+    () async {
+      final runtime = _FakeRuntime();
+      final replacement = _FakeRuntime();
+      final backend = _FakeBackend([replacement]);
+      final engine = Quickjs.test(backend, runtime);
 
-    final running = engine.eval('hold');
-    final queued = engine.eval('queued');
+      final running = engine.eval('hold');
+      final queued = engine.eval('queued');
 
-    final stopFuture = engine.stop();
+      final stopFuture = engine.restart();
 
-    expect(engine.state, QuickjsRuntimeState.stopping);
-    await expectLater(queued, throwsA(isA<JsCancelledException>()));
-    await expectLater(running, throwsA(isA<JsCancelledException>()));
-    await stopFuture;
-    await _flushMicrotasks();
+      expect(engine.state, JsRuntimeState.restarting);
+      await expectLater(queued, throwsA(isA<JsCancelledException>()));
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+      await stopFuture;
+      await _flushMicrotasks();
 
-    expect(backend.createCount, 1);
-    expect(engine.state, QuickjsRuntimeState.ready);
-    expect(await engine.eval('afterStop'), 'afterStop');
-    expect(replacement.evaluations, ['afterStop']);
-  });
+      expect(backend.createCount, 1);
+      expect(engine.state, JsRuntimeState.ready);
+      expect(await engine.eval('afterStop'), 'afterStop');
+      expect(replacement.evaluations, ['afterStop']);
+    },
+  );
 
   test(
-    'eval queued during stopping runs after replacement runtime is ready',
+    'eval queued during restarting runs after replacement runtime is ready',
     () async {
       final stopCompleter = Completer<void>();
       final runtime = _FakeRuntime(stopFuture: stopCompleter.future);
@@ -105,9 +108,9 @@ void main() {
       final engine = Quickjs.test(backend, runtime);
 
       final running = engine.eval('hold');
-      final stopFuture = engine.stop();
+      final stopFuture = engine.restart();
 
-      expect(engine.state, QuickjsRuntimeState.stopping);
+      expect(engine.state, JsRuntimeState.restarting);
 
       final queuedDuringStop = engine.eval('afterStop');
       expect(replacement.evaluations, isEmpty);
@@ -119,7 +122,7 @@ void main() {
       expect(await queuedDuringStop, 'afterStop');
       await _flushMicrotasks();
 
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
       expect(replacement.evaluations, ['afterStop']);
     },
   );
@@ -133,7 +136,7 @@ void main() {
       final running = engine.eval('hold');
       final disposeFuture = engine.dispose();
 
-      expect(engine.state, QuickjsRuntimeState.closed);
+      expect(engine.state, JsRuntimeState.closed);
       expect(
         engine.eval('afterDispose'),
         throwsA(isA<JsRuntimeClosedException>()),
@@ -146,7 +149,7 @@ void main() {
       await _flushMicrotasks();
 
       expect(runtime.disposed, isTrue);
-      expect(engine.state, QuickjsRuntimeState.closed);
+      expect(engine.state, JsRuntimeState.closed);
     },
   );
 
@@ -160,12 +163,15 @@ void main() {
     );
     await _flushMicrotasks();
 
-    expect(engine.state, QuickjsRuntimeState.closed);
+    expect(engine.state, JsRuntimeState.closed);
     expect(
       engine.eval('afterClosed'),
       throwsA(isA<JsRuntimeClosedException>()),
     );
-    await expectLater(engine.stop(), throwsA(isA<JsRuntimeClosedException>()));
+    await expectLater(
+      engine.restart(),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
   });
 
   test('backend crash moves wrapper to failed terminal state', () async {
@@ -178,9 +184,12 @@ void main() {
     );
     await _flushMicrotasks();
 
-    expect(engine.state, QuickjsRuntimeState.failed);
+    expect(engine.state, JsRuntimeState.failed);
     expect(engine.eval('afterCrash'), throwsA(isA<JsRuntimeCrashException>()));
-    await expectLater(engine.stop(), throwsA(isA<JsRuntimeCrashException>()));
+    await expectLater(
+      engine.restart(),
+      throwsA(isA<JsRuntimeCrashException>()),
+    );
   });
 }
 
@@ -199,9 +208,7 @@ final class _FakeBackend implements QuickjsBackend {
   String get quickjsVersion => 'test';
 
   @override
-  Future<QuickjsJsRuntimeBase> createRuntime(
-    QuickjsRuntimeOptions options,
-  ) async {
+  Future<QuickjsJsRuntimeBase> createRuntime(JsOptions options) async {
     createCount += 1;
     if (_runtimes.isNotEmpty) {
       return _runtimes.removeFirst();
@@ -242,7 +249,7 @@ final class _FakeRuntime implements QuickjsJsRuntimeBase {
   Future<String> evaluateAsync(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
   }) {
     return evaluate(code, timeout: timeout, name: name);
   }

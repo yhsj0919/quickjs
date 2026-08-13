@@ -326,27 +326,27 @@ final class QuickjsUiBundle {
     );
   }
 
-  QuickjsPlugin toPlugin() {
+  JsPlugin toPlugin() {
     final entrySpecifier = QuickjsUiResourceResolver.moduleSpecifier(id, entry);
     final adapterSpecifier = '$id/__quickjs_ui_adapter__';
-    return QuickjsPlugin(
-      manifest: QuickjsPluginManifest(
+    return JsPlugin(
+      manifest: JsPluginManifest(
         id: id,
         version: version,
         entry: adapterSpecifier,
         exports: quickjsUiPagePluginExports,
         permissions: permissions,
       ),
-      modules: <QuickjsPluginModule>[
+      modules: <JsPluginModule>[
         for (final module in modules.entries)
-          QuickjsPluginModule(
+          JsPluginModule(
             specifier: QuickjsUiResourceResolver.moduleSpecifier(
               id,
               module.key,
             ),
             source: module.value,
           ),
-        QuickjsPluginModule(
+        JsPluginModule(
           specifier: adapterSpecifier,
           source: QuickjsUiPagePlugin.adapterSource(entrySpecifier),
         ),

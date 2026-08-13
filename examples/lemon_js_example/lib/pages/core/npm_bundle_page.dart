@@ -41,14 +41,9 @@ class _NpmBundlePageState extends State<NpmBundlePage> {
 
       final source = await rootBundle.loadString('assets/js/npm_bundle.mjs');
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[
-            QuickjsHostModule.esModule(
-              specifier: 'example/npm-bundle',
-              source: source,
-            ),
-          ],
-        ),
+        modules: <JsModule>[
+          JsModule.esModule(specifier: 'example/npm-bundle', source: source),
+        ],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -97,7 +92,7 @@ globalThis.npmBundleResult = bundledDependency + '/' + [
       setState(() {
         _busy = false;
         _status = 'compareValues() 调用完成';
-        _result = result;
+        _result = result.toString();
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -131,7 +126,7 @@ globalThis.npmBundleResult = bundledDependency + '/' + [
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'asset → QuickjsRuntimeOptions.modules → '
+              'asset → JsOptions.modules → '
               "import { compareValues } from 'example/npm-bundle'",
             ),
             const SizedBox(height: 16),

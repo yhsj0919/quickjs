@@ -16,7 +16,7 @@ abstract class QuickjsJsRuntimeBase {
   Future<String> evaluateAsync(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
   });
 
   /// Evaluates [source] as an ES module in the current runtime.
@@ -76,7 +76,7 @@ abstract interface class QuickjsMultiContextRuntimeBase {
     int contextId,
     String code, {
     Duration? timeout,
-    String name = '<context-evalAsync>',
+    String name = '<context-run>',
   });
 
   /// Runs timers due in [contextId] and returns the next delay in milliseconds.
@@ -90,7 +90,7 @@ abstract interface class QuickjsMultiContextRuntimeBase {
   Future<void> disposeContext(int contextId);
 }
 
-/// Marker for a child-context adapter that can accept mounts in place.
+/// Marker for a child-context adapter that can accept features in place.
 abstract interface class QuickjsInPlaceMountRuntime {}
 
 abstract interface class QuickjsTimerRuntimeBase {

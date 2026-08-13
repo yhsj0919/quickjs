@@ -9,8 +9,8 @@ import '../runtime/quickjs_runtime_options.dart';
 
 const _webSocketProviderName = 'websocket.dispatch';
 
-final class QuickjsWebSocketMount extends QuickjsHostMount {
-  factory QuickjsWebSocketMount({
+final class WebSocketFeatures extends JsFeatures {
+  factory WebSocketFeatures({
     Set<String>? allowedOrigins,
     Duration connectTimeout = const Duration(seconds: 15),
     int maxMessageBytes = 1024 * 1024,
@@ -42,45 +42,45 @@ final class QuickjsWebSocketMount extends QuickjsHostMount {
     final origins = allowedOrigins == null || allowedOrigins.isEmpty
         ? null
         : Set<String>.unmodifiable(allowedOrigins.map(_normalizeAllowedOrigin));
-    final state = _WebSocketMountState(
+    final state = _WebSocketFeaturesState(
       allowedOrigins: origins,
       connectTimeout: connectTimeout,
       maxMessageBytes: maxMessageBytes,
       maxConnections: maxConnections,
       defaultHeaders: Map<String, String>.unmodifiable(defaultHeaders),
     );
-    return QuickjsWebSocketMount._(
+    return WebSocketFeatures._(
       allowedOrigins: origins,
       connectTimeout: connectTimeout,
       maxMessageBytes: maxMessageBytes,
       maxConnections: maxConnections,
       defaultHeaders: Map<String, String>.unmodifiable(defaultHeaders),
-      provider: QuickjsHostProvider.dart(
+      provider: JsProvider.dart(
         name: _webSocketProviderName,
         debugName: 'host:websocket.dispatch',
-        implementation: QuickjsHostProviderImplementation.platform,
+        implementation: JsProviderImplementation.platform,
         callback: state.dispatch,
       ),
     );
   }
 
-  QuickjsWebSocketMount._({
+  WebSocketFeatures._({
     required this.allowedOrigins,
     required this.connectTimeout,
     required this.maxMessageBytes,
     required this.maxConnections,
     required this.defaultHeaders,
-    required QuickjsHostProvider provider,
+    required JsProvider provider,
   }) : super(
          name: 'websocket',
-         environmentPatches: <QuickjsHostScript>[
-           QuickjsHostScript.js(
+         scripts: <JsScript>[
+           JsScript.js(
              name: 'host:websocket.js',
              globals: const <String>['WebSocket'],
              source: _webSocketHostScript(_webSocketProviderName),
            ),
          ],
-         providers: <QuickjsHostProvider>[provider],
+         providers: <JsProvider>[provider],
        );
 
   final Set<String>? allowedOrigins;
@@ -90,8 +90,8 @@ final class QuickjsWebSocketMount extends QuickjsHostMount {
   final Map<String, String> defaultHeaders;
 }
 
-final class _WebSocketMountState {
-  _WebSocketMountState({
+final class _WebSocketFeaturesState {
+  _WebSocketFeaturesState({
     required this.allowedOrigins,
     required this.connectTimeout,
     required this.maxMessageBytes,
@@ -110,7 +110,7 @@ final class _WebSocketMountState {
 
   Future<Object?> dispatch(
     List<Object?> args,
-    QuickjsHostProviderContext context,
+    JsProviderContext context,
   ) async {
     if (args.length != 1 || args.single is! Map) {
       throw const JsValueConversionException(
@@ -145,7 +145,7 @@ final class _WebSocketMountState {
 
   Future<Object?> _connect(
     Map<Object?, Object?> command,
-    QuickjsHostProviderContext context,
+    JsProviderContext context,
   ) async {
     if (_connections.length >= maxConnections) {
       throw StateError(
@@ -266,7 +266,7 @@ final class _WebSocketConnection {
     );
   }
 
-  Future<Map<String, Object?>> next(QuickjsHostProviderContext context) {
+  Future<Map<String, Object?>> next(JsProviderContext context) {
     if (_events.isNotEmpty) {
       return Future<Map<String, Object?>>.value(_events.removeFirst());
     }

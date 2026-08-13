@@ -155,8 +155,8 @@ export function submitLogin() { return true; }
       final session = QuickjsExtensionSession(
         extension: _hybridExtension(manifest),
         grantedPermissions: const <String>['network', 'storage'],
-        runtimeFactory: (options) async {
-          final runtime = _FakeRuntime(options);
+        runtimeFactory: ({required options, required features}) async {
+          final runtime = _FakeRuntime(options, features: features);
           runtimes.add(runtime);
           return runtime;
         },
@@ -170,13 +170,13 @@ export function submitLogin() { return true; }
       );
       expect(runtimes, hasLength(1));
       expect(
-        runtimes.single.options.mounts.whereType<QuickjsPluginMount>(),
+        runtimes.single.features.whereType<JsPluginFeatures>(),
         hasLength(1),
       );
       expect(
-        runtimes.single.options.mounts.expand((mount) => mount.providers),
+        runtimes.single.features.expand((mount) => mount.providers),
         contains(
-          isA<QuickjsHostProvider>().having(
+          isA<JsProvider>().having(
             (provider) => provider.name,
             'name',
             'fetch.request',
@@ -184,7 +184,7 @@ export function submitLogin() { return true; }
         ),
       );
       expect(
-        runtimes.single.options.mounts
+        runtimes.single.features
             .expand((mount) => mount.providers)
             .map((provider) => provider.name),
         containsAll(<String>[
@@ -193,16 +193,13 @@ export function submitLogin() { return true; }
         ]),
       );
       expect(
-        runtimes.single.options.mounts
-            .expand((mount) => mount.environmentPatches)
+        runtimes.single.features
+            .expand((mount) => mount.scripts)
             .expand((script) => script.globals),
         contains('crypto'),
       );
       expect(
-        runtimes.single.options.mounts
-            .whereType<QuickjsAxiosMount>()
-            .single
-            .assetKey,
+        runtimes.single.features.whereType<AxiosFeatures>().single.assetKey,
         quickjsExtensionAxiosAsset,
       );
       expect(session.state, QuickjsExtensionSessionState.active);
@@ -221,8 +218,8 @@ export function submitLogin() { return true; }
         QuickjsExtensionManifest.parse(manifestSource),
       ),
       grantedPermissions: const <String>['network', 'storage'],
-      runtimeFactory: (options) async {
-        final runtime = _FakeRuntime(options);
+      runtimeFactory: ({required options, required features}) async {
+        final runtime = _FakeRuntime(options, features: features);
         runtimes.add(runtime);
         return runtime;
       },
@@ -244,7 +241,8 @@ export function submitLogin() { return true; }
     final installed = QuickjsExtensionInstaller(registry: registry).install(
       _hybridExtension(manifest),
       grantedPermissions: const <String>['network', 'storage'],
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
 
     expect(registry.servicesForContract('content-source/v1'), [installed]);
@@ -265,16 +263,17 @@ export function submitLogin() { return true; }
     expect(await storage.get('session', namespace: 'site.two'), 'two');
   });
 
-  test('route mounts inject default storage and the bound service', () {
+  test('route features inject default storage and the bound service', () {
     final manifest = QuickjsExtensionManifest.parse(manifestSource);
     final session = QuickjsExtensionSession(
       extension: _hybridExtension(manifest),
       grantedPermissions: const <String>['network', 'storage'],
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
 
-    final mounts = session.mountsForRoute('authentication');
-    final modules = mounts.expand((mount) => mount.modules).toList();
+    final features = session.featuresForRoute('authentication');
+    final modules = features.expand((mount) => mount.modules).toList();
     expect(
       modules.map((module) => module.specifier),
       containsAll(<String>[
@@ -299,19 +298,19 @@ export function submitLogin() { return true; }
       ),
       grantedPermissions: const <String>['network', 'storage'],
       optionalCapabilities: const QuickjsExtensionOptionalCapabilities.none(),
-      runtimeFactory: (options) async {
-        final runtime = _FakeRuntime(options);
+      runtimeFactory: ({required options, required features}) async {
+        final runtime = _FakeRuntime(options, features: features);
         runtimes.add(runtime);
         return runtime;
       },
     );
 
     await session.callPublic('getHome');
-    final mounts = runtimes.single.options.mounts;
-    expect(mounts.expand((mount) => mount.providers), isEmpty);
+    final features = runtimes.single.features;
+    expect(features.expand((mount) => mount.providers), isEmpty);
     expect(
       session
-          .mountsForRoute('authentication')
+          .featuresForRoute('authentication')
           .expand((mount) => mount.modules)
           .map((module) => module.specifier),
       isNot(contains('lemon_js_extensions/storage')),
@@ -347,8 +346,12 @@ export function submitLogin() { return true; }
       QuickjsExtensionInstaller(registry: registry).install(
         _hybridExtension(manifest),
         grantedPermissions: const <String>['network', 'storage'],
-        runtimeFactory: (options) async =>
-            _FakeRuntime(options, onCall: (_, _) => responses.removeAt(0)),
+        runtimeFactory: ({required options, required features}) async =>
+            _FakeRuntime(
+              options,
+              features: features,
+              onCall: (_, _) => responses.removeAt(0),
+            ),
       );
       var launches = 0;
       final runner = QuickjsExtensionFlowRunner(
@@ -465,7 +468,8 @@ export function submitLogin() { return true; }
         store: InMemoryQuickjsExtensionStore(),
         compatibilityRegistry: _compatibilityRegistry(),
         optionalCapabilities: const QuickjsExtensionOptionalCapabilities.none(),
-        runtimeFactory: (options) async => _FakeRuntime(options),
+        runtimeFactory: ({required options, required features}) async =>
+            _FakeRuntime(options, features: features),
       );
       String withCapabilities(String declaration) =>
           manifestSource.replaceFirst(
@@ -509,10 +513,11 @@ export function submitLogin() { return true; }
   test('manager installs, calls by id and restores lazily', () async {
     final store = InMemoryQuickjsExtensionStore();
     final runtimes = <_FakeRuntime>[];
-    Future<QuickjsExtensionServiceRuntime> factory(
-      QuickjsRuntimeOptions options,
-    ) async {
-      final runtime = _FakeRuntime(options);
+    Future<QuickjsExtensionServiceRuntime> factory({
+      required JsOptions options,
+      required List<JsFeatures> features,
+    }) async {
+      final runtime = _FakeRuntime(options, features: features);
       runtimes.add(runtime);
       return runtime;
     }
@@ -552,7 +557,8 @@ export function submitLogin() { return true; }
     final manager = QuickjsExtensionManager(
       store: store,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
     await manager.install(
       _hybridPackage(manifestSource),
@@ -585,7 +591,8 @@ export function submitLogin() { return true; }
     final manager = QuickjsExtensionManager(
       store: store,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
     await manager.install(_hybridPackage(manifestSource));
     final replacement = manifestSource
@@ -605,13 +612,15 @@ export function submitLogin() { return true; }
     final first = QuickjsExtensionManager(
       store: store,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
     await first.install(_hybridPackage(manifestSource));
     final second = QuickjsExtensionManager(
       store: store,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
 
     await expectLater(
@@ -630,16 +639,18 @@ export function submitLogin() { return true; }
       store: store,
       storage: storage,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(
-        options,
-        onCall: (method, arguments) async {
-          if (method == 'migrateStorage') {
-            migrations.add(arguments);
-            await storage.set('token', 'new', namespace: 'site.example1');
-          }
-          return null;
-        },
-      ),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(
+            options,
+            features: features,
+            onCall: (method, arguments) async {
+              if (method == 'migrateStorage') {
+                migrations.add(arguments);
+                await storage.set('token', 'new', namespace: 'site.example1');
+              }
+              return null;
+            },
+          ),
     );
     await manager.install(_hybridPackage(manifestSource));
     final next = manifestSource
@@ -669,16 +680,22 @@ export function submitLogin() { return true; }
       store: InMemoryQuickjsExtensionStore(),
       storage: storage,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(
-        options,
-        onCall: (method, arguments) async {
-          if (method == 'migrateStorage') {
-            await storage.set('token', 'partial', namespace: 'site.example1');
-            throw StateError('migration failed');
-          }
-          return null;
-        },
-      ),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(
+            options,
+            features: features,
+            onCall: (method, arguments) async {
+              if (method == 'migrateStorage') {
+                await storage.set(
+                  'token',
+                  'partial',
+                  namespace: 'site.example1',
+                );
+                throw StateError('migration failed');
+              }
+              return null;
+            },
+          ),
     );
     await manager.install(_hybridPackage(manifestSource));
     final next = manifestSource
@@ -706,7 +723,8 @@ export function submitLogin() { return true; }
       final manager = QuickjsExtensionManager(
         store: InMemoryQuickjsExtensionStore(),
         compatibilityRegistry: _compatibilityRegistry(),
-        runtimeFactory: (options) async => _FakeRuntime(options),
+        runtimeFactory: ({required options, required features}) async =>
+            _FakeRuntime(options, features: features),
       );
       await manager.install(
         _hybridPackage(manifestSource),
@@ -744,7 +762,8 @@ export function submitLogin() { return true; }
     final first = QuickjsExtensionManager(
       store: QuickjsExtensionFileStore(directoryPath: directory.path),
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
     await first.install(
       _hybridPackage(manifestSource),
@@ -754,7 +773,8 @@ export function submitLogin() { return true; }
     final restored = QuickjsExtensionManager(
       store: QuickjsExtensionFileStore(directoryPath: directory.path),
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
     await restored.restore();
 
@@ -843,7 +863,8 @@ export function submitLogin() { return true; }
     final manager = QuickjsExtensionManager(
       store: store,
       compatibilityRegistry: _compatibilityRegistry(),
-      runtimeFactory: (options) async => _FakeRuntime(options),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(options, features: features),
     );
     final initial = manifestSource.replaceFirst(
       '"version": "1.0.0",',
@@ -925,10 +946,11 @@ export function submitLogin() { return true; }
         ),
         storage: InMemoryQuickjsExtensionStorage(),
         grantedPermissions: const <String>['network', 'storage'],
-        runtimeFactory: (options) async {
+        runtimeFactory: ({required options, required features}) async {
           creations++;
           final runtime = _FakeRuntime(
             options,
+            features: features,
             onCall: (_, _) {
               if (creations == 1) throw const JsRuntimeCrashException();
               return 'recovered';
@@ -997,16 +1019,16 @@ final class _MemoryAssetBundle extends CachingAssetBundle {
   }
 }
 
-QuickjsPlugin _servicePlugin(QuickjsExtensionManifest manifest) {
-  return QuickjsPlugin(
-    manifest: QuickjsPluginManifest(
+JsPlugin _servicePlugin(QuickjsExtensionManifest manifest) {
+  return JsPlugin(
+    manifest: JsPluginManifest(
       id: manifest.id,
       version: manifest.version,
       entry: '${manifest.id}/${manifest.service!.entry}',
       exports: const <String>['getHome', 'submitLogin'],
     ),
-    modules: <QuickjsPluginModule>[
-      QuickjsPluginModule(
+    modules: <JsPluginModule>[
+      JsPluginModule(
         specifier: '${manifest.id}/${manifest.service!.entry}',
         source: '''
 export function getHome() { return []; }
@@ -1067,22 +1089,20 @@ QuickjsExtension _hybridExtension(QuickjsExtensionManifest manifest) {
 typedef _CallHandler = Object? Function(String method, List<Object?> args);
 
 final class _FakeRuntime implements QuickjsExtensionServiceRuntime {
-  _FakeRuntime(this.options, {this.onCall});
+  _FakeRuntime(this.options, {required this.features, this.onCall});
 
-  final QuickjsRuntimeOptions options;
+  final JsOptions options;
+  final List<JsFeatures> features;
   final _CallHandler? onCall;
   bool closed = false;
   bool initialized = false;
 
   @override
-  Future<void> validatePlugin(
-    QuickjsPlugin plugin, {
-    Duration? timeout,
-  }) async {}
+  Future<void> validatePlugin(JsPlugin plugin, {Duration? timeout}) async {}
 
   @override
   Future<Object?> initPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     Map<String, Object?> context = const <String, Object?>{},
     Duration? timeout,
   }) async {
@@ -1092,7 +1112,7 @@ final class _FakeRuntime implements QuickjsExtensionServiceRuntime {
 
   @override
   Future<Object?> callPlugin(
-    QuickjsPlugin plugin,
+    JsPlugin plugin,
     String method,
     List<Object?> args, {
     Duration? timeout,
@@ -1102,10 +1122,8 @@ final class _FakeRuntime implements QuickjsExtensionServiceRuntime {
   }
 
   @override
-  Future<Object?> disposePlugin(
-    QuickjsPlugin plugin, {
-    Duration? timeout,
-  }) async => null;
+  Future<Object?> disposePlugin(JsPlugin plugin, {Duration? timeout}) async =>
+      null;
 
   @override
   Future<void> close() async {

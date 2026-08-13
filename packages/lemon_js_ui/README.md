@@ -114,7 +114,7 @@ JS 持有 state 并处理事件；Flutter 负责渲染和把事件送回 JS。
 此外还提供：
 
 - `QuickjsUiController`：刷新、暂停、恢复和宿主控制；
-- `QuickjsUiPlugin`：第三方 JS 模块、宿主 mount 和 Flutter 组件注册；
+- `QuickjsUiPlugin`：第三方 JS 模块、宿主 features 和 Flutter 组件注册；
 - `QuickjsUiNavigator`：受控页面导航；
 - `QuickjsUiComponentRegistry`：注册自定义原生组件；
 - Inspector、加载指标、网络记录和性能报告。

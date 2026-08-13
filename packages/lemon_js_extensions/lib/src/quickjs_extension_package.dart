@@ -339,7 +339,7 @@ final class QuickjsExtensionPackage {
       uiPlugins: uiPlugins,
     ),
     QuickjsExtensionPackageFormat.core => _fromCorePlugin(
-      QuickjsZipPlugin.bytes(bytes, manifestPath: manifestPath),
+      JsZipPlugin.bytes(bytes, manifestPath: manifestPath),
       coreAdapter ?? (throw ArgumentError.notNull('coreAdapter')),
     ),
     QuickjsExtensionPackageFormat.ui => _fromUiBundle(
@@ -473,7 +473,7 @@ final class QuickjsExtensionPackage {
       );
 
   /// 根据清单构建带扩展命名空间的 Core 插件。
-  QuickjsPlugin buildServicePlugin(QuickjsExtensionManifest manifest) {
+  JsPlugin buildServicePlugin(QuickjsExtensionManifest manifest) {
     final service = manifest.service;
     if (service == null) {
       throw StateError('Extension manifest has no service component');
@@ -485,8 +485,8 @@ final class QuickjsExtensionPackage {
     }
     _validateModulePaths(serviceModules.keys, 'serviceModules');
     final namespacedEntry = '${manifest.id}/${service.entry}';
-    return QuickjsPlugin.sources(
-      manifest: QuickjsPluginManifest(
+    return JsPlugin.sources(
+      manifest: JsPluginManifest(
         id: manifest.id,
         version: manifest.version,
         entry: namespacedEntry,
@@ -626,7 +626,7 @@ Future<void> _visitModules(
 }
 
 QuickjsExtensionPackage _fromCorePlugin(
-  QuickjsPlugin plugin,
+  JsPlugin plugin,
   QuickjsCorePackageAdapter adapter,
 ) {
   if (plugin.manifest.id != adapter.id) {

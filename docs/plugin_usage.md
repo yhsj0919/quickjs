@@ -1,6 +1,8 @@
 # QuickJS 完整使用指南
 
-本文介绍 `package:lemon_js` 的主要能力：创建运行时、执行 JS、结构化值转换、模块加载、CommonJS、Dart 方法注入、对象和类绑定、host mount、fetch、Web Crypto、Node/Web 兼容、插件、调试、异常和生命周期。
+公开 API 的命名方向和内容分类请参阅 [API 命名语义](api_naming_conventions.md)。
+
+本文介绍 `package:lemon_js` 的主要能力：创建运行时、执行 JS、结构化值转换、模块加载、CommonJS、Dart 方法注入、对象和类绑定、host features、fetch、Web Crypto、Node/Web 兼容、插件、调试、异常和生命周期。
 
 示例默认使用：
 
@@ -54,17 +56,17 @@ class MyPageState extends State<MyPage> {
 
 ## 2. 运行时配置
 
-通过 `QuickjsRuntimeOptions` 配置运行时：
+通过 `JsOptions` 配置运行时：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
+  options: JsOptions(
     memoryLimitBytes: 64 * 1024 * 1024,
     stackLimitBytes: 1024 * 1024,
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.web(),
-    ],
   ),
+  features: <JsFeatures>[
+      JsFeatures.web(),
+    ],
   onConsole: (event) {
     print('[${event.level.name}] ${event.text}');
   },
@@ -76,15 +78,14 @@ final quickjs = await Quickjs.create(
 - `memoryLimitBytes`：限制单个 runtime 内存。
 - `stackLimitBytes`：限制 native 调用栈。
 - `moduleLoader`：ES module 依赖加载器。
-- `hostCapabilities`：基础 host 能力。
-- `environmentPatches`：启动时注入的 JS 脚本。
+- `scripts`：启动时注入的 JS 脚本。
 - `modules`：预注册 ES module / CommonJS module。
 - `providers`：Dart/Flutter 方法提供者。
-- `mounts`：批量能力包，例如 Web、Node、fetch、crypto、plugin。
+- `features`：批量能力包，例如 Web、Node、fetch、crypto、plugin。
 
 ## 默认内置能力
 
-即使不安装任何 mount，runtime 也会默认安装少量基础能力：
+即使不安装任何 features，runtime 也会默认安装少量基础能力：
 
 - `console.log` / `console.warn` / `console.error`
 - `TextEncoder`
@@ -93,7 +94,7 @@ final quickjs = await Quickjs.create(
 `TextEncoder` / `TextDecoder` 目前提供 UTF-8 编解码能力，适合配合 `crypto.subtle.digest()`、二进制协议、Buffer 类工具使用。
 
 ```dart
-final text = await quickjs.evalAsync('''
+final text = await quickjs.run('''
 const bytes = new TextEncoder().encode('hello');
 return new TextDecoder().decode(bytes);
 ''');
@@ -101,7 +102,7 @@ return new TextDecoder().decode(bytes);
 
 ## 3. 执行同步 JS
 
-`eval()` 执行普通 JS，返回字符串结果：
+`eval()` 执行普通 JS，并返回转换后的 Dart 值：
 
 ```dart
 final value = await quickjs.eval('1 + 2');
@@ -128,10 +129,10 @@ await quickjs.eval(
 
 ## 4. 执行异步 JS
 
-`evalAsync()` 会把代码包在 `async () => { ... }` 中执行，所以需要用 `return` 返回值：
+`run()` 会把代码包在 `async () => { ... }` 中执行，所以需要用 `return` 返回值：
 
 ```dart
-final result = await quickjs.evalAsync('''
+final result = await quickjs.run('''
 const value = await Promise.resolve(42);
 return value;
 ''');
@@ -139,14 +140,15 @@ return value;
 print(result); // 42
 ```
 
-`evalAsync()` 适合调用 Promise、timer、fetch、Dart provider 等异步能力。
+`run()` 适合调用 Promise、timer、fetch、Dart provider 等异步能力。
 
 ## 5. 返回 Dart 结构化值
 
-`eval()` 和 `evalAsync()` 返回字符串。需要 Dart 原生值时，用 `evaluateValue()`：
+`eval()` 和 `run()` 返回转换后的 Dart 原生值；需要保留底层字符串结果时，分别使用
+`evalRaw()` 和 `runRaw()`：
 
 ```dart
-final value = await quickjs.evaluateValue('''
+final value = await quickjs.eval('''
 ({
   name: 'QuickJS',
   count: 3,
@@ -174,7 +176,7 @@ print(value); // {name: QuickJS, count: 3, ok: true, tags: [js, dart]}
 示例：
 
 ```dart
-final bytes = await quickjs.evaluateValue('new Uint8Array([1, 2, 255])');
+final bytes = await quickjs.eval('new Uint8Array([1, 2, 255])');
 print(bytes is Uint8List); // true
 ```
 
@@ -185,7 +187,7 @@ print(bytes is Uint8List); // true
 执行某次 JS 时，可以临时把 Dart 值注入 `globalThis`：
 
 ```dart
-final result = await quickjs.evaluateValue(
+final result = await quickjs.eval(
   'count + price',
   globals: <String, Object?>{
     'count': 40,
@@ -220,33 +222,31 @@ await quickjs.eval('console.log("hello", 123)');
 
 ## 8. 注入简单 Dart 方法
 
-最简单的方式是创建 runtime 时使用 `QuickjsHostProvider.global()`：
+最简单的方式是创建 runtime 时使用 `JsProvider.global()`：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    providers: <QuickjsHostProvider>[
-      QuickjsHostProvider.global(
+  providers: <JsProvider>[
+      JsProvider.global(
         name: 'getDataAsync',
         callback: (args, context) async {
           return 'data from Dart';
         },
       ),
-      QuickjsHostProvider.global(
+      JsProvider.global(
         name: 'dartMethod',
         callback: (args, context) {
           return 'method result';
         },
       ),
     ],
-  ),
 );
 ```
 
 JS 调用：
 
 ```dart
-final result = await quickjs.evaluateValue('''
+final result = await quickjs.eval('''
 const data = await getDataAsync();
 const value = await dartMethod('hello');
 ({ data, value });
@@ -264,7 +264,7 @@ await quickjs.bind('addFromDart', (args) {
   return (args[0] as num) + (args[1] as num);
 });
 
-final result = await quickjs.evalAsync('''
+final result = await quickjs.run('''
 return await addFromDart(20, 22);
 ''');
 
@@ -275,10 +275,10 @@ print(result); // 42
 
 ## 10. Provider 高级写法
 
-`QuickjsHostProvider.global()` 是语法糖：
+`JsProvider.global()` 是语法糖：
 
 ```dart
-QuickjsHostProvider.global(
+JsProvider.global(
   name: 'alert',
   callback: (args, _) {
     print(args.join(' '));
@@ -289,10 +289,10 @@ QuickjsHostProvider.global(
 
 这里的 `name` 是 JS 侧全局函数名，内部 provider id 会自动生成。
 
-需要自定义内部 provider 名时，用 `QuickjsHostProvider.dart()`：
+需要自定义内部 provider 名时，用 `JsProvider.dart()`：
 
 ```dart
-QuickjsHostProvider.dart(
+JsProvider.dart(
   name: 'example.getDataAsync',
   globalName: 'getDataAsync',
   callback: (args, _) async {
@@ -313,19 +313,17 @@ QuickjsHostProvider.dart(
 
 ## 11. 使用 Host Script 注入 JS
 
-`QuickjsHostScript` 用于启动时注入 JS 脚本，比如 polyfill、全局对象、兼容层。
+`JsScript` 用于启动时注入 JS 脚本，比如 polyfill、全局对象、兼容层。
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: const QuickjsRuntimeOptions(
-    environmentPatches: <QuickjsHostScript>[
-      QuickjsHostScript.js(
+  scripts: <JsScript>[
+      JsScript.js(
         name: 'app:env.js',
         globals: <String>['appVersion'],
         source: 'globalThis.appVersion = "1.0.0";',
       ),
     ],
-  ),
 );
 ```
 
@@ -333,30 +331,28 @@ final quickjs = await Quickjs.create(
 
 ## 12. 从 assets 加载 Host Script
 
-不想手动 `rootBundle.loadString()` 时，使用 `QuickjsHostScript.asset()`：
+不想手动 `rootBundle.loadString()` 时，使用 `JsScript.asset()`：
 
 ```dart
-final axiosScript = await QuickjsHostScript.asset(
+final axiosScript = await JsScript.asset(
   name: 'app:axios.js',
   assetKey: 'assets/js/axios.js',
   globals: const <String>['axios'],
 );
 
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    environmentPatches: <QuickjsHostScript>[
+  scripts: <JsScript>[
       axiosScript,
     ],
-  ),
 );
 ```
 
 ## 13. Provider 映射语法糖
 
-如果你已经有多个 provider，并想集中声明全局函数映射，可以使用 `QuickjsHostScript.providerGlobals()`：
+如果你已经有多个 provider，并想集中声明全局函数映射，可以使用 `JsScript.providerGlobals()`：
 
 ```dart
-QuickjsHostScript.providerGlobals(
+JsScript.providerGlobals(
   name: 'app:globals.js',
   globals: const <String, String>{
     'getDataAsync': 'example.getDataAsync',
@@ -372,33 +368,33 @@ globalThis.getDataAsync = (...args) =>
   globalThis.__quickjsHostProviders['example.getDataAsync'](...args);
 ```
 
-简单函数推荐 `QuickjsHostProvider.global()`；需要集中管理映射或构建复杂 API 时再使用 `providerGlobals()`。
+简单函数推荐 `JsProvider.global()`；需要集中管理映射或构建复杂 API 时再使用 `providerGlobals()`。
 
-## 14. Host Mount 能力包
+## 14. Host Features 能力包
 
-`QuickjsHostMount` 可以理解为“给 runtime 安装一整套 JS 运行环境能力”的包。它不是单纯执行一段 JS，也不是单纯注册一个 Dart 方法，而是把多个相关配置作为一个整体安装进去。
+`JsFeatures` 可以理解为“给 runtime 安装一整套 JS 运行环境能力”的包。它不是单纯执行一段 JS，也不是单纯注册一个 Dart 方法，而是把多个相关配置作为一个整体安装进去。
 
-一个 mount 可以包含四类内容：
+一个 features 可以包含四类内容：
 
 - `capabilities`：基础 host 能力，例如 `window` / `self` 这类别名。
-- `environmentPatches`：启动时执行的 JS 补丁，例如安装 `fetch`、`crypto`、`Buffer`、`location`。
+- `scripts`：启动时执行的 JS 补丁，例如安装 `fetch`、`crypto`、`Buffer`、`location`。
 - `modules`：预注册模块，例如 `node:buffer`、`node:crypto`、插件 ES module。
 - `providers`：Dart/Flutter 实现的方法，例如 fetch 请求、crypto digest、应用自定义 API。
 
-换句话说，mount 是“能力边界”的组织单位。比如 `QuickjsFetchMount` 同时需要：
+换句话说，features 是“能力边界”的组织单位。比如 `FetchFeatures` 同时需要：
 
 - 注入 JS 侧 `fetch` / `Headers` / `Response` 类。
 - 注册 Dart 侧真正发 HTTP 请求的 provider。
 - 保存允许访问的 origin、超时、大小限制等配置。
 
-这些东西拆开写很容易漏，所以用一个 mount 表示“安装 fetch 能力”。
+这些东西拆开写很容易漏，所以用一个 features 表示“安装 fetch 能力”。
 
-### Mount 和 JS 注入的区别
+### Features 和 JS 注入的区别
 
-`QuickjsHostScript.js` 只是“启动时执行一段 JS”。它适合做很薄的环境补丁：
+`JsScript.js` 只是“启动时执行一段 JS”。它适合做很薄的环境补丁：
 
 ```dart
-QuickjsHostScript.js(
+JsScript.js(
   name: 'app:env.js',
   globals: const <String>['appVersion'],
   source: 'globalThis.appVersion = "1.0.0";',
@@ -418,61 +414,59 @@ QuickjsHostScript.js(
 globalThis.fetch = ...
 ```
 
-它还需要 Dart 侧 HTTP provider、origin 白名单、请求/响应大小限制、超时、重定向规则、`Headers` / `Request` / `Response` / `AbortController` 等配套对象。只用 `QuickjsHostScript.js` 会把这些配置拆散到多个地方，后续很难判断“这个 runtime 到底安装了什么能力”。
+它还需要 Dart 侧 HTTP provider、origin 白名单、请求/响应大小限制、超时、重定向规则、`Headers` / `Request` / `Response` / `AbortController` 等配套对象。只用 `JsScript.js` 会把这些配置拆散到多个地方，后续很难判断“这个 runtime 到底安装了什么能力”。
 
-所以单独做 mount 的原因是：
+所以单独做 features 的原因是：
 
 - **组合能力**：把 JS patch、Dart provider、模块、capability 放在一个对象里。
-- **明确边界**：`QuickjsFetchMount` 就代表 fetch 能力，`QuickjsWebCryptoMount` 就代表 crypto 能力。
+- **明确边界**：`FetchFeatures` 就代表 fetch 能力，`WebCryptoFeatures` 就代表 crypto 能力。
 - **集中配置**：网络白名单、超时、环境变量、crypto 开关都跟能力本身放在一起。
-- **可复用**：同一个 mount 可以在多个 runtime 或页面中复用。
-- **可检查**：运行时可以统一做 mount name、global、provider、module 冲突检测。
-- **可调试**：`debugInspect()` 可以看到当前 runtime 安装了哪些 mount 和 provider。
-- **可重建**：runtime `stop()` 或 `mount()` 重建后，mount 描述的能力可以自动恢复。
+- **可复用**：同一个 features 可以在多个 runtime 或页面中复用。
+- **可检查**：运行时可以统一做 features name、global、provider、module 冲突检测。
+- **可调试**：`debugInspect()` 可以看到当前 runtime 安装了哪些 features 和 provider。
+- **可重建**：runtime `restart()` 或 `loadFeatures()` 重建后，features 描述的能力可以自动恢复。
 
 简单判断：
 
-- 只注入一段独立 JS：用 `QuickjsHostScript.js`。
-- 只暴露一个 Dart 全局函数：用 `QuickjsHostProvider.global`。
-- 一组 JS API 需要配套 Dart 实现、模块或配置：做成 `QuickjsHostMount`。
-- 想把能力作为产品级开关安装/卸载/复用：做成 `QuickjsHostMount`。
+- 只注入一段独立 JS：用 `JsScript.js`。
+- 只暴露一个 Dart 全局函数：用 `JsProvider.global`。
+- 一组 JS API 需要配套 Dart 实现、模块或配置：做成 `JsFeatures`。
+- 想把能力作为产品级开关安装/卸载/复用：做成 `JsFeatures`。
 
 创建 runtime 时安装：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.web(),
-      QuickjsHostMount.essential(globalBuffer: true),
-      QuickjsFetchMount(
+  features: <JsFeatures>[
+      JsFeatures.web(),
+      JsFeatures.essential(globalBuffer: true),
+      FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
       ),
     ],
-  ),
 );
 ```
 
-也可以自己定义 mount：
+也可以自己定义 features：
 
 ```dart
-final appMount = QuickjsHostMount(
+final appFeatures = JsFeatures(
   name: 'app-api',
-  environmentPatches: const <QuickjsHostScript>[
-    QuickjsHostScript.js(
+  scripts: const <JsScript>[
+    JsScript.js(
       name: 'app:env.js',
       globals: <String>['appName'],
       source: 'globalThis.appName = "Demo";',
     ),
   ],
-  providers: <QuickjsHostProvider>[
-    QuickjsHostProvider.global(
+  providers: <JsProvider>[
+    JsProvider.global(
       name: 'ping',
       callback: (_, __) => 'pong',
     ),
   ],
-  modules: const <QuickjsHostModule>[
-    QuickjsHostModule.esModule(
+  modules: const <JsModule>[
+    JsModule.esModule(
       specifier: 'app/config',
       source: 'export const version = "1.0.0";',
     ),
@@ -484,13 +478,11 @@ final appMount = QuickjsHostMount(
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[appMount],
-  ),
+  features: <JsFeatures>[appFeatures],
 );
 ```
 
-JS 中可以使用 mount 提供的能力：
+JS 中可以使用 features 提供的能力：
 
 ```js
 console.log(appName);
@@ -498,34 +490,32 @@ console.log(await ping());
 const { version } = await import('app/config');
 ```
 
-运行时也可以安装 mount：
+运行时也可以安装 features：
 
 ```dart
-await quickjs.mount(appMount);
+await quickjs.loadFeatures(appFeatures);
 ```
 
-但要注意：运行时 `mount()` 会重建 runtime。重建后会重新安装 options 里的 mounts、providers、scripts、modules，以及运行时 mount；但 JS 执行期间临时写入的全局状态不会保留。因此：
+但要注意：运行时 `loadFeatures()` 会重建 runtime。重建后会重新安装 options 里的 features、providers、scripts、modules，以及运行时 features；但 JS 执行期间临时写入的全局状态不会保留。因此：
 
-- 核心环境能力建议在 `Quickjs.create()` 时通过 `options.mounts` 安装。
-- 运行时 `mount()` 更适合“用户打开某个功能后再加载能力”的场景。
-- 长期存在的能力不要依赖手动 `eval()` 注入，应该放进 mount 或 options。
+- 核心环境能力建议在 `Quickjs.create()` 时通过 `options.features` 安装。
+- 运行时 `loadFeatures()` 更适合“用户打开某个功能后再加载能力”的场景。
+- 长期存在的能力不要依赖手动 `eval()` 注入，应该放进 features 或 options。
 
-mount 还负责冲突检测。重复的 mount name、重复 global、重复 provider name、重复 module specifier 都会报错。这样可以尽早发现两个能力包互相覆盖的问题。
+features 还负责冲突检测。重复的 features name、重复 global、重复 provider name、重复 module specifier 都会报错。这样可以尽早发现两个能力包互相覆盖的问题。
 
 ## 15. Web 兼容环境
 
-`QuickjsHostMount.web()` 提供轻量 Web-like 环境：
+`JsFeatures.web()` 提供轻量 Web-like 环境：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.web(
+  features: <JsFeatures>[
+      JsFeatures.web(
         locationHref: 'https://example.com/app',
         userAgent: 'MyApp QuickJS',
       ),
     ],
-  ),
 );
 ```
 
@@ -541,19 +531,18 @@ final quickjs = await Quickjs.create(
 
 它不包含完整 DOM、CSSOM、WebView、真实浏览器渲染环境。
 
-如果脚本只缺某个很小的 Web API，可以在 `QuickjsHostMount.web()` 的基础上自己补一段 JS。比如给 `navigator` 补 `language` 和 `languages`：
+如果脚本只缺某个很小的 Web API，可以在 `JsFeatures.web()` 的基础上自己补一段 JS。比如给 `navigator` 补 `language` 和 `languages`：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.web(
+  features: <JsFeatures>[
+      JsFeatures.web(
         locationHref: 'https://example.com/app',
         userAgent: 'MyApp QuickJS',
       ),
     ],
-    environmentPatches: const <QuickjsHostScript>[
-      QuickjsHostScript.js(
+  scripts: const <JsScript>[
+      JsScript.js(
         name: 'app:navigator-language.js',
         source: '''
 Object.defineProperty(globalThis.navigator, 'language', {
@@ -569,7 +558,6 @@ Object.defineProperty(globalThis.navigator, 'languages', {
 ''',
       ),
     ],
-  ),
 );
 ```
 
@@ -580,20 +568,19 @@ console.log(navigator.language); // zh-CN
 console.log(navigator.languages[0]); // zh-CN
 ```
 
-这种做法适合补很薄的、纯 JS 能表达的兼容字段。如果要补的是一整套能力，例如网络请求、加密、文件访问、原生存储，就不要只靠 `QuickjsHostScript.js` 堆脚本，应该封装成独立 `QuickjsHostMount`，把 JS API、Dart provider、权限和配置放在一起。
+这种做法适合补很薄的、纯 JS 能表达的兼容字段。如果要补的是一整套能力，例如网络请求、加密、文件访问、原生存储，就不要只靠 `JsScript.js` 堆脚本，应该封装成独立 `JsFeatures`，把 JS API、Dart provider、权限和配置放在一起。
 
-如果要替换 `web()` 已经提供的能力，优先使用 mount 自带的开关关掉内置实现，再安装自己的实现。比如 `localStorage` / `sessionStorage` 已经由 `QuickjsHostMount.web()` 提供，想换成自己的实现时，可以这样做：
+如果要替换 `web()` 已经提供的能力，优先使用 features 自带的开关关掉内置实现，再安装自己的实现。比如 `localStorage` / `sessionStorage` 已经由 `JsFeatures.web()` 提供，想换成自己的实现时，可以这样做：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.web(
+  features: <JsFeatures>[
+      JsFeatures.web(
         storage: false,
       ),
     ],
-    environmentPatches: const <QuickjsHostScript>[
-      QuickjsHostScript.js(
+  scripts: const <JsScript>[
+      JsScript.js(
         name: 'app:storage.js',
         globals: <String>['localStorage'],
         source: '''
@@ -618,7 +605,6 @@ globalThis.localStorage = {
 ''',
       ),
     ],
-  ),
 );
 ```
 
@@ -630,19 +616,17 @@ globalThis.localStorage = {
 await quickjs.eval('globalThis.localStorage = myStorage;');
 ```
 
-但这种覆盖不推荐作为正式能力使用，因为 `stop()`、`mount()` 或 runtime 重建后不会自动恢复。正式方案应该放进 `QuickjsRuntimeOptions`，或者封装成自己的 `QuickjsHostMount`。
+但这种覆盖不推荐作为正式能力使用，因为 `restart()`、`loadFeatures()` 或 runtime 重建后不会自动恢复。正式方案应该放进 `JsOptions`，或者封装成自己的 `JsFeatures`。
 
 ## 16. Essential / Buffer
 
-`QuickjsHostMount.essential()` 提供低风险常用能力，目前主要是 `buffer` / `node:buffer`。
+`JsFeatures.essential()` 提供低风险常用能力，目前主要是 `buffer` / `node:buffer`。
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.essential(globalBuffer: true),
+  features: <JsFeatures>[
+      JsFeatures.essential(globalBuffer: true),
     ],
-  ),
 );
 ```
 
@@ -654,13 +638,12 @@ const bytes = Buffer.from('hello');
 
 ## 17. Node 兼容环境
 
-`QuickjsHostMount.node()` 提供小型 Node-like 模块环境：
+`JsFeatures.node()` 提供小型 Node-like 模块环境：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsHostMount.node(
+  features: <JsFeatures>[
+      JsFeatures.node(
         globalBuffer: true,
         globalProcess: true,
         env: <String, String>{'NODE_ENV': 'production'},
@@ -668,7 +651,6 @@ final quickjs = await Quickjs.create(
         cwd: '/',
       ),
     ],
-  ),
 );
 ```
 
@@ -684,13 +666,12 @@ final quickjs = await Quickjs.create(
 
 ## 18. Fetch / XMLHttpRequest
 
-需要网络请求时安装 `QuickjsFetchMount`：
+需要网络请求时安装 `FetchFeatures`：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsFetchMount(
+  features: <JsFeatures>[
+      FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
         timeout: const Duration(seconds: 15),
         maxRequestBytes: 1024 * 1024,
@@ -698,14 +679,13 @@ final quickjs = await Quickjs.create(
         maxRedirects: 5,
       ),
     ],
-  ),
 );
 ```
 
 JS：
 
 ```dart
-final result = await quickjs.evalAsync('''
+final result = await quickjs.run('''
 const response = await fetch('https://example.com/');
 return await response.text();
 ''');
@@ -716,13 +696,13 @@ return await response.text();
 默认不限制：
 
 ```dart
-QuickjsFetchMount()
+FetchFeatures()
 ```
 
 限制到指定 origin：
 
 ```dart
-QuickjsFetchMount(
+FetchFeatures(
   allowedOrigins: <String>{'https://example.com'},
 )
 ```
@@ -735,7 +715,7 @@ QuickjsFetchMount(
 - Web 端：始终受浏览器 CORS 限制；如果配置了 `allowedOrigins`，还会额外受白名单限制。
 - `allowedOrigins` 不是跨域代理，也不是 CORS 绕过开关。
 
-`QuickjsFetchMount` 安装：
+`FetchFeatures` 安装：
 
 - `fetch`
 - `Headers`
@@ -747,24 +727,22 @@ QuickjsFetchMount(
 
 ## 19. Axios
 
-如果你的 JS 依赖 axios，需要先加载 axios 脚本，并且安装 `QuickjsFetchMount`：
+如果你的 JS 依赖 axios，需要先加载 axios 脚本，并且安装 `FetchFeatures`：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsFetchMount(
+  features: <JsFeatures>[
+      FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
       ),
     ],
-    environmentPatches: <QuickjsHostScript>[
-      await QuickjsHostScript.asset(
+  scripts: <JsScript>[
+      await JsScript.asset(
         name: 'app:axios.js',
         assetKey: 'assets/js/axios.js',
         globals: const <String>['axios'],
       ),
     ],
-  ),
 );
 ```
 
@@ -776,20 +754,18 @@ const response = await axios.get('https://example.com/');
 
 ## 20. Web Crypto
 
-`QuickjsWebCryptoMount` 提供可选 Web Crypto 兼容能力：
+`WebCryptoFeatures` 提供可选 Web Crypto 兼容能力：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsWebCryptoMount(
+  features: <JsFeatures>[
+      WebCryptoFeatures(
         randomUUID: true,
         getRandomValues: true,
         subtleDigest: true,
         subtleHmac: true,
       ),
     ],
-  ),
 );
 ```
 
@@ -805,7 +781,7 @@ final quickjs = await Quickjs.create(
 Digest 示例：
 
 ```dart
-final hex = await quickjs.evalAsync('''
+final hex = await quickjs.run('''
 const bytes = new TextEncoder().encode('hello');
 const digest = await crypto.subtle.digest('SHA-256', bytes);
 return Array.from(new Uint8Array(digest))
@@ -840,13 +816,11 @@ final answer = await quickjs.eval('globalThis.answer');
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    moduleLoader: (moduleName) {
+  moduleLoader: (moduleName) {
       return <String, String>{
         'app/helper.mjs': 'export const suffix = " from helper";',
       }[moduleName];
     },
-  ),
 );
 
 await quickjs.evalModule(
@@ -866,14 +840,12 @@ globalThis.message = 'hello' + suffix;
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: const QuickjsRuntimeOptions(
-    modules: <QuickjsHostModule>[
-      QuickjsHostModule.esModule(
+  modules: <JsModule>[
+      JsModule.esModule(
         specifier: 'app/config',
         source: 'export const version = "1.0.0";',
       ),
     ],
-  ),
 );
 
 await quickjs.evalModule(
@@ -905,14 +877,12 @@ print(result); // 42
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: const QuickjsRuntimeOptions(
-    modules: <QuickjsHostModule>[
-      QuickjsHostModule.commonJs(
+  modules: <JsModule>[
+      JsModule.commonJs(
         specifier: 'app/math',
         source: 'exports.add = (a, b) => a + b;',
       ),
     ],
-  ),
 );
 ```
 
@@ -931,22 +901,20 @@ math.add(1, 2);
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    moduleLoader: quickjsAssetModuleLoader(
+  moduleLoader: jsAssetModuleLoader(
       prefix: 'assets/js/',
     ),
-  ),
 );
 ```
 
-然后在 `pubspec.yaml` 中声明对应资源。模块名和 asset 路径的映射以 `quickjsAssetModuleLoader` 的参数为准。
+然后在 `pubspec.yaml` 中声明对应资源。模块名和 asset 路径的映射以 `jsAssetModuleLoader` 的参数为准。
 
 ## 26. 函数句柄
 
-如果要多次调用同一个 JS 函数，可以用 `evaluateHandle()`：
+如果要多次调用同一个 JS 函数，可以用 `bindFunction()`：
 
 ```dart
-final handle = await quickjs.evaluateHandle('''
+final handle = await quickjs.bindFunction('''
 (name) => 'hello ' + name
 ''');
 
@@ -958,50 +926,54 @@ try {
 }
 ```
 
-如果函数返回 Promise，用 `callAsync()`：
+如果函数返回 Promise，用 `run()`：
 
 ```dart
-final handle = await quickjs.evaluateHandle('''
+final handle = await quickjs.bindFunction('''
 async (name) => 'hello ' + name
 ''');
 
-final result = await handle.callAsync(<Object?>['QuickJS']);
+final result = await handle.run(<Object?>['QuickJS']);
 ```
 
 不用时释放 handle，避免长期持有 JS 函数引用。
 
 ## 27. 绑定 Dart 对象
 
-`bindObject()` 可以把一个 Dart 对象代理成 JS 全局对象：
+`injectObject()` 可以把一个 Dart 对象注入为 JS 全局对象：
 
 ```dart
 var count = 0;
 
-final handle = await quickjs.bindObject(
+final handle = await quickjs.injectObject(
   'counter',
-  QuickjsObjectProxy(
-    properties: const <String, Object?>{
-      'name': 'main-counter',
-    },
-    accessors: <String, QuickjsObjectAccessor>{
-      'count': QuickjsObjectAccessor(
-        get: () => count,
-        set: (value) {
+  JsObject(
+    target: Object(),
+    members: JsMembers(
+    values: const [
+      JsValue('name', 'main-counter'),
+    ],
+    accessors: [
+      JsAccessor(
+        'count',
+        get: (_) => count,
+        set: (_, value) {
           count = (value as num).toInt();
         },
       ),
-    },
-    methods: <String, QuickjsCallback>{
-      'inc': (args) {
+    ],
+    methods: [
+      JsMethod('inc', (_, args) {
         count += args.isEmpty ? 1 : (args.first as num).toInt();
         return count;
-      },
-    },
+      }),
+    ],
+    ),
   ),
 );
 
 try {
-  final result = await quickjs.evalAsync('''
+  final result = await quickjs.run('''
 await counter.inc(2);
 counter.count = 10;
 return await counter.inc();
@@ -1016,23 +988,26 @@ return await counter.inc();
 
 ## 28. 绑定 Dart 类
 
-`bindClass()` 可以把 Dart 类暴露成 JS 构造器。
+`injectClass()` 可以把 Dart 类注入为 JS 构造器。
 
 ```dart
-final handle = await quickjs.bindClass<_User>(
+final handle = await quickjs.injectClass<_User>(
   'User',
-  QuickjsClass<_User>(
-    constructor: (args) {
+  JsClass<_User>(
+    create: (args) {
       return _User('${args.first}');
     },
-    accessors: <String, QuickjsInstanceAccessor<_User>>{
-      'name': QuickjsInstanceAccessor<_User>(
+    members: JsMembers<_User>(
+    accessors: [
+      JsAccessor<_User>(
+        'name',
         get: (user) => user.name,
       ),
-    },
-    methods: <String, QuickjsInstanceMethod<_User>>{
-      'hello': (user, args) => 'hello ${user.name}',
-    },
+    ],
+    methods: [
+      JsMethod<_User>('hello', (user, args) => 'hello ${user.name}'),
+    ],
+    ),
   ),
 );
 ```
@@ -1040,7 +1015,7 @@ final handle = await quickjs.bindClass<_User>(
 JS：
 
 ```dart
-final result = await quickjs.evalAsync('''
+final result = await quickjs.run('''
 const user = new User('QuickJS');
 return await user.hello();
 ''');
@@ -1065,7 +1040,7 @@ final sub = stream.listen((value) {
   print('progress: $value');
 });
 
-await quickjs.evalAsync('''
+await quickjs.run('''
 for (let i = 1; i <= 3; i++) {
   await progress.emit(i);
 }
@@ -1097,7 +1072,7 @@ manifest 描述：
 ## 31. 创建单文件插件
 
 ```dart
-final plugin = QuickjsPlugin.singleFile(
+final plugin = JsPlugin.singleFile(
   id: 'demoApi',
   version: '1.0.0',
   exports: const <String>['hello', 'sum'],
@@ -1126,7 +1101,7 @@ flutter:
 Dart：
 
 ```dart
-final plugin = await QuickjsPlugin.singleFileAsset(
+final plugin = await JsPlugin.singleFileAsset(
   id: 'demoApi',
   version: '1.0.0',
   assetKey: 'assets/js/demo_plugin.mjs',
@@ -1149,8 +1124,8 @@ export function sum(a, b) {
 ## 33. 创建多文件插件
 
 ```dart
-final plugin = await QuickjsPlugin.asset(
-  manifest: const QuickjsPluginManifest(
+final plugin = await JsPlugin.asset(
+  manifest: const JsPluginManifest(
     id: 'mathApi',
     version: '1.0.0',
     entry: 'mathApi/main',
@@ -1229,8 +1204,8 @@ export function formatName(value) {
 ```
 
 quickjs 不强制插件只能使用目录或 zip。应用层可以手动把 manifest JSON 转换成
-`QuickjsPluginManifest`，再把模块文件映射为 `QuickjsPluginModule`；如果插件已经打成 zip，
-也可以直接用 `QuickjsZipPlugin` 解包成 `QuickjsPlugin`。`exports` 声明 Dart 侧可调用的业务函数，
+`JsPluginManifest`，再把模块文件映射为 `JsPluginModule`；如果插件已经打成 zip，
+也可以直接用 `JsZipPlugin` 解包成 `JsPlugin`。`exports` 声明 Dart 侧可调用的业务函数，
 `init` / `dispose` 是可选生命周期导出，未声明时会跳过。
 
 zip 插件包示例：
@@ -1255,7 +1230,7 @@ modules/helper.js
 Dart：
 
 ```dart
-final plugin = await QuickjsZipPlugin.asset(
+final plugin = await JsZipPlugin.asset(
   assetKey: 'assets/plugins/zip_api.zip',
 );
 ```
@@ -1281,18 +1256,16 @@ final plugin = await QuickjsZipPlugin.asset(
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      plugin.asMount(),
+  features: <JsFeatures>[
+      plugin.asFeatures(),
     ],
-  ),
 );
 ```
 
 运行时安装：
 
 ```dart
-await quickjs.mount(plugin.asMount());
+await quickjs.loadFeatures(plugin.asFeatures());
 ```
 
 建议优先在创建 runtime 时安装插件，运行时安装会触发 runtime 重建。
@@ -1337,7 +1310,7 @@ await quickjs.validatePlugin(plugin);
 常用语法糖：
 
 ```dart
-final client = QuickjsPluginClient(quickjs, plugin);
+final client = JsPluginClient(quickjs, plugin);
 
 await client.validate();
 await client.init({'locale': 'zh-CN'});
@@ -1348,7 +1321,7 @@ await client.dispose();
 从 manifest asset 和模块 asset map 创建插件包：
 
 ```dart
-final plugin = await QuickjsPluginBundle.asset(
+final plugin = await JsPluginBundle.asset(
   manifestAsset: 'assets/plugins/demo/manifest.json',
   modules: const <String, String>{
     'demo/main': 'assets/plugins/demo/main.js',
@@ -1360,19 +1333,19 @@ final plugin = await QuickjsPluginBundle.asset(
 把多个插件注册成工具集：
 
 ```dart
-final tools = QuickjsToolRegistry(quickjs)
+final tools = JsToolRegistry(quickjs)
   ..register(translatorPlugin)
   ..register(summaryPlugin);
 
 final text = await tools.call('translator.translate', ['hello']);
 ```
 
-Stream helper 只是命名语法糖，不新增 runtime API：
+Stream 绑定直接由 runtime 提供：
 
 ```dart
-final progress = await QuickjsStreamBridge.bindJsSink(quickjs, 'progress');
+final progress = await quickjs.bindStream('progress');
 
-await QuickjsStreamBridge.bindDartStream(quickjs, 'hostCount', (_) {
+await quickjs.injectFunction('hostCount', (_) {
   return Stream.periodic(const Duration(seconds: 1), (i) => i + 1).take(3);
 });
 ```
@@ -1383,25 +1356,23 @@ Dart：
 
 ```dart
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      plugin.asMount(),
+  features: <JsFeatures>[
+      plugin.asFeatures(),
     ],
-    providers: <QuickjsHostProvider>[
-      QuickjsHostProvider.global(
+  providers: <JsProvider>[
+      JsProvider.global(
         name: 'getDataAsync',
         callback: (args, _) async {
           return 'data from Dart';
         },
       ),
-      QuickjsHostProvider.global(
+      JsProvider.global(
         name: 'dartMethod',
         callback: (args, _) {
           return 'method result from Dart';
         },
       ),
     ],
-  ),
 );
 ```
 
@@ -1420,7 +1391,7 @@ export async function test() {
 Dart：
 
 ```dart
-final plugin = await QuickjsPlugin.singleFileAsset(
+final plugin = await JsPlugin.singleFileAsset(
   id: 'assetApi',
   version: '1.0.0',
   assetKey: 'assets/js/js_call_dart_plugin.mjs',
@@ -1428,42 +1399,40 @@ final plugin = await QuickjsPlugin.singleFileAsset(
 );
 
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[
-      QuickjsFetchMount(
+  features: <JsFeatures>[
+      FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
       ),
-      plugin.asMount(),
+      plugin.asFeatures(),
     ],
-    providers: <QuickjsHostProvider>[
-      QuickjsHostProvider.global(
+  providers: <JsProvider>[
+      JsProvider.global(
         name: 'alert',
         callback: (args, _) {
           print('alert: ${args.join(' ')}');
           return null;
         },
       ),
-      QuickjsHostProvider.global(
+      JsProvider.global(
         name: 'getDataAsync',
         callback: (args, _) async {
           return 'data from Dart';
         },
       ),
-      QuickjsHostProvider.global(
+      JsProvider.global(
         name: 'dartMethod',
         callback: (args, _) {
           return 'method result from Dart';
         },
       ),
     ],
-    environmentPatches: <QuickjsHostScript>[
-      await QuickjsHostScript.asset(
+  scripts: <JsScript>[
+      await JsScript.asset(
         name: 'app:axios.js',
         assetKey: 'assets/js/axios.js',
         globals: const <String>['axios'],
       ),
     ],
-  ),
 );
 
 final result = await quickjs.invokePlugin(
@@ -1501,7 +1470,7 @@ final snapshot = await quickjs.debugInspect(includeGlobals: true);
 
 print(snapshot.state);
 print(snapshot.registeredProviders);
-print(snapshot.registeredMounts);
+print(snapshot.registeredFeatures);
 print(snapshot.pluginDetails);
 print(snapshot.moduleNames);
 print(snapshot.globals);
@@ -1516,7 +1485,7 @@ print(snapshot.globals);
 - `registeredCallbacks`
 - `registeredProviders`
 - `providerDetails`
-- `registeredMounts`
+- `registeredFeatures`
 - `pluginDetails`
 - `moduleNames`
 - `sourceMapNames`
@@ -1531,7 +1500,7 @@ print(snapshot.globals);
 ```dart
 quickjs.registerSourceMap(
   'app:bundle.js',
-  QuickjsSourceMap.fromJson(sourceMapJson),
+  JsSourceMap.fromJson(sourceMapJson),
 );
 ```
 
@@ -1575,24 +1544,24 @@ try {
   print(error.name);
   print(error.message);
   print(error.stack);
-} on QuickjsException catch (error) {
+} on JsException catch (error) {
   print(error.message);
 }
 ```
 
 ## 42. 停止和重建
 
-`stop()` 会停止当前 runtime。后续运行会在内部重建：
+`restart()` 会停止当前 runtime。后续运行会在内部重建：
 
 ```dart
-await quickjs.stop();
+await quickjs.restart();
 ```
 
 适合用户主动取消、页面进入后台、长任务中断等场景。
 
-`mount()` 运行时安装能力也会重建 runtime。重建后：
+`loadFeatures()` 运行时安装能力也会重建 runtime。重建后：
 
-- options 中的 mounts/providers/scripts/modules 会重新安装。
+- options 中的 features/providers/scripts/modules 会重新安装。
 - 运行期间临时写入的 JS global 状态不会保留。
 - Dart 侧旧的 function/object/class handle 不应继续使用。
 
@@ -1636,26 +1605,26 @@ Future<Quickjs> runtimeForRun() async {
 
 ```dart
 final quickjs = await Quickjs.create();
-final result = await quickjs.evaluateValue('1 + 2');
+final result = await quickjs.eval('1 + 2');
 ```
 
 需要 Web-like 全局对象：
 
 ```dart
-QuickjsHostMount.web();
+JsFeatures.web();
 ```
 
 需要 Buffer / Node 子集：
 
 ```dart
-QuickjsHostMount.essential(globalBuffer: true);
-QuickjsHostMount.node(globalBuffer: true, globalProcess: true);
+JsFeatures.essential(globalBuffer: true);
+JsFeatures.node(globalBuffer: true, globalProcess: true);
 ```
 
 需要网络：
 
 ```dart
-QuickjsFetchMount(
+FetchFeatures(
   allowedOrigins: <String>{'https://example.com'},
 );
 ```
@@ -1663,7 +1632,7 @@ QuickjsFetchMount(
 需要 crypto：
 
 ```dart
-QuickjsWebCryptoMount(
+WebCryptoFeatures(
   randomUUID: true,
   getRandomValues: true,
   subtleDigest: true,
@@ -1674,7 +1643,7 @@ QuickjsWebCryptoMount(
 需要 Dart 方法注入：
 
 ```dart
-QuickjsHostProvider.global(
+JsProvider.global(
   name: 'methodName',
   callback: (args, _) async => 'result',
 );
@@ -1683,11 +1652,9 @@ QuickjsHostProvider.global(
 需要插件：
 
 ```dart
-final plugin = await QuickjsPlugin.singleFileAsset(...);
+final plugin = await JsPlugin.singleFileAsset(...);
 final quickjs = await Quickjs.create(
-  options: QuickjsRuntimeOptions(
-    mounts: <QuickjsHostMount>[plugin.asMount()],
-  ),
+  features: <JsFeatures>[plugin.asFeatures()],
 );
 final result = await quickjs.invokePlugin('methodName', args);
 ```

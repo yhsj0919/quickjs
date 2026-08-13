@@ -8,15 +8,15 @@ import '../diagnostics/quickjs_exception.dart';
 import 'quickjs.dart';
 import 'quickjs_plugin.dart';
 
-/// Lightweight client for one plugin mounted in a [QuickjsPluginHost].
-final class QuickjsPluginClient {
-  const QuickjsPluginClient(this.engine, this.plugin);
+/// Lightweight client for one plugin mounted in a [JsPluginHost].
+final class JsPluginClient {
+  const JsPluginClient(this.engine, this.plugin);
 
   static int _nextCallId = 0;
   static DateTime? _lastCoreCallEndedAt;
 
-  final QuickjsPluginHost engine;
-  final QuickjsPlugin plugin;
+  final JsPluginHost engine;
+  final JsPlugin plugin;
 
   String get pluginId => plugin.manifest.id;
 
@@ -108,11 +108,11 @@ final class QuickjsPluginClient {
 }
 
 /// Convenience constructors for plugin packages.
-final class QuickjsPluginBundle {
-  const QuickjsPluginBundle._();
+final class JsPluginBundle {
+  const JsPluginBundle._();
 
   /// Creates a plugin package from a manifest asset and a module asset map.
-  static Future<QuickjsPlugin> asset({
+  static Future<JsPlugin> asset({
     required String manifestAsset,
     required Map<String, String> modules,
     AssetBundle? bundle,
@@ -125,7 +125,7 @@ final class QuickjsPluginBundle {
         'QuickJS plugin manifest asset must be a JSON object',
       );
     }
-    return QuickjsPlugin.asset(
+    return JsPlugin.asset(
       manifest: _manifestFromJson(manifestValue),
       modules: modules,
       bundle: resolvedBundle,
@@ -133,7 +133,7 @@ final class QuickjsPluginBundle {
   }
 
   /// Creates a plugin package from a manifest JSON string and module sources.
-  static QuickjsPlugin sources({
+  static JsPlugin sources({
     required String manifestJson,
     required Map<String, String> modules,
   }) {
@@ -143,7 +143,7 @@ final class QuickjsPluginBundle {
         'QuickJS plugin manifest source must be a JSON object',
       );
     }
-    return QuickjsPlugin.sources(
+    return JsPlugin.sources(
       manifest: _manifestFromJson(manifestValue),
       modules: modules,
     );
@@ -151,15 +151,15 @@ final class QuickjsPluginBundle {
 }
 
 /// Registry for calling plugin exports as `pluginId.method` tools.
-final class QuickjsToolRegistry {
-  QuickjsToolRegistry(this.engine);
+final class JsToolRegistry {
+  JsToolRegistry(this.engine);
 
   final Quickjs engine;
-  final Map<String, QuickjsPlugin> _plugins = <String, QuickjsPlugin>{};
+  final Map<String, JsPlugin> _plugins = <String, JsPlugin>{};
 
-  Iterable<QuickjsPlugin> get plugins => _plugins.values;
+  Iterable<JsPlugin> get plugins => _plugins.values;
 
-  QuickjsToolRegistry register(QuickjsPlugin plugin) {
+  JsToolRegistry register(JsPlugin plugin) {
     final previous = _plugins[plugin.manifest.id];
     if (previous != null && !identical(previous, plugin)) {
       throw JsValueConversionException(
@@ -170,7 +170,7 @@ final class QuickjsToolRegistry {
     return this;
   }
 
-  QuickjsToolRegistry unregister(String pluginId) {
+  JsToolRegistry unregister(String pluginId) {
     _plugins.remove(pluginId);
     return this;
   }
@@ -200,30 +200,8 @@ final class QuickjsToolRegistry {
   }
 }
 
-typedef QuickjsStreamFactory =
-    FutureOr<Stream<Object?>> Function(List<Object?> args);
-
-/// Naming helpers for JS sink and Dart stream bindings.
-final class QuickjsStreamBridge {
-  const QuickjsStreamBridge._();
-
-  /// Binds a JS-side `{ emit, close, error }` sink and returns Dart's stream.
-  static Future<Stream<Object?>> bindJsSink(Quickjs engine, String name) {
-    return engine.bindSink(name);
-  }
-
-  /// Binds a Dart stream factory as a JS async iterable provider.
-  static Future<void> bindDartStream(
-    Quickjs engine,
-    String name,
-    QuickjsStreamFactory factory,
-  ) {
-    return engine.bind(name, factory);
-  }
-}
-
-QuickjsPluginManifest _manifestFromJson(Map<String, Object?> json) {
-  return QuickjsPluginManifest(
+JsPluginManifest _manifestFromJson(Map<String, Object?> json) {
+  return JsPluginManifest(
     id: _requiredString(json, 'id'),
     version: _requiredString(json, 'version'),
     entry: _requiredString(json, 'entry'),
@@ -320,10 +298,10 @@ String _valueSummary(Object? value) {
 }
 
 String _errorSummary(Object error) {
-  if (error is JsException) {
-    return 'JsException name=${error.name ?? 'unknown'} message=${error.message}';
+  if (error is JsThrownException) {
+    return 'JsThrownException name=${error.name ?? 'unknown'} message=${error.message}';
   }
-  if (error is QuickjsException) {
+  if (error is JsException) {
     return '${error.runtimeType} message=${error.message}';
   }
   return '$error';

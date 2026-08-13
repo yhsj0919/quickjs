@@ -10,7 +10,7 @@ import 'quickjs_plugin.dart';
 ///
 /// A zip plugin package should contain `quickjs-plugin.json` or
 /// `manifest.json`. The manifest supports the same contract fields as
-/// [QuickjsPluginManifest]. JavaScript files under the manifest directory are
+/// [JsPluginManifest]. JavaScript files under the manifest directory are
 /// mapped into plugin modules using the manifest `id` as namespace.
 ///
 /// Example zip layout:
@@ -23,30 +23,30 @@ import 'quickjs_plugin.dart';
 ///
 /// With `entry: "demo/main"`, `main.js` maps to `demo/main`, and
 /// `modules/helper.js` maps to `demo/modules/helper.js`.
-final class QuickjsZipPlugin {
-  const QuickjsZipPlugin._();
+final class JsZipPlugin {
+  const JsZipPlugin._();
 
   /// Loads a plugin zip from Flutter assets.
-  static Future<QuickjsPlugin> asset({
+  static Future<JsPlugin> asset({
     required String assetKey,
     AssetBundle? bundle,
     String? manifestPath,
   }) async {
     final data = await (bundle ?? rootBundle).load(assetKey);
-    return QuickjsZipPlugin.bytes(
+    return JsZipPlugin.bytes(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       manifestPath: manifestPath,
     );
   }
 
   /// Loads a plugin zip from in-memory bytes.
-  static QuickjsPlugin bytes(Uint8List zipBytes, {String? manifestPath}) {
+  static JsPlugin bytes(Uint8List zipBytes, {String? manifestPath}) {
     final archive = ZipDecoder().decodeBytes(zipBytes);
     return archivePackage(archive, manifestPath: manifestPath);
   }
 
   /// Loads a plugin from an already decoded [Archive].
-  static QuickjsPlugin archivePackage(Archive archive, {String? manifestPath}) {
+  static JsPlugin archivePackage(Archive archive, {String? manifestPath}) {
     final files = _archiveFiles(archive);
     final manifestEntry = _findManifest(files, manifestPath);
     final manifestJson = utf8.decode(manifestEntry.value);
@@ -65,11 +65,11 @@ final class QuickjsZipPlugin {
       manifest: manifest,
       manifestJson: manifestValue,
     );
-    return QuickjsPlugin(
+    return JsPlugin(
       manifest: manifest,
-      modules: <QuickjsPluginModule>[
+      modules: <JsPluginModule>[
         for (final entry in moduleFiles.entries)
-          QuickjsPluginModule.bytes(specifier: entry.key, bytes: entry.value),
+          JsPluginModule.bytes(specifier: entry.key, bytes: entry.value),
       ],
     );
   }
@@ -123,8 +123,8 @@ final class QuickjsZipPlugin {
     return candidates.first;
   }
 
-  static QuickjsPluginManifest _manifestFromJson(Map<String, Object?> json) {
-    return QuickjsPluginManifest(
+  static JsPluginManifest _manifestFromJson(Map<String, Object?> json) {
+    return JsPluginManifest(
       id: _requiredString(json, 'id'),
       version: _requiredString(json, 'version'),
       entry: _requiredString(json, 'entry'),
@@ -140,7 +140,7 @@ final class QuickjsZipPlugin {
     Map<String, Uint8List> files, {
     required String root,
     required String manifestPath,
-    required QuickjsPluginManifest manifest,
+    required JsPluginManifest manifest,
     required Map<String, Object?> manifestJson,
   }) {
     final explicitFiles = manifestJson['files'];
@@ -189,7 +189,7 @@ final class QuickjsZipPlugin {
 
   static String _requireModuleSpecifier(
     Object? value,
-    QuickjsPluginManifest manifest,
+    JsPluginManifest manifest,
   ) {
     if (value is! String || value.isEmpty) {
       throw const JsValueConversionException(

@@ -13,7 +13,9 @@ class MemoryLimitPage extends StatefulWidget {
 
 class _MemoryLimitPageState extends State<MemoryLimitPage> {
   static const int _memoryLimitBytes = 256 * 1024;
-  static const int _stackLimitBytes = 64 * 1024;
+  // Keep enough stack for the initial environment bootstrap. Unbounded JS
+  // recursion still reaches this limit and exercises JsStackOverflowException.
+  static const int _stackLimitBytes = 256 * 1024;
 
   Quickjs? _quickjs;
   bool _disposed = false;
@@ -40,7 +42,7 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
+        options: const JsOptions(
           memoryLimitBytes: _memoryLimitBytes,
           stackLimitBytes: _stackLimitBytes,
         ),
@@ -165,7 +167,7 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -194,7 +196,7 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
             const SizedBox(height: 8),
             const Text(
               'memoryLimitBytes=262144 bytes (256 KiB), '
-              'stackLimitBytes=65536 bytes (64 KiB)',
+              'stackLimitBytes=262144 bytes (256 KiB)',
             ),
             const SizedBox(height: 16),
             Wrap(

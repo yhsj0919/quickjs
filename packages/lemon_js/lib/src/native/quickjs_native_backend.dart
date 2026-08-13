@@ -13,9 +13,7 @@ class NativeQuickjsBackend implements QuickjsBackend {
   String get quickjsVersion => _quickjsVersion;
 
   @override
-  Future<QuickjsJsRuntimeBase> createRuntime(
-    QuickjsRuntimeOptions options,
-  ) async {
+  Future<QuickjsJsRuntimeBase> createRuntime(JsOptions options) async {
     final runtime = await NativeQuickjsWorkerRuntime.create(options: options);
     _quickjsVersion = runtime.quickjsVersion;
     return runtime;

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js.dart';
 
 void main() {
-  test('QuickjsWebSocketMount exposes browser-style WebSocket', () async {
+  test('WebSocketFeatures exposes browser-style WebSocket', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.transform(WebSocketTransformer()).listen((socket) {
@@ -22,16 +22,14 @@ void main() {
 
     final origin = 'ws://${server.address.address}:${server.port}';
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        mounts: <QuickjsHostMount>[
-          QuickjsWebSocketMount(allowedOrigins: <String>{origin}),
-        ],
-      ),
+      features: <JsFeatures>[
+        WebSocketFeatures(allowedOrigins: <String>{origin}),
+      ],
     );
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evalAsync('''
+      await engine.run('''
 return await new Promise((resolve, reject) => {
   const ws = new WebSocket('$origin/ws');
   const events = [];
@@ -58,7 +56,7 @@ return await new Promise((resolve, reject) => {
     );
 
     expect(
-      await engine.evalAsync('''
+      await engine.run('''
 return await new Promise((resolve, reject) => {
   const ws = new WebSocket('$origin/binary');
   ws.binaryType = 'arraybuffer';
@@ -75,7 +73,7 @@ return await new Promise((resolve, reject) => {
     );
 
     await expectLater(
-      engine.evalAsync('''
+      engine.run('''
 return await new Promise((resolve, reject) => {
   const ws = new WebSocket('wss://example.com/socket');
   ws.onopen = () => resolve('unexpected');
@@ -83,7 +81,7 @@ return await new Promise((resolve, reject) => {
 });
 '''),
       throwsA(
-        isA<JsException>().having(
+        isA<JsThrownException>().having(
           (error) => error.message,
           'message',
           contains('origin is not allowed'),

@@ -88,9 +88,9 @@ void _printResult(
   );
 }
 
-QuickjsPlugin _legacyIdlePlugin() {
-  return QuickjsPlugin(
-    manifest: const QuickjsPluginManifest(
+JsPlugin _legacyIdlePlugin() {
+  return JsPlugin(
+    manifest: const JsPluginManifest(
       id: 'timer_pump_legacy_benchmark',
       version: '1.0.0',
       entry: 'timer_pump_legacy_benchmark/main',
@@ -105,8 +105,8 @@ QuickjsPlugin _legacyIdlePlugin() {
         'dispose',
       ],
     ),
-    modules: const <QuickjsPluginModule>[
-      QuickjsPluginModule(
+    modules: const <JsPluginModule>[
+      JsPluginModule(
         specifier: 'timer_pump_legacy_benchmark/main',
         source: '''
 let firstCommit = true;

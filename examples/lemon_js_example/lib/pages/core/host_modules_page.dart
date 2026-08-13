@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-const _hostMathModule = QuickjsHostModule.esModule(
+const _hostMathModule = JsModule.esModule(
   specifier: 'app/math',
   source: '''
 export const value = 41;
@@ -13,7 +13,7 @@ export function add(a, b) {
 ''',
 );
 
-const _hostPackageMainModule = QuickjsHostModule.esModule(
+const _hostPackageMainModule = JsModule.esModule(
   specifier: 'pkg/main',
   source: '''
 import { value } from "./dep";
@@ -21,14 +21,14 @@ export const result = value + 1;
 ''',
 );
 
-const _hostPackageDepModule = QuickjsHostModule.esModule(
+const _hostPackageDepModule = JsModule.esModule(
   specifier: 'pkg/dep',
   source: '''
 export const value = 9;
 ''',
 );
 
-const _hostBufferModule = QuickjsHostModule.esModule(
+const _hostBufferModule = JsModule.esModule(
   specifier: 'buffer',
   source: '''
 export const label = "host-buffer";
@@ -38,7 +38,7 @@ export function byteLength(value) {
 ''',
 );
 
-const _hostCommonJsModule = QuickjsHostModule.commonJs(
+const _hostCommonJsModule = JsModule.commonJs(
   specifier: 'app/cjs',
   source: '''
 const local = require("./local");
@@ -48,14 +48,14 @@ module.exports = {
 ''',
 );
 
-const _hostCommonJsLocalModule = QuickjsHostModule.commonJs(
+const _hostCommonJsLocalModule = JsModule.commonJs(
   specifier: 'app/local',
   source: '''
 module.exports = { value: 6 };
 ''',
 );
 
-const _hostCounterModule = QuickjsHostModule.esModule(
+const _hostCounterModule = JsModule.esModule(
   specifier: 'app/counter',
   source: '''
 globalThis.hostModuleImportCount = (globalThis.hostModuleImportCount || 0) + 1;
@@ -63,7 +63,7 @@ export const count = globalThis.hostModuleImportCount;
 ''',
 );
 
-const _hostCommonJsCounterModule = QuickjsHostModule.commonJs(
+const _hostCommonJsCounterModule = JsModule.commonJs(
   specifier: 'app/cjs-counter',
   source: '''
 globalThis.hostCommonJsImportCount = (globalThis.hostCommonJsImportCount || 0) + 1;
@@ -105,18 +105,16 @@ class _HostModulesPageState extends State<HostModulesPage> {
       await previous?.dispose();
 
       final quickjs = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[
-            _hostMathModule,
-            _hostPackageMainModule,
-            _hostPackageDepModule,
-            _hostBufferModule,
-            _hostCommonJsModule,
-            _hostCommonJsLocalModule,
-            _hostCounterModule,
-            _hostCommonJsCounterModule,
-          ],
-        ),
+        modules: <JsModule>[
+          _hostMathModule,
+          _hostPackageMainModule,
+          _hostPackageDepModule,
+          _hostBufferModule,
+          _hostCommonJsModule,
+          _hostCommonJsLocalModule,
+          _hostCounterModule,
+          _hostCommonJsCounterModule,
+        ],
       );
       if (!mounted || _disposed) {
         await quickjs.dispose();
@@ -242,11 +240,7 @@ module.exports = first.count + "/" + second.count + "/" + globalThis.hostCommonJ
   Future<void> _runEssentialBuffer() async {
     await _capture('essential Buffer', () async {
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.essential(globalBuffer: true),
-          ],
-        ),
+        features: <JsFeatures>[JsFeatures.essential(globalBuffer: true)],
       );
       try {
         await quickjs.evalModule('''
@@ -267,7 +261,7 @@ globalThis.essentialBufferModuleDemo =
           'essential import "node:buffer" => $moduleResult\n'
           'essential global Buffer => $globalResult',
         );
-        _status = 'QuickjsHostMount.essential() 的 Buffer 可用';
+        _status = 'JsFeatures.essential() 的 Buffer 可用';
       } finally {
         await quickjs.dispose();
       }
@@ -277,16 +271,14 @@ globalThis.essentialBufferModuleDemo =
   Future<void> _runNodePreset() async {
     await _capture('node preset', () async {
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.node(
-              globalBuffer: true,
-              globalProcess: true,
-              env: <String, String>{'APP_ENV': 'example'},
-              cwd: '/example',
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.node(
+            globalBuffer: true,
+            globalProcess: true,
+            env: <String, String>{'APP_ENV': 'example'},
+            cwd: '/example',
+          ),
+        ],
       );
       try {
         await quickjs.evalModule('''
@@ -305,7 +297,7 @@ globalThis.nodePresetDemo = [
 ].join("/");
 ''', name: 'example:node-preset.mjs');
         final result = await quickjs.eval('globalThis.nodePresetDemo');
-        _log.insert(0, 'QuickjsHostMount.node() => $result');
+        _log.insert(0, 'JsFeatures.node() => $result');
         _status = 'node preset provides buffer/path/process/timers modules';
       } finally {
         await quickjs.dispose();
@@ -320,7 +312,7 @@ globalThis.nodePresetDemo = [
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       await running;
       await quickjs.evalModule('''
 import { value, add } from "app/math";
@@ -367,7 +359,7 @@ globalThis.hostModuleAfterStop = add(value, 1);
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';
@@ -395,8 +387,8 @@ globalThis.hostModuleAfterStop = add(value, 1);
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'QuickjsRuntimeOptions.modules + '
-              'QuickjsHostModule.esModule/commonJs',
+              'JsOptions.modules + '
+              'JsModule.esModule/commonJs',
             ),
             const SizedBox(height: 16),
             Wrap(

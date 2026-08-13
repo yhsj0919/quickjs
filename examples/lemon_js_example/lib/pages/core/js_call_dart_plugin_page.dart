@@ -39,70 +39,68 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
       _quickjs = null;
       _runtimeCreatedAt = null;
       await previous?.dispose();
-      final plugin = QuickjsPlugin.singleFileAsset(
+      final plugin = JsPlugin.singleFileAsset(
         id: 'assetApi',
         version: '1.0.0',
         assetKey: 'assets/js/js_call_dart_plugin.mjs',
         exports: const <String>['test2', 'axiosGet'],
       );
       final quickjs = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsAxiosMount(
-              assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
-              allowedOrigins: <String>{_originOf(widget.axiosUrl)},
-              maxResponseBytes: 1024 * 1024,
-              timeout: const Duration(seconds: 15),
-            ),
-            plugin.asMount(),
-          ],
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.global(
-              name: 'alert',
-              callback: (args, _) {
-                final output = args.join(' ');
-                _appendLog('alert <= $output');
-                return showDialog<void>(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) {
-                    return AlertDialog(
-                      title: const Text('JS Alert'),
-                      content: SingleChildScrollView(child: Text(output)),
-                      actions: <Widget>[
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('OK'),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-            QuickjsHostProvider.global(
-              name: 'getDataAsync',
-              callback: (args, _) {
-                _appendLog('getDataAsync <= $args');
-                return '来自Dart的消息';
-              },
-            ),
-            QuickjsHostProvider.global(
-              name: 'dartMethod',
-              callback: (args, _) {
-                _appendLog('dartMethod <= $args');
-                return '这是静态消息';
-              },
-            ),
-            QuickjsHostProvider.global(
-              name: 'asyncWithError',
-              callback: (_, _) async {
-                await Future<void>.delayed(const Duration(milliseconds: 100));
-                throw StateError('Some error');
-              },
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          AxiosFeatures(
+            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
+            allowedOrigins: <String>{_originOf(widget.axiosUrl)},
+            maxResponseBytes: 1024 * 1024,
+            timeout: const Duration(seconds: 15),
+          ),
+          plugin.asFeatures(),
+        ],
+        providers: <JsProvider>[
+          JsProvider.global(
+            name: 'alert',
+            callback: (args, _) {
+              final output = args.join(' ');
+              _appendLog('alert <= $output');
+              return showDialog<void>(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) {
+                  return AlertDialog(
+                    title: const Text('JS Alert'),
+                    content: SingleChildScrollView(child: Text(output)),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+          JsProvider.global(
+            name: 'getDataAsync',
+            callback: (args, _) {
+              _appendLog('getDataAsync <= $args');
+              return '来自Dart的消息';
+            },
+          ),
+          JsProvider.global(
+            name: 'dartMethod',
+            callback: (args, _) {
+              _appendLog('dartMethod <= $args');
+              return '这是静态消息';
+            },
+          ),
+          JsProvider.global(
+            name: 'asyncWithError',
+            callback: (_, _) async {
+              await Future<void>.delayed(const Duration(milliseconds: 100));
+              throw StateError('Some error');
+            },
+          ),
+        ],
         onConsole: (event) {
           _appendLog('console.${event.level.name}: ${event.text}');
         },

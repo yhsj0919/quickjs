@@ -62,7 +62,7 @@ class _ConsolePageState extends State<ConsolePage> {
     }
   }
 
-  void _onConsole(QuickjsConsoleEvent event) {
+  void _onConsole(JsConsoleEvent event) {
     if (!mounted || _disposed) {
       return;
     }
@@ -92,7 +92,7 @@ console.error(new Error("boom"));
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.stop();
+      await quickjs.restart();
       await running;
       await quickjs.eval('console.warn("console restored after stop")');
     });

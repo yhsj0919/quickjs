@@ -79,9 +79,9 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
 
     final futures = <Future<String>>[
       // 三个请求立即提交，底层应按 FIFO 串行进入同一个 runtime。
-      quickjs.eval('globalThis.queue = (globalThis.queue || "") + "A"'),
-      quickjs.eval('globalThis.queue = (globalThis.queue || "") + "B"'),
-      quickjs.eval('globalThis.queue = (globalThis.queue || "") + "C"'),
+      quickjs.evalRaw('globalThis.queue = (globalThis.queue || "") + "A"'),
+      quickjs.evalRaw('globalThis.queue = (globalThis.queue || "") + "B"'),
+      quickjs.evalRaw('globalThis.queue = (globalThis.queue || "") + "C"'),
     ];
 
     try {
@@ -126,7 +126,7 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
     });
 
     try {
-      final result = await quickjs.evalAsync('''
+      final result = await quickjs.run('''
 await new Promise((resolve) => setTimeout(resolve, 100));
 return { answer: 6 * 7, state: "resolved" };
 ''', name: 'example:async-api.js');
@@ -134,7 +134,7 @@ return { answer: 6 * 7, state: "resolved" };
         return;
       }
       setState(() {
-        _log.add('evalAsync：$result');
+        _log.add('run：$result');
         _status = 'JavaScript Promise 已完成';
       });
     } catch (error) {
@@ -142,8 +142,8 @@ return { answer: 6 * 7, state: "resolved" };
         return;
       }
       setState(() {
-        _log.add('evalAsync 失败：${_describeError(error)}');
-        _status = 'evalAsync 执行失败';
+        _log.add('run 失败：${_describeError(error)}');
+        _status = 'run 执行失败';
       });
     } finally {
       if (mounted && !_disposed) {
@@ -190,7 +190,7 @@ return { answer: 6 * 7, state: "resolved" };
   }
 
   String _describeError(Object error) {
-    if (error is QuickjsException) {
+    if (error is JsException) {
       return '${error.runtimeType}: ${error.message}';
     }
     return '${error.runtimeType}: $error';

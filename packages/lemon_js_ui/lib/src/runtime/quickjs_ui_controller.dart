@@ -17,7 +17,7 @@ import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_session.dart';
 import 'quickjs_ui_runtime.dart';
 
-typedef QuickjsUiPluginLoader = Future<QuickjsPlugin> Function();
+typedef QuickjsUiPluginLoader = Future<JsPlugin> Function();
 
 /// Controller for one quickjs_ui page instance.
 ///
@@ -28,7 +28,7 @@ final class QuickjsUiController extends ChangeNotifier {
   QuickjsUiController({
     Quickjs? engine,
     QuickjsUiRuntime? runtime,
-    QuickjsConsoleSink? onConsole,
+    JsConsoleSink? onConsole,
     QuickjsUiDevOptions? devOptions,
     QuickjsUiInspector? inspector,
   }) : devOptions = devOptions ?? QuickjsUiDevOptions.defaults,
@@ -60,7 +60,7 @@ final class QuickjsUiController extends ChangeNotifier {
 
   QuickjsUiSession get session => _session;
   Quickjs? get engine => _session.engine;
-  QuickjsPlugin? get plugin => _session.plugin;
+  JsPlugin? get plugin => _session.plugin;
   Map<String, Object?> get props => _session.props;
   Object? get state => _session.state;
   QuickjsUiNode? get node => _session.node;
@@ -81,9 +81,9 @@ final class QuickjsUiController extends ChangeNotifier {
   bool get isDisposed => _disposed;
 
   Future<void> loadPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
@@ -92,7 +92,7 @@ final class QuickjsUiController extends ChangeNotifier {
     _loadConfig = _QuickjsUiLoadConfig.copy(
       plugin: plugin,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
@@ -102,7 +102,7 @@ final class QuickjsUiController extends ChangeNotifier {
       plugin,
       requestId: requestId,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
@@ -113,7 +113,7 @@ final class QuickjsUiController extends ChangeNotifier {
   Future<void> load(
     QuickjsUiPluginLoader loader, {
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
@@ -123,7 +123,7 @@ final class QuickjsUiController extends ChangeNotifier {
     _loadConfig = _QuickjsUiLoadConfig.copy(
       loader: loader,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
@@ -146,7 +146,7 @@ final class QuickjsUiController extends ChangeNotifier {
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
-        mounts: mounts,
+        features: features,
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
@@ -173,10 +173,10 @@ final class QuickjsUiController extends ChangeNotifier {
   }
 
   Future<void> _loadPlugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     required int requestId,
     required Map<String, Object?> initialProps,
-    required List<QuickjsHostMount> mounts,
+    required List<JsFeatures> features,
     required Iterable<String> grantedPermissions,
     required QuickjsUiPermissionPolicy? permissionPolicy,
     required QuickjsUiErrorContext errorContext,
@@ -197,7 +197,7 @@ final class QuickjsUiController extends ChangeNotifier {
       await _session.loadPlugin(
         plugin,
         initialProps: initialProps,
-        mounts: mounts,
+        features: features,
         grantedPermissions: grantedPermissions,
         permissionPolicy: permissionPolicy,
       );
@@ -373,7 +373,7 @@ final class QuickjsUiController extends ChangeNotifier {
       state: state,
       node: node,
       plugin: plugin,
-      mounts: _session.mounts,
+      features: _session.features,
       error: error,
     );
   }
@@ -427,7 +427,7 @@ final class QuickjsUiController extends ChangeNotifier {
         await _session.loadPlugin(
           configuredPlugin,
           initialProps: config.initialProps,
-          mounts: config.mounts,
+          features: config.features,
           grantedPermissions: config.grantedPermissions,
           permissionPolicy: config.permissionPolicy,
         );
@@ -476,7 +476,7 @@ final class QuickjsUiController extends ChangeNotifier {
       await _session.loadPlugin(
         plugin,
         initialProps: config.initialProps,
-        mounts: config.mounts,
+        features: config.features,
         grantedPermissions: config.grantedPermissions,
         permissionPolicy: config.permissionPolicy,
       );
@@ -623,9 +623,9 @@ final class QuickjsUiController extends ChangeNotifier {
 final class _QuickjsUiLoadConfig {
   factory _QuickjsUiLoadConfig.copy({
     QuickjsUiPluginLoader? loader,
-    QuickjsPlugin? plugin,
+    JsPlugin? plugin,
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
@@ -634,7 +634,7 @@ final class _QuickjsUiLoadConfig {
       loader: loader,
       plugin: plugin,
       initialProps: Map<String, Object?>.unmodifiable(initialProps),
-      mounts: List<QuickjsHostMount>.unmodifiable(mounts),
+      features: List<JsFeatures>.unmodifiable(features),
       grantedPermissions: Set<String>.unmodifiable(grantedPermissions),
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
@@ -645,16 +645,16 @@ final class _QuickjsUiLoadConfig {
     required this.loader,
     required this.plugin,
     required this.initialProps,
-    required this.mounts,
+    required this.features,
     required this.grantedPermissions,
     required this.permissionPolicy,
     required this.errorContext,
   });
 
   final QuickjsUiPluginLoader? loader;
-  final QuickjsPlugin? plugin;
+  final JsPlugin? plugin;
   final Map<String, Object?> initialProps;
-  final List<QuickjsHostMount> mounts;
+  final List<JsFeatures> features;
   final Set<String> grantedPermissions;
   final QuickjsUiPermissionPolicy? permissionPolicy;
   final QuickjsUiErrorContext errorContext;

@@ -13,118 +13,118 @@ void main() {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
     expect(engine.quickjsVersion, '0.15.1');
-    expect(await engine.eval('1 + 2'), '3');
+    expect(await engine.eval('1 + 2'), 3);
+    expect(await engine.evalRaw('1 + 2'), '3');
   });
 
   // 同一个 Quickjs 实例应能重复执行，不需要每次重新创建 runtime。
   test('quickjs instance can be reused', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
-    expect(engine.state, QuickjsRuntimeState.ready);
-    expect(await engine.evaluate('"a" + "b"'), 'ab');
-    expect(await engine.evaluate('2 ** 10'), '1024');
-    expect(engine.state, QuickjsRuntimeState.ready);
+    expect(engine.state, JsRuntimeState.ready);
+    expect(await engine.eval('"a" + "b"'), 'ab');
+    expect(await engine.eval('2 ** 10'), 1024);
+    expect(await engine.run('return await Promise.resolve(6 * 7);'), 42);
+    expect(await engine.runRaw('return await Promise.resolve(6 * 7);'), '42');
+    expect(engine.state, JsRuntimeState.ready);
   });
 
   // 结构化返回 API 不改变 eval 的字符串语义，先覆盖 JS primitives。
-  test('evaluateValue maps primitive JavaScript values', () async {
+  test('eval maps primitive JavaScript values', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
-    expect(await engine.evaluateValue('1 + 2'), 3);
-    expect(await engine.evaluateValue('1.5 + 2'), 3.5);
-    expect(await engine.evaluateValue('true'), true);
-    expect(await engine.evaluateValue('"hello"'), 'hello');
-    expect(await engine.evaluateValue('null'), isNull);
-    expect(await engine.evaluateValue('undefined'), isA<JsUndefined>());
-    expect(await engine.eval('undefined'), 'undefined');
+    expect(await engine.eval('1 + 2'), 3);
+    expect(await engine.eval('1.5 + 2'), 3.5);
+    expect(await engine.eval('true'), true);
+    expect(await engine.eval('"hello"'), 'hello');
+    expect(await engine.eval('null'), isNull);
+    expect(await engine.eval('undefined'), isA<JsUndefined>());
+    expect(await engine.evalRaw('undefined'), 'undefined');
   });
 
   // 结构化返回继续覆盖 JSON-compatible array 和 plain object。
-  test('evaluateValue maps arrays and plain objects', () async {
+  test('eval maps arrays and plain objects', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
-    expect(await engine.evaluateValue('[1, "two", true, null]'), <Object?>[
+    expect(await engine.eval('[1, "two", true, null]'), <Object?>[
       1,
       'two',
       true,
       null,
     ]);
-    expect(await engine.evaluateValue('({ a: 1, b: "two", c: false })'), {
+    expect(await engine.eval('({ a: 1, b: "two", c: false })'), {
       'a': 1,
       'b': 'two',
       'c': false,
     });
-    expect(
-      await engine.evaluateValue('({ nested: [1, { ok: true }, null] })'),
-      {
-        'nested': [
-          1,
-          {'ok': true},
-          null,
-        ],
-      },
-    );
+    expect(await engine.eval('({ nested: [1, { ok: true }, null] })'), {
+      'nested': [
+        1,
+        {'ok': true},
+        null,
+      ],
+    });
   });
 
   // ArrayBuffer / Uint8Array 应映射为 Dart Uint8List。
-  test('evaluateValue maps binary buffers to Uint8List', () async {
+  test('eval maps binary buffers to Uint8List', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evaluateValue('new Uint8Array([1, 2, 255])'),
+      await engine.eval('new Uint8Array([1, 2, 255])'),
       Uint8List.fromList([1, 2, 255]),
     );
     expect(
-      await engine.evaluateValue('new Uint8Array([3, 4, 5]).buffer'),
+      await engine.eval('new Uint8Array([3, 4, 5]).buffer'),
       Uint8List.fromList([3, 4, 5]),
     );
   });
 
   // JS bigint 应映射为 Dart BigInt，避免大整数精度丢失。
-  test('evaluateValue maps BigInt values', () async {
+  test('eval maps BigInt values', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evaluateValue('9007199254740993n'),
+      await engine.eval('9007199254740993n'),
       BigInt.parse('9007199254740993'),
     );
   });
 
   // 不可直接转换的 JS 值应给出明确的 Dart 错误，而不是静默丢值。
-  test('evaluateValue rejects unsupported JavaScript values', () async {
+  test('eval rejects unsupported JavaScript values', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
     await expectLater(
-      engine.evaluateValue('Symbol("id")'),
+      engine.eval('Symbol("id")'),
       throwsA(isA<JsValueConversionException>()),
     );
     await expectLater(
-      engine.evaluateValue('() => 1'),
+      engine.eval('() => 1'),
       throwsA(isA<JsValueConversionException>()),
     );
     await expectLater(
-      engine.evaluateValue('[1, Symbol("id")]'),
+      engine.eval('[1, Symbol("id")]'),
       throwsA(isA<JsValueConversionException>()),
     );
     await expectLater(
-      engine.evaluateValue('const value = {}; value.self = value; value'),
+      engine.eval('const value = {}; value.self = value; value'),
       throwsA(isA<JsValueConversionException>()),
     );
   });
 
   test(
-    'evaluateValue rejects overly deep object graphs before JS stack overflow',
+    'eval rejects overly deep object graphs before JS stack overflow',
     () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
       await expectLater(
-        engine.evaluateValue('''
+        engine.eval('''
 let value = { leaf: true };
 for (let i = 0; i < 256; i += 1) {
   value = { child: value };
@@ -142,37 +142,34 @@ value;
     },
   );
 
-  test(
-    'evaluateValue budgets containers rather than primitive leaves',
-    () async {
-      final engine = await Quickjs.create();
-      addTearDown(engine.dispose);
+  test('eval budgets containers rather than primitive leaves', () async {
+    final engine = await Quickjs.create();
+    addTearDown(engine.dispose);
 
-      final flat = await engine.evaluateValue(
-        'Array.from({ length: 15000 }, (_, index) => index)',
-      );
-      expect(flat, isA<List<Object?>>());
-      expect((flat! as List<Object?>).length, 15000);
+    final flat = await engine.eval(
+      'Array.from({ length: 15000 }, (_, index) => index)',
+    );
+    expect(flat, isA<List<Object?>>());
+    expect((flat! as List<Object?>).length, 15000);
 
-      await expectLater(
-        engine.evaluateValue('Array.from({ length: 10001 }, () => ({}))'),
-        throwsA(
-          isA<JsValueConversionException>().having(
-            (error) => error.message,
-            'message',
-            contains('object graph is too large'),
-          ),
+    await expectLater(
+      engine.eval('Array.from({ length: 10001 }, () => ({}))'),
+      throwsA(
+        isA<JsValueConversionException>().having(
+          (error) => error.message,
+          'message',
+          contains('object graph is too large'),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
 
   test(
     'callPlugin rejects overly deep return values before JS stack overflow',
     () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'deep_return',
         version: '1.0.0',
         exports: const <String>['render'],
@@ -186,7 +183,7 @@ export function render() {
 }
 ''',
       );
-      await engine.mount(plugin.asMount());
+      await engine.loadFeatures(plugin.asFeatures());
 
       await expectLater(
         engine.callPlugin(plugin, 'render', const <Object?>[]),
@@ -206,7 +203,7 @@ export function render() {
     () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'deep_args',
         version: '1.0.0',
         exports: const <String>['echo'],
@@ -216,7 +213,7 @@ export function echo(value) {
 }
 ''',
       );
-      await engine.mount(plugin.asMount());
+      await engine.loadFeatures(plugin.asFeatures());
 
       Object? value = <String, Object?>{'leaf': true};
       for (var index = 0; index < 256; index += 1) {
@@ -226,7 +223,7 @@ export function echo(value) {
       await expectLater(
         engine.callPlugin(plugin, 'echo', <Object?>[value]),
         throwsA(
-          isA<QuickjsException>().having(
+          isA<JsException>().having(
             (error) => error.message,
             'message',
             contains('QuickJS Dart value graph is too deep'),
@@ -237,11 +234,11 @@ export function echo(value) {
   );
 
   // Dart values can be injected as temporary JS globals for one evaluation.
-  test('evaluateValue maps Dart globals to JavaScript values', () async {
+  test('eval maps Dart globals to JavaScript values', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
-    final value = await engine.evaluateValue(
+    final value = await engine.eval(
       '''
 ({
   intValue,
@@ -309,32 +306,77 @@ export function echo(value) {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
-    await engine.bind('hostAdd', (args) {
+    await engine.injectFunction('hostAdd', (args) {
       return (args[0] as num).toInt() + (args[1] as num).toInt();
     });
 
-    expect(await engine.evalAsync('return await hostAdd(20, 22);'), '42');
+    expect(await engine.call('hostAdd', [20, 22]), 42);
+    expect(await engine.callRaw('hostAdd', [20, 22]), '42');
   });
 
-  test('bound Dart callback rejection is reported as JsException', () async {
+  test(
+    'call safely passes structured arguments to a global function',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.evalRaw('''
+globalThis.describe = async function(value) {
+  return { receiver: this === globalThis, value };
+};
+''');
+
+      expect(
+        await engine.call('describe', [
+          {
+            'text': 'quote: " and newline:\n',
+            'items': [1, true, null],
+          },
+        ]),
+        {
+          'receiver': true,
+          'value': {
+            'text': 'quote: " and newline:\n',
+            'items': [1, true, null],
+          },
+        },
+      );
+    },
+  );
+
+  test('call rejects a global that is not a function', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
-
-    await engine.bind('hostFail', (_) {
-      throw StateError('host failed');
-    });
+    await engine.evalRaw('globalThis.answer = 42');
 
     await expectLater(
-      engine.evalAsync('return await hostFail();'),
-      throwsA(
-        isA<JsException>().having(
-          (error) => error.message,
-          'message',
-          contains('host failed'),
-        ),
-      ),
+      engine.call('answer', const []),
+      throwsA(isA<JsThrownException>()),
     );
   });
+
+  test(
+    'bound Dart callback rejection is reported as JsThrownException',
+    () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.injectFunction('hostFail', (_) {
+        throw StateError('host failed');
+      });
+
+      await expectLater(
+        engine.run('return await hostFail();'),
+        throwsA(
+          isA<JsThrownException>().having(
+            (error) => error.message,
+            'message',
+            contains('host failed'),
+          ),
+        ),
+      );
+    },
+  );
 
   // Unsupported Dart globals should fail before entering JS execution.
   test('eval rejects unsupported Dart globals', () async {
@@ -342,13 +384,13 @@ export function echo(value) {
     addTearDown(engine.dispose);
 
     await expectLater(
-      engine.evaluateValue('value', globals: {'value': Object()}),
+      engine.eval('value', globals: {'value': Object()}),
       throwsA(isA<JsValueConversionException>()),
     );
     final cyclic = <Object?>[];
     cyclic.add(cyclic);
     await expectLater(
-      engine.evaluateValue('value', globals: {'value': cyclic}),
+      engine.eval('value', globals: {'value': cyclic}),
       throwsA(isA<JsValueConversionException>()),
     );
   });
@@ -367,25 +409,25 @@ export function echo(value) {
     ''');
 
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(engine.state, QuickjsRuntimeState.running);
+    expect(engine.state, JsRuntimeState.running);
     expect(await evalFuture, 'done');
-    expect(engine.state, QuickjsRuntimeState.ready);
+    expect(engine.state, JsRuntimeState.ready);
   });
 
   // stop 期间公开状态应进入 stopping，恢复后回到 ready。
-  test('runtime state is stopping while stop is in progress', () async {
+  test('runtime state is stopping while restart is in progress', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
     final running = engine.eval('while (true) {}');
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    final stopFuture = engine.stop();
-    expect(engine.state, QuickjsRuntimeState.stopping);
+    final stopFuture = engine.restart();
+    expect(engine.state, JsRuntimeState.restarting);
 
     await expectLater(running, throwsA(isA<JsCancelledException>()));
     await stopFuture.timeout(const Duration(seconds: 2));
-    expect(engine.state, QuickjsRuntimeState.ready);
+    expect(engine.state, JsRuntimeState.ready);
   });
 
   // dispose 后公开状态应稳定为 closed。
@@ -394,13 +436,13 @@ export function echo(value) {
 
     await engine.dispose();
 
-    expect(engine.state, QuickjsRuntimeState.closed);
+    expect(engine.state, JsRuntimeState.closed);
   });
 
   // memory limit 应把超限分配映射成稳定的 OOM 错误，并保持 runtime 可继续使用。
   test('memory limit rejects oversized allocations', () async {
     final engine = await Quickjs.create(
-      options: const QuickjsRuntimeOptions(memoryLimitBytes: 256 * 1024),
+      options: const JsOptions(memoryLimitBytes: 256 * 1024),
     );
     addTearDown(engine.dispose);
 
@@ -414,7 +456,7 @@ export function echo(value) {
   // stack limit 应把递归栈溢出映射成稳定错误，并保持 runtime 可继续使用。
   test('stack limit rejects deep recursion', () async {
     final engine = await Quickjs.create(
-      options: const QuickjsRuntimeOptions(stackLimitBytes: 256 * 1024),
+      options: const JsOptions(stackLimitBytes: 256 * 1024),
     );
     addTearDown(engine.dispose);
 
@@ -425,15 +467,15 @@ export function echo(value) {
     expect(await engine.eval('1 + 1'), '2');
   });
 
-  // JS throw 必须映射成公开的 JsException，而不是普通字符串结果。
-  test('javascript throw is reported as JsException', () async {
+  // JS throw 必须映射成公开的 JsThrownException，而不是普通字符串结果。
+  test('javascript throw is reported as JsThrownException', () async {
     final engine = await Quickjs.create();
     addTearDown(engine.dispose);
 
     await expectLater(
       engine.eval('throw new Error("boom")'),
       throwsA(
-        isA<JsException>().having(
+        isA<JsThrownException>().having(
           (error) => error.message,
           'message',
           contains('boom'),
@@ -449,7 +491,7 @@ export function echo(value) {
     await expectLater(
       engine.eval('throw new TypeError("structured boom")'),
       throwsA(
-        isA<JsException>()
+        isA<JsThrownException>()
             .having(
               (error) => error.message,
               'message',
@@ -462,7 +504,7 @@ export function echo(value) {
   });
 
   test(
-    'non Error JavaScript throw still reports a useful JsException',
+    'non Error JavaScript throw still reports a useful JsThrownException',
     () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
@@ -470,7 +512,7 @@ export function echo(value) {
       await expectLater(
         engine.eval('throw "plain boom"'),
         throwsA(
-          isA<JsException>()
+          isA<JsThrownException>()
               .having(
                 (error) => error.message,
                 'message',
@@ -587,7 +629,7 @@ export function echo(value) {
     final running = engine.eval('while (true) {}');
     final stopFuture = Future<void>.delayed(
       const Duration(milliseconds: 50),
-      engine.stop,
+      engine.restart,
     );
 
     await expectLater(running, throwsA(isA<JsCancelledException>()));
@@ -602,7 +644,11 @@ export function echo(value) {
 
     final running = engine.eval('while (true) {}');
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    final stops = Future.wait([engine.stop(), engine.stop(), engine.stop()]);
+    final stops = Future.wait([
+      engine.restart(),
+      engine.restart(),
+      engine.restart(),
+    ]);
 
     await expectLater(running, throwsA(isA<JsCancelledException>()));
     await stops.timeout(const Duration(seconds: 2));
@@ -618,7 +664,7 @@ export function echo(value) {
     final queued = engine.eval('globalThis.stoppedQueue = true');
     final stopFuture = Future<void>.delayed(
       const Duration(milliseconds: 50),
-      engine.stop,
+      engine.restart,
     );
 
     await expectLater(running, throwsA(isA<JsCancelledException>()));
@@ -746,7 +792,10 @@ export function echo(value) {
   test('disposed quickjs instance rejects stop', () async {
     final engine = await Quickjs.create();
     await engine.dispose();
-    await expectLater(engine.stop(), throwsA(isA<JsRuntimeClosedException>()));
+    await expectLater(
+      engine.restart(),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
   });
 
   // stop 进行中提交的新 eval 会等待 runtime 恢复后执行，不能永久 pending。
@@ -756,7 +805,7 @@ export function echo(value) {
 
     final running = engine.eval('while (true) {}');
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    final stopFuture = engine.stop();
+    final stopFuture = engine.restart();
     final queuedDuringStop = engine.eval('21 * 2');
 
     await expectLater(running, throwsA(isA<JsCancelledException>()));
@@ -830,7 +879,7 @@ export function echo(value) {
   });
 
   test('public runtime creates isolated contexts', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final first = await runtime.createContext();
     final second = await runtime.createContext();
@@ -843,13 +892,16 @@ export function echo(value) {
   });
 
   test('public contexts keep host callbacks isolated', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final first = await runtime.createContext();
     final second = await runtime.createContext();
 
-    await first.bindCallback('hostValue', (args) => (args.single as int) + 1);
-    await second.bindCallback('hostValue', (args) => (args.single as int) * 2);
+    await first.injectFunction('hostValue', (args) => (args.single as int) + 1);
+    await second.injectFunction(
+      'hostValue',
+      (args) => (args.single as int) * 2,
+    );
     await first.eval('hostValue(20).then(value => globalThis.result = value)');
     await second.eval('hostValue(20).then(value => globalThis.result = value)');
 
@@ -860,13 +912,13 @@ export function echo(value) {
   test(
     'late context callback response does not close shared runtime',
     () async {
-      final runtime = await QuickjsRuntime.create();
+      final runtime = await JsRuntime.create();
       addTearDown(runtime.dispose);
       final disposed = await runtime.createContext();
       final sibling = await runtime.createContext();
       final started = Completer<void>();
 
-      await disposed.bindCallback('slowHost', (_) async {
+      await disposed.injectFunction('slowHost', (_) async {
         started.complete();
         await Future<void>.delayed(const Duration(milliseconds: 20));
         return 1;
@@ -881,20 +933,20 @@ export function echo(value) {
   );
 
   test('context async evaluation pumps isolated timers', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final first = await runtime.createContext();
     final second = await runtime.createContext();
 
     expect(
-      await first.evalAsync(
+      await first.run(
         'new Promise(resolve => setTimeout(() => resolve(21), 5))',
       ),
       '21',
     );
     expect(await second.eval('typeof result'), 'undefined');
     expect(
-      await second.evalAsync(
+      await second.run(
         'new Promise(resolve => setTimeout(() => resolve(40), 5))',
       ),
       '40',
@@ -902,7 +954,7 @@ export function echo(value) {
   });
 
   test('disposing a context cancels only its timers', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final disposed = await runtime.createContext();
     final sibling = await runtime.createContext();
@@ -910,7 +962,7 @@ export function echo(value) {
     await disposed.eval('setInterval(() => {}, 1)');
     await disposed.dispose();
     expect(
-      await sibling.evalAsync(
+      await sibling.run(
         'new Promise(resolve => setTimeout(() => resolve(42), 5))',
       ),
       '42',
@@ -918,16 +970,16 @@ export function echo(value) {
   });
 
   test('context callback exposes Dart Stream to its JS context', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final context = await runtime.createContext();
 
-    await context.bindCallback(
+    await context.injectFunction(
       'numbers',
       (_) => Stream<Object?>.fromIterable(<Object?>[1, 2, 3]),
     );
     expect(
-      await context.evalAsync('''
+      await context.run('''
 (async () => {
   const values = [];
   for await (const value of await numbers()) values.push(value);
@@ -938,17 +990,36 @@ export function echo(value) {
     );
   });
 
+  test('context injects Dart Stream as a JS async iterable', () async {
+    final runtime = await JsRuntime.create();
+    addTearDown(runtime.dispose);
+    final context = await runtime.createContext();
+
+    await context.injectStream(
+      'numbers',
+      Stream<int>.fromIterable(<int>[1, 2, 3]),
+    );
+    expect(
+      await context.run('''
+const values = [];
+for await (const value of numbers) values.push(value);
+return values.join(',');
+'''),
+      '1,2,3',
+    );
+  });
+
   test('context JS sink emits to its Dart stream', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final context = await runtime.createContext();
     final values = <Object?>[];
     final done = Completer<void>();
-    final stream = await context.bindJsSink('progress');
+    final stream = await context.bindStream('progress');
     final subscription = stream.listen(values.add, onDone: done.complete);
     addTearDown(subscription.cancel);
 
-    await context.evalAsync('''
+    await context.run('''
 (async () => {
   await progress.emit(10);
   await progress.emit(20);
@@ -962,25 +1033,25 @@ export function echo(value) {
   test(
     'contexts install and isolate plugins without rebuilding runtime',
     () async {
-      final runtime = await QuickjsRuntime.create();
+      final runtime = await JsRuntime.create();
       addTearDown(runtime.dispose);
-      final firstPlugin = QuickjsPlugin.singleFile(
+      final firstPlugin = JsPlugin.singleFile(
         id: 'counter',
         version: '1.0.0',
         source: 'export function add(value) { return value + 1; }',
         exports: const <String>['add'],
       );
-      final secondPlugin = QuickjsPlugin.singleFile(
+      final secondPlugin = JsPlugin.singleFile(
         id: 'counter',
         version: '2.0.0',
         source: 'export function add(value) { return value + 10; }',
         exports: const <String>['add'],
       );
       final first = await runtime.createContext(
-        options: QuickjsContextOptions(plugins: <QuickjsPlugin>[firstPlugin]),
+        plugins: <JsPlugin>[firstPlugin],
       );
       final second = await runtime.createContext(
-        options: QuickjsContextOptions(plugins: <QuickjsPlugin>[secondPlugin]),
+        plugins: <JsPlugin>[secondPlugin],
       );
 
       await first.validatePlugin(firstPlugin);
@@ -991,11 +1062,11 @@ export function echo(value) {
   );
 
   test('context loads a plugin in place and preserves globals', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
     final context = await runtime.createContext();
     await context.eval('globalThis.beforeMount = 41');
-    final plugin = QuickjsPlugin.singleFile(
+    final plugin = JsPlugin.singleFile(
       id: 'dynamic',
       version: '1.0.0',
       source: 'export function read() { return globalThis.beforeMount + 1; }',
@@ -1009,21 +1080,19 @@ export function echo(value) {
   });
 
   test('failed batched context initialization releases the context', () async {
-    final runtime = await QuickjsRuntime.create();
+    final runtime = await JsRuntime.create();
     addTearDown(runtime.dispose);
 
     await expectLater(
       runtime.createContext(
-        options: const QuickjsContextOptions(
-          environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript.js(
-              name: 'broken-context-bootstrap.js',
-              source: 'throw new Error("bootstrap failed")',
-            ),
-          ],
-        ),
+        scripts: const <JsScript>[
+          JsScript.js(
+            name: 'broken-context-bootstrap.js',
+            source: 'throw new Error("bootstrap failed")',
+          ),
+        ],
       ),
-      throwsA(isA<JsException>()),
+      throwsA(isA<JsThrownException>()),
     );
     expect(runtime.activeContextCount, 0);
 
@@ -1071,7 +1140,7 @@ Future<void> _expectHundredQueuedEvals(Quickjs engine) async {
 }
 
 Future<void> _waitForContextValue(
-  QuickjsContext context,
+  JsContext context,
   String expression,
   String expected,
 ) async {

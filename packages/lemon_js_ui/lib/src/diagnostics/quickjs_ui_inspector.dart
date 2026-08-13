@@ -146,8 +146,8 @@ final class QuickjsUiInspector extends ChangeNotifier {
     required Map<String, Object?> props,
     required Object? state,
     required QuickjsUiNode? node,
-    required QuickjsPlugin? plugin,
-    required List<QuickjsHostMount> mounts,
+    required JsPlugin? plugin,
+    required List<JsFeatures> features,
     Object? error,
   }) {
     final pageName = plugin?.manifest.metadata['name'];
@@ -162,7 +162,7 @@ final class QuickjsUiInspector extends ChangeNotifier {
       manifest: QuickjsUiPageSnapshot.manifestFor(plugin),
       lastAction: _lastAction,
       lifecycle: lifecycleTimeline,
-      hostApis: QuickjsUiPageSnapshot.hostApisFor(mounts),
+      hostApis: QuickjsUiPageSnapshot.hostApisFor(features),
       resources: QuickjsUiPageSnapshot.resourcesFor(plugin),
       network: networkRecords.map((record) => record.toMap()).toList(),
       diff: _lastDiff,
@@ -175,8 +175,8 @@ final class QuickjsUiInspector extends ChangeNotifier {
     required Map<String, Object?> props,
     required Object? state,
     required QuickjsUiNode? node,
-    required QuickjsPlugin? plugin,
-    required List<QuickjsHostMount> mounts,
+    required JsPlugin? plugin,
+    required List<JsFeatures> features,
     Object? error,
   }) {
     return buildSnapshot(
@@ -184,7 +184,7 @@ final class QuickjsUiInspector extends ChangeNotifier {
       state: state,
       node: node,
       plugin: plugin,
-      mounts: mounts,
+      features: features,
       error: error,
     ).toMap();
   }

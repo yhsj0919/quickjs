@@ -25,27 +25,27 @@ final class _MemoryAssetBundle extends CachingAssetBundle {
 }
 
 void main() {
-  test('QuickjsHttpSession supplies shared Fetch and XHR configuration', () {
-    final session = QuickjsHttpSession(
+  test('JsHttpSession supplies shared Fetch and XHR configuration', () {
+    final session = JsHttpSession(
       allowedOrigins: const <String>{'https://example.com'},
       timeout: const Duration(seconds: 12),
       defaultHeaders: const <String, String>{'X-Session': 'shared'},
     );
     addTearDown(session.close);
 
-    final mount = QuickjsFetchMount.session(session);
+    final mount = FetchFeatures.session(session);
     expect(mount.session, same(session));
     expect(mount.allowedOrigins, const <String>{'https://example.com'});
     expect(mount.timeout, const Duration(seconds: 12));
     expect(mount.defaultHeaders['x-session'], 'shared');
-    expect(mount.environmentPatches.single.globals, contains('fetch'));
-    expect(mount.environmentPatches.single.globals, contains('XMLHttpRequest'));
+    expect(mount.scripts.single.globals, contains('fetch'));
+    expect(mount.scripts.single.globals, contains('XMLHttpRequest'));
 
     session.close();
     expect(session.isClosed, isTrue);
   });
 
-  test('QuickjsAxiosMount installs Axios asset with Fetch defaults', () async {
+  test('AxiosFeatures installs Axios asset with Fetch defaults', () async {
     final bundle = _MemoryAssetBundle(<String, String>{
       'assets/js/axios.js': '''
 globalThis.axios = {
@@ -66,23 +66,21 @@ globalThis.axios = {
 
     final origin = 'http://${server.address.address}:${server.port}';
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        mounts: <QuickjsHostMount>[
-          QuickjsAxiosMount(
-            assetKey: 'assets/js/axios.js',
-            bundle: bundle,
-            allowedOrigins: <String>{origin},
-            defaultHeaders: const <String, String>{
-              'x-axios-mount-test': 'from-mount',
-            },
-          ),
-        ],
-      ),
+      features: <JsFeatures>[
+        AxiosFeatures(
+          assetKey: 'assets/js/axios.js',
+          bundle: bundle,
+          allowedOrigins: <String>{origin},
+          defaultHeaders: const <String, String>{
+            'x-axios-mount-test': 'from-mount',
+          },
+        ),
+      ],
     );
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evalAsync('''
+      await engine.run('''
 const response = await axios.get('$origin/axios');
 return [typeof fetch, response.status, response.data].join('/');
 '''),
@@ -90,7 +88,7 @@ return [typeof fetch, response.status, response.data].join('/');
     );
   });
 
-  test('QuickjsFetchMount allows every origin by default', () async {
+  test('FetchFeatures allows every origin by default', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
@@ -100,14 +98,12 @@ return [typeof fetch, response.status, response.data].join('/');
 
     final origin = 'http://${server.address.address}:${server.port}';
     final engine = await Quickjs.create(
-      options: QuickjsRuntimeOptions(
-        mounts: <QuickjsHostMount>[QuickjsFetchMount(maxResponseBytes: 4096)],
-      ),
+      features: <JsFeatures>[FetchFeatures(maxResponseBytes: 4096)],
     );
     addTearDown(engine.dispose);
 
     expect(
-      await engine.evalAsync('''
+      await engine.run('''
 const response = await fetch('$origin/default');
 return await response.text();
 '''),
@@ -116,7 +112,7 @@ return await response.text();
   });
 
   test(
-    'QuickjsFetchMount enforces policy and exposes Fetch response APIs',
+    'FetchFeatures enforces policy and exposes Fetch response APIs',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
@@ -144,22 +140,20 @@ return await response.text();
 
       final origin = 'http://${server.address.address}:${server.port}';
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsFetchMount(
-              allowedOrigins: <String>{origin},
-              maxResponseBytes: 4096,
-              defaultHeaders: const <String, String>{
-                'x-default-test': 'from-mount',
-              },
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          FetchFeatures(
+            allowedOrigins: <String>{origin},
+            maxResponseBytes: 4096,
+            defaultHeaders: const <String, String>{
+              'x-default-test': 'from-mount',
+            },
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const response = await fetch('$origin/echo', {
   method: 'POST',
   headers: { 'x-request-test': 'from-js' },
@@ -184,7 +178,7 @@ return [
       );
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const request = new Request('$origin/redirect', { redirect: 'follow' });
 const response = await fetch(request);
 const payload = await response.json();
@@ -194,7 +188,7 @@ return [response.status, response.redirected, response.url, payload.defaultHeade
       );
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const headers = new Headers({ accept: 'application/json' });
 headers.append('x-request-test', 'page-scenario');
 const request = new Request('$origin/echo', { method: 'GET', headers });
@@ -209,11 +203,11 @@ return [response.status, response.ok, payload.method, bytes.length > 0].join('/'
       );
 
       await expectLater(
-        engine.evalAsync('''
+        engine.run('''
 return await fetch('$origin/redirect', { redirect: 'error' });
 '''),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('redirect:error'),
@@ -222,7 +216,7 @@ return await fetch('$origin/redirect', { redirect: 'error' });
       );
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 return await new Promise((resolve, reject) => {
   const xhr = new XMLHttpRequest();
   const states = [];
@@ -246,7 +240,7 @@ return await new Promise((resolve, reject) => {
       );
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 return await new Promise((resolve, reject) => {
   const xhr = new XMLHttpRequest();
   const events = [];
@@ -264,7 +258,7 @@ return await new Promise((resolve, reject) => {
       );
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 return await new Promise((resolve, reject) => {
   const controller = new AbortController();
   const xhr = new XMLHttpRequest();
@@ -284,9 +278,9 @@ return await new Promise((resolve, reject) => {
       );
 
       await expectLater(
-        engine.evalAsync("return await fetch('https://example.com/');"),
+        engine.run("return await fetch('https://example.com/');"),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('origin is not allowed'),

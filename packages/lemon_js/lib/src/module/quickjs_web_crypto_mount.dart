@@ -8,14 +8,14 @@ import '../runtime/quickjs_runtime_options.dart';
 const _digestProviderName = 'webcrypto.subtle.digest';
 const _hmacProviderName = 'webcrypto.subtle.hmac';
 
-/// Optional Web Crypto compatibility mount.
+/// Optional Web Crypto compatibility features.
 ///
 /// This preset is separate from the runtime core. `randomUUID()` and
 /// `getRandomValues()` prefer a native Web Crypto random source, while
 /// `subtle.digest()` and HMAC use Dart's `package:crypto` through async
 /// providers.
-final class QuickjsWebCryptoMount extends QuickjsHostMount {
-  QuickjsWebCryptoMount({
+final class WebCryptoFeatures extends JsFeatures {
+  WebCryptoFeatures({
     bool randomUUID = true,
     bool getRandomValues = true,
     bool allowInsecureRandomFallback = false,
@@ -23,8 +23,8 @@ final class QuickjsWebCryptoMount extends QuickjsHostMount {
     bool subtleHmac = false,
   }) : super(
          name: 'web-crypto',
-         environmentPatches: <QuickjsHostScript>[
-           QuickjsHostScript.js(
+         scripts: <JsScript>[
+           JsScript.js(
              name: 'host:web-crypto.js',
              globals: const <String>['crypto'],
              source: _webCryptoHostScriptSource(
@@ -38,17 +38,17 @@ final class QuickjsWebCryptoMount extends QuickjsHostMount {
              ),
            ),
          ],
-         providers: <QuickjsHostProvider>[
+         providers: <JsProvider>[
            if (subtleDigest) _digestProvider,
            if (subtleHmac) _hmacProvider,
          ],
        );
 }
 
-final QuickjsHostProvider _digestProvider = QuickjsHostProvider.dart(
+final JsProvider _digestProvider = JsProvider.dart(
   name: _digestProviderName,
   debugName: 'host:webcrypto.subtle.digest',
-  implementation: QuickjsHostProviderImplementation.dart,
+  implementation: JsProviderImplementation.dart,
   callback: (args, context) async {
     context.throwIfCancelled();
     final algorithm = args.isNotEmpty ? '${args[0]}' : '';
@@ -61,10 +61,10 @@ final QuickjsHostProvider _digestProvider = QuickjsHostProvider.dart(
   },
 );
 
-final QuickjsHostProvider _hmacProvider = QuickjsHostProvider.dart(
+final JsProvider _hmacProvider = JsProvider.dart(
   name: _hmacProviderName,
   debugName: 'host:webcrypto.subtle.hmac',
-  implementation: QuickjsHostProviderImplementation.dart,
+  implementation: JsProviderImplementation.dart,
   callback: (args, context) async {
     context.throwIfCancelled();
     final algorithm = args.isNotEmpty ? '${args[0]}' : '';
@@ -240,7 +240,7 @@ String _webCryptoHostScriptSource({
         : '';
     const normalizeHmacAlgorithm = (algorithm) => {
       if (!algorithm || typeof algorithm !== 'object' || String(algorithm.name || '').toUpperCase() !== 'HMAC') {
-        throw new Error('crypto.subtle only supports HMAC keys in this mount');
+        throw new Error('crypto.subtle only supports HMAC keys in this features');
       }
       const hash = normalizeHashName(algorithm.hash);
       if (!hash) {

@@ -47,13 +47,13 @@ Future<void> _waitFor(bool Function() condition) async {
   }
 }
 
-bool _jsExceptionMentionsSource(JsException error, String sourceName) {
+bool _jsExceptionMentionsSource(JsThrownException error, String sourceName) {
   return error.fileName == sourceName ||
       (error.stack?.contains(sourceName) ?? false);
 }
 
-QuickjsSourceMap _testSourceMap({String file = 'bundle.js'}) {
-  return QuickjsSourceMap.fromMap({
+JsSourceMap _testSourceMap({String file = 'bundle.js'}) {
+  return JsSourceMap.fromMap({
     'version': 3,
     'file': file,
     'sources': ['src/main.ts'],
@@ -63,7 +63,7 @@ QuickjsSourceMap _testSourceMap({String file = 'bundle.js'}) {
   });
 }
 
-const _randomUuidHostScript = QuickjsHostScript.js(
+const _randomUuidHostScript = JsScript.js(
   name: 'host:crypto-random-uuid.js',
   source: r'''
 (() => {
@@ -104,7 +104,7 @@ const _randomUuidHostScript = QuickjsHostScript.js(
 ''',
 );
 
-const _hostMathModule = QuickjsHostModule.esModule(
+const _hostMathModule = JsModule.esModule(
   specifier: 'app/math',
   source: '''
 export const value = 41;
@@ -114,7 +114,7 @@ export function add(a, b) {
 ''',
 );
 
-const _hostBufferModule = QuickjsHostModule.esModule(
+const _hostBufferModule = JsModule.esModule(
   specifier: 'buffer',
   source: '''
 export const label = 'host-buffer';
@@ -122,7 +122,7 @@ export const byteLength = (value) => String(value).length;
 ''',
 );
 
-const _hostCryptoModule = QuickjsHostModule.esModule(
+const _hostCryptoModule = JsModule.esModule(
   specifier: 'crypto',
   source: '''
 export const label = 'node-crypto-module';
@@ -132,7 +132,7 @@ export function randomBytes(length) {
 ''',
 );
 
-const _hostPackageMainModule = QuickjsHostModule.esModule(
+const _hostPackageMainModule = JsModule.esModule(
   specifier: 'pkg/main',
   source: '''
 import { value } from './dep';
@@ -140,12 +140,12 @@ export const result = value + 1;
 ''',
 );
 
-const _hostPackageDepModule = QuickjsHostModule.esModule(
+const _hostPackageDepModule = JsModule.esModule(
   specifier: 'pkg/dep',
   source: 'export const value = 9;',
 );
 
-const _hostModuleLoaderMainModule = QuickjsHostModule.esModule(
+const _hostModuleLoaderMainModule = JsModule.esModule(
   specifier: 'loader/main',
   source: '''
 import { value } from './dep';
@@ -153,7 +153,7 @@ export const result = value + 1;
 ''',
 );
 
-const _hostCommonJsModule = QuickjsHostModule.commonJs(
+const _hostCommonJsModule = JsModule.commonJs(
   specifier: 'app/cjs',
   source: '''
 const local = require('./local');
@@ -163,12 +163,12 @@ module.exports = {
 ''',
 );
 
-const _hostCommonJsLocalModule = QuickjsHostModule.commonJs(
+const _hostCommonJsLocalModule = JsModule.commonJs(
   specifier: 'app/local',
   source: 'exports.value = 6;',
 );
 
-const _hostCommonJsLoaderMainModule = QuickjsHostModule.commonJs(
+const _hostCommonJsLoaderMainModule = JsModule.commonJs(
   specifier: 'loader/cjs-main',
   source: '''
 const dep = require('./cjs-dep');
@@ -176,12 +176,12 @@ exports.result = dep.value + 1;
 ''',
 );
 
-const _hostCommonJsBufferModule = QuickjsHostModule.commonJs(
+const _hostCommonJsBufferModule = JsModule.commonJs(
   specifier: 'buffer',
   source: "exports.label = 'commonjs-buffer';",
 );
 
-const _hostCounterModule = QuickjsHostModule.esModule(
+const _hostCounterModule = JsModule.esModule(
   specifier: 'app/counter',
   source: '''
 globalThis.hostModuleImportCount = (globalThis.hostModuleImportCount || 0) + 1;
@@ -189,7 +189,7 @@ export const count = globalThis.hostModuleImportCount;
 ''',
 );
 
-const _hostCommonJsCounterModule = QuickjsHostModule.commonJs(
+const _hostCommonJsCounterModule = JsModule.commonJs(
   specifier: 'app/cjs-counter',
   source: '''
 globalThis.hostCommonJsImportCount = (globalThis.hostCommonJsImportCount || 0) + 1;
@@ -231,7 +231,7 @@ void main() {
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync(r'''
+        await engine.run(r'''
 const encoder = new TextEncoder();
 const encoded = encoder.encode('hello 世界');
 const target = new Uint8Array(5);
@@ -252,7 +252,7 @@ return [
     });
 
     test('emits console events to the configured sink', () async {
-      final events = <QuickjsConsoleEvent>[];
+      final events = <JsConsoleEvent>[];
       final engine = await Quickjs.create(onConsole: events.add);
       addTearDown(engine.dispose);
 
@@ -267,22 +267,22 @@ console.error(new Error("boom"));
       );
 
       await _waitFor(() => events.length == 3);
-      expect(events[0].level, QuickjsConsoleLevel.log);
+      expect(events[0].level, JsConsoleLevel.log);
       expect(events[0].text, 'hello 42 {"ok":true}');
       expect(events[0].args, <Object?>[
         'hello',
         42,
         {'ok': true},
       ]);
-      expect(events[1].level, QuickjsConsoleLevel.warn);
+      expect(events[1].level, JsConsoleLevel.warn);
       expect(events[1].text, 'careful');
-      expect(events[2].level, QuickjsConsoleLevel.error);
+      expect(events[2].level, JsConsoleLevel.error);
       expect(events[2].text, contains('boom'));
       expect(events[2].timestamp, isA<DateTime>());
     });
 
     test('can emit console events repeatedly in one runtime', () async {
-      final events = <QuickjsConsoleEvent>[];
+      final events = <JsConsoleEvent>[];
       final engine = await Quickjs.create(onConsole: events.add);
       addTearDown(engine.dispose);
 
@@ -310,8 +310,8 @@ console.error("error", $i);
     });
 
     test('keeps console events isolated per runtime', () async {
-      final firstEvents = <QuickjsConsoleEvent>[];
-      final secondEvents = <QuickjsConsoleEvent>[];
+      final firstEvents = <JsConsoleEvent>[];
+      final secondEvents = <JsConsoleEvent>[];
       final first = await Quickjs.create(onConsole: firstEvents.add);
       final second = await Quickjs.create(onConsole: secondEvents.add);
       addTearDown(first.dispose);
@@ -322,13 +322,13 @@ console.error("error", $i);
 
       await _waitFor(() => firstEvents.length == 1 && secondEvents.length == 1);
       expect(firstEvents.single.text, 'first');
-      expect(firstEvents.single.level, QuickjsConsoleLevel.log);
+      expect(firstEvents.single.level, JsConsoleLevel.log);
       expect(secondEvents.single.text, 'second');
-      expect(secondEvents.single.level, QuickjsConsoleLevel.error);
+      expect(secondEvents.single.level, JsConsoleLevel.error);
     });
 
-    test('reinstalls console after stop rebuilds the runtime', () async {
-      final events = <QuickjsConsoleEvent>[];
+    test('reinstalls console after restart rebuilds the runtime', () async {
+      final events = <JsConsoleEvent>[];
       final engine = await Quickjs.create(onConsole: events.add);
       addTearDown(engine.dispose);
 
@@ -336,13 +336,13 @@ console.error("error", $i);
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await engine.stop();
+      await engine.restart();
       final error = await running;
       expect(error, isA<JsCancelledException>());
 
       await engine.eval('console.warn("after stop")');
       await _waitFor(() => events.length == 1);
-      expect(events.single.level, QuickjsConsoleLevel.warn);
+      expect(events.single.level, JsConsoleLevel.warn);
       expect(events.single.text, 'after stop');
     });
 
@@ -351,12 +351,12 @@ console.error("error", $i);
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      expect(await engine.evaluateValue('1 + 2'), 3);
-      expect(await engine.evaluateValue('1.5 + 2'), 3.5);
-      expect(await engine.evaluateValue('true'), true);
-      expect(await engine.evaluateValue('"hello"'), 'hello');
-      expect(await engine.evaluateValue('null'), isNull);
-      expect(await engine.evaluateValue('undefined'), isA<JsUndefined>());
+      expect(await engine.eval('1 + 2'), 3);
+      expect(await engine.eval('1.5 + 2'), 3.5);
+      expect(await engine.eval('true'), true);
+      expect(await engine.eval('"hello"'), 'hello');
+      expect(await engine.eval('null'), isNull);
+      expect(await engine.eval('undefined'), isA<JsUndefined>());
     });
 
     // BigInt 鍦?native 鍜?web 涓婇兘搴旀槧灏勪负 Dart BigInt銆?
@@ -365,7 +365,7 @@ console.error("error", $i);
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evaluateValue('9007199254740993n'),
+        await engine.eval('9007199254740993n'),
         BigInt.parse('9007199254740993'),
       );
     });
@@ -375,27 +375,24 @@ console.error("error", $i);
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      expect(await engine.evaluateValue('[1, "two", true, null]'), <Object?>[
+      expect(await engine.eval('[1, "two", true, null]'), <Object?>[
         1,
         'two',
         true,
         null,
       ]);
-      expect(await engine.evaluateValue('({ a: 1, b: "two", c: false })'), {
+      expect(await engine.eval('({ a: 1, b: "two", c: false })'), {
         'a': 1,
         'b': 'two',
         'c': false,
       });
-      expect(
-        await engine.evaluateValue('({ nested: [1, { ok: true }, null] })'),
-        {
-          'nested': [
-            1,
-            {'ok': true},
-            null,
-          ],
-        },
-      );
+      expect(await engine.eval('({ nested: [1, { ok: true }, null] })'), {
+        'nested': [
+          1,
+          {'ok': true},
+          null,
+        ],
+      });
     });
 
     // ArrayBuffer / Uint8Array 鍦?native 鍜?web 涓婇兘搴旀槧灏勪负 Uint8List銆?
@@ -404,11 +401,11 @@ console.error("error", $i);
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evaluateValue('new Uint8Array([1, 2, 255])'),
+        await engine.eval('new Uint8Array([1, 2, 255])'),
         Uint8List.fromList([1, 2, 255]),
       );
       expect(
-        await engine.evaluateValue('new Uint8Array([3, 4, 5]).buffer'),
+        await engine.eval('new Uint8Array([3, 4, 5]).buffer'),
         Uint8List.fromList([3, 4, 5]),
       );
     });
@@ -425,7 +422,7 @@ console.error("error", $i);
         'const value = {}; value.self = value; value',
       ]) {
         await expectLater(
-          engine.evaluateValue(code),
+          engine.eval(code),
           throwsA(isA<JsValueConversionException>()),
         );
       }
@@ -437,7 +434,7 @@ console.error("error", $i);
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evaluateValue(
+        await engine.eval(
           '''
 ({
   sum: intValue + doubleValue,
@@ -525,13 +522,11 @@ console.error("error", $i);
 
     test('loads relative ES module imports consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'lib/dep.mjs' => 'export const value = 40;',
-            'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'lib/dep.mjs' => 'export const value = 40;',
+          'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -547,7 +542,7 @@ globalThis.moduleValue = add(value, 2);
     });
 
     test('calls single-file plugin exports with structured values', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'api1',
         version: '1.0.0',
         exports: const <String>['hello', 'bytes'],
@@ -565,9 +560,7 @@ export function bytes(input) {
 ''',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -604,16 +597,14 @@ export function bytes(input) {
     });
 
     test('reuses plugin call namespace module across repeated calls', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'leakcheck',
         version: '1.0.0',
         exports: const <String>['echo'],
         source: 'export function echo(value) { return value; }',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -647,15 +638,15 @@ export function hello(name) {
 ''',
         'assets/pkg-helper.mjs': "export const suffix = ' from asset';",
       });
-      final singleFile = QuickjsPlugin.singleFileAsset(
+      final singleFile = JsPlugin.singleFileAsset(
         id: 'asset1',
         version: '1.0.0',
         assetKey: 'assets/plugin-main.mjs',
         exports: const <String>['hello'],
         bundle: bundle,
       );
-      final package = QuickjsPlugin.asset(
-        manifest: const QuickjsPluginManifest(
+      final package = JsPlugin.asset(
+        manifest: const JsPluginManifest(
           id: 'asset2',
           version: '1.0.0',
           entry: 'asset2/main',
@@ -668,9 +659,7 @@ export function hello(name) {
         bundle: bundle,
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[singleFile.asMount(), package.asMount()],
-        ),
+        features: <JsFeatures>[singleFile.asFeatures(), package.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -689,14 +678,14 @@ export function hello(name) {
     });
 
     test('creates plugins from inline sources', () async {
-      final singleFile = QuickjsPlugin.singleFile(
+      final singleFile = JsPlugin.singleFile(
         id: 'source1',
         version: '1.0.0',
         source: 'export function hello(name) { return "hello " + name; }',
         exports: const <String>['hello'],
       );
-      final package = QuickjsPlugin.sources(
-        manifest: const QuickjsPluginManifest(
+      final package = JsPlugin.sources(
+        manifest: const JsPluginManifest(
           id: 'source2',
           version: '1.0.0',
           entry: 'source2/main',
@@ -713,9 +702,7 @@ export function hello(name) {
         },
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[singleFile.asMount(), package.asMount()],
-        ),
+        features: <JsFeatures>[singleFile.asFeatures(), package.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -768,13 +755,11 @@ export function hello(name) {
             "export const suffix = ' from zip';",
           ),
         );
-      final plugin = QuickjsZipPlugin.bytes(
+      final plugin = JsZipPlugin.bytes(
         Uint8List.fromList(ZipEncoder().encode(archive)),
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -823,14 +808,12 @@ export function hello(name) {
               "export const suffix = ' from mapped zip';",
             ),
           );
-        final plugin = QuickjsZipPlugin.bytes(
+        final plugin = JsZipPlugin.bytes(
           Uint8List.fromList(ZipEncoder().encode(archive)),
           manifestPath: 'plugins/demo/quickjs-plugin.json',
         );
         final engine = await Quickjs.create(
-          options: QuickjsRuntimeOptions(
-            mounts: <QuickjsHostMount>[plugin.asMount()],
-          ),
+          features: <JsFeatures>[plugin.asFeatures()],
         );
         addTearDown(engine.dispose);
 
@@ -852,15 +835,14 @@ export function hello(name) {
         );
 
       expect(
-        () => QuickjsZipPlugin.bytes(
-          Uint8List.fromList(ZipEncoder().encode(archive)),
-        ),
+        () =>
+            JsZipPlugin.bytes(Uint8List.fromList(ZipEncoder().encode(archive))),
         throwsA(isA<JsValueConversionException>()),
       );
     });
 
     test('wraps plugin lifecycle calls with a plugin client', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'clientApi',
         version: '1.0.0',
         exports: const <String>['hello'],
@@ -881,12 +863,10 @@ export function dispose() {
 ''',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
-      final client = QuickjsPluginClient(engine, plugin);
+      final client = JsPluginClient(engine, plugin);
 
       await client.validate();
       expect(await client.init(<String, Object?>{'locale': 'zh-CN'}), 'zh-CN');
@@ -898,7 +878,7 @@ export function dispose() {
     });
 
     test('exposes mounted plugin details in debug snapshots', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'debugApi',
         version: '1.2.3',
         exports: const <String>['hello'],
@@ -911,9 +891,7 @@ export function dispose() {}
 ''',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount(name: 'debug-plugin')],
-        ),
+        features: <JsFeatures>[plugin.asFeatures(name: 'debug-plugin')],
       );
       addTearDown(engine.dispose);
 
@@ -926,7 +904,7 @@ export function dispose() {}
       expect(detail.exports, const <String>['hello']);
       expect(detail.init, 'init');
       expect(detail.dispose, 'dispose');
-      expect(detail.mountName, 'debug-plugin');
+      expect(detail.featuresName, 'debug-plugin');
       expect(detail.moduleNames, const <String>['debugApi/main']);
     });
 
@@ -947,7 +925,7 @@ export function hello(name) {
         'assets/plugins/demo/modules/helper.js':
             "export const suffix = ' from bundle';",
       });
-      final plugin = await QuickjsPluginBundle.asset(
+      final plugin = await JsPluginBundle.asset(
         manifestAsset: 'assets/plugins/demo/manifest.json',
         modules: const <String, String>{
           'bundleApi/main': 'assets/plugins/demo/main.js',
@@ -956,9 +934,7 @@ export function hello(name) {
         bundle: bundle,
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -970,7 +946,7 @@ export function hello(name) {
     });
 
     test('creates plugin bundles from manifest and module sources', () async {
-      final plugin = QuickjsPluginBundle.sources(
+      final plugin = JsPluginBundle.sources(
         manifestJson: jsonEncode(<String, Object?>{
           'id': 'sourceBundleApi',
           'version': '1.0.0',
@@ -989,9 +965,7 @@ export function hello(name) {
         },
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -1003,8 +977,8 @@ export function hello(name) {
     });
 
     test('calls registered plugins as tool names', () async {
-      QuickjsPlugin plugin(String id, String label) {
-        return QuickjsPlugin.singleFile(
+      JsPlugin plugin(String id, String label) {
+        return JsPlugin.singleFile(
           id: id,
           version: '1.0.0',
           exports: const <String>['run'],
@@ -1015,12 +989,10 @@ export function hello(name) {
       final translator = plugin('translator', 'translate');
       final summary = plugin('summary', 'summarize');
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[translator.asMount(), summary.asMount()],
-        ),
+        features: <JsFeatures>[translator.asFeatures(), summary.asFeatures()],
       );
       addTearDown(engine.dispose);
-      final tools = QuickjsToolRegistry(engine)
+      final tools = JsToolRegistry(engine)
         ..register(translator)
         ..register(summary);
 
@@ -1040,7 +1012,7 @@ export function hello(name) {
     });
 
     test('calls optional plugin lifecycle exports', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'lifecycle',
         version: '1.0.0',
         exports: const <String>['hello'],
@@ -1063,9 +1035,7 @@ export function dispose() {
 ''',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -1088,16 +1058,14 @@ export function dispose() {
     });
 
     test('skips missing plugin lifecycle exports', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'nolifecycle',
         version: '1.0.0',
         exports: const <String>['hello'],
         source: "export function hello() { return 'ok'; }",
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -1108,8 +1076,8 @@ export function dispose() {
     });
 
     test('replaces runtime-mounted plugin versions after rebuild', () async {
-      QuickjsPlugin plugin(String version, String label) {
-        return QuickjsPlugin.singleFile(
+      JsPlugin plugin(String version, String label) {
+        return JsPlugin.singleFile(
           id: 'replaceable',
           version: version,
           exports: const <String>['hello'],
@@ -1122,18 +1090,18 @@ export function dispose() {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.mount(first.asMount());
+      await engine.loadFeatures(first.asFeatures());
       expect(await engine.invokePlugin('hello', const <Object?>[]), 'v1');
-      await engine.mount(
-        second.asMount(),
-        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+      await engine.loadFeatures(
+        second.asFeatures(),
+        conflictPolicy: JsFeaturesConflictPolicy.replace,
       );
       await engine.validatePlugin(second);
       expect(await engine.invokePlugin('hello', const <Object?>[]), 'v2');
     });
 
     test('loads the same plugin into multiple isolated runtimes', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'multiRuntime',
         version: '1.0.0',
         exports: const <String>['next'],
@@ -1146,14 +1114,10 @@ export function next(label) {
 ''',
       );
       final first = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       final second = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(first.dispose);
       addTearDown(second.dispose);
@@ -1173,9 +1137,9 @@ export function next(label) {
     });
 
     test(
-      'requires explicit host mounts for plugin host capabilities',
+      'requires explicit host features for plugin host capabilities',
       () async {
-        final plugin = QuickjsPlugin.singleFile(
+        final plugin = JsPlugin.singleFile(
           id: 'hostCapability',
           version: '1.0.0',
           exports: const <String>['readStorage'],
@@ -1187,24 +1151,17 @@ export function readStorage() {
 ''',
         );
         final disabled = await Quickjs.create(
-          options: QuickjsRuntimeOptions(
-            mounts: <QuickjsHostMount>[plugin.asMount()],
-          ),
+          features: <JsFeatures>[plugin.asFeatures()],
         );
         final enabled = await Quickjs.create(
-          options: QuickjsRuntimeOptions(
-            mounts: <QuickjsHostMount>[
-              QuickjsHostMount.web(),
-              plugin.asMount(),
-            ],
-          ),
+          features: <JsFeatures>[JsFeatures.web(), plugin.asFeatures()],
         );
         addTearDown(disabled.dispose);
         addTearDown(enabled.dispose);
 
         await expectLater(
           disabled.invokePlugin('readStorage', const <Object?>[]),
-          throwsA(isA<JsException>()),
+          throwsA(isA<JsThrownException>()),
         );
         expect(
           await enabled.invokePlugin('readStorage', const <Object?>[]),
@@ -1217,17 +1174,13 @@ export function readStorage() {
       final bundle = _MemoryAssetBundle(<String, String>{
         'assets/bootstrap.js': 'globalThis.assetBootstrapValue = 42;',
       });
-      final script = QuickjsHostScript.asset(
+      final script = JsScript.asset(
         name: 'asset:bootstrap.js',
         assetKey: 'assets/bootstrap.js',
         globals: const <String>['assetBootstrapValue'],
         bundle: bundle,
       );
-      final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          environmentPatches: <QuickjsHostScript>[script],
-        ),
-      );
+      final engine = await Quickjs.create(scripts: <JsScript>[script]);
       addTearDown(engine.dispose);
 
       expect(await engine.eval('assetBootstrapValue'), '42');
@@ -1235,20 +1188,18 @@ export function readStorage() {
 
     test('creates host scripts from inline sources', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount(
-              name: 'inline-sources',
-              environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript.js(
-                  name: 'asset:inline-bootstrap.js',
-                  source: 'globalThis.inlineBootstrapValue = 42;',
-                  globals: <String>['inlineBootstrapValue'],
-                ),
-              ],
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'inline-sources',
+            scripts: <JsScript>[
+              JsScript.js(
+                name: 'asset:inline-bootstrap.js',
+                source: 'globalThis.inlineBootstrapValue = 42;',
+                globals: <String>['inlineBootstrapValue'],
+              ),
+            ],
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -1257,55 +1208,48 @@ export function readStorage() {
 
     test('creates host global wrappers for Dart providers', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'example.echo',
-              callback: (args, _) => 'echo ${args.single}',
-            ),
-          ],
-          environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript.providerGlobals(
-              name: 'test:provider-globals.js',
-              globals: const <String, String>{'echo': 'example.echo'},
-            ),
-          ],
-        ),
+        providers: <JsProvider>[
+          JsProvider.dart(
+            name: 'example.echo',
+            callback: (args, _) => 'echo ${args.single}',
+          ),
+        ],
+        scripts: <JsScript>[
+          JsScript.providerGlobals(
+            name: 'test:provider-globals.js',
+            globals: const <String, String>{'echo': 'example.echo'},
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
-      expect(await engine.evalAsync("return await echo('ok');"), 'echo ok');
+      expect(await engine.run("return await echo('ok');"), 'echo ok');
     });
 
     test('injects provider globals directly', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.global(
-              name: 'directEcho',
-              callback: (args, _) => 'direct ${args.single}',
-            ),
-          ],
-        ),
+        providers: <JsProvider>[
+          JsProvider.global(
+            name: 'directEcho',
+            callback: (args, _) => 'direct ${args.single}',
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
-      expect(
-        await engine.evalAsync("return await directEcho('ok');"),
-        'direct ok',
-      );
+      expect(await engine.run("return await directEcho('ok');"), 'direct ok');
     });
 
     test('calls multi-module plugin package exports', () async {
-      final plugin = QuickjsPlugin(
-        manifest: const QuickjsPluginManifest(
+      final plugin = JsPlugin(
+        manifest: const JsPluginManifest(
           id: 'api2',
           version: '1.0.0',
           entry: 'api2/main',
           exports: <String>['hello'],
         ),
-        modules: const <QuickjsPluginModule>[
-          QuickjsPluginModule(
+        modules: const <JsPluginModule>[
+          JsPluginModule(
             specifier: 'api2/main',
             source: '''
 import { suffix } from './helper';
@@ -1314,16 +1258,14 @@ export function hello(name) {
 }
 ''',
           ),
-          QuickjsPluginModule(
+          JsPluginModule(
             specifier: 'api2/helper',
             source: "export const suffix = ' from helper';",
           ),
         ],
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
@@ -1335,8 +1277,8 @@ export function hello(name) {
     });
 
     test('keeps same export names isolated by plugin namespace', () async {
-      QuickjsPlugin plugin(String id, String label) {
-        return QuickjsPlugin.singleFile(
+      JsPlugin plugin(String id, String label) {
+        return JsPlugin.singleFile(
           id: id,
           version: '1.0.0',
           exports: const <String>['hello'],
@@ -1348,13 +1290,11 @@ export function hello(name) {
       final second = plugin('api4', 'second');
       final third = plugin('api5', 'third');
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            first.asMount(),
-            second.asMount(),
-            third.asMount(),
-          ],
-        ),
+        features: <JsFeatures>[
+          first.asFeatures(),
+          second.asFeatures(),
+          third.asFeatures(),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -1395,13 +1335,13 @@ export function hello(name) {
     });
 
     test('reports plugin contract and module graph errors clearly', () async {
-      final notFunction = QuickjsPlugin.singleFile(
+      final notFunction = JsPlugin.singleFile(
         id: 'api5',
         version: '1.0.0',
         exports: const <String>['hello'],
         source: 'export const hello = 1;',
       );
-      final missingDependency = QuickjsPlugin.singleFile(
+      final missingDependency = JsPlugin.singleFile(
         id: 'api6',
         version: '1.0.0',
         exports: const <String>['hello'],
@@ -1413,19 +1353,17 @@ export function hello() {
 ''',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            notFunction.asMount(),
-            missingDependency.asMount(),
-          ],
-        ),
+        features: <JsFeatures>[
+          notFunction.asFeatures(),
+          missingDependency.asFeatures(),
+        ],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
         engine.validatePlugin(notFunction),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('QuickJS plugin export is not a function'),
@@ -1444,15 +1382,15 @@ export function hello() {
 
     test('rejects plugin namespace and duplicate module conflicts', () {
       expect(
-        () => QuickjsPlugin(
-          manifest: const QuickjsPluginManifest(
+        () => JsPlugin(
+          manifest: const JsPluginManifest(
             id: 'bad',
             version: '1.0.0',
             entry: 'other/main',
             exports: <String>['hello'],
           ),
-          modules: const <QuickjsPluginModule>[
-            QuickjsPluginModule(
+          modules: const <JsPluginModule>[
+            JsPluginModule(
               specifier: 'other/main',
               source: "export function hello() { return 'bad'; }",
             ),
@@ -1467,19 +1405,19 @@ export function hello() {
         ),
       );
       expect(
-        () => QuickjsPlugin(
-          manifest: const QuickjsPluginManifest(
+        () => JsPlugin(
+          manifest: const JsPluginManifest(
             id: 'dup',
             version: '1.0.0',
             entry: 'dup/main',
             exports: <String>['hello'],
           ),
-          modules: const <QuickjsPluginModule>[
-            QuickjsPluginModule(
+          modules: const <JsPluginModule>[
+            JsPluginModule(
               specifier: 'dup/main',
               source: "export function hello() { return 'first'; }",
             ),
-            QuickjsPluginModule(
+            JsPluginModule(
               specifier: 'dup/main',
               source: "export function hello() { return 'second'; }",
             ),
@@ -1496,7 +1434,7 @@ export function hello() {
     });
 
     test('reports invalid plugin lifecycle exports clearly', () async {
-      final plugin = QuickjsPlugin.singleFile(
+      final plugin = JsPlugin.singleFile(
         id: 'badlifecycle',
         version: '1.0.0',
         exports: const <String>['hello'],
@@ -1509,16 +1447,14 @@ export function hello() {
 ''',
       );
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[plugin.asMount()],
-        ),
+        features: <JsFeatures>[plugin.asFeatures()],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
         engine.validatePlugin(plugin),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('QuickJS plugin lifecycle export is not a function'),
@@ -1529,14 +1465,12 @@ export function hello() {
 
     test('caches imported ES modules in one runtime consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'counter.mjs' =>
-              'globalThis.moduleImportCount = (globalThis.moduleImportCount || 0) + 1;'
-                  'export const value = globalThis.moduleImportCount;',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'counter.mjs' =>
+            'globalThis.moduleImportCount = (globalThis.moduleImportCount || 0) + 1;'
+                'export const value = globalThis.moduleImportCount;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -1555,9 +1489,7 @@ export function hello() {
     });
 
     test('reports missing ES module imports consistently', () async {
-      final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(moduleLoader: (_) => null),
-      );
+      final engine = await Quickjs.create(moduleLoader: (_) => null);
       addTearDown(engine.dispose);
 
       await expectLater(
@@ -1566,7 +1498,7 @@ export function hello() {
       );
     });
 
-    test('maps ES module throw to JsException consistently', () async {
+    test('maps ES module throw to JsThrownException consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
@@ -1576,7 +1508,7 @@ export function hello() {
           name: 'module-error.mjs',
         ),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('module boom'),
@@ -1587,14 +1519,12 @@ export function hello() {
 
     test('loads relative CommonJS require consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'lib/dep.js' => 'exports.value = 40;',
-            'shared/add.js' =>
-              'module.exports = function add(a, b) { return a + b; };',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'lib/dep.js' => 'exports.value = 40;',
+          'shared/add.js' =>
+            'module.exports = function add(a, b) { return a + b; };',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -1612,12 +1542,10 @@ exports.value = globalThis.commonJsValue;
 
     test('supports CommonJS module.exports consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'answer.js' => 'module.exports = 42;',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'answer.js' => 'module.exports = 42;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -1633,14 +1561,12 @@ exports.value = globalThis.commonJsValue;
 
     test('caches CommonJS modules in one runtime consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'counter.js' =>
-              'globalThis.commonJsImportCount = (globalThis.commonJsImportCount || 0) + 1;'
-                  'exports.count = globalThis.commonJsImportCount;',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'counter.js' =>
+            'globalThis.commonJsImportCount = (globalThis.commonJsImportCount || 0) + 1;'
+                'exports.count = globalThis.commonJsImportCount;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -1659,9 +1585,7 @@ exports.value = globalThis.commonJsValue;
     });
 
     test('reports missing CommonJS modules consistently', () async {
-      final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(moduleLoader: (_) => null),
-      );
+      final engine = await Quickjs.create(moduleLoader: (_) => null);
       addTearDown(engine.dispose);
 
       await expectLater(
@@ -1674,15 +1598,15 @@ exports.value = globalThis.commonJsValue;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final add = await engine.evaluateHandle('''
+      final add = await engine.bindFunction('''
 function add(a, b) {
   return a + b;
 }
 add
 ''');
 
-      expect(await add.call([20, 22]), '42');
-      expect(await add.call([1, 2]), '3');
+      expect(await add.call([20, 22]), 42);
+      expect(await add.callRaw([1, 2]), '3');
     });
 
     test(
@@ -1691,7 +1615,7 @@ add
         final engine = await Quickjs.create();
         addTearDown(engine.dispose);
 
-        final summarize = await engine.evaluateHandle(
+        final summarize = await engine.bindFunction(
           '(input) => input.name + ":" + input.values.join(",")',
         );
 
@@ -1711,21 +1635,22 @@ add
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final add = await engine.evaluateHandle('''
+      final add = await engine.bindFunction('''
 async (a, b) => {
   await new Promise((resolve) => setTimeout(resolve, 1));
   return a + b;
 }
 ''');
 
-      expect(await add.callAsync([20, 22]), '42');
+      expect(await add.run([20, 22]), 42);
+      expect(await add.runRaw([1, 2]), '3');
     });
 
     test('maps Promise rejection from function handles consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final fail = await engine.evaluateHandle('''
+      final fail = await engine.bindFunction('''
 async () => {
   await new Promise((resolve) => setTimeout(resolve, 1));
   throw new Error('handle async boom');
@@ -1733,9 +1658,9 @@ async () => {
 ''');
 
       await expectLater(
-        fail.callAsync(const []),
+        fail.run(const []),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.toString(),
             'message',
             contains('handle async boom'),
@@ -1749,7 +1674,7 @@ async () => {
       addTearDown(engine.dispose);
 
       await expectLater(
-        engine.evaluateHandle('42'),
+        engine.bindFunction('42'),
         throwsA(isA<JsValueConversionException>()),
       );
     });
@@ -1760,8 +1685,8 @@ async () => {
       addTearDown(first.dispose);
       addTearDown(second.dispose);
 
-      final firstHandle = await first.evaluateHandle('() => "first"');
-      final secondHandle = await second.evaluateHandle('() => "second"');
+      final firstHandle = await first.bindFunction('() => "first"');
+      final secondHandle = await second.bindFunction('() => "second"');
 
       expect(await firstHandle.call(const []), 'first');
       expect(await secondHandle.call(const []), 'second');
@@ -1771,7 +1696,7 @@ async () => {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final loop = await engine.evaluateHandle('() => { while (true) {} }');
+      final loop = await engine.bindFunction('() => { while (true) {} }');
 
       await expectLater(
         loop.call(const [], timeout: const Duration(milliseconds: 50)),
@@ -1784,12 +1709,10 @@ async () => {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final pending = await engine.evaluateHandle(
-        '() => new Promise(() => {})',
-      );
+      final pending = await engine.bindFunction('() => new Promise(() => {})');
 
       await expectLater(
-        pending.callAsync(const [], timeout: const Duration(milliseconds: 50)),
+        pending.run(const [], timeout: const Duration(milliseconds: 50)),
         throwsA(isA<JsTimeoutException>()),
       );
       expect(await engine.eval('21 * 2'), '42');
@@ -1799,7 +1722,7 @@ async () => {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final loop = await engine.evaluateHandle('() => { while (true) {} }');
+      final loop = await engine.bindFunction('() => { while (true) {} }');
       final running = loop.call(const []);
       final cancelFuture = Future<void>.delayed(
         const Duration(milliseconds: 50),
@@ -1813,7 +1736,7 @@ async () => {
 
     test('function handles reject calls after dispose consistently', () async {
       final engine = await Quickjs.create();
-      final add = await engine.evaluateHandle('(a, b) => a + b');
+      final add = await engine.bindFunction('(a, b) => a + b');
 
       await engine.dispose();
 
@@ -1822,7 +1745,7 @@ async () => {
         throwsA(isA<JsRuntimeClosedException>()),
       );
       await expectLater(
-        add.callAsync([1, 2]),
+        add.run([1, 2]),
         throwsA(isA<JsRuntimeClosedException>()),
       );
     });
@@ -1831,9 +1754,9 @@ async () => {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final add = await engine.evaluateHandle('(a, b) => a + b');
+      final add = await engine.bindFunction('(a, b) => a + b');
 
-      expect(await add.call([20, 22]), '42');
+      expect(await add.call([20, 22]), 42);
       await add.dispose();
       await add.dispose();
 
@@ -1848,7 +1771,7 @@ async () => {
         ),
       );
       await expectLater(
-        add.callAsync([1, 2]),
+        add.run([1, 2]),
         throwsA(
           isA<JsRuntimeClosedException>().having(
             (error) => error.message,
@@ -1858,15 +1781,15 @@ async () => {
         ),
       );
 
-      final multiply = await engine.evaluateHandle('(a, b) => a * b');
-      expect(await multiply.call([6, 7]), '42');
+      final multiply = await engine.bindFunction('(a, b) => a * b');
+      expect(await multiply.call([6, 7]), 42);
     });
 
     test(
       'disposing function handles after runtime dispose is a no-op',
       () async {
         final engine = await Quickjs.create();
-        final add = await engine.evaluateHandle('(a, b) => a + b');
+        final add = await engine.bindFunction('(a, b) => a + b');
 
         await engine.dispose();
         await add.dispose();
@@ -1879,9 +1802,14 @@ async () => {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bindObject(
+      await engine.injectObject(
         'user',
-        const QuickjsObjectProxy(properties: {'name': 'Tom', 'age': 42}),
+        JsObject(
+          target: Object(),
+          members: const JsMembers(
+            values: [JsValue('name', 'Tom'), JsValue('age', 42)],
+          ),
+        ),
       );
 
       expect(await engine.eval('user.name + ":" + user.age'), 'Tom:42');
@@ -1898,24 +1826,28 @@ async () => {
       addTearDown(engine.dispose);
       var name = 'Tom';
 
-      await engine.bindObject(
+      await engine.injectObject(
         'profile',
-        QuickjsObjectProxy(
-          accessors: {
-            'name': QuickjsObjectAccessor(
-              get: () => name,
-              set: (value) {
-                name = value as String;
-              },
-            ),
-            'readonly': QuickjsObjectAccessor(get: () => 'fixed'),
-          },
+        JsObject(
+          target: Object(),
+          members: JsMembers(
+            accessors: [
+              JsAccessor(
+                'name',
+                get: (_) => name,
+                set: (_, value) {
+                  name = value as String;
+                },
+              ),
+              JsAccessor('readonly', get: (_) => 'fixed'),
+            ],
+          ),
         ),
       );
 
-      expect(await engine.evalAsync('return await profile.name;'), 'Tom');
+      expect(await engine.run('return await profile.name;'), 'Tom');
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 profile.name = 'Jerry';
 await new Promise((resolve) => setTimeout(resolve, 1));
 return await profile.name;
@@ -1924,7 +1856,7 @@ return await profile.name;
       );
       expect(name, 'Jerry');
       expect(
-        await engine.evalAsync(
+        await engine.run(
           'return Reflect.set(profile, "readonly", "changed") + ":" + '
           'await profile.readonly;',
         ),
@@ -1936,23 +1868,27 @@ return await profile.name;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bindObject(
+      await engine.injectObject(
         'profile',
-        QuickjsObjectProxy(
-          accessors: {
-            'name': QuickjsObjectAccessor(
-              get: () {
-                throw StateError('getter failed');
-              },
-            ),
-          },
+        JsObject(
+          target: Object(),
+          members: JsMembers(
+            accessors: [
+              JsAccessor(
+                'name',
+                get: (_) {
+                  throw StateError('getter failed');
+                },
+              ),
+            ],
+          ),
         ),
       );
 
       await expectLater(
-        engine.evalAsync('return await profile.name;'),
+        engine.run('return await profile.name;'),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('getter failed'),
@@ -1965,29 +1901,27 @@ return await profile.name;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final handle = await engine.bindObject(
+      final handle = await engine.injectObject(
         'calculator',
-        QuickjsObjectProxy(
-          properties: const {'name': 'calc'},
-          methods: {
-            'add': (args) {
-              return (args[0] as num).toInt() + (args[1] as num).toInt();
-            },
-            'label': (args) async {
-              return '${args.single}:${DateTime.utc(2024).year}';
-            },
-          },
+        JsObject(
+          target: Object(),
+          members: JsMembers(
+            values: const [JsValue('name', 'calc')],
+            methods: [
+              JsMethod('add', (_, args) {
+                return (args[0] as num).toInt() + (args[1] as num).toInt();
+              }),
+              JsMethod('label', (_, args) async {
+                return '${args.single}:${DateTime.utc(2024).year}';
+              }),
+            ],
+          ),
         ),
       );
 
+      expect(await engine.run('return await calculator.add(20, 22);'), 42);
       expect(
-        await engine.evalAsync('return await calculator.add(20, 22);'),
-        '42',
-      );
-      expect(
-        await engine.evalAsync(
-          'return await calculator.label(calculator.name);',
-        ),
+        await engine.run('return await calculator.label(calculator.name);'),
         'calc:2024',
       );
       expect(handle.name, 'calculator');
@@ -1998,12 +1932,15 @@ return await profile.name;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final handle = await engine.bindObject(
+      final handle = await engine.injectObject(
         'service',
-        QuickjsObjectProxy(methods: {'ping': (_) => 'pong'}),
+        JsObject(
+          target: Object(),
+          members: JsMembers(methods: [JsMethod('ping', (_, _) => 'pong')]),
+        ),
       );
 
-      expect(await engine.evalAsync('return await service.ping();'), 'pong');
+      expect(await engine.run('return await service.ping();'), 'pong');
       expect(
         await engine.eval(
           'const quickjsObjectProxyKeys = Object.keys(globalThis).filter((key) => '
@@ -2034,9 +1971,9 @@ return await profile.name;
         '0',
       );
       await expectLater(
-        engine.evalAsync('return await leakedPing();'),
+        engine.run('return await leakedPing();'),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('not bound'),
@@ -2052,24 +1989,28 @@ return await profile.name;
         addTearDown(engine.dispose);
         var name = 'Tom';
 
-        final handle = await engine.bindObject(
+        final handle = await engine.injectObject(
           'service',
-          QuickjsObjectProxy(
-            properties: const {'role': 'admin'},
-            accessors: {
-              'name': QuickjsObjectAccessor(
-                get: () => name,
-                set: (value) {
-                  name = value as String;
-                },
-              ),
-            },
-            methods: {'ping': (_) => 'pong'},
+          JsObject(
+            target: Object(),
+            members: JsMembers(
+              values: const [JsValue('role', 'admin')],
+              accessors: [
+                JsAccessor(
+                  'name',
+                  get: (_) => name,
+                  set: (_, value) {
+                    name = value as String;
+                  },
+                ),
+              ],
+              methods: [JsMethod('ping', (_, _) => 'pong')],
+            ),
           ),
         );
 
         expect(
-          await engine.evalAsync(
+          await engine.run(
             'globalThis.leakedService = service;'
             'globalThis.leakedPing = service.ping;'
             'return await service.name + ":" + service.role + ":" + '
@@ -2088,9 +2029,9 @@ return await profile.name;
           'return await leakedPing();',
         ]) {
           await expectLater(
-            engine.evalAsync(code),
+            engine.run(code),
             throwsA(
-              isA<JsException>().having(
+              isA<JsThrownException>().having(
                 (error) => error.message,
                 'message',
                 contains('object proxy is disposed'),
@@ -2106,9 +2047,12 @@ return await profile.name;
       'disposing Dart object proxy handles after runtime dispose is a no-op',
       () async {
         final engine = await Quickjs.create();
-        final handle = await engine.bindObject(
+        final handle = await engine.injectObject(
           'service',
-          QuickjsObjectProxy(methods: {'ping': (_) => 'pong'}),
+          JsObject(
+            target: Object(),
+            members: JsMembers(methods: [JsMethod('ping', (_, _) => 'pong')]),
+          ),
         );
 
         await engine.dispose();
@@ -2123,21 +2067,24 @@ return await profile.name;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bindObject(
+      await engine.injectObject(
         'service',
-        QuickjsObjectProxy(
-          methods: {
-            'fail': (_) {
-              throw StateError('proxy failed');
-            },
-          },
+        JsObject(
+          target: Object(),
+          members: JsMembers(
+            methods: [
+              JsMethod('fail', (_, _) {
+                throw StateError('proxy failed');
+              }),
+            ],
+          ),
         ),
       );
 
       await expectLater(
-        engine.evalAsync('return await service.fail();'),
+        engine.run('return await service.fail();'),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('proxy failed'),
@@ -2153,39 +2100,49 @@ return await profile.name;
         addTearDown(engine.dispose);
 
         await expectLater(
-          engine.bindObject(
+          engine.injectObject(
             'invalidProxy',
-            const QuickjsObjectProxy(properties: {'not-valid': 1}),
-          ),
-          throwsA(isA<JsValueConversionException>()),
-        );
-        await expectLater(
-          engine.bindObject(
-            'invalidProxy',
-            QuickjsObjectProxy(
-              properties: const {'value': 1},
-              methods: {'value': (_) => null},
+            JsObject(
+              target: Object(),
+              members: const JsMembers(values: [JsValue('not-valid', 1)]),
             ),
           ),
           throwsA(isA<JsValueConversionException>()),
         );
         await expectLater(
-          engine.bindObject(
+          engine.injectObject(
             'invalidProxy',
-            const QuickjsObjectProxy(
-              accessors: {'value': QuickjsObjectAccessor()},
+            JsObject(
+              target: Object(),
+              members: JsMembers(
+                values: const [JsValue('value', 1)],
+                methods: [JsMethod('value', (_, _) => null)],
+              ),
             ),
           ),
           throwsA(isA<JsValueConversionException>()),
         );
         await expectLater(
-          engine.bindObject(
+          engine.injectObject(
             'invalidProxy',
-            QuickjsObjectProxy(
-              accessors: const {
-                'value': QuickjsObjectAccessor(get: _objectProxyTestGetter),
-              },
-              methods: {'value': (_) => null},
+            JsObject(
+              target: Object(),
+              members: const JsMembers(accessors: [JsAccessor('value')]),
+            ),
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+        await expectLater(
+          engine.injectObject(
+            'invalidProxy',
+            JsObject(
+              target: Object(),
+              members: JsMembers(
+                accessors: [
+                  JsAccessor('value', get: (_) => _objectProxyTestGetter()),
+                ],
+                methods: [JsMethod('value', (_, _) => null)],
+              ),
             ),
           ),
           throwsA(isA<JsValueConversionException>()),
@@ -2201,7 +2158,10 @@ return await profile.name;
         await engine.dispose();
 
         await expectLater(
-          engine.bindObject('user', const QuickjsObjectProxy()),
+          engine.injectObject(
+            'user',
+            JsObject(target: Object(), members: const JsMembers()),
+          ),
           throwsA(isA<JsRuntimeClosedException>()),
         );
       },
@@ -2213,35 +2173,41 @@ return await profile.name;
         final engine = await Quickjs.create();
         addTearDown(engine.dispose);
 
-        final handle = await engine.bindClass<_TestUser>(
+        final handle = await engine.injectClass<_TestUser>(
           'User',
-          QuickjsClass<_TestUser>(
-            constructor: (args) => _TestUser(args.single as String),
-            accessors: {
-              'name': QuickjsInstanceAccessor<_TestUser>(
-                get: (user) => user.name,
-                set: (user, value) {
-                  user.name = value as String;
-                },
-              ),
-            },
-            methods: {
-              'greet': (user, args) =>
-                  'Hello ${args.single}, I am ${user.name}',
-            },
+          JsClass<_TestUser>(
+            create: (args) => _TestUser(args.single as String),
+            members: JsMembers<_TestUser>(
+              values: const [JsValue('kind', 'user')],
+              accessors: [
+                JsAccessor<_TestUser>(
+                  'name',
+                  get: (user) => user.name,
+                  set: (user, value) {
+                    user.name = value as String;
+                  },
+                ),
+              ],
+              methods: [
+                JsMethod<_TestUser>(
+                  'greet',
+                  (user, args) => 'Hello ${args.single}, I am ${user.name}',
+                ),
+              ],
+            ),
           ),
         );
 
         expect(
-          await engine.evalAsync('''
+          await engine.run('''
 const user = new User('Tom');
 const before = await user.name;
 user.name = 'Jerry';
 const after = await user.name;
 const greeting = await user.greet('Alice');
-return before + ':' + after + ':' + greeting + ':' + (user instanceof User);
+return before + ':' + after + ':' + greeting + ':' + user.kind + ':' + (user instanceof User);
 '''),
-          'Tom:Jerry:Hello Alice, I am Jerry:true',
+          'Tom:Jerry:Hello Alice, I am Jerry:user:true',
         );
         expect(handle.name, 'User');
         expect(handle.disposed, isFalse);
@@ -2252,30 +2218,33 @@ return before + ':' + after + ':' + greeting + ':' + (user instanceof User);
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bindClass<_TestUser>(
+      await engine.injectClass<_TestUser>(
         'User',
-        QuickjsClass<_TestUser>(
-          constructor: (args) => _TestUser(args.single as String),
-          accessors: {
-            'name': QuickjsInstanceAccessor<_TestUser>(
-              get: (user) => user.name,
-              set: (user, value) {
-                user.name = value as String;
-              },
-            ),
-          },
+        JsClass<_TestUser>(
+          create: (args) => _TestUser(args.single as String),
+          members: JsMembers<_TestUser>(
+            accessors: [
+              JsAccessor<_TestUser>(
+                'name',
+                get: (user) => user.name,
+                set: (user, value) {
+                  user.name = value as String;
+                },
+              ),
+            ],
+          ),
         ),
       );
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 globalThis.currentUser = new User('Tom');
 return await currentUser.name;
 '''),
         'Tom',
       );
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 globalThis.currentUser ??= new User('Tom');
 const before = await currentUser.name;
 currentUser.name = 'Jerry';
@@ -2290,23 +2259,25 @@ return before + ' -> ' + after;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bindClass<_TestUser>(
+      await engine.injectClass<_TestUser>(
         'User',
-        QuickjsClass<_TestUser>(
-          constructor: (_) {
+        JsClass<_TestUser>(
+          create: (_) {
             throw StateError('constructor failed');
           },
-          methods: {'name': (user, _) => user.name},
+          members: JsMembers<_TestUser>(
+            methods: [JsMethod('name', (user, _) => user.name)],
+          ),
         ),
       );
 
       await expectLater(
-        engine.evalAsync('''
+        engine.run('''
 const user = new User('Tom');
 return await user.name();
 '''),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('constructor failed'),
@@ -2319,24 +2290,27 @@ return await user.name();
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      final handle = await engine.bindClass<_TestUser>(
+      final handle = await engine.injectClass<_TestUser>(
         'User',
-        QuickjsClass<_TestUser>(
-          constructor: (args) => _TestUser(args.single as String),
-          accessors: {
-            'name': QuickjsInstanceAccessor<_TestUser>(
-              get: (user) => user.name,
-              set: (user, value) {
-                user.name = value as String;
-              },
-            ),
-          },
-          methods: {'greet': (user, _) => 'Hello ${user.name}'},
+        JsClass<_TestUser>(
+          create: (args) => _TestUser(args.single as String),
+          members: JsMembers<_TestUser>(
+            accessors: [
+              JsAccessor<_TestUser>(
+                'name',
+                get: (user) => user.name,
+                set: (user, value) {
+                  user.name = value as String;
+                },
+              ),
+            ],
+            methods: [JsMethod('greet', (user, _) => 'Hello ${user.name}')],
+          ),
         ),
       );
 
       expect(
-        await engine.evalAsync(
+        await engine.run(
           'globalThis.leakedUser = new User("Tom");'
           'return await leakedUser.greet();',
         ),
@@ -2353,9 +2327,9 @@ return await user.name();
         'return await leakedUser.greet();',
       ]) {
         await expectLater(
-          engine.evalAsync(code),
+          engine.run(code),
           throwsA(
-            isA<JsException>().having(
+            isA<JsThrownException>().having(
               (error) => error.message,
               'message',
               contains('class instance is disposed'),
@@ -2369,10 +2343,11 @@ return await user.name();
       'disposing Dart class handles after runtime dispose is a no-op',
       () async {
         final engine = await Quickjs.create();
-        final handle = await engine.bindClass<_TestUser>(
+        final handle = await engine.injectClass<_TestUser>(
           'User',
-          QuickjsClass<_TestUser>(
-            constructor: (args) => _TestUser(args.single as String),
+          JsClass<_TestUser>(
+            create: (args) => _TestUser(args.single as String),
+            members: const JsMembers(),
           ),
         );
 
@@ -2389,28 +2364,26 @@ return await user.name();
       addTearDown(engine.dispose);
 
       await expectLater(
-        engine.bindClass<_TestUser>(
+        engine.injectClass<_TestUser>(
           'Invalid',
-          QuickjsClass<_TestUser>(
-            constructor: _classTestUserConstructor,
-            accessors: const {
-              'not-valid': QuickjsInstanceAccessor<_TestUser>(),
-            },
+          JsClass<_TestUser>(
+            create: _classTestUserConstructor,
+            members: const JsMembers(accessors: [JsAccessor('not-valid')]),
           ),
         ),
         throwsA(isA<JsValueConversionException>()),
       );
       await expectLater(
-        engine.bindClass<_TestUser>(
+        engine.injectClass<_TestUser>(
           'Invalid',
-          QuickjsClass<_TestUser>(
-            constructor: _classTestUserConstructor,
-            accessors: const {
-              'value': QuickjsInstanceAccessor<_TestUser>(
-                get: _classTestUserNameGetter,
-              ),
-            },
-            methods: {'value': (user, _) => user.name},
+          JsClass<_TestUser>(
+            create: _classTestUserConstructor,
+            members: JsMembers<_TestUser>(
+              accessors: const [
+                JsAccessor<_TestUser>('value', get: _classTestUserNameGetter),
+              ],
+              methods: [JsMethod('value', (user, _) => user.name)],
+            ),
           ),
         ),
         throwsA(isA<JsValueConversionException>()),
@@ -2423,9 +2396,12 @@ return await user.name();
       await engine.dispose();
 
       await expectLater(
-        engine.bindClass<_TestUser>(
+        engine.injectClass<_TestUser>(
           'User',
-          QuickjsClass<_TestUser>(constructor: _classTestUserConstructor),
+          JsClass<_TestUser>(
+            create: _classTestUserConstructor,
+            members: const JsMembers(),
+          ),
         ),
         throwsA(isA<JsRuntimeClosedException>()),
       );
@@ -2435,25 +2411,25 @@ return await user.name();
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bind('hostAdd', (args) {
+      await engine.injectFunction('hostAdd', (args) {
         return (args[0] as num).toInt() + (args[1] as num).toInt();
       });
 
-      expect(await engine.evalAsync('return await hostAdd(20, 22);'), '42');
+      expect(await engine.run('return await hostAdd(20, 22);'), '42');
     });
 
     test('maps Promise-based Dart callback reject consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bind('hostFail', (_) {
+      await engine.injectFunction('hostFail', (_) {
         throw StateError('host failed');
       });
 
       await expectLater(
-        engine.evalAsync('return await hostFail();'),
+        engine.run('return await hostFail();'),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('host failed'),
@@ -2468,24 +2444,24 @@ return await user.name();
       addTearDown(first.dispose);
       addTearDown(second.dispose);
 
-      await first.bind('hostName', (_) => 'first');
-      await second.bind('hostName', (_) => 'second');
+      await first.injectFunction('hostName', (_) => 'first');
+      await second.injectFunction('hostName', (_) => 'second');
 
-      expect(await first.evalAsync('return await hostName();'), 'first');
-      expect(await second.evalAsync('return await hostName();'), 'second');
+      expect(await first.run('return await hostName();'), 'first');
+      expect(await second.run('return await hostName();'), 'second');
     });
 
     test('maps callback binary values consistently', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bind('hostBytes', (args) {
+      await engine.injectFunction('hostBytes', (args) {
         final bytes = args.single as Uint8List;
         return Uint8List.fromList([bytes[0], bytes[1], 255]);
       });
 
       expect(
-        await engine.evalAsync(
+        await engine.run(
           'const bytes = await hostBytes(new Uint8Array([1, 2]));'
           'return Array.from(bytes).join(",");',
         ),
@@ -2498,14 +2474,14 @@ return await user.name();
       final callbackInvoked = Completer<void>();
       final callbackResult = Completer<Object?>();
 
-      await engine.bind('hostWait', (_) {
+      await engine.injectFunction('hostWait', (_) {
         if (!callbackInvoked.isCompleted) {
           callbackInvoked.complete();
         }
         return callbackResult.future;
       });
 
-      final running = engine.evalAsync('return await hostWait();');
+      final running = engine.run('return await hostWait();');
       await callbackInvoked.future.timeout(const Duration(seconds: 2));
 
       final runningFailure = expectLater(
@@ -2523,7 +2499,7 @@ return await user.name();
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync(
+        await engine.run(
           'const value = await new Promise((resolve) => '
           'setTimeout(() => resolve(42), 1));'
           'return value;',
@@ -2537,7 +2513,7 @@ return await user.name();
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync(
+        await engine.run(
           'let called = false;'
           'const id = setTimeout(() => { called = true; }, 1);'
           'clearTimeout(id);'
@@ -2553,7 +2529,7 @@ return await user.name();
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync(
+        await engine.run(
           'let count = 0;'
           'await new Promise((resolve) => {'
           '  const id = setInterval(() => {'
@@ -2574,7 +2550,7 @@ return await user.name();
       final first = await Quickjs.create();
       try {
         expect(
-          await first.evalAsync(
+          await first.run(
             'globalThis.timerName = "first";'
             'return await new Promise((resolve) => '
             'setTimeout(() => resolve(timerName), 1));',
@@ -2588,7 +2564,7 @@ return await user.name();
       final second = await Quickjs.create();
       try {
         expect(
-          await second.evalAsync(
+          await second.run(
             'globalThis.timerName = "second";'
             'return await new Promise((resolve) => '
             'setTimeout(() => resolve(timerName), 1));',
@@ -2604,12 +2580,12 @@ return await user.name();
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bind('hostStream', (_) {
+      await engine.injectFunction('hostStream', (_) {
         return Stream<Object?>.fromIterable([1, 2, 3]);
       });
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const values = [];
 const stream = await hostStream();
 for await (const item of stream) {
@@ -2621,16 +2597,34 @@ return values.join(',');
       );
     });
 
+    test('injects Dart Stream as a JS async iterable consistently', () async {
+      final engine = await Quickjs.create();
+      addTearDown(engine.dispose);
+
+      await engine.injectStream('numbers', Stream<int>.fromIterable([1, 2, 3]));
+
+      expect(
+        await engine.run('''
+const values = [];
+for await (const value of numbers) {
+  values.push(value);
+}
+return values.join(',');
+'''),
+        '1,2,3',
+      );
+    });
+
     test('can consume Dart Stream callback repeatedly', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bind('hostStream', (_) {
+      await engine.injectFunction('hostStream', (_) {
         return Stream<Object?>.fromIterable([1, 2, 3]);
       });
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const collect = async () => {
   const values = [];
   const stream = await hostStream();
@@ -2651,7 +2645,7 @@ return [await collect(), await collect()].join('|');
         final engine = await Quickjs.create();
         addTearDown(engine.dispose);
 
-        await engine.bind('hostCount', (args) {
+        await engine.injectFunction('hostCount', (args) {
           final max = (args.single as num).toInt();
           return Stream<Object?>.periodic(
             const Duration(milliseconds: 10),
@@ -2660,7 +2654,7 @@ return [await collect(), await collect()].join('|');
         });
 
         expect(
-          await engine.evalAsync('''
+          await engine.run('''
 const values = [];
 const stream = await hostCount(5);
 for await (const value of stream) {
@@ -2679,12 +2673,12 @@ return values.join(',');
       final values = <Object?>[];
       final done = Completer<void>();
 
-      final stream = await engine.bindSink('progress');
+      final stream = await engine.bindStream('progress');
       final subscription = stream.listen(values.add, onDone: done.complete);
       addTearDown(subscription.cancel);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 await progress.emit('chunk-1');
 await progress.emit('chunk-2');
 await progress.close();
@@ -2702,14 +2696,14 @@ return 'done';
       final sinkValues = <Object?>[];
       final sinkDone = Completer<void>();
 
-      await QuickjsStreamBridge.bindDartStream(engine, 'hostCount', (args) {
+      await engine.injectFunction('hostCount', (args) {
         final max = (args.single as num).toInt();
         return Stream<Object?>.periodic(
           const Duration(milliseconds: 10),
           (index) => index + 1,
         ).take(max);
       });
-      final sink = await QuickjsStreamBridge.bindJsSink(engine, 'progress');
+      final sink = await engine.bindStream('progress');
       final subscription = sink.listen(
         sinkValues.add,
         onDone: sinkDone.complete,
@@ -2717,7 +2711,7 @@ return 'done';
       addTearDown(subscription.cancel);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const values = [];
 for await (const value of await hostCount(3)) {
   values.push(value);
@@ -2738,8 +2732,11 @@ return values.join(',');
       final firstDone = Completer<void>();
 
       try {
-        await first.bind('hostStream', (_) => Stream<Object?>.value('first'));
-        final firstStream = await first.bindSink('progress');
+        await first.injectFunction(
+          'hostStream',
+          (_) => Stream<Object?>.value('first'),
+        );
+        final firstStream = await first.bindStream('progress');
         final firstSub = firstStream.listen(
           firstValues.add,
           onDone: firstDone.complete,
@@ -2747,7 +2744,7 @@ return values.join(',');
         addTearDown(firstSub.cancel);
 
         expect(
-          await first.evalAsync('''
+          await first.run('''
 await progress.emit('first-sink');
 await progress.close();
 const values = [];
@@ -2768,8 +2765,11 @@ return values.join(',');
       final secondValues = <Object?>[];
       final secondDone = Completer<void>();
       try {
-        await second.bind('hostStream', (_) => Stream<Object?>.value('second'));
-        final secondStream = await second.bindSink('progress');
+        await second.injectFunction(
+          'hostStream',
+          (_) => Stream<Object?>.value('second'),
+        );
+        final secondStream = await second.bindStream('progress');
         final secondSub = secondStream.listen(
           secondValues.add,
           onDone: secondDone.complete,
@@ -2777,7 +2777,7 @@ return values.join(',');
         addTearDown(secondSub.cancel);
 
         expect(
-          await second.evalAsync('''
+          await second.run('''
 await progress.emit('second-sink');
 await progress.close();
 const values = [];
@@ -2803,12 +2803,12 @@ return values.join(',');
         final values = <Object?>[];
         final done = Completer<void>();
 
-        final stream = await engine.bindSink('progress');
+        final stream = await engine.bindStream('progress');
         final subscription = stream.listen(values.add, onDone: done.complete);
         addTearDown(subscription.cancel);
 
         expect(
-          await engine.evalAsync('''
+          await engine.run('''
 let n = 0;
 const sideJob = new Promise((resolve) => setTimeout(() => resolve('side'), 1));
 while (n < 3) {
@@ -2829,13 +2829,13 @@ return await sideJob;
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
-      await engine.bind('hostStream', (_) async* {
+      await engine.injectFunction('hostStream', (_) async* {
         yield 'before';
         throw StateError('stream failed');
       });
 
       await expectLater(
-        engine.evalAsync('''
+        engine.run('''
 const values = [];
 const stream = await hostStream();
 for await (const item of stream) {
@@ -2844,7 +2844,7 @@ for await (const item of stream) {
 return values.join(',');
 '''),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('stream failed'),
@@ -2858,7 +2858,7 @@ return values.join(',');
       addTearDown(engine.dispose);
       final errorSeen = Completer<Object>();
 
-      final stream = await engine.bindSink('progress');
+      final stream = await engine.bindStream('progress');
       final subscription = stream.listen(
         (_) {},
         onError: (Object error) {
@@ -2870,7 +2870,7 @@ return values.join(',');
       addTearDown(subscription.cancel);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 await progress.error('sink failed');
 return 'done';
 '''),
@@ -2888,7 +2888,7 @@ return 'done';
       final cancelled = Completer<void>();
       StreamController<Object?>? controller;
 
-      await engine.bind('hostStream', (_) {
+      await engine.injectFunction('hostStream', (_) {
         late final StreamController<Object?> current;
         current = StreamController<Object?>(
           onListen: () {
@@ -2906,7 +2906,7 @@ return 'done';
       });
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 let first;
 const stream = await hostStream();
 for await (const item of stream) {
@@ -2922,14 +2922,14 @@ return first;
     });
 
     // JS throw 涓嶈兘琚綋鎴愭櫘閫氬瓧绗︿覆缁撴灉銆?
-    test('maps JavaScript throw to JsException', () async {
+    test('maps JavaScript throw to JsThrownException', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
       await expectLater(
         engine.eval('throw new Error("boom")'),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.message,
             'message',
             contains('boom'),
@@ -2945,7 +2945,7 @@ return first;
       await expectLater(
         engine.eval('throw new TypeError("consistent boom")'),
         throwsA(
-          isA<JsException>()
+          isA<JsThrownException>()
               .having(
                 (error) => error.message,
                 'message',
@@ -2970,7 +2970,7 @@ function fail() {
 fail();
 ''', name: sourceName),
         throwsA(
-          isA<JsException>()
+          isA<JsThrownException>()
               .having(
                 (error) => error.message,
                 'message',
@@ -2993,7 +2993,7 @@ fail();
         const sourceName = 'scripts/named_value.js';
 
         await expectLater(
-          engine.evaluateValue(
+          engine.eval(
             '''
 function fail() {
   throw new Error("named value boom");
@@ -3004,7 +3004,7 @@ fail();
             globals: {'prefix': 'named'},
           ),
           throwsA(
-            isA<JsException>()
+            isA<JsThrownException>()
                 .having(
                   (error) => error.message,
                   'message',
@@ -3031,7 +3031,7 @@ fail();
       await expectLater(
         engine.eval('throw new Error("mapped boom")', name: sourceName),
         throwsA(
-          isA<JsException>()
+          isA<JsThrownException>()
               .having(
                 (error) => error.message,
                 'message',
@@ -3057,7 +3057,7 @@ fail();
       await expectLater(
         engine.eval('throw new Error("unmapped boom")', name: sourceName),
         throwsA(
-          isA<JsException>().having(
+          isA<JsThrownException>().having(
             (error) => error.sourceMap,
             'sourceMap',
             isNull,
@@ -3068,21 +3068,21 @@ fail();
 
     test('captures debug inspector snapshots consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
+        options: JsOptions(
           memoryLimitBytes: 512 * 1024,
           stackLimitBytes: 256 * 1024,
-          moduleLoader: (name) => switch (name) {
-            'dep.mjs' => 'export const value = 41;',
-            _ => null,
-          },
         ),
+        moduleLoader: (name) => switch (name) {
+          'dep.mjs' => 'export const value = 41;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
       const sourceName = 'debug-bundle.js';
       final sourceMap = _testSourceMap(file: sourceName);
 
       engine.registerSourceMap(sourceName, sourceMap);
-      await engine.bind('debugAdd', (args) {
+      await engine.injectFunction('debugAdd', (args) {
         return (args[0] as num).toInt() + (args[1] as num).toInt();
       });
       await engine.evalModule(
@@ -3092,7 +3092,7 @@ fail();
 
       expect(await engine.debugEvaluateValue('debugAnswer + 1'), 43);
       final snapshot = await engine.debugInspect(includeGlobals: true);
-      expect(snapshot.state, QuickjsRuntimeState.ready);
+      expect(snapshot.state, JsRuntimeState.ready);
       expect(snapshot.running, isFalse);
       expect(snapshot.pendingEvaluations, 0);
       expect(snapshot.memoryLimitBytes, 512 * 1024);
@@ -3105,13 +3105,11 @@ fail();
 
     test('captures registered host modules in debug snapshots', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[
-            _hostMathModule,
-            _hostBufferModule,
-            _hostCommonJsModule,
-          ],
-        ),
+        modules: <JsModule>[
+          _hostMathModule,
+          _hostBufferModule,
+          _hostCommonJsModule,
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -3125,16 +3123,14 @@ fail();
 
     test('captures registered host providers in debug snapshots', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'debug.provider',
-              debugName: 'debug-provider-callback',
-              implementation: QuickjsHostProviderImplementation.platform,
-              callback: (_, _) => null,
-            ),
-          ],
-        ),
+        providers: <JsProvider>[
+          JsProvider.dart(
+            name: 'debug.provider',
+            debugName: 'debug-provider-callback',
+            implementation: JsProviderImplementation.platform,
+            callback: (_, _) => null,
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -3150,7 +3146,7 @@ fail();
       );
       expect(
         snapshot.providerDetails.single.implementation,
-        QuickjsHostProviderImplementation.platform,
+        JsProviderImplementation.platform,
       );
     });
 
@@ -3181,29 +3177,28 @@ fail();
 
     test('installs configured browser global aliases consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          hostCapabilities: QuickjsHostCapabilities(
-            browserGlobals: QuickjsBrowserGlobals(window: true, self: true),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'browser-globals',
+            browserGlobals: JsGlobals(window: true, self: true),
           ),
-        ),
+        ],
       );
       addTearDown(engine.dispose);
 
       expect(
         await engine.eval('window === globalThis && self === globalThis'),
-        'true',
+        true,
       );
       expect(
         await engine.eval('Object.keys(globalThis).includes("window")'),
-        'false',
+        false,
       );
     });
 
     test('installs host script crypto randomUUID consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
-        ),
+        scripts: <JsScript>[_randomUuidHostScript],
       );
       addTearDown(engine.dispose);
 
@@ -3223,11 +3218,9 @@ fail();
 
     test('installs minimal web crypto environment consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsWebCryptoMount(allowInsecureRandomFallback: true),
-          ],
-        ),
+        features: <JsFeatures>[
+          WebCryptoFeatures(allowInsecureRandomFallback: true),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -3256,11 +3249,7 @@ fail();
 
     test('can install selected web crypto helpers consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsWebCryptoMount(getRandomValues: false),
-          ],
-        ),
+        features: <JsFeatures>[WebCryptoFeatures(getRandomValues: false)],
       );
       addTearDown(engine.dispose);
 
@@ -3277,46 +3266,40 @@ fail();
         return;
       }
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount()],
-        ),
+        features: <JsFeatures>[WebCryptoFeatures()],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
         engine.eval('crypto.getRandomValues(new Uint8Array(1))'),
-        throwsA(isA<JsException>()),
+        throwsA(isA<JsThrownException>()),
       );
     });
 
     test('rejects invalid web crypto getRandomValues targets', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount()],
-        ),
+        features: <JsFeatures>[WebCryptoFeatures()],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
         engine.eval('crypto.getRandomValues(new Float32Array(1))'),
-        throwsA(isA<JsException>()),
+        throwsA(isA<JsThrownException>()),
       );
       await expectLater(
         engine.eval('crypto.getRandomValues(new Uint8Array(65537))'),
-        throwsA(isA<JsException>()),
+        throwsA(isA<JsThrownException>()),
       );
     });
 
     test('installs Flutter-backed web crypto digest consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleDigest: true)],
-        ),
+        features: <JsFeatures>[WebCryptoFeatures(subtleDigest: true)],
       );
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const data = new Uint8Array([104, 101, 108, 108, 111]);
 const digest = await crypto.subtle.digest('SHA-256', data);
 const sha1Digest = await crypto.subtle.digest('SHA-1', data);
@@ -3341,14 +3324,12 @@ return (digest instanceof ArrayBuffer) + '/' + hex + '/' + sha1Hex + '/' + viewH
 
     test('installs Flutter-backed web crypto HMAC consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleHmac: true)],
-        ),
+        features: <JsFeatures>[WebCryptoFeatures(subtleHmac: true)],
       );
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const keyBytes = new Uint8Array([107, 101, 121]);
 const data = new Uint8Array([104, 101, 108, 108, 111]);
 const key256 = await crypto.subtle.importKey(
@@ -3388,35 +3369,32 @@ return hex256 + '/' + hex1 + '/' + valid + '/' + invalid;
 
     test('web crypto digest rejects unsupported algorithms', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsWebCryptoMount(subtleDigest: true)],
-        ),
+        features: <JsFeatures>[WebCryptoFeatures(subtleDigest: true)],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
-        engine.evalAsync(
+        engine.run(
           "return await crypto.subtle.digest('MD5', new Uint8Array([1]));",
         ),
-        throwsA(isA<JsException>()),
+        throwsA(isA<JsThrownException>()),
       );
     });
 
     test('installs async host providers for startup scripts', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'app.hello',
-              callback: (args, _) {
-                return 'hello ${args.single}';
-              },
-            ),
-          ],
-          environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript.js(
-              name: 'host:app-provider.js',
-              source: '''
+        providers: <JsProvider>[
+          JsProvider.dart(
+            name: 'app.hello',
+            callback: (args, _) {
+              return 'hello ${args.single}';
+            },
+          ),
+        ],
+        scripts: const <JsScript>[
+          JsScript.js(
+            name: 'host:app-provider.js',
+            source: '''
 Object.defineProperty(globalThis, 'app', {
   value: {
     hello(name) {
@@ -3428,90 +3406,85 @@ Object.defineProperty(globalThis, 'app', {
   writable: true,
 });
 ''',
-            ),
-          ],
-        ),
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync("return await app.hello('QuickJS');"),
+        await engine.run("return await app.hello('QuickJS');"),
         'hello QuickJS',
       );
     });
 
     test(
-      'reinstalls async host providers after stop rebuilds runtime',
+      'reinstalls async host providers after restart rebuilds runtime',
       () async {
         final engine = await Quickjs.create(
-          options: QuickjsRuntimeOptions(
-            providers: <QuickjsHostProvider>[
-              QuickjsHostProvider.dart(
-                name: 'app.double',
-                callback: (args, _) => (args.single! as num).toInt() * 2,
-              ),
-            ],
-            environmentPatches: const <QuickjsHostScript>[
-              QuickjsHostScript.js(
-                name: 'host:provider-rebuild.js',
-                source: '''
+          providers: <JsProvider>[
+            JsProvider.dart(
+              name: 'app.double',
+              callback: (args, _) => (args.single! as num).toInt() * 2,
+            ),
+          ],
+          scripts: const <JsScript>[
+            JsScript.js(
+              name: 'host:provider-rebuild.js',
+              source: '''
 globalThis.app = {
   double(value) {
     return globalThis.__quickjsHostProviders['app.double'](value);
   },
 };
 ''',
-              ),
-            ],
-          ),
+            ),
+          ],
         );
         addTearDown(engine.dispose);
 
         final running = engine.eval('while (true) {}');
         await pumpEventQueue();
-        await engine.stop();
+        await engine.restart();
         await expectLater(running, throwsA(isA<JsCancelledException>()));
 
-        expect(await engine.evalAsync('return await app.double(21);'), '42');
+        expect(await engine.run('return await app.double(21);'), '42');
       },
     );
 
     test('cancels pending async host providers on stop', () async {
-      final invoked = Completer<QuickjsHostProviderContext>();
+      final invoked = Completer<JsProviderContext>();
       var invocationCount = 0;
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'app.wait',
-              callback: (_, context) async {
-                invocationCount += 1;
-                if (invocationCount == 1) {
-                  invoked.complete(context);
-                  await context.cancelled;
-                  context.throwIfCancelled();
-                }
-                return 42;
-              },
-            ),
-          ],
-          environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript.js(
-              name: 'host:provider-cancel-stop.js',
-              source: '''
+        providers: <JsProvider>[
+          JsProvider.dart(
+            name: 'app.wait',
+            callback: (_, context) async {
+              invocationCount += 1;
+              if (invocationCount == 1) {
+                invoked.complete(context);
+                await context.cancelled;
+                context.throwIfCancelled();
+              }
+              return 42;
+            },
+          ),
+        ],
+        scripts: const <JsScript>[
+          JsScript.js(
+            name: 'host:provider-cancel-stop.js',
+            source: '''
 globalThis.app = {
   wait() {
     return globalThis.__quickjsHostProviders['app.wait']();
   },
 };
 ''',
-            ),
-          ],
-        ),
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
-      final running = engine.evalAsync('return await app.wait();');
+      final running = engine.run('return await app.wait();');
       final context = await invoked.future.timeout(const Duration(seconds: 2));
       final runningFailure = expectLater(
         running,
@@ -3520,43 +3493,41 @@ globalThis.app = {
         ),
       );
 
-      await engine.stop().timeout(const Duration(seconds: 2));
+      await engine.restart().timeout(const Duration(seconds: 2));
       await runningFailure;
       expect(context.isCancelled, isTrue);
       expect(context.cancellationReason, isA<JsCancelledException>());
-      expect(await engine.evalAsync('return await app.wait();'), '42');
+      expect(await engine.run('return await app.wait();'), '42');
     });
 
     test('dispose detaches pending async host provider Futures', () async {
-      final invoked = Completer<QuickjsHostProviderContext>();
+      final invoked = Completer<JsProviderContext>();
       final providerResult = Completer<Object?>();
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'app.wait',
-              callback: (_, context) {
-                invoked.complete(context);
-                return providerResult.future;
-              },
-            ),
-          ],
-          environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript.js(
-              name: 'host:provider-cancel-dispose.js',
-              source: '''
+        providers: <JsProvider>[
+          JsProvider.dart(
+            name: 'app.wait',
+            callback: (_, context) {
+              invoked.complete(context);
+              return providerResult.future;
+            },
+          ),
+        ],
+        scripts: const <JsScript>[
+          JsScript.js(
+            name: 'host:provider-cancel-dispose.js',
+            source: '''
 globalThis.app = {
   wait() {
     return globalThis.__quickjsHostProviders['app.wait']();
   },
 };
 ''',
-            ),
-          ],
-        ),
+          ),
+        ],
       );
 
-      final running = engine.evalAsync('return await app.wait();');
+      final running = engine.run('return await app.wait();');
       final context = await invoked.future.timeout(const Duration(seconds: 2));
       final runningFailure = expectLater(
         running,
@@ -3572,16 +3543,13 @@ globalThis.app = {
     });
 
     test('keeps async host providers isolated per runtime', () async {
-      QuickjsRuntimeOptions providerOptions(String value) {
-        return QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'app.identity',
-              callback: (_, _) => value,
-            ),
+      Future<Quickjs> createProviderRuntime(String value) {
+        return Quickjs.create(
+          providers: <JsProvider>[
+            JsProvider.dart(name: 'app.identity', callback: (_, _) => value),
           ],
-          environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript.js(
+          scripts: const <JsScript>[
+            JsScript.js(
               name: 'host:provider-isolation.js',
               globals: <String>['app'],
               source: '''
@@ -3596,43 +3564,41 @@ globalThis.app = {
         );
       }
 
-      final first = await Quickjs.create(options: providerOptions('first'));
-      final second = await Quickjs.create(options: providerOptions('second'));
+      final first = await createProviderRuntime('first');
+      final second = await createProviderRuntime('second');
       addTearDown(first.dispose);
       addTearDown(second.dispose);
 
-      expect(await first.evalAsync('return await app.identity();'), 'first');
-      expect(await second.evalAsync('return await app.identity();'), 'second');
+      expect(await first.run('return await app.identity();'), 'first');
+      expect(await second.run('return await app.identity();'), 'second');
 
       await first.dispose();
-      expect(await second.evalAsync('return await app.identity();'), 'second');
+      expect(await second.run('return await app.identity();'), 'second');
     });
 
     test('wraps async host providers from ES host modules', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
-              name: 'app.sum',
-              callback: (args, _) {
-                return args.fold<int>(
-                  0,
-                  (sum, value) => sum + (value! as num).toInt(),
-                );
-              },
-            ),
-          ],
-          modules: const <QuickjsHostModule>[
-            QuickjsHostModule.esModule(
-              specifier: 'app/provider',
-              source: '''
+        providers: <JsProvider>[
+          JsProvider.dart(
+            name: 'app.sum',
+            callback: (args, _) {
+              return args.fold<int>(
+                0,
+                (sum, value) => sum + (value! as num).toInt(),
+              );
+            },
+          ),
+        ],
+        modules: const <JsModule>[
+          JsModule.esModule(
+            specifier: 'app/provider',
+            source: '''
 export function sum(...values) {
   return globalThis.__quickjsHostProviders['app.sum'](...values);
 }
 ''',
-            ),
-          ],
-        ),
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -3644,7 +3610,7 @@ export function sum(...values) {
         'undefined',
       );
       expect(
-        await engine.evalAsync('return await globalThis.providerSumPromise;'),
+        await engine.run('return await globalThis.providerSumPromise;'),
         '6',
       );
     });
@@ -3652,64 +3618,52 @@ export function sum(...values) {
     test('rejects duplicate async host provider names', () async {
       await expectLater(
         Quickjs.create(
-          options: QuickjsRuntimeOptions(
-            providers: <QuickjsHostProvider>[
-              QuickjsHostProvider.dart(
-                name: 'app.hello',
-                callback: (_, _) => 1,
-              ),
-              QuickjsHostProvider.dart(
-                name: 'app.hello',
-                callback: (_, _) => 2,
-              ),
-            ],
-          ),
+          providers: <JsProvider>[
+            JsProvider.dart(name: 'app.hello', callback: (_, _) => 1),
+            JsProvider.dart(name: 'app.hello', callback: (_, _) => 2),
+          ],
         ),
         throwsA(isA<JsValueConversionException>()),
       );
     });
 
-    test('installs named host mounts as one capability bundle', () async {
+    test('installs named host features as one capability bundle', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount(
-              name: 'app-api',
-              capabilities: const QuickjsHostCapabilities(
-                browserGlobals: QuickjsBrowserGlobals(window: true),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'app-api',
+            browserGlobals: const JsGlobals(window: true),
+            providers: <JsProvider>[
+              JsProvider.dart(
+                name: 'app.hello',
+                callback: (args, _) => 'hello ${args.single}',
               ),
-              providers: <QuickjsHostProvider>[
-                QuickjsHostProvider.dart(
-                  name: 'app.hello',
-                  callback: (args, _) => 'hello ${args.single}',
-                ),
-              ],
-              environmentPatches: const <QuickjsHostScript>[
-                QuickjsHostScript.js(
-                  name: 'mount:app-global.js',
-                  source: '''
+            ],
+            scripts: const <JsScript>[
+              JsScript.js(
+                name: 'mount:app-global.js',
+                source: '''
 globalThis.app = {
   hello(name) {
     return globalThis.__quickjsHostProviders['app.hello'](name);
   },
 };
 ''',
-                ),
-              ],
-              modules: const <QuickjsHostModule>[
-                QuickjsHostModule.esModule(
-                  specifier: 'app/constants',
-                  source: 'export const answer = 42;',
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+            modules: const <JsModule>[
+              JsModule.esModule(
+                specifier: 'app/constants',
+                source: 'export const answer = 42;',
+              ),
+            ],
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync(
+        await engine.run(
           "return typeof window + '/' + await app.hello('mount');",
         ),
         'object/hello mount',
@@ -3721,84 +3675,83 @@ globalThis.app = {
         ),
         'undefined',
       );
-      expect(await engine.eval('mountAnswer'), '42');
+      expect(await engine.eval('mountAnswer'), 42);
 
       final snapshot = await engine.debugInspect();
-      expect(snapshot.registeredMounts, contains('app-api'));
+      expect(snapshot.registeredFeatures, contains('app-api'));
       expect(snapshot.registeredProviders, contains('app.hello'));
       expect(snapshot.moduleNames, contains('app/constants'));
     });
 
-    test('reinstalls named host mounts after stop rebuilds runtime', () async {
-      final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount(
+    test(
+      'reinstalls named host features after restart rebuilds runtime',
+      () async {
+        final engine = await Quickjs.create(
+          features: <JsFeatures>[
+            JsFeatures(
               name: 'app-rebuild',
-              environmentPatches: const <QuickjsHostScript>[
-                QuickjsHostScript.js(
+              scripts: const <JsScript>[
+                JsScript.js(
                   name: 'mount:rebuild.js',
                   source: 'globalThis.mountedValue = 42;',
                 ),
               ],
             ),
           ],
-        ),
-      );
-      addTearDown(engine.dispose);
+        );
+        addTearDown(engine.dispose);
 
-      final running = engine.eval('while (true) {}');
-      await pumpEventQueue();
-      await engine.stop();
-      await expectLater(running, throwsA(isA<JsCancelledException>()));
+        final running = engine.eval('while (true) {}');
+        await pumpEventQueue();
+        await engine.restart();
+        await expectLater(running, throwsA(isA<JsCancelledException>()));
 
-      expect(await engine.eval('mountedValue'), '42');
-      expect(
-        (await engine.debugInspect()).registeredMounts,
-        contains('app-rebuild'),
-      );
-    });
+        expect(await engine.eval('mountedValue'), '42');
+        expect(
+          (await engine.debugInspect()).registeredFeatures,
+          contains('app-rebuild'),
+        );
+      },
+    );
 
     test('installs named host mount presets consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.web(locationHref: 'https://example.test/app'),
-            QuickjsWebCryptoMount(subtleDigest: true),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.web(locationHref: 'https://example.test/app'),
+          WebCryptoFeatures(subtleDigest: true),
+        ],
       );
       addTearDown(engine.dispose);
 
       expect(
-        await engine.evalAsync('''
+        await engine.run('''
 const digest = await crypto.subtle.digest('SHA-256', new Uint8Array([1]));
 return location.hostname + '/' + typeof crypto.randomUUID + '/' + digest.byteLength;
 '''),
         'example.test/function/32',
       );
       expect(
-        (await engine.debugInspect()).registeredMounts,
+        (await engine.debugInspect()).registeredFeatures,
         containsAll(<String>['web', 'web-crypto']),
       );
     });
 
-    test('mounts capability bundles at runtime by rebuilding', () async {
+    test('features capability bundles at runtime by rebuilding', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
       await engine.eval('globalThis.beforeMount = 1');
 
-      await engine.mount(
-        QuickjsHostMount(
+      await engine.loadFeatures(
+        JsFeatures(
           name: 'runtime-api',
-          providers: <QuickjsHostProvider>[
-            QuickjsHostProvider.dart(
+          providers: <JsProvider>[
+            JsProvider.dart(
               name: 'runtime.echo',
               callback: (args, _) => args.single,
             ),
           ],
-          environmentPatches: const <QuickjsHostScript>[
-            QuickjsHostScript.js(
+          scripts: const <JsScript>[
+            JsScript.js(
               name: 'mount:runtime-api.js',
               source: '''
 globalThis.runtimeApi = {
@@ -3809,8 +3762,8 @@ globalThis.runtimeApi = {
 ''',
             ),
           ],
-          modules: const <QuickjsHostModule>[
-            QuickjsHostModule.esModule(
+          modules: const <JsModule>[
+            JsModule.esModule(
               specifier: 'runtime/constants',
               source: 'export const value = 7;',
             ),
@@ -3820,7 +3773,7 @@ globalThis.runtimeApi = {
 
       expect(await engine.eval('typeof beforeMount'), 'undefined');
       expect(
-        await engine.evalAsync("return await runtimeApi.echo('mounted');"),
+        await engine.run("return await runtimeApi.echo('mounted');"),
         'mounted',
       );
       expect(
@@ -3832,24 +3785,24 @@ globalThis.runtimeApi = {
       );
       expect(await engine.eval('runtimeConstant'), '7');
       expect(
-        (await engine.debugInspect()).registeredMounts,
+        (await engine.debugInspect()).registeredFeatures,
         contains('runtime-api'),
       );
     });
 
-    test('replaces same-name runtime mounts atomically', () async {
-      QuickjsHostMount versionedMount(int version) {
-        return QuickjsHostMount(
+    test('replaces same-name runtime features atomically', () async {
+      JsFeatures versionedMount(int version) {
+        return JsFeatures(
           name: 'versioned-runtime',
-          environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript.js(
+          scripts: <JsScript>[
+            JsScript.js(
               name: 'mount:versioned-runtime.js',
               globals: const <String>['runtimeMountVersion'],
               source: 'globalThis.runtimeMountVersion = $version;',
             ),
           ],
-          modules: <QuickjsHostModule>[
-            QuickjsHostModule.esModule(
+          modules: <JsModule>[
+            JsModule.esModule(
               specifier: 'versioned/module',
               source: 'export const value = $version;',
             ),
@@ -3862,49 +3815,47 @@ globalThis.runtimeApi = {
 import { value } from 'versioned/module';
 globalThis.versionedModuleValue = value;
 ''', name: 'versioned-check.mjs');
-        return engine.eval('versionedModuleValue');
+        return engine.evalRaw('versionedModuleValue');
       }
 
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
-      await engine.mount(versionedMount(1));
-      expect(await engine.eval('runtimeMountVersion'), '1');
+      await engine.loadFeatures(versionedMount(1));
+      expect(await engine.eval('runtimeMountVersion'), 1);
       expect(await readVersionedModule(engine), '1');
 
       await expectLater(
-        engine.mount(versionedMount(2)),
+        engine.loadFeatures(versionedMount(2)),
         throwsA(isA<JsValueConversionException>()),
       );
-      expect(await engine.eval('runtimeMountVersion'), '1');
+      expect(await engine.eval('runtimeMountVersion'), 1);
 
-      await engine.mount(
+      await engine.loadFeatures(
         versionedMount(2),
-        conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+        conflictPolicy: JsFeaturesConflictPolicy.replace,
       );
-      expect(await engine.eval('runtimeMountVersion'), '2');
+      expect(await engine.eval('runtimeMountVersion'), 2);
       expect(await readVersionedModule(engine), '2');
       expect(
-        (await engine.debugInspect()).registeredMounts,
+        (await engine.debugInspect()).registeredFeatures,
         contains('versioned-runtime'),
       );
 
       final running = engine.eval('while (true) {}');
       await pumpEventQueue();
-      await engine.stop();
+      await engine.restart();
       await expectLater(running, throwsA(isA<JsCancelledException>()));
-      expect(await engine.eval('runtimeMountVersion'), '2');
+      expect(await engine.eval('runtimeMountVersion'), 2);
       expect(await readVersionedModule(engine), '2');
     });
 
     test('does not shadow modules already resolved by moduleLoader', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          moduleLoader: (name) => switch (name) {
-            'dynamic/value' => 'export const value = 42;',
-            'dynamic/cjs' => 'exports.value = 43;',
-            _ => null,
-          },
-        ),
+        moduleLoader: (name) => switch (name) {
+          'dynamic/value' => 'export const value = 42;',
+          'dynamic/cjs' => 'exports.value = 43;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
       await engine.evalModule('''
@@ -3914,11 +3865,11 @@ globalThis.dynamicLoaderValue = value;
       expect(await engine.eval('dynamicLoaderValue'), '42');
 
       await expectLater(
-        engine.mount(
-          const QuickjsHostMount(
+        engine.loadFeatures(
+          const JsFeatures(
             name: 'dynamic-shadow',
-            modules: <QuickjsHostModule>[
-              QuickjsHostModule.esModule(
+            modules: <JsModule>[
+              JsModule.esModule(
                 specifier: 'dynamic/value',
                 source: 'export const value = 7;',
               ),
@@ -3928,10 +3879,10 @@ globalThis.dynamicLoaderValue = value;
         throwsA(isA<JsValueConversionException>()),
       );
 
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
       expect(await engine.eval('dynamicLoaderValue'), '42');
       expect(
-        (await engine.debugInspect()).registeredMounts,
+        (await engine.debugInspect()).registeredFeatures,
         isNot(contains('dynamic-shadow')),
       );
 
@@ -3943,11 +3894,11 @@ globalThis.dynamicLoaderValue = value;
         '43',
       );
       await expectLater(
-        engine.mount(
-          const QuickjsHostMount(
+        engine.loadFeatures(
+          const JsFeatures(
             name: 'dynamic-cjs-shadow',
-            modules: <QuickjsHostModule>[
-              QuickjsHostModule.commonJs(
+            modules: <JsModule>[
+              JsModule.commonJs(
                 specifier: 'dynamic/cjs',
                 source: 'exports.value = 8;',
               ),
@@ -3956,47 +3907,45 @@ globalThis.dynamicLoaderValue = value;
         ),
         throwsA(isA<JsValueConversionException>()),
       );
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
     });
 
-    test('does not replace initialization mounts at runtime', () async {
+    test('does not replace initialization features at runtime', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount(
-              name: 'static-mount',
-              environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript.js(
-                  name: 'mount:static.js',
-                  globals: <String>['staticMountValue'],
-                  source: 'globalThis.staticMountValue = 42;',
-                ),
-              ],
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'static-mount',
+            scripts: <JsScript>[
+              JsScript.js(
+                name: 'mount:static.js',
+                globals: <String>['staticMountValue'],
+                source: 'globalThis.staticMountValue = 42;',
+              ),
+            ],
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
-        engine.mount(
-          const QuickjsHostMount(name: 'static-mount'),
-          conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+        engine.loadFeatures(
+          const JsFeatures(name: 'static-mount'),
+          conflictPolicy: JsFeaturesConflictPolicy.replace,
         ),
         throwsA(isA<JsValueConversionException>()),
       );
       expect(await engine.eval('staticMountValue'), '42');
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
     });
 
     test('rolls back runtime mount replacement when rebuild fails', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
-      await engine.mount(
-        const QuickjsHostMount(
+      await engine.loadFeatures(
+        const JsFeatures(
           name: 'replace-rollback',
-          environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript.js(
+          scripts: <JsScript>[
+            JsScript.js(
               name: 'mount:replace-rollback.js',
               globals: <String>['replaceRollbackValue'],
               source: 'globalThis.replaceRollbackValue = 1;',
@@ -4006,38 +3955,38 @@ globalThis.dynamicLoaderValue = value;
       );
 
       await expectLater(
-        engine.mount(
-          const QuickjsHostMount(
+        engine.loadFeatures(
+          const JsFeatures(
             name: 'replace-rollback',
-            environmentPatches: <QuickjsHostScript>[
-              QuickjsHostScript.js(
+            scripts: <JsScript>[
+              JsScript.js(
                 name: 'mount:replace-rollback.js',
                 globals: <String>['replaceRollbackValue'],
                 source: 'throw new Error("replacement install failed");',
               ),
             ],
           ),
-          conflictPolicy: QuickjsHostMountConflictPolicy.replace,
+          conflictPolicy: JsFeaturesConflictPolicy.replace,
         ),
-        throwsA(isA<JsException>()),
+        throwsA(isA<JsThrownException>()),
       );
 
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
       expect(await engine.eval('replaceRollbackValue'), '1');
       expect(
-        (await engine.debugInspect()).registeredMounts,
+        (await engine.debugInspect()).registeredFeatures,
         contains('replace-rollback'),
       );
     });
 
-    test('keeps runtime mounts across later stop rebuilds', () async {
+    test('keeps runtime features across later restart rebuilds', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
-      await engine.mount(
-        const QuickjsHostMount(
+      await engine.loadFeatures(
+        const JsFeatures(
           name: 'runtime-rebuild',
-          environmentPatches: <QuickjsHostScript>[
-            QuickjsHostScript.js(
+          scripts: <JsScript>[
+            JsScript.js(
               name: 'mount:runtime-rebuild.js',
               source: 'globalThis.runtimeMountedValue = 42;',
             ),
@@ -4047,67 +3996,62 @@ globalThis.dynamicLoaderValue = value;
 
       final running = engine.eval('while (true) {}');
       await pumpEventQueue();
-      await engine.stop();
+      await engine.restart();
       await expectLater(running, throwsA(isA<JsCancelledException>()));
 
       expect(await engine.eval('runtimeMountedValue'), '42');
     });
 
-    test('rejects conflicting runtime mounts without rebuilding', () async {
+    test('rejects conflicting runtime features without rebuilding', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount(
-              name: 'existing',
-              providers: <QuickjsHostProvider>[
-                QuickjsHostProvider.dart(
-                  name: 'existing.provider',
-                  callback: (_, _) => 42,
-                ),
-              ],
-              environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript.js(
-                  name: 'mount:existing.js',
-                  globals: <String>['existingValue'],
-                  source: 'globalThis.existingValue = 42;',
-                ),
-              ],
-              modules: <QuickjsHostModule>[
-                QuickjsHostModule.esModule(
-                  specifier: 'existing/module',
-                  source: 'export const value = 42;',
-                ),
-              ],
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'existing',
+            providers: <JsProvider>[
+              JsProvider.dart(
+                name: 'existing.provider',
+                callback: (_, _) => 42,
+              ),
+            ],
+            scripts: <JsScript>[
+              JsScript.js(
+                name: 'mount:existing.js',
+                globals: <String>['existingValue'],
+                source: 'globalThis.existingValue = 42;',
+              ),
+            ],
+            modules: <JsModule>[
+              JsModule.esModule(
+                specifier: 'existing/module',
+                source: 'export const value = 42;',
+              ),
+            ],
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
       await expectLater(
-        engine.mount(const QuickjsHostMount(name: 'existing')),
+        engine.loadFeatures(const JsFeatures(name: 'existing')),
         throwsA(isA<JsValueConversionException>()),
       );
       await expectLater(
-        engine.mount(
-          QuickjsHostMount(
+        engine.loadFeatures(
+          JsFeatures(
             name: 'provider-conflict',
-            providers: <QuickjsHostProvider>[
-              QuickjsHostProvider.dart(
-                name: 'existing.provider',
-                callback: (_, _) => 7,
-              ),
+            providers: <JsProvider>[
+              JsProvider.dart(name: 'existing.provider', callback: (_, _) => 7),
             ],
           ),
         ),
         throwsA(isA<JsValueConversionException>()),
       );
       await expectLater(
-        engine.mount(
-          const QuickjsHostMount(
+        engine.loadFeatures(
+          const JsFeatures(
             name: 'module-conflict',
-            modules: <QuickjsHostModule>[
-              QuickjsHostModule.esModule(
+            modules: <JsModule>[
+              JsModule.esModule(
                 specifier: 'existing/module',
                 source: 'export const value = 7;',
               ),
@@ -4117,11 +4061,11 @@ globalThis.dynamicLoaderValue = value;
         throwsA(isA<JsValueConversionException>()),
       );
       await expectLater(
-        engine.mount(
-          const QuickjsHostMount(
+        engine.loadFeatures(
+          const JsFeatures(
             name: 'global-conflict',
-            environmentPatches: <QuickjsHostScript>[
-              QuickjsHostScript.js(
+            scripts: <JsScript>[
+              JsScript.js(
                 name: 'mount:global-conflict.js',
                 globals: <String>['existingValue'],
                 source: 'globalThis.existingValue = 7;',
@@ -4132,20 +4076,20 @@ globalThis.dynamicLoaderValue = value;
         throwsA(isA<JsValueConversionException>()),
       );
       expect(await engine.eval('existingValue'), '42');
-      expect(engine.state, QuickjsRuntimeState.ready);
+      expect(engine.state, JsRuntimeState.ready);
     });
 
-    test('rejects runtime mounts while JavaScript is running', () async {
+    test('rejects runtime features while JavaScript is running', () async {
       final engine = await Quickjs.create();
       addTearDown(engine.dispose);
 
       final running = engine.eval('while (true) {}');
       await pumpEventQueue();
       await expectLater(
-        engine.mount(const QuickjsHostMount(name: 'busy')),
+        engine.loadFeatures(const JsFeatures(name: 'busy')),
         throwsA(isA<StateError>()),
       );
-      await engine.stop();
+      await engine.restart();
       await expectLater(running, throwsA(isA<JsCancelledException>()));
     });
 
@@ -4154,102 +4098,93 @@ globalThis.dynamicLoaderValue = value;
       () async {
         await expectLater(
           Quickjs.create(
-            options: const QuickjsRuntimeOptions(
-              mounts: <QuickjsHostMount>[
-                QuickjsHostMount(name: 'duplicate'),
-                QuickjsHostMount(name: 'duplicate'),
-              ],
-            ),
+            features: <JsFeatures>[
+              JsFeatures(name: 'duplicate'),
+              JsFeatures(name: 'duplicate'),
+            ],
           ),
           throwsA(isA<JsValueConversionException>()),
         );
 
         await expectLater(
           Quickjs.create(
-            options: const QuickjsRuntimeOptions(
-              mounts: <QuickjsHostMount>[
-                QuickjsHostMount(
-                  name: 'first',
-                  environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript.js(name: 'same.js', source: 'void 0;'),
-                  ],
-                ),
-                QuickjsHostMount(
-                  name: 'second',
-                  environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript.js(name: 'same.js', source: 'void 0;'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          throwsA(isA<JsValueConversionException>()),
-        );
-
-        await expectLater(
-          Quickjs.create(
-            options: const QuickjsRuntimeOptions(
-              mounts: <QuickjsHostMount>[
-                QuickjsHostMount(
-                  name: 'first-global',
-                  environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript.js(
-                      name: 'first.js',
-                      globals: <String>['app'],
-                      source: 'globalThis.app = 1;',
-                    ),
-                  ],
-                ),
-                QuickjsHostMount(
-                  name: 'second-global',
-                  environmentPatches: <QuickjsHostScript>[
-                    QuickjsHostScript.js(
-                      name: 'second.js',
-                      globals: <String>['app'],
-                      source: 'globalThis.app = 2;',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          throwsA(isA<JsValueConversionException>()),
-        );
-
-        await expectLater(
-          Quickjs.create(
-            options: const QuickjsRuntimeOptions(
-              hostCapabilities: QuickjsHostCapabilities(
-                browserGlobals: QuickjsBrowserGlobals(window: true),
+            features: <JsFeatures>[
+              JsFeatures(
+                name: 'first',
+                scripts: <JsScript>[
+                  JsScript.js(name: 'same.js', source: 'void 0;'),
+                ],
               ),
-              environmentPatches: <QuickjsHostScript>[
-                QuickjsHostScript.js(
-                  name: 'window-conflict.js',
-                  globals: <String>['window'],
-                  source: 'globalThis.window = {};',
-                ),
-              ],
-            ),
+              JsFeatures(
+                name: 'second',
+                scripts: <JsScript>[
+                  JsScript.js(name: 'same.js', source: 'void 0;'),
+                ],
+              ),
+            ],
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+
+        await expectLater(
+          Quickjs.create(
+            features: <JsFeatures>[
+              JsFeatures(
+                name: 'first-global',
+                scripts: <JsScript>[
+                  JsScript.js(
+                    name: 'first.js',
+                    globals: <String>['app'],
+                    source: 'globalThis.app = 1;',
+                  ),
+                ],
+              ),
+              JsFeatures(
+                name: 'second-global',
+                scripts: <JsScript>[
+                  JsScript.js(
+                    name: 'second.js',
+                    globals: <String>['app'],
+                    source: 'globalThis.app = 2;',
+                  ),
+                ],
+              ),
+            ],
+          ),
+          throwsA(isA<JsValueConversionException>()),
+        );
+
+        await expectLater(
+          Quickjs.create(
+            features: <JsFeatures>[
+              JsFeatures(
+                name: 'browser-globals',
+                browserGlobals: JsGlobals(window: true),
+              ),
+            ],
+            scripts: <JsScript>[
+              JsScript.js(
+                name: 'window-conflict.js',
+                globals: <String>['window'],
+                source: 'globalThis.window = {};',
+              ),
+            ],
           ),
           throwsA(isA<JsValueConversionException>()),
         );
       },
     );
 
-    test('installs configured host mounts consistently', () async {
+    test('installs configured host features consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount(
-              name: 'configured',
-              capabilities: QuickjsHostCapabilities(
-                browserGlobals: QuickjsBrowserGlobals(window: true),
-              ),
-              environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
-              modules: <QuickjsHostModule>[_hostMathModule],
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'configured',
+            browserGlobals: JsGlobals(window: true),
+            scripts: <JsScript>[_randomUuidHostScript],
+            modules: <JsModule>[_hostMathModule],
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -4268,14 +4203,12 @@ globalThis.hostEnvironmentModuleValue = add(value, 1);
 
     test('installs minimal web host environment consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.web(
-              locationHref: 'https://example.com:8443/app?q=1#top',
-              userAgent: 'quickjs-test',
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.web(
+            locationHref: 'https://example.com:8443/app?q=1#top',
+            userAgent: 'quickjs-test',
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -4307,9 +4240,7 @@ globalThis.hostEnvironmentModuleValue = add(value, 1);
 
     test('installs essential buffer modules consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[QuickjsHostMount.essential()],
-        ),
+        features: <JsFeatures>[JsFeatures.essential()],
       );
       addTearDown(engine.dispose);
 
@@ -4341,11 +4272,7 @@ module.exports = Buffer.isBuffer(value) + '/' + value.toString() + '/' + value.l
 
     test('installs essential global Buffer when requested', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.essential(globalBuffer: true),
-          ],
-        ),
+        features: <JsFeatures>[JsFeatures.essential(globalBuffer: true)],
       );
       addTearDown(engine.dispose);
 
@@ -4359,15 +4286,13 @@ module.exports = Buffer.isBuffer(value) + '/' + value.toString() + '/' + value.l
 
     test('installs node preset modules without globals by default', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.node(
-              env: <String, String>{'APP_ENV': 'test'},
-              platform: 'test-platform',
-              cwd: '/workspace/app',
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.node(
+            env: <String, String>{'APP_ENV': 'test'},
+            platform: 'test-platform',
+            cwd: '/workspace/app',
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -4413,14 +4338,9 @@ globalThis.nodePresetValue = [
 
     test('installs node preset CommonJS modules consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.node(
-              env: <String, String>{'MODE': 'cjs'},
-              cwd: '/cjs',
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.node(env: <String, String>{'MODE': 'cjs'}, cwd: '/cjs'),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -4450,15 +4370,13 @@ module.exports = [
 
     test('installs node preset globals when requested', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          mounts: <QuickjsHostMount>[
-            QuickjsHostMount.node(
-              globalBuffer: true,
-              globalProcess: true,
-              env: <String, String>{'GLOBAL_MODE': 'enabled'},
-            ),
-          ],
-        ),
+        features: <JsFeatures>[
+          JsFeatures.node(
+            globalBuffer: true,
+            globalProcess: true,
+            env: <String, String>{'GLOBAL_MODE': 'enabled'},
+          ),
+        ],
       );
       addTearDown(engine.dispose);
 
@@ -4475,11 +4393,7 @@ module.exports = [
     });
 
     test('loads configured ES host modules consistently', () async {
-      final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[_hostMathModule],
-        ),
-      );
+      final engine = await Quickjs.create(modules: <JsModule>[_hostMathModule]);
       addTearDown(engine.dispose);
 
       expect(
@@ -4494,9 +4408,7 @@ globalThis.hostModuleValue = add(value, 1);
 
     test('does not expose host modules as globals consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[_hostBufferModule],
-        ),
+        modules: <JsModule>[_hostBufferModule],
       );
       addTearDown(engine.dispose);
 
@@ -4516,10 +4428,8 @@ globalThis.hostBufferImportLabel = label;
 
     test('keeps global crypto and node crypto module separate', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
-          modules: <QuickjsHostModule>[_hostCryptoModule],
-        ),
+        scripts: <JsScript>[_randomUuidHostScript],
+        modules: <JsModule>[_hostCryptoModule],
       );
       addTearDown(engine.dispose);
 
@@ -4539,9 +4449,7 @@ globalThis.hostNodeCryptoValue =
       'normalizes node-prefixed host module specifiers consistently',
       () async {
         final engine = await Quickjs.create(
-          options: const QuickjsRuntimeOptions(
-            modules: <QuickjsHostModule>[_hostBufferModule],
-          ),
+          modules: <JsModule>[_hostBufferModule],
         );
         addTearDown(engine.dispose);
 
@@ -4561,12 +4469,7 @@ globalThis.hostNodeBufferValue = label + '/' + byteLength('abcd');
 
     test('loads relative dependencies between ES host modules', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[
-            _hostPackageMainModule,
-            _hostPackageDepModule,
-          ],
-        ),
+        modules: <JsModule>[_hostPackageMainModule, _hostPackageDepModule],
       );
       addTearDown(engine.dispose);
 
@@ -4582,13 +4485,11 @@ globalThis.hostNodeBufferValue = label + '/' + byteLength('abcd');
 
     test('loads ES host module dependencies from moduleLoader', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          modules: const <QuickjsHostModule>[_hostModuleLoaderMainModule],
-          moduleLoader: (name) => switch (name) {
-            'loader/dep' => 'export const value = 40;',
-            _ => null,
-          },
-        ),
+        modules: const <JsModule>[_hostModuleLoaderMainModule],
+        moduleLoader: (name) => switch (name) {
+          'loader/dep' => 'export const value = 40;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -4602,14 +4503,11 @@ globalThis.hostLoaderDependencyValue = result;
 
     test('prefers ES host modules over moduleLoader consistently', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          modules: const <QuickjsHostModule>[_hostMathModule],
-          moduleLoader: (name) => switch (name) {
-            'app/math' =>
-              'export const value = -1; export const add = () => -1;',
-            _ => null,
-          },
-        ),
+        modules: const <JsModule>[_hostMathModule],
+        moduleLoader: (name) => switch (name) {
+          'app/math' => 'export const value = -1; export const add = () => -1;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -4623,9 +4521,7 @@ globalThis.hostPreferredValue = add(value, 1);
 
     test('caches ES host modules in one runtime consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[_hostCounterModule],
-        ),
+        modules: <JsModule>[_hostCounterModule],
       );
       addTearDown(engine.dispose);
 
@@ -4640,12 +4536,7 @@ globalThis.hostCounterResult = first + '/' + second + '/' + globalThis.hostModul
 
     test('loads configured CommonJS host modules consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[
-            _hostCommonJsModule,
-            _hostCommonJsLocalModule,
-          ],
-        ),
+        modules: <JsModule>[_hostCommonJsModule, _hostCommonJsLocalModule],
       );
       addTearDown(engine.dispose);
 
@@ -4660,9 +4551,7 @@ globalThis.hostCounterResult = first + '/' + second + '/' + globalThis.hostModul
 
     test('caches CommonJS host modules in one runtime consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          modules: <QuickjsHostModule>[_hostCommonJsCounterModule],
-        ),
+        modules: <JsModule>[_hostCommonJsCounterModule],
       );
       addTearDown(engine.dispose);
 
@@ -4678,13 +4567,11 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
 
     test('loads CommonJS host module dependencies from moduleLoader', () async {
       final engine = await Quickjs.create(
-        options: QuickjsRuntimeOptions(
-          modules: const <QuickjsHostModule>[_hostCommonJsLoaderMainModule],
-          moduleLoader: (name) => switch (name) {
-            'loader/cjs-dep' => 'exports.value = 40;',
-            _ => null,
-          },
-        ),
+        modules: const <JsModule>[_hostCommonJsLoaderMainModule],
+        moduleLoader: (name) => switch (name) {
+          'loader/cjs-dep' => 'exports.value = 40;',
+          _ => null,
+        },
       );
       addTearDown(engine.dispose);
 
@@ -4701,14 +4588,12 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
       'prefers CommonJS host modules over moduleLoader consistently',
       () async {
         final engine = await Quickjs.create(
-          options: QuickjsRuntimeOptions(
-            modules: const <QuickjsHostModule>[_hostCommonJsModule],
-            moduleLoader: (name) => switch (name) {
-              'app/cjs' => 'module.exports = { value: -1 };',
-              'app/local' => 'exports.value = 6;',
-              _ => null,
-            },
-          ),
+          modules: const <JsModule>[_hostCommonJsModule],
+          moduleLoader: (name) => switch (name) {
+            'app/cjs' => 'module.exports = { value: -1 };',
+            'app/local' => 'exports.value = 6;',
+            _ => null,
+          },
         );
         addTearDown(engine.dispose);
 
@@ -4726,9 +4611,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
       'normalizes node-prefixed CommonJS host modules consistently',
       () async {
         final engine = await Quickjs.create(
-          options: const QuickjsRuntimeOptions(
-            modules: <QuickjsHostModule>[_hostCommonJsBufferModule],
-          ),
+          modules: <JsModule>[_hostCommonJsBufferModule],
         );
         addTearDown(engine.dispose);
 
@@ -4745,18 +4628,16 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
     test('rejects duplicate host module specifiers consistently', () async {
       await expectLater(
         Quickjs.create(
-          options: const QuickjsRuntimeOptions(
-            modules: <QuickjsHostModule>[
-              QuickjsHostModule.esModule(
-                specifier: 'dup',
-                source: 'export const value = 1;',
-              ),
-              QuickjsHostModule.esModule(
-                specifier: 'node:dup',
-                source: 'export const value = 2;',
-              ),
-            ],
-          ),
+          modules: <JsModule>[
+            JsModule.esModule(
+              specifier: 'dup',
+              source: 'export const value = 1;',
+            ),
+            JsModule.esModule(
+              specifier: 'node:dup',
+              source: 'export const value = 2;',
+            ),
+          ],
         ),
         throwsA(isA<JsValueConversionException>()),
       );
@@ -4764,34 +4645,39 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
 
     test('keeps host capability configuration isolated by runtime', () async {
       final enabled = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          hostCapabilities: QuickjsHostCapabilities(
-            browserGlobals: QuickjsBrowserGlobals(window: true),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'browser-globals',
+            browserGlobals: JsGlobals(window: true),
           ),
-        ),
+        ],
       );
       final disabled = await Quickjs.create();
       addTearDown(enabled.dispose);
       addTearDown(disabled.dispose);
 
-      expect(await enabled.eval('window === globalThis'), 'true');
+      expect(await enabled.eval('window === globalThis'), true);
       expect(await disabled.eval('typeof window'), 'undefined');
     });
 
-    test('reinstalls host environment after stop rebuilds runtime', () async {
+    test('reinstalls host environment after restart rebuilds runtime', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(
-          hostCapabilities: QuickjsHostCapabilities(
-            browserGlobals: QuickjsBrowserGlobals(window: true),
+        features: <JsFeatures>[
+          JsFeatures(
+            name: 'browser-globals',
+            browserGlobals: JsGlobals(window: true),
           ),
-          environmentPatches: <QuickjsHostScript>[_randomUuidHostScript],
-          modules: <QuickjsHostModule>[_hostMathModule],
-        ),
+        ],
+        scripts: <JsScript>[_randomUuidHostScript],
+        modules: <JsModule>[_hostMathModule],
       );
       addTearDown(engine.dispose);
 
       final running = engine.eval('while (true) {}');
-      await Future<void>.delayed(const Duration(milliseconds: 50), engine.stop);
+      await Future<void>.delayed(
+        const Duration(milliseconds: 50),
+        engine.restart,
+      );
       await expectLater(running, throwsA(isA<JsCancelledException>()));
 
       expect(await engine.eval('window === globalThis'), 'true');
@@ -4881,7 +4767,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
     // native 鍜?web 閮藉簲鎶?memory limit 瓒呴檺鏄犲皠鎴愬悓涓€涓叕寮€閿欒绫诲瀷銆?
     test('maps memory limit failures consistently', () async {
       final engine = await Quickjs.create(
-        options: const QuickjsRuntimeOptions(memoryLimitBytes: 256 * 1024),
+        options: const JsOptions(memoryLimitBytes: 256 * 1024),
       );
       addTearDown(engine.dispose);
 
@@ -4900,7 +4786,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
       final running = engine.eval('while (true) {}');
       final stopFuture = Future<void>.delayed(
         const Duration(milliseconds: 50),
-        engine.stop,
+        engine.restart,
       );
 
       await expectLater(running, throwsA(isA<JsCancelledException>()));

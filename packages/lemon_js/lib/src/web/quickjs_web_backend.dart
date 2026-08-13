@@ -74,9 +74,7 @@ class WebQuickjsBackend implements QuickjsBackend {
   String get quickjsVersion => _quickjsVersion;
 
   @override
-  Future<QuickjsJsRuntimeBase> createRuntime(
-    QuickjsRuntimeOptions options,
-  ) async {
+  Future<QuickjsJsRuntimeBase> createRuntime(JsOptions options) async {
     final id = (await _host.runtimeNew(options.memoryLimitBytes?.toJS).toDart)
         .toDartInt;
     return WebQuickjsJsRuntime(_host, id, options);
@@ -89,7 +87,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   }
 
   final QuickjsWebHost _host;
-  final QuickjsRuntimeOptions _options;
+  final JsOptions _options;
   int _id;
   bool _closed = false;
   Future<void>? _recovering;
@@ -167,7 +165,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
     try {
       return await _evaluateCurrentRuntime(code, timeout: timeout, name: name);
     } catch (error) {
-      if (error is QuickjsException) {
+      if (error is JsException) {
         rethrow;
       }
       final mapped = _mapWebError(error);
@@ -187,7 +185,7 @@ final class WebQuickjsJsRuntime implements QuickjsJsRuntimeBase {
   Future<String> evaluateAsync(
     String code, {
     Duration? timeout,
-    String name = '<evalAsync>',
+    String name = '<run>',
   }) async {
     _ensureOpen();
     try {

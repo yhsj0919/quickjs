@@ -157,10 +157,10 @@ final class QuickjsUiError implements Exception {
 }
 
 String _messageFor(Object cause) {
-  if (cause is JsException) {
+  if (cause is JsThrownException) {
     return cause.message;
   }
-  if (cause is QuickjsException) {
+  if (cause is JsException) {
     return cause.message;
   }
   if (cause is FormatException) {
@@ -170,7 +170,7 @@ String _messageFor(Object cause) {
 }
 
 StackTrace? _stackFor(Object cause) {
-  if (cause is JsException && cause.stack != null) {
+  if (cause is JsThrownException && cause.stack != null) {
     return StackTrace.fromString(cause.stack!);
   }
   if (cause is Error) {

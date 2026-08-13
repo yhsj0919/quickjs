@@ -10,7 +10,7 @@ import 'quickjs_ui_network_loader.dart';
 
 /// Bounded cache for parsed dynamic-UI bundles.
 ///
-/// The cache owns only JavaScript module text and [QuickjsPlugin] descriptors.
+/// The cache owns only JavaScript module text and [JsPlugin] descriptors.
 /// It never retains a QuickJS Context, page state, rendered widgets, or image
 /// bytes; images remain governed by Flutter's ImageCache or an application
 /// media cache. TTL, byte capacity and entry capacity are independent bounds.
@@ -33,8 +33,7 @@ final class QuickjsUiResourceCache {
   final int maxEntries;
   final LinkedHashMap<String, _ResourceCacheEntry> _entries =
       LinkedHashMap<String, _ResourceCacheEntry>();
-  final Map<String, Future<QuickjsPlugin>> _pending =
-      <String, Future<QuickjsPlugin>>{};
+  final Map<String, Future<JsPlugin>> _pending = <String, Future<JsPlugin>>{};
   int _totalBytes = 0;
 
   int get length => _entries.length;
@@ -42,7 +41,7 @@ final class QuickjsUiResourceCache {
   bool get isEnabled =>
       maxAge > Duration.zero && maxBytes > 0 && maxEntries > 0;
 
-  Future<QuickjsPlugin> loadAsset({
+  Future<JsPlugin> loadAsset({
     required String path,
     String? bundleRoot,
     AssetBundle? bundle,
@@ -59,7 +58,7 @@ final class QuickjsUiResourceCache {
     );
   }
 
-  Future<QuickjsPlugin> loadFile({required String path, String? bundleRoot}) {
+  Future<JsPlugin> loadFile({required String path, String? bundleRoot}) {
     final key = 'file:$bundleRoot:$path';
     return _load(
       key,
@@ -70,7 +69,7 @@ final class QuickjsUiResourceCache {
     );
   }
 
-  Future<QuickjsPlugin> loadNetwork({
+  Future<JsPlugin> loadNetwork({
     required Uri url,
     Uri? bundleRoot,
     QuickjsUiNetworkFetch? fetch,
@@ -102,10 +101,7 @@ final class QuickjsUiResourceCache {
     _totalBytes = 0;
   }
 
-  Future<QuickjsPlugin> _load(
-    String key,
-    Future<QuickjsPlugin> Function() loader,
-  ) {
+  Future<JsPlugin> _load(String key, Future<JsPlugin> Function() loader) {
     if (!isEnabled) return loader();
     final now = DateTime.now();
     final cached = _entries.remove(key);
@@ -114,7 +110,7 @@ final class QuickjsUiResourceCache {
       if (now.difference(cached.createdAt) <= maxAge) {
         _entries[key] = cached;
         _totalBytes += cached.sizeBytes;
-        return Future<QuickjsPlugin>.value(cached.plugin);
+        return Future<JsPlugin>.value(cached.plugin);
       }
     }
     final pending = _pending[key];
@@ -161,12 +157,12 @@ final class _ResourceCacheEntry {
     required this.createdAt,
   });
 
-  final QuickjsPlugin plugin;
+  final JsPlugin plugin;
   final int sizeBytes;
   final DateTime createdAt;
 }
 
-int _pluginSize(QuickjsPlugin plugin) {
+int _pluginSize(JsPlugin plugin) {
   var bytes =
       utf8.encode(plugin.manifest.id).length +
       utf8.encode(plugin.manifest.version).length +

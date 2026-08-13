@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../runtime/quickjs_runtime_options.dart';
 
 /// 可替换的异步命名空间 KV 存储。
-abstract interface class QuickjsKeyValueStore {
+abstract interface class JsKvStore {
   Future<Object?> get(String key, {String? namespace});
 
   Future<void> set(String key, Object? value, {String? namespace});
@@ -20,7 +20,7 @@ abstract interface class QuickjsKeyValueStore {
 }
 
 /// 适合测试和临时 Session 的内存 KV 实现。
-final class InMemoryQuickjsKeyValueStore implements QuickjsKeyValueStore {
+final class MemoryJsKvStore implements JsKvStore {
   final Map<String, Map<String, Object?>> _namespaces =
       <String, Map<String, Object?>>{};
 
@@ -63,9 +63,8 @@ final class InMemoryQuickjsKeyValueStore implements QuickjsKeyValueStore {
 /// 所有值统一编码为 JSON，因此支持 null、bool、num、String、List 和
 /// `Map<String, Object?>`。它适合配置、认证状态和少量缓存，不用于数据库查询、事务或
 /// 关键数据的可靠刷盘。
-final class SharedPreferencesQuickjsKeyValueStore
-    implements QuickjsKeyValueStore {
-  SharedPreferencesQuickjsKeyValueStore({SharedPreferencesAsync? preferences})
+final class SharedPreferencesJsKvStore implements JsKvStore {
+  SharedPreferencesJsKvStore({SharedPreferencesAsync? preferences})
     : _injectedPreferences = preferences;
 
   static const String _prefix = 'lemon_js.kv.v1.';
@@ -134,29 +133,29 @@ final class SharedPreferencesQuickjsKeyValueStore
 }
 
 /// 将一个已经绑定命名空间的 KV Store 暴露为 ES module。
-base class QuickjsKeyValueStorageMount extends QuickjsHostMount {
-  factory QuickjsKeyValueStorageMount({
-    QuickjsKeyValueStore? store,
+base class StorageFeatures extends JsFeatures {
+  factory StorageFeatures({
+    JsKvStore? store,
     String? namespace,
     String moduleSpecifier = 'lemon_js/storage',
     String? name,
-  }) => QuickjsKeyValueStorageMount.custom(
-    store: store ?? SharedPreferencesQuickjsKeyValueStore(),
+  }) => StorageFeatures.custom(
+    store: store ?? SharedPreferencesJsKvStore(),
     namespace: namespace,
     moduleSpecifier: moduleSpecifier,
     name: name,
   );
 
   /// 供需要自定义模块名的组合层使用。
-  QuickjsKeyValueStorageMount.custom({
-    required QuickjsKeyValueStore store,
+  StorageFeatures.custom({
+    required JsKvStore store,
     required String? namespace,
     required String moduleSpecifier,
     required String? name,
   }) : super(
          name: name ?? 'lemon_js.storage.${_encode(namespace ?? '')}',
-         providers: <QuickjsHostProvider>[
-           QuickjsHostProvider.dart(
+         providers: <JsProvider>[
+           JsProvider.dart(
              name:
                  '${name ?? 'lemon_js.storage.${_encode(namespace ?? '')}'}.call',
              debugName: 'kv-storage:${namespace ?? 'default'}',
@@ -201,8 +200,8 @@ base class QuickjsKeyValueStorageMount extends QuickjsHostMount {
              },
            ),
          ],
-         modules: <QuickjsHostModule>[
-           QuickjsHostModule.esModule(
+         modules: <JsModule>[
+           JsModule.esModule(
              specifier: moduleSpecifier,
              source: _storageModuleSource(
                '${name ?? 'lemon_js.storage.${_encode(namespace ?? '')}'}.call',

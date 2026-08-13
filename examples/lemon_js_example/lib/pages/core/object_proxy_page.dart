@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// 对象代理 Demo：使用 [Quickjs.bindObject] 注册 Dart proxy，
+/// 对象代理 Demo：使用 [Quickjs.injectObject] 注册 Dart proxy，
 /// 暴露只读属性、Promise 方法与显式释放。
 class ObjectProxyPage extends StatefulWidget {
   const ObjectProxyPage({super.key});
@@ -14,7 +14,7 @@ class ObjectProxyPage extends StatefulWidget {
 
 class _ObjectProxyPageState extends State<ObjectProxyPage> {
   Quickjs? _quickjs;
-  QuickjsObjectHandle? _userHandle;
+  JsObjectHandle? _userHandle;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -41,22 +41,26 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
 
       var userName = 'Tom';
       final quickjs = await Quickjs.create();
-      final userHandle = await quickjs.bindObject(
+      final userHandle = await quickjs.injectObject(
         'user',
-        QuickjsObjectProxy(
-          properties: const {'role': 'admin'},
-          accessors: {
-            'name': QuickjsObjectAccessor(
-              get: () => userName,
-              set: (value) {
-                userName = value as String;
-              },
-            ),
-          },
-          methods: {
-            'greet': (args) => '你好 ${args.single}，我是 $userName',
-            'save': (_) async => '已保存 $userName',
-          },
+        JsObject(
+          target: Object(),
+          members: JsMembers(
+            values: const [JsValue('role', 'admin')],
+            accessors: [
+              JsAccessor(
+                'name',
+                get: (_) => userName,
+                set: (_, value) {
+                  userName = value as String;
+                },
+              ),
+            ],
+            methods: [
+              JsMethod('greet', (_, args) => '你好 ${args.single}，我是 $userName'),
+              JsMethod('save', (_, _) async => '已保存 $userName'),
+            ],
+          ),
         ),
       );
       if (!mounted || _disposed) {
@@ -82,7 +86,7 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
 
   Future<void> _readProperties() async {
     await _capture('读取属性', () async {
-      final result = await _requireRuntime().evalAsync(
+      final result = await _requireRuntime().run(
         'return await user.name + ":" + user.role;',
       );
       _appendLog('await user.name:user.role => $result');
@@ -91,7 +95,7 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
 
   Future<void> _changeDynamicProperty() async {
     await _capture('动态属性 getter/setter', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 const before = await user.name;
 user.name = 'Jerry';
 await new Promise((resolve) => setTimeout(resolve, 1));
@@ -104,7 +108,7 @@ return before + ' -> ' + after;
 
   Future<void> _callMethods() async {
     await _capture('调用方法', () async {
-      final result = await _requireRuntime().evalAsync('''
+      final result = await _requireRuntime().run('''
 const greeting = await user.greet('Jerry');
 const saved = await user.save();
 return greeting + ':' + saved;
@@ -206,7 +210,7 @@ return greeting + ':' + saved;
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              '使用 bindObject 绑定 Dart 对象代理，暴露只读属性、动态 getter/setter 和 Promise 方法。',
+              '使用 injectObject 注入 Dart 对象代理，暴露只读属性、动态 getter/setter 和 Promise 方法。',
             ),
             const SizedBox(height: 16),
             Wrap(

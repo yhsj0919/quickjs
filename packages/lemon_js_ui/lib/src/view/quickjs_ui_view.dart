@@ -36,7 +36,7 @@ typedef QuickjsUiEmptyBuilder = Widget Function(BuildContext context);
 /// Flutter Widget，并在页面销毁时释放 runtime。
 ///
 /// 能力注入分为两类：
-/// - [mounts]：业务 JS 能力（网络、宿主 API、polyfill 等）。
+/// - [features]：业务 JS 能力（网络、宿主 API、polyfill 等）。
 /// - [uiPlugins]：第三方原生 UI 组件插件（同时包含 JS 模块与 Flutter 渲染注册）。
 final class QuickjsUiView extends StatefulWidget {
   /// 通用构造：通过 [plugin] 或 [path] 二选一指定页面来源。
@@ -48,7 +48,7 @@ final class QuickjsUiView extends StatefulWidget {
     String? path,
     this.bundleRoot,
     this.initialProps = const <String, Object?>{},
-    this.mounts = const <QuickjsHostMount>[],
+    this.features = const <JsFeatures>[],
     this.uiPlugins = const <QuickjsUiPlugin>[],
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
@@ -73,11 +73,11 @@ final class QuickjsUiView extends StatefulWidget {
        assert(plugin != null || path != null),
        assert(runtime == null || controller == null);
 
-  /// 从已注册的 [QuickjsPlugin] 加载页面。
+  /// 从已注册的 [JsPlugin] 加载页面。
   ///
   /// - [plugin]：QuickJS 插件描述对象，通常包含入口脚本与模块图。
   /// - [initialProps]：传给 JS 页面根组件的初始 props。
-  /// - [mounts]：业务侧 JS runtime 能力 mount。
+  /// - [features]：业务侧 JS runtime 能力 features。
   /// - [uiPlugins]：需要额外原生 UI 控件时传入的 UI 插件列表。
   /// - [grantedPermissions]：页面已授权的能力名称集合。
   /// - [permissionPolicy]：权限拦截策略；为 `null` 时使用默认策略。
@@ -89,16 +89,16 @@ final class QuickjsUiView extends StatefulWidget {
   /// - [emptyBuilder]：空内容状态 UI 构建器。
   /// - [onFirstRender]：首次成功渲染后的回调。
   factory QuickjsUiView.plugin(
-    QuickjsPlugin plugin, {
+    JsPlugin plugin, {
     Key? key,
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
     QuickjsUiRuntime? runtime,
-    QuickjsConsoleSink? onConsole,
+    JsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -112,7 +112,7 @@ final class QuickjsUiView extends StatefulWidget {
       plugin: plugin,
       source: _QuickjsUiViewSource.plugin,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
@@ -139,13 +139,13 @@ final class QuickjsUiView extends StatefulWidget {
     required String path,
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
     QuickjsUiRuntime? runtime,
-    QuickjsConsoleSink? onConsole,
+    JsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -160,7 +160,7 @@ final class QuickjsUiView extends StatefulWidget {
       bundleRoot: bundleRoot,
       source: _QuickjsUiViewSource.asset,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
@@ -187,13 +187,13 @@ final class QuickjsUiView extends StatefulWidget {
     required String path,
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
     QuickjsUiRuntime? runtime,
-    QuickjsConsoleSink? onConsole,
+    JsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -208,7 +208,7 @@ final class QuickjsUiView extends StatefulWidget {
       bundleRoot: bundleRoot,
       source: _QuickjsUiViewSource.file,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
@@ -239,13 +239,13 @@ final class QuickjsUiView extends StatefulWidget {
     QuickjsUiNetworkFetch? fetch,
     QuickjsUiNetworkLogHandler? onNetworkLog,
     Map<String, Object?> initialProps = const <String, Object?>{},
-    List<QuickjsHostMount> mounts = const <QuickjsHostMount>[],
+    List<JsFeatures> features = const <JsFeatures>[],
     List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
     QuickjsUiPermissionPolicy? permissionPolicy,
     QuickjsUiController? controller,
     QuickjsUiRuntime? runtime,
-    QuickjsConsoleSink? onConsole,
+    JsConsoleSink? onConsole,
     Widget? placeholder,
     QuickjsUiLoadingBuilder? loadingBuilder,
     QuickjsUiErrorBuilder? errorBuilder,
@@ -263,7 +263,7 @@ final class QuickjsUiView extends StatefulWidget {
       onNetworkLog: onNetworkLog,
       source: _QuickjsUiViewSource.network,
       initialProps: initialProps,
-      mounts: mounts,
+      features: features,
       uiPlugins: uiPlugins,
       grantedPermissions: grantedPermissions,
       permissionPolicy: permissionPolicy,
@@ -291,7 +291,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.onNetworkLog,
     required this._source,
     this.initialProps = const <String, Object?>{},
-    this.mounts = const <QuickjsHostMount>[],
+    this.features = const <JsFeatures>[],
     this.uiPlugins = const <QuickjsUiPlugin>[],
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
@@ -307,7 +307,7 @@ final class QuickjsUiView extends StatefulWidget {
     this.performanceController,
   }) : assert(runtime == null || controller == null);
 
-  final QuickjsPlugin? plugin;
+  final JsPlugin? plugin;
   final String? _path;
 
   /// 多文件 bundle 根路径（asset / 本地文件 / 网络 URL 语义由加载源决定）。
@@ -328,14 +328,14 @@ final class QuickjsUiView extends StatefulWidget {
   /// 传给 JS 页面根组件的初始 props。
   final Map<String, Object?> initialProps;
 
-  /// 页面业务 JavaScript runtime 所需的宿主能力 mount。
+  /// 页面业务 JavaScript runtime 所需的宿主能力 features。
   ///
-  /// 例如 [QuickjsAxiosMount]、[QuickjsFetchMount]、自定义 provider mount 等。
-  final List<QuickjsHostMount> mounts;
+  /// 例如 [AxiosFeatures]、[FetchFeatures]、自定义 provider features 等。
+  final List<JsFeatures> features;
 
   /// 第三方原生 UI 组件插件列表。
   ///
-  /// 每个插件同时提供 JS 模块 mount 与 Flutter 组件注册，避免只配一半。
+  /// 每个插件同时提供 JS 模块 features 与 Flutter 组件注册，避免只配一半。
   final List<QuickjsUiPlugin> uiPlugins;
 
   /// 页面已声明并授权的能力名称。
@@ -345,9 +345,9 @@ final class QuickjsUiView extends StatefulWidget {
   final QuickjsUiPermissionPolicy? permissionPolicy;
 
   /// JS `console.*` 输出接收器。
-  final QuickjsConsoleSink? onConsole;
+  final JsConsoleSink? onConsole;
 
-  /// Shared owner of pre-initialized engines. Page [mounts] remain scoped to
+  /// Shared owner of pre-initialized engines. Page [features] remain scoped to
   /// the leased engine configuration and are never merged into other pages.
   final QuickjsUiRuntime? runtime;
 
@@ -451,13 +451,13 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     return registry;
   }
 
-  List<QuickjsHostMount> _effectiveMounts() {
+  List<JsFeatures> _effectiveMounts() {
     if (widget.uiPlugins.isEmpty) {
-      return widget.mounts;
+      return widget.features;
     }
-    return <QuickjsHostMount>[
-      ...widget.mounts,
-      for (final plugin in widget.uiPlugins) ...plugin.mounts,
+    return <JsFeatures>[
+      ...widget.features,
+      for (final plugin in widget.uiPlugins) ...plugin.features,
     ];
   }
 
@@ -517,7 +517,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         oldWidget.resourceCache != widget.resourceCache ||
         oldWidget._source != widget._source ||
         oldWidget.initialProps != widget.initialProps ||
-        oldWidget.mounts != widget.mounts ||
+        oldWidget.features != widget.features ||
         oldWidget.uiPlugins != widget.uiPlugins ||
         !_stringIterableSetEquals(
           oldWidget.grantedPermissions,
@@ -685,7 +685,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_isCurrentGeneration(generation)) {
         return;
       }
-      await _controller.lifecycle('mount');
+      await _controller.lifecycle('features');
       if (!_isCurrentGeneration(generation)) {
         return;
       }
@@ -723,7 +723,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         await _controller.loadPlugin(
           plugin,
           initialProps: widget.initialProps,
-          mounts: _effectiveMounts(),
+          features: _effectiveMounts(),
           grantedPermissions: widget.grantedPermissions,
           permissionPolicy: widget.permissionPolicy,
           errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
@@ -737,7 +737,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       await _controller.load(
         _loadPlugin,
         initialProps: widget.initialProps,
-        mounts: _effectiveMounts(),
+        features: _effectiveMounts(),
         grantedPermissions: widget.grantedPermissions,
         permissionPolicy: widget.permissionPolicy,
         errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
@@ -761,7 +761,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     _loadCoordinator.schedule(_load, immediate: immediate);
   }
 
-  Future<QuickjsPlugin> _loadPlugin() async {
+  Future<JsPlugin> _loadPlugin() async {
     final plugin = widget.plugin;
     if (plugin != null) {
       return plugin;
@@ -776,14 +776,14 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     };
   }
 
-  Future<QuickjsPlugin> _loadAssetPlugin(String path) async {
+  Future<JsPlugin> _loadAssetPlugin(String path) async {
     return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadAsset(
       path: path,
       bundleRoot: widget.bundleRoot,
     );
   }
 
-  Future<QuickjsPlugin> _loadNetworkPlugin(Uri url) async {
+  Future<JsPlugin> _loadNetworkPlugin(Uri url) async {
     return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadNetwork(
       url: url,
       bundleRoot: widget.networkBundleRoot,
@@ -792,7 +792,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     );
   }
 
-  Future<QuickjsPlugin> _loadFilePlugin(String path) async {
+  Future<JsPlugin> _loadFilePlugin(String path) async {
     return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadFile(
       path: path,
       bundleRoot: widget.bundleRoot,
