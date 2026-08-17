@@ -10,14 +10,12 @@ void main() {
     expect(source, isNot(contains("from 'fast-deep-equal'")));
     expect(source, isNot(contains('from "fast-deep-equal"')));
 
-    final engine = await Quickjs.create(
-      modules: <JsModule>[
-        JsModule.esModule(specifier: 'example/npm-bundle', source: source),
-      ],
+    final engine = await JsEngine.create(
+      modules: <JsModule>[JsModule(name: 'example/npm-bundle', source: source)],
     );
     addTearDown(engine.dispose);
 
-    await engine.evalModule('''
+    await engine.runModule('''
 import { bundledDependency, compareValues } from 'example/npm-bundle';
 globalThis.npmBundleTestResult = bundledDependency + '/' + [
   compareValues({ answer: 42 }, { answer: 42 }),

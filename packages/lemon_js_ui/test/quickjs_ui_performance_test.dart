@@ -4,8 +4,8 @@ import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 void main() {
   test('auto quality degrades and recovers with hysteresis', () {
-    final controller = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.auto,
+    final controller = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.auto,
       targetFrameBudget: const Duration(milliseconds: 8),
       degradeAfterFrames: 2,
       upgradeAfterFrames: 4,
@@ -17,35 +17,35 @@ void main() {
     }
 
     sample(const Duration(milliseconds: 10));
-    expect(controller.quality, QuickjsUiEffectQuality.high);
+    expect(controller.quality, JsUiEffectQuality.high);
     sample(const Duration(milliseconds: 10));
-    expect(controller.quality, QuickjsUiEffectQuality.balanced);
+    expect(controller.quality, JsUiEffectQuality.balanced);
     sample(const Duration(milliseconds: 10));
     sample(const Duration(milliseconds: 10));
-    expect(controller.quality, QuickjsUiEffectQuality.low);
+    expect(controller.quality, JsUiEffectQuality.low);
 
     for (var index = 0; index < 4; index += 1) {
       sample(const Duration(milliseconds: 4));
     }
-    expect(controller.quality, QuickjsUiEffectQuality.balanced);
+    expect(controller.quality, JsUiEffectQuality.balanced);
     for (var index = 0; index < 4; index += 1) {
       sample(const Duration(milliseconds: 4));
     }
-    expect(controller.quality, QuickjsUiEffectQuality.high);
+    expect(controller.quality, JsUiEffectQuality.high);
   });
 
   test(
     'display refresh rate configures automatic budget unless overridden',
     () {
-      final automatic = QuickjsUiPerformanceController(
-        mode: QuickjsUiPerformanceMode.auto,
+      final automatic = JsUiPerformanceController(
+        mode: JsUiPerformanceMode.auto,
       );
       automatic.updateDisplayRefreshRate(60);
       expect(automatic.refreshRate, 60);
       expect(automatic.targetFrameBudget.inMicroseconds, closeTo(16667, 1));
 
-      final overridden = QuickjsUiPerformanceController(
-        mode: QuickjsUiPerformanceMode.auto,
+      final overridden = JsUiPerformanceController(
+        mode: JsUiPerformanceMode.auto,
         targetFrameBudget: const Duration(milliseconds: 10),
       );
       overridden.updateDisplayRefreshRate(120);
@@ -57,21 +57,19 @@ void main() {
   );
 
   test('reduced motion temporarily forces off without losing quality', () {
-    final controller = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.low,
-    );
-    expect(controller.quality, QuickjsUiEffectQuality.low);
+    final controller = JsUiPerformanceController(mode: JsUiPerformanceMode.low);
+    expect(controller.quality, JsUiEffectQuality.low);
     controller.updateReduceMotion(true);
-    expect(controller.quality, QuickjsUiEffectQuality.off);
+    expect(controller.quality, JsUiEffectQuality.off);
     expect(controller.snapshot.reduceMotion, isTrue);
     controller.updateReduceMotion(false);
-    expect(controller.quality, QuickjsUiEffectQuality.low);
+    expect(controller.quality, JsUiEffectQuality.low);
     controller.dispose();
   });
 
   test('performance snapshot exposes timing percentiles and reason', () {
-    final controller = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.auto,
+    final controller = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.auto,
       degradeAfterFrames: 1,
       upgradeAfterFrames: 2,
     );
@@ -88,8 +86,8 @@ void main() {
   });
 
   test('performance session exports fixed-mode samples as JSON', () {
-    final controller = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.high,
+    final controller = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.high,
       targetFrameBudget: const Duration(milliseconds: 8),
     );
     controller.updateDisplayRefreshRate(120);
@@ -131,8 +129,8 @@ void main() {
   });
 
   test('performance session records automatic quality degradation', () {
-    final controller = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.auto,
+    final controller = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.auto,
       targetFrameBudget: const Duration(milliseconds: 8),
       degradeAfterFrames: 1,
       upgradeAfterFrames: 2,
@@ -156,16 +154,16 @@ void main() {
   testWidgets('low quality removes expensive widget effects locally', (
     tester,
   ) async {
-    final performance = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.auto,
+    final performance = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.auto,
       degradeAfterFrames: 1,
       upgradeAfterFrames: 2,
     );
-    final renderer = QuickjsUiRenderer(
+    final renderer = JsUiRenderer(
       onEvent: (_) {},
       performanceController: performance,
     );
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Container',
       'key': 'quality-effect',
       'width': 40,
@@ -191,7 +189,7 @@ void main() {
       raster: const Duration(milliseconds: 12),
     );
     await tester.pump();
-    expect(performance.quality, QuickjsUiEffectQuality.low);
+    expect(performance.quality, JsUiEffectQuality.low);
     expect(find.byType(BackdropFilter), findsNothing);
     expect(find.byType(ColorFiltered), findsNothing);
     expect(find.byType(ImageFiltered), findsOneWidget);
@@ -209,14 +207,14 @@ void main() {
   testWidgets('Canvas metrics include schema resources paint and rejection', (
     tester,
   ) async {
-    final performance = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.low,
+    final performance = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.low,
     );
-    final renderer = QuickjsUiRenderer(
+    final renderer = JsUiRenderer(
       onEvent: (_) {},
       performanceController: performance,
     );
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'sceneKey': 'metrics-scene',
       'commands': <Object?>[
@@ -256,7 +254,7 @@ void main() {
     expect(metrics['canvasRepaintCount'], greaterThan(0));
     expect(metrics['canvasPaintP90Ms'], isA<double>());
 
-    final invalid = QuickjsUiNode.fromMap(<String, Object?>{
+    final invalid = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'commands': <Object?>[
         <String, Object?>{'op': 'restore'},
@@ -275,14 +273,14 @@ void main() {
   testWidgets('off quality resolves animations to a static end state', (
     tester,
   ) async {
-    final performance = QuickjsUiPerformanceController(
-      mode: QuickjsUiPerformanceMode.off,
+    final performance = JsUiPerformanceController(
+      mode: JsUiPerformanceMode.off,
     );
-    final renderer = QuickjsUiRenderer(
+    final renderer = JsUiRenderer(
       onEvent: (_) {},
       performanceController: performance,
     );
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Container',
       'key': 'disabled-effect',
       'opacity': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 500},

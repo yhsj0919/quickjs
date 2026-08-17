@@ -33,27 +33,27 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
    `Buffer` 等。用户侧 JS 调用方式应保持稳定；注入范围、权限配置、runtime 隔离和
    native / web 一致性测试必须约束替换与补齐策略。
 
-7. 公开 API 只保留 `Quickjs` 一个系统入口。
-   创建、执行、停止、销毁都从 `Quickjs` 实例进入，不要求用户直接管理底层 runtime。
+7. 公开 API 只保留 `JsEngine` 一个系统入口。
+   创建、执行、停止、销毁都从 `JsEngine` 实例进入，不要求用户直接管理底层 runtime。
 
 8. 每个新功能同步补 example 页面和测试。
-   example 页面必须能独立创建和销毁自己的 `Quickjs` 实例，页面之间不共享 runtime
+   example 页面必须能独立创建和销毁自己的 `JsEngine` 实例，页面之间不共享 runtime
    状态。
 
 ## 当前完成状态
 
 ### 已完成
 
-- [x] `Quickjs.create()` / `eval()` / `run()` / `restart()` / `dispose()`
+- [x] `JsEngine.create()` / `eval()` / `run()` / `restart()` / `dispose()`
   已异步化。
 - [x] native FFI 调用已迁移到 Dart isolate worker。
 - [x] Web WASM 调用已迁移到 Web Worker。
-- [x] 同一 `Quickjs` 实例内的 eval 请求按 FIFO 串行执行。
+- [x] 同一 `JsEngine` 实例内的 eval 请求按 FIFO 串行执行。
 - [x] 长耗时 JS 不阻塞 Flutter UI isolate。
 - [x] `dispose()` 后继续 eval 会抛出 `JsRuntimeClosedException`。
 - [x] `restart()` 可以取消当前 eval，并取消队列中的 eval。
 - [x] `eval(timeout:)` 可以触发 `JsTimeoutException`。
-- [x] timeout / stop 后同一个 `Quickjs` 实例可以继续 eval。
+- [x] timeout / stop 后同一个 `JsEngine` 实例可以继续 eval。
 - [x] 重复 `dispose()`、closed 后 `restart()`、restart 过程中入队 eval 等状态边界已有测试。
 - [x] 多 runtime 的基础 global 状态已隔离。
 - [x] dispose 一个 runtime 不影响另一个 runtime。
@@ -62,7 +62,7 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
   `JsCancelledException`、`JsRuntimeClosedException`、`JsRuntimeCrashException`。
 - [x] worker crash 后 pending Future 会完成为 `JsRuntimeCrashException`，后续请求返回
   closed error。
-- [x] 公开 `QuickjsRuntimeState` 与 `engine.state`，可观测 ready、running、stopping、
+- [x] 公开 `JsRuntimeState` 与 `engine.state`，可观测 ready、running、stopping、
   closed、failed 等生命周期状态。
 - [x] memory limit：基于 native `JS_SetMemoryLimit` 与 web `quickjs-wasi`
   `memoryLimit`，超限映射为 `JsOutOfMemoryException`。
@@ -74,9 +74,9 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
   null、undefined、bigint、array、plain object、ArrayBuffer、Uint8Array。
 - [x] 值转换对循环引用、symbol、function 等不可直接转换值会抛出
   `JsValueConversionException`。
-- [x] `eval()` / `run()` 支持通过 `globals` 临时注入 Dart
+- [x] `eval()` / `run()` 支持通过 `tempGlobals` 临时注入 Dart
   值：int、double、bool、String、null、Uint8List、List、Map、DateTime。
-- [x] `Quickjs.create(onConsole:)` 支持接收 `console.log` / `console.warn` /
+- [x] `JsEngine.create(onConsole:)` 支持接收 `console.log` / `console.warn` /
   `console.error` 事件；未配置 sink 时默认注入 no-op console。
 - [x] JS exception 已结构化为 `JsException.message/name/stack/fileName/line/column`；
   eval 场景下 location 字段按 native / web 底层能力 nullable 暴露。
@@ -102,11 +102,11 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
   - 单请求 `cancel(requestId)` 不纳入 0.9.0 前准入，后续若出现真实调用场景再单独设计。
 
 - [x] runtime 状态机
-  - `Quickjs` 内部已使用显式 `ready / running / stopping / closed / failed` 状态枚举。
-  - `QuickjsRuntimeState` 与 `engine.state` 已公开。
+  - `JsEngine` 内部已使用显式 `ready / running / stopping / closed / failed` 状态枚举。
+  - `JsRuntimeState` 与 `engine.state` 已公开。
   - ready / running / stopping / closed / failed 的可观察状态转换已有确定性测试覆盖。
   - closed / dispose / queue / stop / crash 语义已有测试。
-  - `Quickjs.create()` 返回前的 `creating` 过程当前无实例可观察，不作为 0.9.0 前阻塞项。
+  - `JsEngine.create()` 返回前的 `creating` 过程当前无实例可观察，不作为 0.9.0 前阻塞项。
 
 - [x] 错误模型
   - timeout、cancel、closed、基础 JS throw 映射已覆盖。
@@ -127,7 +127,7 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
 
 ### 范围
 
-- [x] 异步 `Quickjs` API。
+- [x] 异步 `JsEngine` API。
 - [x] native runtime worker isolate。
 - [x] Web Worker WASM bridge。
 - [x] 单 runtime FIFO 执行队列。
@@ -163,7 +163,7 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
 
 - [x] 完整 runtime 状态机：
   内部 `ready -> running -> stopping -> closed / failed` 已实现并公开状态观测；`creating`
-  阶段在 `Quickjs.create()` 返回前无实例可观察，后续如需进度事件再扩展。
+  阶段在 `JsEngine.create()` 返回前无实例可观察，后续如需进度事件再扩展。
 - [x] failed / crash 状态语义。
 - [x] memory limit：基于 `JS_SetMemoryLimit`。
 - [~] stack limit：native 基于 `JS_SetMaxStackSize`；Web 等价能力待底层支持。
@@ -208,7 +208,7 @@ JavaScript、释放 runtime，并覆盖 native FFI 与 Web WASM。下一步继�
 - [x] List
 - [x] Map<String, Object?>
 - [x] DateTime
-- [x] `eval(..., globals: {...})`
+- [x] `eval(..., tempGlobals: {...})`
 
 ### 结构化 JS 异常
 
@@ -239,12 +239,12 @@ nullable 暴露；`eval` 场景不强制保证所有位置字段都存在。
 - [x] Web quickjs-wasi Promise job pump 对齐。
 - [x] 异步函数体执行支持（当时名为 `evalAsync`，现公开为 `run`）：native / web 已支持；top-level await 归入后续 ES module 能力评估。
 - [x] dispose runtime 时取消 pending callback 和未完成 Promise。
-- [x] callback runtime 隔离：绑定只在所属 `Quickjs` 实例内有效。
+- [x] callback runtime 隔离：绑定只在所属 `JsEngine` 实例内有效。
 - [x] callback example 页面：绑定 Dart 函数，JS `await` 调用并展示返回值和错误。
 - [x] timer/event-loop example 页面：展示 `setTimeout`、`clearTimeout`、`setInterval`
   与 Promise job pump。
 - [x] `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`。
-- [-] 同步 callback 返回值映射：不纳入当前 worker 隔离模型；如需同步 API，应使用 JS provider 或 worker-local 实现。
+- [-] 同步 callback 返回值映射：不纳入当前 worker 隔离模型；如需同步 API，应使用 JS method 或 worker-local 实现。
 
 ## 0.5.1：流式 callback 与增量结果
 
@@ -274,7 +274,7 @@ nullable 暴露；`eval` 场景不强制保证所有位置字段都存在。
 
 目标：支持真实项目脚本组织方式。
 
-- [x] `evalModule(source, name: ...)`
+- [x] `runModule(source, name: ...)`
 - [x] ES module parse / evaluate：native / web 已支持单个 module source 执行与异常映射。
   - 已覆盖静态 import 依赖加载、相对路径解析与 imported module cache 复用。
 - [x] module cache。
@@ -341,12 +341,12 @@ await user.save()
 计划范围：
 
 - [x] `engine.injectObject(name, proxy)`：通过显式 descriptor 注入 Dart proxy。
-- [x] property getter / setter：支持显式 `QuickjsObjectAccessor` descriptor；getter 在 JS 侧表现为 Promise，setter 通过 callback 派发。
+- [x] property getter / setter：支持显式 `JsAccessor` descriptor；getter 在 JS 侧表现为 Promise，setter 通过 callback 派发。
 - [x] method call（同步与 async method 分开定义语义）：method 走 Promise callback bridge。
 - [x] readonly property。
 - [x] async getter / method：method 与 getter 已表现为 Promise；setter assignment 不返回 Promise（JS accessor 语义限制）。
 - [x] proxy 归属 runtime；dispose 后新绑定返回 closed error，已绑定 JS proxy 随 runtime 释放，泄漏 proxy/method/accessor 引用会返回明确 disposed error。
-- [x] `QuickjsObjectHandle.dispose()`：显式删除 JS global proxy 和隐藏 method/accessor callback globals；重复释放不报错。
+- [x] `JsObjectHandle.dispose()`：显式删除 JS global proxy 和隐藏 method/accessor callback globals；重复释放不报错。
 - [x] runtime-level callback unregister：proxy dispose 后即使 JS 持有泄漏的 method/accessor 引用，也不能再触发 Dart callback。
 
 ### Dart 类与实例绑定
@@ -365,7 +365,7 @@ const user = new User('Tom')
 
 - [x] `engine.injectClass<T>(jsName, constructor)`：通过显式 descriptor 注入可构造类型。
 - [x] instance id 管理：JS 侧 instance proxy 只保存 id，Dart 侧按 runtime/class 维护 instance table。
-- [-] instance finalizer：暂不实现；当前版本只承诺显式 `QuickjsClassHandle.dispose()` / `Quickjs.dispose()` / runtime rebuild 清理，
+- [-] instance finalizer：暂不实现；当前版本只承诺显式 `JsClassHandle.dispose()` / `JsEngine.dispose()` / runtime rebuild 清理，
   JS GC 不驱动 Dart instance 回收。
 - [x] JS GC 与 Dart GC 关系文档：`docs/class_binding_lifecycle.md` 已说明 instance 生命周期、dispose 批量释放、跨 runtime 混用禁止规则，
   以及当前不承诺 JS GC 驱动 Dart instance 回收。
@@ -377,7 +377,7 @@ const user = new User('Tom')
 - [x] `console.error`
 - [x] source file name：`eval` / `run` 及对应的 Raw 变体支持 `name:`，native 与 web
   异常栈可指向该 source name；底层仍使用 `evaluate` / `evaluateAsync` 实现通道。
-- [x] sourcemap registry：`QuickjsSourceMap` 与 runtime 级注册表已支持按 source name
+- [x] sourcemap registry：`JsSourceMap` 与 runtime 级注册表已支持按 source name
   注册、查询、清理，并在匹配的 `JsException.sourceMap` 上附加元数据；stack 重写留给下一步。
 - [x] stack remap：注册 sourcemap 后，匹配 source name 的 `JsException.stack` 会重写为原始
   source 位置，并同步更新 `fileName` / `line` / `column`。
@@ -413,16 +413,16 @@ const user = new User('Tom')
 - [x] 环境补全：创建 runtime 后安装 `globalThis` 上的对象、alias 或 polyfill，例如
   `window`、`self`、`location`、`navigator`、storage、`crypto`、`fetch`。当前由
   `JsOptions.scripts`、`JsFeatures.web()`
-  承载，并会在 stop 重建 runtime 后重新安装。`QuickjsHostScript.globals` 可显式声明脚本安装的
+  承载，并会在 stop 重建 runtime 后重新安装。`JsScript.globals` 可显式声明脚本安装的
   global，供初始化及运行时 features 在重建前检测冲突。
 - [x] 模块加载：按 specifier 注册 ES module / CommonJS module，只有 JS 侧 `import` / `require`
   时才加载，不自动污染 `globalThis`。当前由 `JsOptions.modules` 和
-  `QuickjsHostModule.esModule/commonJs` 承载。
-- [x] 方法注入 / provider：注册由 Dart/Flutter、JS 或平台能力实现的函数入口。provider 本身不决定
+  `JsModule/JsModule.commonJs` 承载。
+- [x] 方法注入 / method：注册由 Dart/Flutter、JS 或平台能力实现的函数入口。method 本身不决定
   JS API 形状；JS 侧由环境补全脚本或 host module 包装成标准 API。当前已支持 async Dart/Flutter
-  provider、Promise 映射、debug 可见性、runtime 隔离和生命周期取消；JS provider、worker-local
-  sync provider 作为后续增强，不影响当前 async provider 模型。
-- [x] 批量挂载 / bundle：把环境补全、模块加载、方法注入组合成一个可复用能力包，例如 `web()`、
+  method、Promise 映射、debug 可见性、runtime 隔离和生命周期取消；JS method、worker-local
+  sync method 作为后续增强，不影响当前 async method 模型。
+- [x] 能力组合 / bundle：把环境补全、模块加载、方法注入组合成一个可复用能力包，例如 `web()`、
   `node()`、`essential()`、`webCrypto()` 或用户自定义业务能力包。preset 不是功能扩展的唯一入口；
   用户应能用同样的底层接口注入框架没有预置的模块或 global API。
 
@@ -430,54 +430,54 @@ const user = new User('Tom')
 
 | 语义 | 推荐命名 | 当前 API |
 | --- | --- | --- |
-| 环境补全 | `scripts` / `QuickjsEnvironmentPatch` | `scripts` / `QuickjsHostScript` |
-| 模块加载 | `modules` / `QuickjsModuleDefinition` | `modules` / `QuickjsHostModule` |
-| 方法注入 | `methods` / `QuickjsInjectedMethod` 或 `providers` / `QuickjsHostProvider` | `providers` / `QuickjsHostProvider` |
-| 批量挂载 | `features` / `JsFeatures` | `features` / `JsFeatures` |
+| 环境补全 | `scripts` / `JsScript` | `scripts` / `JsScript` |
+| 模块加载 | `modules` / `JsModule` | `modules` / `JsModule` |
+| 方法注入 | `methods` / `JsHostMethod` 或 `methods` / `JsHostMethod` | `methods` / `JsHostMethod` |
+| 能力组合 | `features` / `JsFeatures` | `features` / `JsFeatures` |
 
-当前版本允许破坏性 API 调整：旧 `QuickjsHostEnvironment` / `hostEnvironments` 已删除，所有 preset、
+当前版本允许破坏性 API 调整：旧 `JsFeatures` / `hostEnvironments` 已删除，所有 preset、
 示例和测试统一迁移到 `JsFeatures` / `features`。其余低层字段是否改名，以实际可读性为准，
 不再为了旧代码保留重复入口。
 
-provider 实现类型只描述能力来源，不改变 JS API 形状：
+method 实现类型只描述能力来源，不改变 JS API 形状：
 
-- JS provider：实现完全运行在 QuickJS 内，适合纯 JS polyfill、同步短耗时函数和不需要平台能力的逻辑。
-- Dart/Flutter provider：通过 callback bridge 进入宿主侧，适合 hash、fetch、文件、数据库、平台能力等。
+- JS method：实现完全运行在 QuickJS 内，适合纯 JS polyfill、同步短耗时函数和不需要平台能力的逻辑。
+- Dart/Flutter method：通过 callback bridge 进入宿主侧，适合 hash、fetch、文件、数据库、平台能力等。
   这类能力默认映射为 Promise，不提供跨 isolate 的同步调用语义。
-- platform/web provider：在 web 端可包装浏览器原生能力，在 native 端可包装 Flutter/Dart 能力；同一个
-  JS API 可以按平台选择不同 provider，但 JS 侧调用方式保持稳定。
+- platform/web method：在 web 端可包装浏览器原生能力，在 native 端可包装 Flutter/Dart 能力；同一个
+  JS API 可以按平台选择不同 method，但 JS 侧调用方式保持稳定。
 
 同步 / 异步语义按 JS API 形态决定，而不是按实现偏好决定：
 
-- 同步 JS API 只能由 JS provider 或 worker-local、确定短耗时实现提供，例如纯 JS polyfill。
-- 跨 Dart 主 isolate、网络、文件系统、数据库、平台通道或可能长耗时计算的 provider 必须返回 Promise。
-- 标准本身是 Promise 的 API，例如 `fetch()`、`crypto.subtle.digest()`，应天然走异步 provider。
+- 同步 JS API 只能由 JS method 或 worker-local、确定短耗时实现提供，例如纯 JS polyfill。
+- 跨 Dart 主 isolate、网络、文件系统、数据库、平台通道或可能长耗时计算的 method 必须返回 Promise。
+- 标准本身是 Promise 的 API，例如 `fetch()`、`crypto.subtle.digest()`，应天然走异步 method。
 - 标准本身是同步的 API，例如 `crypto.getRandomValues()`，如果无法提供 worker-local 同步实现，就不要用
-  异步 provider 伪装成同步 API，应改为用户显式注入自定义异步 API 或选择 JS fallback。
+  异步 method 伪装成同步 API，应改为用户显式注入自定义异步 API 或选择 JS fallback。
 
-### 批量挂载模型
+### 能力组合模型
 
-用户不应该被迫在 `JsOptions` 里一条条拼 `scripts`、`modules`、`providers`。
-需要提供一个批量挂载对象，把相关能力作为一个整体安装：
+用户不应该被迫在 `JsOptions` 里一条条拼 `scripts`、`modules`、`methods`。
+需要提供一个能力组合对象，把相关能力作为一个整体加载：
 
 ```dart
 final appApi = JsFeatures(
   name: 'app-api',
   scripts: [
-    QuickjsHostScript.js(
+    JsScript(
       name: 'app-global.js',
       globals: ['app'],
       source: 'globalThis.app = ...',
     ),
   ],
   modules: [
-    QuickjsHostModule.esModule(
-      specifier: 'app/api',
+    JsModule(
+      name: 'app/api',
       source: 'export function hello() { ... }',
     ),
   ],
-  providers: [
-    QuickjsHostProvider.dart(
+  methods: [
+    JsHostMethod(
       name: 'app.hello',
       callback: (args, context) async {
         context.throwIfCancelled();
@@ -488,12 +488,12 @@ final appApi = JsFeatures(
 );
 ```
 
-挂载入口分两种：
+加载入口分两种：
 
-- 初始化挂载：创建 runtime 时传入一组 features，适合固定能力和 preset。
+- 初始化加载：创建 runtime 时传入一组 features，适合固定能力和 preset。
 
   ```dart
-  final engine = await Quickjs.create(
+  final engine = await JsEngine.create(
     features: [
       JsFeatures.web(),
       appApi,
@@ -501,17 +501,17 @@ final appApi = JsFeatures(
   );
   ```
 
-- 运行时挂载：runtime 创建后批量安装一组能力，适合插件、用户安装包、按业务对象选择 API。
+- 运行时加载：runtime 创建后加载一组能力，适合插件、用户安装包、按业务对象选择 API。
 
   ```dart
   await engine.loadFeatures(appApi);
   ```
 
-  当前第一版已实现，要求 runtime 处于 idle 状态，并通过重建 runtime 原子生效。挂载后原有 JS globals、
-  module cache、手动绑定 callback 和 handle 不保留；挂载成功后，该 features 会在后续 stop 重建时继续安装。
+  当前第一版已实现，要求 runtime 处于 idle 状态，并通过重建 runtime 原子生效。加载后原有 JS globals、
+  module cache、手动绑定 callback 和 handle 不保留；加载成功后，该 features 会在后续 stop 重建时继续安装。
 
-运行时挂载默认拒绝同名 features、global、provider 和 module。显式传入
-`JsFeaturesConflictPolicy.replace` 时，只替换之前通过 `Quickjs.loadFeatures()` 安装的同名完整 bundle，
+运行时加载默认拒绝同名 features、global、method 和 module。显式传入
+`JsFeaturesConflictPolicy.replace` 时，只替换之前通过 `JsEngine.loadFeatures()` 安装的同名完整 bundle，
 并通过重建 runtime 清空旧 module cache 后生效；初始化 features 不可替换，与其他 features 的资源冲突
 仍会拒绝。替换安装失败时恢复旧 features 配置和可用 runtime。
 
@@ -519,11 +519,11 @@ final appApi = JsFeatures(
 
 按 JS 生态里的自然使用方式划分能力，不按实现难度划分：
 
-- [x] `window` / `self`：global alias capability。当前通过 `QuickjsBrowserGlobals` 显式开启，
+- [x] `window` / `self`：global alias capability。当前通过 `JsGlobals` 显式开启，
   默认不注入。
 - [x] `location` / `navigator` / `localStorage` / `sessionStorage`：环境补全。
   只实现明确声明的最小子集，不伪装成完整浏览器环境。
-- [x] `fetch`：`QuickjsFetchFeatures` 显式安装 Promise-based Fetch API；Native 底层使用 Dart
+- [x] `fetch`：`FetchFeatures` 显式加载 Promise-based Fetch API；Native 底层使用 Dart
   `HttpClient`，Web 底层使用浏览器原生 `fetch`。支持 origin allowlist、超时、请求/响应大小限制、
   生命周期取消、默认请求头、Headers/Request/Response，以及 text/json/arrayBuffer/clone。
   支持 `follow` / `error` / `manual` 重定向模式、最大跳转次数，并对每一跳重新校验 origin。
@@ -534,13 +534,13 @@ final appApi = JsFeatures(
   header、timeout、abort、text/json/arraybuffer 响应能力，并提供 `AbortController` / `AbortSignal`；
   已使用 Axios 1.6.2 UMD bundle 在 Native 与真实 Chrome 中验证 GET、POST、404、timeout、
   cancel 和重定向；不支持同步 XHR。
-- [x] Web Crypto：环境补全 `globalThis.crypto`；`QuickjsWebCryptoFeatures()`
+- [x] Web Crypto：环境补全 `globalThis.crypto`；`WebCryptoFeatures()`
   已覆盖 `crypto.randomUUID()`、`crypto.getRandomValues()`，随机源优先复用宿主原生
-  `crypto.getRandomValues`，native 无同步安全随机源时默认拒绝 fallback，但可显式开启 JS fallback；并通过 async provider 支持
+  `crypto.getRandomValues`，native 无同步安全随机源时默认拒绝 fallback，但可显式开启 JS fallback；并通过 async method 支持
   `crypto.subtle.digest()` 的 SHA-1 / SHA-256 / SHA-384 / SHA-512，以及 HMAC
   `importKey('raw', ...)` / `sign()` / `verify()` 的 SHA-1 / SHA-256 最小标准子集。该 preset
   只作为最小兼容示例，不继续按 Web Crypto 标准全量内置；后续新增算法或能力应优先暴露为用户
-  可注入的方法/provider，再由环境补全或模块加载包装成 JS API。
+  可注入的方法/method，再由环境补全或模块加载包装成 JS API。
 - [x] Node `Buffer`：优先作为 `buffer` / `node:buffer` 模块加载；preset 可额外安装
   global `Buffer`；当前 `essential()` / `node()` 已提供最小实现。
 - [x] Node `crypto`：作为 `crypto` / `node:crypto` 模块加载；当前最小子集覆盖
@@ -554,18 +554,18 @@ final appApi = JsFeatures(
 
 - [x] 权限与可用能力显式配置，不默认暴露平台敏感能力。
 - [x] 具体生态 API 不硬编码进 `quickjs.dart`；`crypto.randomUUID()` 当前已迁移为
-  `QuickjsWebCryptoFeatures()` preset，用户仍可通过环境补全脚本手动注入自定义实现。
-- [x] 把需要 Dart/Flutter 实现的生态能力抽象成通用 host callback/provider 注入接口；框架预制
+  `WebCryptoFeatures()` preset，用户仍可通过环境补全脚本手动注入自定义实现。
+- [x] 把需要 Dart/Flutter 实现的生态能力抽象成通用 host callback/method 注入接口；框架预制
   `crypto.subtle.digest()`、`fetch` 等能力时也应复用该接口，而不是为每个 API 在 runtime 内部
   增加专用分支。
-- [x] provider 声明已包含名称、async 调用模式、structured value codec、每次调用独立的
-  `QuickjsHostProviderContext` 取消语义、debug 名称和 `QuickjsHostProviderImplementation` 实现来源；
-  `debugInspect().providerDetails` 可读取结构化 metadata。名称可以被环境补全脚本绑定到 global API，
+- [x] method 声明已包含名称、async 调用模式、structured value codec、每次调用独立的
+  `JsHostMethodContext` 取消语义、debug 名称和 `JsHostMethodImplementation` 实现来源；
+  `debugInspect().methodDetails` 可读取结构化 metadata。名称可以被环境补全脚本绑定到 global API，
   也可以被模块加载包装成 module export。
 - [x] 不允许配置出语义不成立的组合，例如 `sync + Dart/Flutter callback + 跨 isolate/平台能力`。
-  这类能力必须显式建模为 async provider，并在 JS 包装层返回 Promise。
-- [x] `crypto.subtle.digest()` 的 Flutter 实现已迁移为 `QuickjsWebCryptoFeatures` 内部注册的 async
-  provider，并进一步拆分到 `quickjs_web_crypto_mount.dart`；`quickjs.dart` 不再 import
+  这类能力必须显式建模为 async method，并在 JS 包装层返回 Promise。
+- [x] `crypto.subtle.digest()` 的 Flutter 实现已迁移为 `WebCryptoFeatures` 内部注册的 async
+  method，并进一步拆分到 `quickjs_web_crypto_features.dart`；`quickjs.dart` 不再 import
   `package:crypto`，也不再包含 Web Crypto 专用安装分支。
 - [x] runtime options 与 features 已统一使用 `scripts` 表示环境补全脚本，不再保留
   `hostScripts` 重复入口。
@@ -575,7 +575,7 @@ final appApi = JsFeatures(
   不会自动执行；只有 `import` / dynamic `import()` 命中该 specifier 时才 parse/evaluate。
 - [x] CommonJS 注入同样属于 host module registry；只有 `require()` 命中该 specifier 时才执行。
 - [x] host module 可声明依赖其他 host module、`moduleLoader` 模块或相对模块；依赖解析和 cache
-  语义必须与 0.6.0 的 `evalModule` / CommonJS cache 对齐。
+  语义必须与 0.6.0 的 `runModule` / CommonJS cache 对齐。
 - [x] 支持 `node:` 前缀归一化：`node:buffer` 可解析到 `buffer`，但文档必须说明 canonical
   module name。
 - [x] 明确 `moduleLoader` 与 `modules` 的组合顺序。当前实现优先级为：显式 host module、
@@ -583,19 +583,19 @@ final appApi = JsFeatures(
   重复注册的显式 host module 必须抛出明确错误。
 - [x] 模块 cache 语义固定：模块一旦被当前 runtime import / require，就不能在同一 runtime
   中替换；需要重建 runtime 才能替换。
-- [x] 提供 debug inspector 等价能力，能看到 host module、provider、已加载模块和已通过动态 loader
+- [x] 提供 debug inspector 等价能力，能看到 host module、method、已加载模块和已通过动态 loader
   解析过的模块名。
 - [x] 同步宿主 API 只能来自 JS startup script 或 worker-local 的确定短耗时实现；跨 Dart 主
   isolate、网络、文件系统或平台异步边界的能力必须返回 Promise。
-- [x] dispose / stop / runtime 重建会取消 pending provider bridge，并完成每次调用 context 的
-  `cancelled` Future；JS Promise 会 reject，provider 可通过 context 协作停止底层任务。
+- [x] dispose / stop / runtime 重建会取消 pending method bridge，并完成每次调用 context 的
+  `cancelled` Future；JS Promise 会 reject，method 可通过 context 协作停止底层任务。
 
 ### 与既有 API 的边界
 
 - Dart → JS 的 `injectObject()` / `injectClass()` 继续作为直接 global bridge
   API：用户显式把 Dart 函数或对象暴露到 `globalThis`，JS 侧直接调用。
-- 0.9.0 的方法注入/provider 复用 callback bridge，但不要求用户手动暴露隐藏 callback。
-  预制 `fetch`、storage、Web Crypto 等能力需要 Dart/平台异步实现时，由 preset 内部注册 provider，
+- 0.9.0 的方法注入/method 复用 callback bridge，但不要求用户手动暴露隐藏 callback。
+  预制 `fetch`、storage、Web Crypto 等能力需要 Dart/平台异步实现时，由 preset 内部注册 method，
   再通过环境补全或模块加载包装成标准 JS API。
 - 如果某个能力天然是模块形态，优先迁移到模块加载，不要再要求用户通过 `bind()` 暴露一组 global
   方法。例如 `Buffer`、`node:crypto`、`node:path` 应是 module；`fetch`、`window` 应是 global。
@@ -606,24 +606,24 @@ final appApi = JsFeatures(
 
 先实现通用机制，再提供预制能力：
 
-1. [x] 模块加载：`QuickjsHostModule` / `modules` 已支持注册、解析、缓存、冲突检测、debug 可见性。
-2. [x] 方法注入 / provider：已支持 async Dart/Flutter provider、Promise、
-   structured value codec、debug 名称和 runtime 重建重装；dispose/stop 取消语义、JS provider
-   与 worker-local sync provider 作为后续增强。
-3. [x] 迁移现有预制实现：`crypto.subtle.digest()` 与 `QuickjsFetchFeatures` 均使用通用 async provider
+1. [x] 模块加载：`JsModule` / `modules` 已支持注册、解析、缓存、冲突检测、debug 可见性。
+2. [x] 方法注入 / method：已支持 async Dart/Flutter method、Promise、
+   structured value codec、debug 名称和 runtime 重建重装；dispose/stop 取消语义、JS method
+   与 worker-local sync method 作为后续增强。
+3. [x] 迁移现有预制实现：`crypto.subtle.digest()` 与 `FetchFeatures` 均使用通用 async method
    注入；后续 Node `crypto` 等能力继续复用同一机制。
 4. [x] 环境补全：`JsFeatures.web()` 提供 `URL`、`location`、`navigator`、storage
-   等 Web 风格最小集；`QuickjsFetchFeatures` 作为独立显式能力提供 Fetch API。
-5. [x] 批量挂载：已新增 `JsFeatures`、`JsOptions.features` 和 `Quickjs.loadFeatures(...)`，
-   支持初始化及运行时批量组合 capabilities、environment patches、modules、providers 和 Web Crypto
-   preset。旧 `QuickjsHostEnvironment` / `hostEnvironments` 已删除。运行时挂载当前通过重建生效，
-   热挂载不纳入当前语义；replace 策略已支持同名 runtime features 的原子替换。
+   等 Web 风格最小集；`FetchFeatures` 作为独立显式能力提供 Fetch API。
+5. [x] 能力组合：已新增 `JsFeatures`、`JsEngine.create(features: ...)` 和 `JsEngine.loadFeatures(...)`，
+   支持初始化及运行时批量组合 capabilities、environment patches、modules、methods 和 Web Crypto
+   preset。旧 `JsFeatures` / `hostEnvironments` 已删除。运行时加载当前通过重建生效，
+   热加载不纳入当前语义；replace 策略已支持同名 runtime features 的原子替换。
 6. [x] 命名整理：批量入口使用 `features` / `JsFeatures`，直接配置统一为
-   `scripts`、`modules`、`providers`。
-7. [x] `QuickjsWebCryptoFeatures()`：已提供 `crypto.randomUUID()`、
+   `scripts`、`modules`、`methods`。
+7. [x] `WebCryptoFeatures()`：已提供 `crypto.randomUUID()`、
    `crypto.getRandomValues()`、Flutter 原生 `crypto.subtle.digest()`，以及 HMAC sign/verify
    最小子集作为示例；不在 0.9.0 内继续补齐 encrypt/decrypt、非 HMAC sign/verify 等完整
-   `SubtleCrypto` API。后续如需扩展，应先提供用户可复用的 callback/provider 注入接口，
+   `SubtleCrypto` API。后续如需扩展，应先提供用户可复用的 callback/method 注入接口，
    再由用户或独立预制包组合具体能力。
 8. [x] `JsFeatures.node()`：已提供 `buffer`、`crypto`、`path`、`process`、`timers` 的
    ES module 与 CommonJS host module；可显式安装 global `Buffer` / `process`。`crypto` 当前为
@@ -646,47 +646,47 @@ final appApi = JsFeatures(
   `import crypto from "node:crypto"` 在启用对应 module 后可用。
 - [x] 同一能力的 global 入口和 module 入口互不混淆；例如 Web `crypto` global 不等同于 Node
   `node:crypto` 模块。
-- [x] WebCrypto digest/HMAC 通过 Dart/Flutter async provider 实现，native / web 后端结果一致。
-- [-] 大数据 SHA-256 性能基准不作为 0.9.0 准入项；当前已通过 Dart/Flutter async provider 避免 UI 阻塞，
+- [x] WebCrypto digest/HMAC 通过 Dart/Flutter async method 实现，native / web 后端结果一致。
+- [-] 大数据 SHA-256 性能基准不作为 0.9.0 准入项；当前已通过 Dart/Flutter async method 避免 UI 阻塞，
   后续如扩展大数据场景再补专门 benchmark。
-- [x] provider 已支持 Dart/Flutter 异步实现；JS 实现和 platform/web 实现可通过相同 JS 包装形态后续扩展，
-  JS 侧调用方式不应随 provider 来源改变。
-- [x] 已支持初始化时通过 options 或运行时通过 `engine.loadFeatures(...)` 批量挂载能力包，并覆盖安装顺序、
-  冲突检测、debug 可见性和 stop 重建语义。运行时挂载要求 idle，并通过重建 runtime 生效。
+- [x] method 已支持 Dart/Flutter 异步实现；JS 实现和 platform/web 实现可通过相同 JS 包装形态后续扩展，
+  JS 侧调用方式不应随 method 来源改变。
+- [x] 已支持初始化时通过 options 或运行时通过 `engine.loadFeatures(...)` 加载能力包，并覆盖安装顺序、
+  冲突检测、debug 可见性和 stop 重建语义。运行时加载要求 idle，并通过重建 runtime 生效。
 - [x] `JsFeaturesConflictPolicy.replace` 支持原子替换同名 runtime features；初始化 features 不可替换，
   无关资源冲突仍拒绝，安装失败会回滚旧 features 并恢复 runtime。
-- [x] 运行时挂载模块遵守 cache 规则：同名 provider、同格式 module、显式声明的 global，以及
+- [x] 运行时加载的模块遵守 cache 规则：同名 method、同格式 module、显式声明的 global，以及
   已由动态 loader 加载的 ES/CommonJS module 都会在重建前报错；显式 replace 只允许替换旧 features
   自己拥有的 module 名。
-- [x] async provider 在 stop / dispose / runtime 重建时不会悬挂 bridge Future；JS 侧 Promise 会
-  reject，provider 通过 `QuickjsHostProviderContext` 接收取消信号，后续新 runtime 重新安装 provider。
+- [x] async method 在 stop / dispose / runtime 重建时不会悬挂 bridge Future；JS 侧 Promise 会
+  reject，method 通过 `JsHostMethodContext` 接收取消信号，后续新 runtime 重新安装 method。
 - [x] stop 重建 runtime 后，startup scripts 和 host modules 重新可用；已加载模块 cache 的替换
   规则保持一致。
 - [x] native / web 一致性测试覆盖 global 注入、host module 注入、`node:` 前缀、node preset、
-  provider runtime 隔离、dispose/stop cancellation、动态 loader 模块冲突和 replace 回滚。
+  method runtime 隔离、dispose/stop cancellation、动态 loader 模块冲突和 replace 回滚。
 - [x] host modules example 页面覆盖 ES module、CommonJS、`node:` 前缀、相对依赖、
   global 污染检查、cache、debug 模块列表、essential Buffer、node preset 和 stop 重建后恢复。
-- [x] 能力批量挂载 example 页面覆盖初始化 features、运行时 `Quickjs.loadFeatures()`、同名 features 原子替换、
-  环境补全、module、provider、冲突回滚、debug 挂载列表和 stop 重建后恢复。
+- [x] 能力组合 example 页面覆盖初始化 features、运行时 `JsEngine.loadFeatures()`、同名 features 原子替换、
+  环境补全、module、method、冲突回滚、debug 能力列表和 stop 重建后恢复。
 - [x] Web 宿主环境 example 页面覆盖 `JsFeatures.web()`、默认未启用检查、
   `window` / `self` / `location` / `navigator`、内存版 storage、轻量 `URL` 和 stop 重建后恢复。
-- [x] Fetch example 页面覆盖 `QuickjsFetchFeatures` origin allowlist、Native HttpClient、Web browser
+- [x] Fetch example 页面覆盖 `FetchFeatures` origin allowlist、Native HttpClient、Web browser
   fetch 和 Response JSON 读取；自动化测试使用本地 HTTP server 验证请求/响应、默认 header、
   重定向策略、origin 拒绝和 Axios 风格 XHR 调用；Example asset 内置 Axios 1.6.2 UMD bundle，
   页面可直接验证真实 Axios 的 GET、POST、404、timeout、cancel 和重定向。
-- [x] Web Crypto example 页面覆盖 `QuickjsWebCryptoFeatures()`、默认未启用检查、
+- [x] Web Crypto example 页面覆盖 `WebCryptoFeatures()`、默认未启用检查、
   `crypto.randomUUID()`、`crypto.getRandomValues()`、Flutter 原生 `crypto.subtle.digest()`、
   HMAC sign/verify 和 stop 重建后恢复。
 
 ### 0.9.0 收口结论
 
-0.9.0 前的执行模型、模块、provider、features、Web/Node 最小兼容能力和 example/test 覆盖已收口。
+0.9.0 前的执行模型、模块、method、features、Web/Node 最小兼容能力和 example/test 覆盖已收口。
 剩余条目均为明确延期、外部底层限制或性能/CI 增强项，不再阻塞 0.10.0 插件入口与模块包工作。
 
 ## 0.10.0：JS 插件入口与模块包
 
 目标：在 0.9.0 的 `modules` 稳定后，支持把一段 JS 或一组 JS 模块作为可选择的业务
-API provider 装载到 runtime。quickjs 核心只负责运行插件入口、模块注册、调用导出函数和
+API method 装载到 runtime。quickjs 核心只负责运行插件入口、模块注册、调用导出函数和
 runtime 替换语义；zip 包、插件目录、签名、更新源等安装管理能力可以由工具层、应用层或
 独立包实现。
 
@@ -698,7 +698,7 @@ runtime 替换语义；zip 包、插件目录、签名、更新源等安装管�
 - [x] 插件内部可使用相对 import；框架负责把插件模块图映射到 `modules` 并复用 0.9.0 的
   解析和 cache 规则。
 - [x] 插件来源可以是 inline source、asset 或 bytes；file、目录、zip 等来源由工具层或外层
-  安装器读取后转成 `QuickjsPluginModule`。
+  安装器读取后转成 `JsPluginModule`。
 - [x] 复杂 npm 依赖仍推荐插件作者预打包；quickjs 插件包只承诺显式模块图，不实现完整 npm resolver。
 
 ### 插件模板与契约
@@ -708,18 +708,19 @@ runtime 替换语义；zip 包、插件目录、签名、更新源等安装管�
   `metadata`。
 - [x] `exports` 声明 Flutter 侧可调用的方法名，例如 `hello`、`translate`、`summarize`。
 - [x] 可选生命周期导出：`init(context)`、`dispose()`；未导出时跳过，不影响普通函数调用。
-- [x] quickjs 可在装载时校验 manifest 声明的 exports 是否存在且为 function，失败返回明确错误。
+- [x] quickjs 可在加载时校验 manifest 声明的 exports 是否存在且为 function，失败返回明确错误。
 - [x] 不要求插件引入 quickjs JS SDK；后续可提供可选 helper SDK，但 SDK 不是运行必需依赖。
 - [x] 插件参数和返回值必须符合 structured value codec；不支持的 JS 值按现有转换错误处理。
 
-### Runtime 装载与调用
+### Runtime 加载与调用
 
-- [x] 插件数据来源与 runtime 装载分离：应用层决定插件从哪里来，runtime 创建时显式选择要启用的
+- [x] 插件数据来源与 runtime 加载分离：应用层决定插件从哪里来，runtime 创建时显式选择要启用的
   单文件插件或插件包。
-- [x] 同一插件可以装载到多个 runtime；不同业务对象可以选择不同 runtime、不同 plugin id 或不同
+- [x] 同一插件可以加载到多个 runtime；不同业务对象可以选择不同 runtime、不同 plugin id 或不同
   entry module。
 - [x] Flutter 侧提供面向业务的调用入口，例如按插件 entry 调用导出函数：
-  `callPlugin(pluginId, method, args)` 或 `callModule(module, method, args)`。
+  `callPluginExport(plugin, method, args)` 或 `callModule(module, method, args)`；按插件 id 选择时使用
+  `callPlugin(method, args, pluginId: id)`。
 - [x] `api1`、`api2`、`api3` 可以导出同名 `hello()`；业务端选择不同插件对象或 runtime，
   即可调用不同实现。
 - [x] 插件导出的函数走现有 structured value codec；Promise 返回值、异常、Uint8List 等语义复用
@@ -732,7 +733,7 @@ runtime 替换语义；zip 包、插件目录、签名、更新源等安装管�
 - [x] 插件模块不热替换已加载模块。由于 QuickJS module cache 存在，已 import / require 的插件
   模块只能在新 runtime 或重建 runtime 后生效。
 - [x] 提供明确的替换策略：保留当前 runtime 继续跑旧版本；新建 runtime 使用新版本；或 dispose
-  当前 runtime 后重建并重新装载插件。
+  当前 runtime 后重建并重新加载插件。
 - [-] 如果业务需要无缝切换，由上层持有插件 API 对象并在 runtime 重建后替换该对象引用。
 - [-] 外层插件管理器可以提供安装、查询、启用、禁用、卸载、版本更新、hash / 签名校验等能力；
   这些不是 quickjs 核心包的必需职责。
@@ -742,7 +743,7 @@ runtime 替换语义；zip 包、插件目录、签名、更新源等安装管�
 - [x] 单文件插件示例：一个 asset JS 文件导出 `hello()`，Flutter 侧直接调用。
 - [x] 多文件插件包示例：`main.js` import `modules/xx.js`，Flutter 侧调用 entry 的导出函数。
 - [x] 插件模板示例：`manifest.json` + `main.js` + `modules/helper.js`，展示 exports 契约。
-- [x] 三个 provider 示例：`api1`、`api2`、`api3` 都导出 `hello()`，Flutter 侧选择不同 provider。
+- [x] 三个 method 示例：`api1`、`api2`、`api3` 都导出 `hello()`，Flutter 侧选择不同 method。
 - [x] manifest exports 声明缺失、entry 未找到、导出不是 function 时都有明确错误。
 - [x] 插件内部依赖未声明模块时返回明确 module resolve error。
 - [x] 插件 namespace 冲突、重复 entry、runtime 重建后新版本生效都有测试覆盖。
@@ -752,23 +753,23 @@ runtime 替换语义；zip 包、插件目录、签名、更新源等安装管�
 目标：在 0.10.0 插件入口与模块包语义稳定后，补齐常见业务调用、插件包加载、工具集注册和双向
 stream 的工具层 helper。0.10.1 不改变 runtime 的插件隔离、模块缓存和替换语义。
 
-- [x] `QuickjsPluginClient`：封装 `validatePlugin()` / `initPlugin()` / `callPlugin()` /
+- [x] `JsPluginClient`：封装 `validatePlugin()` / `initPlugin()` / `callPlugin()` /
   `disposePlugin()`，让业务侧按插件对象创建轻量 client。
 
   ```dart
-  final client = QuickjsPluginClient(engine, plugin);
+  final client = JsPluginClient(engine, plugin);
 
-  await client.init({'locale': 'zh-CN'});
+  await client.init(context: {'locale': 'zh-CN'});
   final result = await client.call('hello', ['QuickJS']);
   await client.dispose();
   ```
 
-- [x] `QuickjsPluginBundle.asset()`：从 manifest asset + modules asset map 创建插件包，减少
-  `QuickjsPluginManifest` 和 asset module 映射的样板代码。
+- [x] `JsPlugin.manifestAsset()`：从 manifest asset + modules asset map 创建插件包，减少
+  `JsPluginManifest` 和 asset module 映射的样板代码。
 
   ```dart
-  final plugin = await QuickjsPluginBundle.asset(
-    manifestAsset: 'assets/plugins/demo/manifest.json',
+  final plugin = await JsPlugin.manifestAsset(
+    path: 'assets/plugins/demo/manifest.json',
     modules: {
       'demo/main': 'assets/plugins/demo/main.js',
       'demo/helper': 'assets/plugins/demo/modules/helper.js',
@@ -776,30 +777,30 @@ stream 的工具层 helper。0.10.1 不改变 runtime 的插件隔离、模块�
   );
   ```
 
-- [x] `QuickjsToolRegistry`：把多个插件注册成工具集，按 `pluginId.method` 调用，适合翻译、
+- [x] `JsPluginRegistry`：把多个插件注册成工具集，按 `pluginId.method` 调用，适合翻译、
   摘要、分类等可组合工具 API。
 
   ```dart
-  final tools = QuickjsToolRegistry(engine)
+  final tools = JsPluginRegistry(engine)
     ..register(translatorPlugin)
     ..register(summaryPlugin);
 
-  final text = await tools.call('translator.translate', ['hello']);
+  final text = await tools.call('translator', 'translate', ['hello']);
   ```
 
-- [x] Stream 相关语法糖：给 JS -> Dart sink 和 Dart -> JS stream demo 提供更清楚的 helper，
-  先围绕 `stream_callback_page.dart` 收口命名；不新增 runtime API，底层复用现有 `bindSink`
-  / provider 能力。
+- [x] Stream API：JS -> Dart 使用 `bindStream()`，Dart -> JS 使用 `injectStream()`；
+  不增加额外工具类，直接由 engine/context 提供。
 
   ```dart
-  final progress = await QuickjsStreamBridge.bindJsSink(engine, 'progress');
+  final progress = await engine.bindStream('progress');
 
-  await QuickjsStreamBridge.bindDartStream(engine, 'hostCount', (_) {
-    return Stream.periodic(const Duration(seconds: 1), (i) => i + 1).take(3);
-  });
+  await engine.injectStream(
+    'hostCount',
+    Stream.periodic(const Duration(seconds: 1), (i) => i + 1).take(3),
+  );
   ```
 
-- [x] `QuickjsZipPlugin.asset()` / `bytes()` / `archivePackage()`：zip 包 -> 插件包，支持
+- [x] `JsZipPlugin.asset()` / `bytes()` / `archive()`：zip 包 -> 插件包，支持
   `manifest.json` / `quickjs-plugin.json` 和可选 `files` 显式映射，作为 0.10.1 插件包输入工具。
 - [-] 目录扫描、file system 读取、hash / 签名校验、安装/启用/禁用/更新源管理：继续作为外层
   插件管理器职责，不放进 runtime 核心。
@@ -811,10 +812,10 @@ stream 的工具层 helper。0.10.1 不改变 runtime 的插件隔离、模块�
 
 - [x] 插件 manifest schema 文档化：明确 `id`、`version`、`entry`、`exports`、生命周期、
   `permissions`、`metadata` 和 zip `files` 映射规则。
-- [x] `debugInspect()` 增加 `pluginDetails`：展示已挂载插件的 id、version、entry、exports、
-  lifecycle、features name 和 module names，便于定位插件装载状态。
+- [x] `debugInspect()` 增加 `pluginDetails`：展示已加载插件的 id、version、entry、exports、
+  lifecycle、features name 和 module names，便于定位插件加载状态。
 - [x] zip 插件 example：提供 `assets/plugins/zip_demo.zip` 和独立 Zip Plugin 页面，覆盖
-  `QuickjsZipPlugin.asset()`、`QuickjsPluginClient.validate/init/call()`。
+  `JsZipPlugin.asset()`、`JsPluginClient.validate/init/call()`。
 - [ ] 插件 / zip 错误消息继续收口：manifest 缺字段、entry 缺失、files 映射错误、namespace 错误
   都应指向具体字段或路径。
 - [ ] verify / CI 稳定性继续跟进：Windows 下 Flutter CLI 卡住时记录环境问题，保持 Dart analyzer
@@ -823,7 +824,7 @@ stream 的工具层 helper。0.10.1 不改变 runtime 的插件隔离、模块�
 ## HarmonyOS / OpenHarmony 支持计划
 
 鸿蒙端仍然使用 Flutter，不建设 ArkUI 应用层或独立的鸿蒙 UI backend。目标是在不改变
-`Quickjs`、`QuickjsContext`、plugin、features 和 provider 公共 API 的前提下，将现有
+`JsEngine`、`JsContext`、plugin、features 和 method 公共 API 的前提下，将现有
 native FFI 执行模型扩展到 Flutter 鸿蒙应用。鸿蒙与其他 native 平台共享 Dart API、
 isolate worker 和 JS 运行语义，不引入平台专用的 JS 调用入口。该计划依赖可用且稳定的
 Flutter 鸿蒙工具链，因此暂不承诺具体版本和发布日期。
@@ -834,12 +835,12 @@ Flutter 鸿蒙工具链，因此暂不承诺具体版本和发布日期。
   和 runtime/context 隔离语义与 Android/iOS/桌面端一致。
 - [ ] 审核文件、网络、随机源、时钟、WebSocket 等预制 host features 的鸿蒙实现；不支持的
   平台能力必须显式报告，而不是静默降级。
-- [ ] 建立 analyzer、native smoke、module/provider/callback/timer、异常、内存限制和生命周期
+- [ ] 建立 analyzer、native smoke、module/method/callback/timer、异常、内存限制和生命周期
   测试矩阵，并至少覆盖一台 ARM64 真机。
 - [ ] 补充鸿蒙接入、构建、发布、动态库诊断和常见错误文档。
 
 完成标准：同一组 core consistency tests 在鸿蒙通过，业务代码无需按平台改写
-`Quickjs.create()`、plugin 或 provider 的调用方式。
+`JsEngine.create()`、plugin 或 method 的调用方式。
 
 ## quickjs_ui
 

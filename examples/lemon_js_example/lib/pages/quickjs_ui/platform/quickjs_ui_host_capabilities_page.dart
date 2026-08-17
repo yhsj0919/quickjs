@@ -4,22 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
-/// 宿主能力 Demo：通过 [QuickjsUiHostCapabilities] 组合系统默认能力与自定义宿主调用。
-class QuickjsUiHostCapabilitiesPage extends StatefulWidget {
-  const QuickjsUiHostCapabilitiesPage({super.key});
+/// 宿主能力 Demo：通过 [JsUiHostFeatures] 组合系统默认能力与自定义宿主调用。
+class JsUiHostCapabilitiesPage extends StatefulWidget {
+  const JsUiHostCapabilitiesPage({super.key});
 
   /// 入口 JS 页面的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/host_capabilities_page.mjs';
 
   @override
-  State<QuickjsUiHostCapabilitiesPage> createState() =>
-      _QuickjsUiHostCapabilitiesPageState();
+  State<JsUiHostCapabilitiesPage> createState() =>
+      _JsUiHostCapabilitiesPageState();
 }
 
-class _QuickjsUiHostCapabilitiesPageState
-    extends State<QuickjsUiHostCapabilitiesPage> {
-  late final QuickjsUiController _controller;
-  late final QuickjsUiHostCapabilities _capabilities;
+class _JsUiHostCapabilitiesPageState extends State<JsUiHostCapabilitiesPage> {
+  late final JsUiController _controller;
+  late final JsUiHostFeatures _capabilities;
   late final List<JsFeatures> _features;
   late final Map<String, Object?> _initialProps;
   String _status = '等待 JS 页面加载';
@@ -27,27 +26,27 @@ class _QuickjsUiHostCapabilitiesPageState
   @override
   void initState() {
     super.initState();
-    _controller = QuickjsUiController(
+    _controller = JsUiController(
       onConsole: (event) {
         debugPrint('quickjs_ui console.${event.level.name}: ${event.text}');
       },
     )..addListener(_handleControllerChanged);
-    _capabilities = QuickjsUiHostCapabilities(
-      groups: <QuickjsUiCapabilityGroup>[
-        QuickjsUiCapabilityGroup.system(
-          options: const QuickjsUiHostCapabilityOptions(
-            enabled: <QuickjsUiHostCapability>{
-              QuickjsUiHostCapability.toast,
-              QuickjsUiHostCapability.confirm,
-              QuickjsUiHostCapability.dialog,
-              QuickjsUiHostCapability.snackbar,
-              QuickjsUiHostCapability.bottomSheet,
-              QuickjsUiHostCapability.navigation,
-              QuickjsUiHostCapability.storage,
-              QuickjsUiHostCapability.nativeCall,
+    _capabilities = JsUiHostFeatures(
+      groups: <JsUiCapabilityGroup>[
+        JsUiCapabilityGroup.system(
+          options: const JsUiHostCapabilityOptions(
+            enabled: <JsUiHostCapability>{
+              JsUiHostCapability.toast,
+              JsUiHostCapability.confirm,
+              JsUiHostCapability.dialog,
+              JsUiHostCapability.snackbar,
+              JsUiHostCapability.bottomSheet,
+              JsUiHostCapability.navigation,
+              JsUiHostCapability.storage,
+              JsUiHostCapability.nativeCall,
             },
           ),
-          handlers: QuickjsUiHostApiHandlers(
+          handlers: JsUiHostApiHandlers(
             onToast: (message, options) {
               _setStatus('toast: $message');
               if (mounted) {
@@ -88,7 +87,7 @@ class _QuickjsUiHostCapabilitiesPageState
     _controller.removeListener(_handleControllerChanged);
     unawaited(
       _controller
-          .lifecycle('dispose', render: false)
+          .lifecycle(JsUiLifecycle.dispose, render: false)
           .whenComplete(_controller.dispose),
     );
     super.dispose();
@@ -111,8 +110,8 @@ class _QuickjsUiHostCapabilitiesPageState
             ),
           ),
           Expanded(
-            child: QuickjsUiView.asset(
-              path: QuickjsUiHostCapabilitiesPage.path,
+            child: JsUiView.asset(
+              path: JsUiHostCapabilitiesPage.path,
               controller: _controller,
               features: _features,
               initialProps: _initialProps,
@@ -241,12 +240,10 @@ class _QuickjsUiHostCapabilitiesPageState
   }) {
     final content = data['content'];
     if (content is Map) {
-      final node = QuickjsUiNode.fromMap(
+      final node = JsUiNode.fromMap(
         content.map((key, value) => MapEntry<String, Object?>('$key', value)),
       );
-      return QuickjsUiRenderer(
-        onEvent: (_) {},
-      ).build(node, buildContext: context);
+      return JsUiRenderer(onEvent: (_) {}).build(node, buildContext: context);
     }
     return Text(fallback);
   }
@@ -267,11 +264,11 @@ class _QuickjsUiHostCapabilitiesPageState
   }
 }
 
-typedef _QuickjsUiHostRouteBuilder =
+typedef _JsUiHostRouteBuilder =
     Widget Function(BuildContext context, Map<String, Object?> params);
 
-final Map<String, _QuickjsUiHostRouteBuilder> _hostCapabilityRouteRegistry =
-    <String, _QuickjsUiHostRouteBuilder>{
+final Map<String, _JsUiHostRouteBuilder> _hostCapabilityRouteRegistry =
+    <String, _JsUiHostRouteBuilder>{
       'quickjs-ui.host-capabilities.detail': (context, params) =>
           _HostCapabilityNavigationTargetPage(params: params),
     };
@@ -310,14 +307,20 @@ class _HostCapabilityNavigationTargetPage extends StatelessWidget {
   }
 }
 
-QuickjsUiCapabilityGroup _customEchoGroup() {
-  return QuickjsUiCapabilityGroup.functions(
+JsUiCapabilityGroup _customEchoGroup() {
+  return JsUiCapabilityGroup.methods(
     name: 'app-custom',
     namespace: 'app',
-    globalName: 'quickjsUiApp',
-    functions: <String, Function>{
-      'customEcho': (Object? value) => 'echo:$value',
-      'add': (num a, num b) => a + b,
-    },
+    globalName: 'jsUiApp',
+    methods: <JsUiHostMethod>[
+      JsUiHostMethod(
+        name: 'customEcho',
+        callback: (args, _) => 'echo:${args.firstOrNull}',
+      ),
+      JsUiHostMethod(
+        name: 'add',
+        callback: (args, _) => (args[0] as num) + (args[1] as num),
+      ),
+    ],
   );
 }

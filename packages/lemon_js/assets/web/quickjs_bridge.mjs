@@ -116,7 +116,7 @@ function decodeWireValue(record, value) {
 function createDartStreamHandle(record, streamId) {
   const vm = record.vm;
   const iterable = vm.newObject();
-  const next = vm.newFunction(`__quickjsStreamNext_${streamId}`, () => {
+  const next = vm.newFunction(`__jsStreamNext_${streamId}`, () => {
     const deferred = vm.newPromise();
     let deferredSettled = false;
     (async () => {
@@ -147,7 +147,7 @@ function createDartStreamHandle(record, streamId) {
     });
     return deferred.handle;
   });
-  const cancel = vm.newFunction(`__quickjsStreamReturn_${streamId}`, () => {
+  const cancel = vm.newFunction(`__jsStreamReturn_${streamId}`, () => {
     const deferred = vm.newPromise();
     let deferredSettled = false;
     (async () => {
@@ -171,7 +171,7 @@ function createDartStreamHandle(record, streamId) {
     return deferred.handle;
   });
   const asyncIterator = vm.newFunction(
-    `__quickjsStreamAsyncIterator_${streamId}`,
+    `__jsStreamAsyncIterator_${streamId}`,
     function () {
       return this.dup();
     },
@@ -632,9 +632,9 @@ export function runtimeBindSink(id, sinkId, name) {
       payloadJson,
     }));
   };
-  const emit = vm.newFunction(`__quickjsSinkEmit_${sinkId}`, actionFunction('emit'));
-  const close = vm.newFunction(`__quickjsSinkClose_${sinkId}`, actionFunction('close'));
-  const error = vm.newFunction(`__quickjsSinkError_${sinkId}`, actionFunction('error'));
+  const emit = vm.newFunction(`__jsSinkEmit_${sinkId}`, actionFunction('emit'));
+  const close = vm.newFunction(`__jsSinkClose_${sinkId}`, actionFunction('close'));
+  const error = vm.newFunction(`__jsSinkError_${sinkId}`, actionFunction('error'));
   sinkObject.setProp('emit', emit);
   sinkObject.setProp('close', close);
   sinkObject.setProp('error', error);

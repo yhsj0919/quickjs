@@ -2,29 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 局部刷新 Demo：可视化 stable key 节点在 diff 中被跳过、变化节点重新构建。
-class QuickjsUiDiffPage extends StatefulWidget {
-  const QuickjsUiDiffPage({super.key});
+class JsUiDiffPage extends StatefulWidget {
+  const JsUiDiffPage({super.key});
 
   @override
-  State<QuickjsUiDiffPage> createState() => _QuickjsUiDiffPageState();
+  State<JsUiDiffPage> createState() => _JsUiDiffPageState();
 }
 
-class _QuickjsUiDiffPageState extends State<QuickjsUiDiffPage> {
+class _JsUiDiffPageState extends State<JsUiDiffPage> {
   /// 入口 JS 页面的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/diff_page.mjs';
 
-  late final QuickjsUiComponentRegistry _registry;
-  late final QuickjsUiRenderer _renderer;
-  late final QuickjsUiController _controller;
+  late final JsUiComponentRegistry _registry;
+  late final JsUiRenderer _renderer;
+  late final JsUiController _controller;
   final Map<String, int> _buildCounts = <String, int>{};
 
   @override
   void initState() {
     super.initState();
-    _registry = QuickjsUiComponentRegistry.defaults()
+    _registry = JsUiComponentRegistry.defaults()
       ..register('Probe', _buildProbe);
-    _controller = QuickjsUiController()..addListener(_handleControllerChanged);
-    _renderer = QuickjsUiRenderer(
+    _controller = JsUiController()..addListener(_handleControllerChanged);
+    _renderer = JsUiRenderer(
       registry: _registry,
       onEvent: _controller.dispatch,
     );
@@ -70,7 +70,7 @@ class _QuickjsUiDiffPageState extends State<QuickjsUiDiffPage> {
     );
   }
 
-  Widget _buildProbe(QuickjsUiRenderContext context, QuickjsUiNode node) {
+  Widget _buildProbe(JsUiRenderContext context, JsUiNode node) {
     final id = '${node.props['id']}';
     _buildCounts[id] = (_buildCounts[id] ?? 0) + 1;
     return DecoratedBox(
@@ -88,7 +88,7 @@ class _QuickjsUiDiffPageState extends State<QuickjsUiDiffPage> {
 
   Future<void> _load() async {
     await _controller.load(() async {
-      final bundle = await QuickjsUiBundle.asset(path: path);
+      final bundle = await JsUiBundle.asset(path: path);
       return bundle.toPlugin();
     });
   }

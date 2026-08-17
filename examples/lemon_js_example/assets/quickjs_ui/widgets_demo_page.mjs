@@ -143,8 +143,8 @@ export default Page({
   },
 
   async goBack() {
-    if (globalThis.quickjsUiDemo?.back) {
-      await globalThis.quickjsUiDemo.back({ source: 'layout-navigation-demo' });
+    if (globalThis.jsUiDemo?.back) {
+      await globalThis.jsUiDemo.back({ source: 'layout-navigation-demo' });
     }
     return null;
   },

@@ -1,6 +1,7 @@
 /// One network request observed by quickjs_ui development tooling.
-final class QuickjsUiNetworkRecord {
-  const QuickjsUiNetworkRecord({
+final class JsUiNetworkRecord {
+  /// Creates a snapshot of one observed request.
+  const JsUiNetworkRecord({
     required this.id,
     required this.source,
     required this.method,
@@ -13,30 +14,57 @@ final class QuickjsUiNetworkRecord {
     this.etag,
     this.fromCache = false,
     this.error,
-    this.phase = QuickjsUiNetworkRecordPhase.pending,
+    this.phase = JsUiNetworkRecordPhase.pending,
   });
 
+  /// Correlation identifier assigned by the network journal.
   final String id;
-  final QuickjsUiNetworkSource source;
-  final String method;
-  final Uri uri;
-  final DateTime startedAt;
-  final DateTime? completedAt;
-  final int? statusCode;
-  final int? durationMs;
-  final int? bodyBytes;
-  final String? etag;
-  final bool fromCache;
-  final String? error;
-  final QuickjsUiNetworkRecordPhase phase;
 
+  /// Subsystem that issued the request.
+  final JsUiNetworkSource source;
+
+  /// HTTP or host request method.
+  final String method;
+
+  /// Requested URI.
+  final Uri uri;
+
+  /// Time at which the request began.
+  final DateTime startedAt;
+
+  /// Time at which the final event was observed.
+  final DateTime? completedAt;
+
+  /// Response status code, when available.
+  final int? statusCode;
+
+  /// Reported request duration in milliseconds.
+  final int? durationMs;
+
+  /// Reported response body size in bytes.
+  final int? bodyBytes;
+
+  /// Entity tag sent or received by the request.
+  final String? etag;
+
+  /// Whether the response body was served from a cache.
+  final bool fromCache;
+
+  /// Failure description, when the request failed.
+  final String? error;
+
+  /// Current request lifecycle phase.
+  final JsUiNetworkRecordPhase phase;
+
+  /// Whether the record has a successful 2xx response and no [error].
   bool get succeeded =>
       error == null &&
       statusCode != null &&
       statusCode! >= 200 &&
       statusCode! < 300;
 
-  QuickjsUiNetworkRecord copyWith({
+  /// Returns a copy with the supplied completion fields replaced.
+  JsUiNetworkRecord copyWith({
     DateTime? completedAt,
     int? statusCode,
     int? durationMs,
@@ -44,9 +72,9 @@ final class QuickjsUiNetworkRecord {
     String? etag,
     bool? fromCache,
     String? error,
-    QuickjsUiNetworkRecordPhase? phase,
+    JsUiNetworkRecordPhase? phase,
   }) {
-    return QuickjsUiNetworkRecord(
+    return JsUiNetworkRecord(
       id: id,
       source: source,
       method: method,
@@ -63,6 +91,7 @@ final class QuickjsUiNetworkRecord {
     );
   }
 
+  /// Serializes this record to JSON-compatible structured data.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'id': id,
@@ -82,6 +111,26 @@ final class QuickjsUiNetworkRecord {
   }
 }
 
-enum QuickjsUiNetworkSource { bundle, host }
+/// Identifies the subsystem that produced a network record.
+enum JsUiNetworkSource {
+  /// The JSUI bundle or package loader.
+  bundle,
 
-enum QuickjsUiNetworkRecordPhase { pending, completed, cacheHit, failed }
+  /// A page request delegated through a host network capability.
+  host,
+}
+
+/// The observed lifecycle state of a network request.
+enum JsUiNetworkRecordPhase {
+  /// A request event was observed without a final response.
+  pending,
+
+  /// A non-cache response completed.
+  completed,
+
+  /// The resource was served from a cache.
+  cacheHit,
+
+  /// The request completed with an error.
+  failed,
+}

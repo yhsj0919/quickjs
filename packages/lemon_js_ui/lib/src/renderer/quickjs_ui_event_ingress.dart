@@ -1,21 +1,24 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
 import 'quickjs_ui_render_context.dart';
 
-typedef QuickjsUiEventSink = Future<void> Function(Map<String, Object?> event);
+typedef JsUiEventSink = Future<void> Function(Map<String, Object?> event);
 
 /// Queues renderer UI events and flushes them after the current frame so
-/// controller updates never synchronously rebuild [QuickjsUiView] during build.
+/// controller updates never synchronously rebuild [JsUiView] during build.
 ///
 /// Events keep the order in which Flutter observed them. Samples are keyed by
-/// [QuickjsUiEventEnvelope.coalesceKey] and only the latest value in the same
+/// [JsUiEventEnvelope.coalesceKey] and only the latest value in the same
 /// command-delimited slot is sent to JavaScript in a frame.
-final class QuickjsUiEventIngress {
-  QuickjsUiEventIngress(this._onEvent);
+final class JsUiEventIngress {
+  JsUiEventIngress(this._onEvent);
 
-  final QuickjsUiEventSink _onEvent;
+  final JsUiEventSink _onEvent;
   final List<_PendingIngressEvent> _pending = <_PendingIngressEvent>[];
   final Map<String, _PendingIngressEvent> _pendingSampleSlots =
       <String, _PendingIngressEvent>{};
@@ -24,15 +27,14 @@ final class QuickjsUiEventIngress {
   bool _disposed = false;
 
   void submit(Map<String, Object?> event) {
-    submitEnvelope(QuickjsUiEventEnvelope.command(event));
+    submitEnvelope(JsUiEventEnvelope.command(event));
   }
 
-  void submitEnvelope(QuickjsUiEventEnvelope envelope) {
+  void submitEnvelope(JsUiEventEnvelope envelope) {
     if (_disposed) {
       return;
     }
-    if (envelope.kind == QuickjsUiEventKind.sample &&
-        envelope.coalesceKey != null) {
+    if (envelope.kind == JsUiEventKind.sample && envelope.coalesceKey != null) {
       final key = envelope.coalesceKey!;
       final pending = _pendingSampleSlots[key];
       if (pending != null) {
@@ -102,5 +104,5 @@ final class _PendingIngressEvent {
 
   _PendingIngressEvent.sample({required this.envelope});
 
-  QuickjsUiEventEnvelope envelope;
+  JsUiEventEnvelope envelope;
 }

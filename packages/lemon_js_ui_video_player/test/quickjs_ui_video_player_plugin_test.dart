@@ -1,14 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
 import 'package:lemon_js_ui_video_player/lemon_js_ui_video_player.dart';
 
 void main() {
   test('loads VideoPlayer through quickjs_ui/video_player import', () async {
-    final session = QuickjsUiSession();
+    final session = JsUiSession();
     addTearDown(session.dispose);
 
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'quickjs_ui_video_player_plugin_test',
         version: '0.1.0',
         source: '''
@@ -43,7 +45,7 @@ export default Page({
       initialProps: const <String, Object?>{
         'source': 'https://example.com/video.mp4',
       },
-      features: QuickjsUiVideoPlayerPlugin.plugin.features,
+      features: JsUiVideoPlayerPlugin.plugin.features,
     );
 
     final node = session.node;
@@ -64,11 +66,11 @@ export default Page({
   });
 
   test('VideoPlayer callbacks are optional', () async {
-    final session = QuickjsUiSession();
+    final session = JsUiSession();
     addTearDown(session.dispose);
 
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'quickjs_ui_video_player_optional_callbacks_test',
         version: '0.1.0',
         source: '''
@@ -85,7 +87,7 @@ export default Page({
       initialProps: const <String, Object?>{
         'source': 'https://example.com/video.mp4',
       },
-      features: QuickjsUiVideoPlayerPlugin.plugin.features,
+      features: JsUiVideoPlayerPlugin.plugin.features,
     );
 
     final props = session.node?.props ?? const <String, Object?>{};
@@ -95,22 +97,22 @@ export default Page({
     expect(props['loop'], isFalse);
     expect(props['playbackSpeed'], 1);
     expect(props.containsKey('aspectRatio'), isFalse);
-    expect(props['onReady'], isNull);
-    expect(props['onProgress'], isNull);
-    expect(props['onEnded'], isNull);
-    expect(props['onError'], isNull);
+    expect(props['onReady'], isA<JsUndefined>());
+    expect(props['onProgress'], isA<JsUndefined>());
+    expect(props['onEnded'], isA<JsUndefined>());
+    expect(props['onError'], isA<JsUndefined>());
   });
 
   test('video plugin page survives progress storms with togglePlay', () async {
-    final bundle = await QuickjsUiBundle.fromEntry(
+    final bundle = await JsUiBundle.loadEntry(
       id: 'quickjs_ui_video_player_stress_page_test',
       version: '0.1.0',
       entry: 'video_player_plugin_page.mjs',
-      resolver: QuickjsUiResourceResolver.file(
+      resolver: JsUiResourceResolver.file(
         basePath: '../../examples/lemon_js_example/assets/quickjs_ui',
       ),
     );
-    final session = QuickjsUiSession();
+    final session = JsUiSession();
     addTearDown(session.dispose);
 
     await session.loadPlugin(
@@ -120,7 +122,7 @@ export default Page({
         'autoplay': true,
         'loop': true,
       },
-      features: QuickjsUiVideoPlayerPlugin.plugin.features,
+      features: JsUiVideoPlayerPlugin.plugin.features,
     );
 
     await session.dispatch(<String, Object?>{

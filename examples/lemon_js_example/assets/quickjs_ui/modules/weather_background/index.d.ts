@@ -1,4 +1,4 @@
-import type { JsonValue, QuickjsUiNode } from 'quickjs_ui';
+import type { JsonValue, JsUiNode } from 'quickjs_ui';
 
 export type WeatherType =
   | 'sunny'
@@ -36,7 +36,7 @@ export type WeatherBackgroundProps = {
   playToken?: JsonValue;
   borderRadius?: number;
   theme?: WeatherTheme;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
 };
 
 export declare const WEATHER_TYPES: readonly WeatherType[];
@@ -46,4 +46,4 @@ export declare function createWeatherTheme(options?: {
 }): WeatherTheme;
 export declare function WeatherBackground(
   props?: WeatherBackgroundProps
-): QuickjsUiNode;
+): JsUiNode;

@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,8 +11,8 @@ import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 
-final class QuickjsUiScrollCommand {
-  const QuickjsUiScrollCommand({
+final class JsUiScrollCommand {
+  const JsUiScrollCommand({
     this.initialScrollOffset = 0,
     this.scrollToOffset,
     this.scrollToKey,
@@ -25,41 +28,41 @@ final class QuickjsUiScrollCommand {
   final Duration? scrollDuration;
   final Curve scrollCurve;
 
-  static QuickjsUiScrollCommand fromNode(QuickjsUiNode node) {
-    return QuickjsUiScrollCommand(
+  static JsUiScrollCommand fromNode(JsUiNode node) {
+    return JsUiScrollCommand(
       initialScrollOffset:
-          QuickjsUiProps.number(
+          JsUiProps.number(
             node.props['initialScrollOffset'],
             name: 'initialScrollOffset',
           ) ??
           0,
-      scrollToOffset: QuickjsUiProps.number(
+      scrollToOffset: JsUiProps.number(
         node.props['scrollToOffset'],
         name: 'scrollToOffset',
       ),
-      scrollToKey: QuickjsUiProps.string(node.props['scrollToKey']),
+      scrollToKey: JsUiProps.string(node.props['scrollToKey']),
       scrollToken:
-          QuickjsUiProps.intValue(node.props['scrollToken']) ??
-          QuickjsUiProps.intValue(node.props['scrollToToken']) ??
+          JsUiProps.intValue(node.props['scrollToken']) ??
+          JsUiProps.intValue(node.props['scrollToToken']) ??
           0,
-      scrollDuration: QuickjsUiProps.duration(
+      scrollDuration: JsUiProps.duration(
         node.props['scrollDurationMs'],
         name: 'scroll duration',
       ),
-      scrollCurve: QuickjsUiProps.curve(node.props['scrollCurve']),
+      scrollCurve: JsUiProps.curve(node.props['scrollCurve']),
     );
   }
 }
 
-List<String?> quickjsUiChildKeys(QuickjsUiNode node) {
+List<String?> jsUiChildKeys(JsUiNode node) {
   return <String?>[
     for (final child in node.children)
-      QuickjsUiProps.string(child.props['key'], name: 'child key'),
+      JsUiProps.string(child.props['key'], name: 'child key'),
   ];
 }
 
-Duration quickjsUiItemTransitionDuration(QuickjsUiNode node) {
-  return QuickjsUiProps.duration(
+Duration jsUiItemTransitionDuration(JsUiNode node) {
+  return JsUiProps.duration(
         node.props['itemTransitionDurationMs'] ??
             node.props['animationDurationMs'] ??
             node.props['durationMs'],
@@ -68,28 +71,28 @@ Duration quickjsUiItemTransitionDuration(QuickjsUiNode node) {
       const Duration(milliseconds: 250);
 }
 
-Curve quickjsUiItemTransitionCurve(QuickjsUiNode node) {
-  return QuickjsUiProps.curve(
+Curve jsUiItemTransitionCurve(JsUiNode node) {
+  return JsUiProps.curve(
     node.props['itemTransitionCurve'] ?? node.props['curve'],
   );
 }
 
-Widget quickjsUiWrapScrollNotifications({
-  required QuickjsUiRenderContext context,
-  required QuickjsUiNode node,
+Widget jsUiWrapScrollNotifications({
+  required JsUiRenderContext context,
+  required JsUiNode node,
   required Widget child,
 }) {
-  final onScroll = QuickjsUiProps.event(node.props['onScroll']);
+  final onScroll = JsUiProps.event(node.props['onScroll']);
   if (onScroll == null) {
     return child;
   }
   return NotificationListener<ScrollNotification>(
     onNotification: (notification) {
       final metrics = notification.metrics;
-      context.dispatchEvent(
+      context.dispatch(
         onScroll,
-        defaultCoalesceKey: quickjsUiEventKey(node, 'onScroll'),
-        kind: QuickjsUiEventKind.sample,
+        defaultCoalesceKey: jsUiEventKey(node, 'onScroll'),
+        kind: JsUiEventKind.sample,
         payload: <String, Object?>{
           'pixels': metrics.pixels,
           'minScrollExtent': metrics.minScrollExtent,
@@ -104,8 +107,8 @@ Widget quickjsUiWrapScrollNotifications({
   );
 }
 
-final class QuickjsUiScrollableList extends StatefulWidget {
-  const QuickjsUiScrollableList({
+final class JsUiScrollableList extends StatefulWidget {
+  const JsUiScrollableList({
     super.key,
     required this.axis,
     required this.shrinkWrap,
@@ -136,19 +139,18 @@ final class QuickjsUiScrollableList extends StatefulWidget {
   final double? cacheExtent;
   final bool addAutomaticKeepAlives;
   final bool addRepaintBoundaries;
-  final QuickjsUiScrollCommand scroll;
+  final JsUiScrollCommand scroll;
   final bool animateItems;
   final Duration itemDuration;
   final Curve itemCurve;
   final ScrollPhysics? physics;
 
   @override
-  State<QuickjsUiScrollableList> createState() =>
-      _QuickjsUiScrollableListState();
+  State<JsUiScrollableList> createState() => _JsUiScrollableListState();
 }
 
-final class QuickjsUiBuilderList extends StatefulWidget {
-  const QuickjsUiBuilderList({
+final class JsUiBuilderList extends StatefulWidget {
+  const JsUiBuilderList({
     super.key,
     required this.listKey,
     required this.itemCount,
@@ -189,17 +191,17 @@ final class QuickjsUiBuilderList extends StatefulWidget {
   final double? itemExtent;
   final double? estimatedItemExtent;
   final double? cacheExtent;
-  final QuickjsUiScrollCommand scroll;
+  final JsUiScrollCommand scroll;
   final List<Widget> batchChildren;
   final void Function(int start, int end) requestRange;
   final VoidCallback? loadMore;
   final ScrollPhysics? physics;
 
   @override
-  State<QuickjsUiBuilderList> createState() => _QuickjsUiBuilderListState();
+  State<JsUiBuilderList> createState() => _JsUiBuilderListState();
 }
 
-final class _QuickjsUiBuilderListState extends State<QuickjsUiBuilderList> {
+final class _JsUiBuilderListState extends State<JsUiBuilderList> {
   late final ScrollController _controller;
   final Map<int, Widget> _items = <int, Widget>{};
   int _loadedEnd = 0;
@@ -218,7 +220,7 @@ final class _QuickjsUiBuilderListState extends State<QuickjsUiBuilderList> {
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiBuilderList oldWidget) {
+  void didUpdateWidget(covariant JsUiBuilderList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.listKey != widget.listKey ||
         oldWidget.resetToken != widget.resetToken) {
@@ -372,8 +374,7 @@ final class _QuickjsUiBuilderListState extends State<QuickjsUiBuilderList> {
   }
 }
 
-final class _QuickjsUiScrollableListState
-    extends State<QuickjsUiScrollableList> {
+final class _JsUiScrollableListState extends State<JsUiScrollableList> {
   late final ScrollController _controller;
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
   int _lastScrollToken = 0;
@@ -393,7 +394,7 @@ final class _QuickjsUiScrollableListState
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiScrollableList oldWidget) {
+  void didUpdateWidget(covariant JsUiScrollableList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.scroll.scrollToken != _lastScrollToken) {
       _lastScrollToken = widget.scroll.scrollToken;
@@ -471,16 +472,16 @@ final class _QuickjsUiScrollableListState
         for (var index = 0; index < widget.childCount; index++)
           widget.childBuilder(index),
       ];
-      return QuickjsUiAnimatedListView(
+      return JsUiAnimatedListView(
         controller: _controller,
         axis: widget.axis,
         shrinkWrap: widget.shrinkWrap,
         padding: widget.padding,
         duration: widget.itemDuration,
         curve: widget.itemCurve,
-        items: <QuickjsUiAnimatedListItem>[
+        items: <JsUiAnimatedListItem>[
           for (var index = 0; index < children.length; index++)
-            QuickjsUiAnimatedListItem(
+            JsUiAnimatedListItem(
               key: widget.childKeys[index]!,
               child: children[index],
             ),
@@ -530,8 +531,8 @@ final class _QuickjsUiScrollableListState
   }
 }
 
-final class QuickjsUiScrollableColumn extends StatefulWidget {
-  const QuickjsUiScrollableColumn({
+final class JsUiScrollableColumn extends StatefulWidget {
+  const JsUiScrollableColumn({
     super.key,
     required this.padding,
     required this.children,
@@ -541,16 +542,14 @@ final class QuickjsUiScrollableColumn extends StatefulWidget {
 
   final EdgeInsetsGeometry? padding;
   final List<Widget> children;
-  final QuickjsUiScrollCommand scroll;
+  final JsUiScrollCommand scroll;
   final ScrollPhysics? physics;
 
   @override
-  State<QuickjsUiScrollableColumn> createState() =>
-      _QuickjsUiScrollableColumnState();
+  State<JsUiScrollableColumn> createState() => _JsUiScrollableColumnState();
 }
 
-final class _QuickjsUiScrollableColumnState
-    extends State<QuickjsUiScrollableColumn> {
+final class _JsUiScrollableColumnState extends State<JsUiScrollableColumn> {
   late final ScrollController _controller;
   int _lastScrollToken = 0;
 
@@ -569,7 +568,7 @@ final class _QuickjsUiScrollableColumnState
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiScrollableColumn oldWidget) {
+  void didUpdateWidget(covariant JsUiScrollableColumn oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.scroll.scrollToken != _lastScrollToken) {
       _lastScrollToken = widget.scroll.scrollToken;
@@ -616,15 +615,15 @@ final class _QuickjsUiScrollableColumnState
   }
 }
 
-final class QuickjsUiAnimatedListItem {
-  const QuickjsUiAnimatedListItem({required this.key, required this.child});
+final class JsUiAnimatedListItem {
+  const JsUiAnimatedListItem({required this.key, required this.child});
 
   final String key;
   final Widget child;
 }
 
-final class QuickjsUiAnimatedListView extends StatefulWidget {
-  const QuickjsUiAnimatedListView({
+final class JsUiAnimatedListView extends StatefulWidget {
+  const JsUiAnimatedListView({
     super.key,
     required this.controller,
     required this.axis,
@@ -642,39 +641,37 @@ final class QuickjsUiAnimatedListView extends StatefulWidget {
   final EdgeInsetsGeometry? padding;
   final Duration duration;
   final Curve curve;
-  final List<QuickjsUiAnimatedListItem> items;
+  final List<JsUiAnimatedListItem> items;
   final ScrollPhysics? physics;
 
   @override
-  State<QuickjsUiAnimatedListView> createState() =>
-      _QuickjsUiAnimatedListViewState();
+  State<JsUiAnimatedListView> createState() => _JsUiAnimatedListViewState();
 }
 
-final class _QuickjsUiAnimatedListViewState
-    extends State<QuickjsUiAnimatedListView> {
+final class _JsUiAnimatedListViewState extends State<JsUiAnimatedListView> {
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
-  late List<QuickjsUiAnimatedListItem> _items;
+  late List<JsUiAnimatedListItem> _items;
 
   @override
   void initState() {
     super.initState();
-    _items = List<QuickjsUiAnimatedListItem>.of(widget.items);
+    _items = List<JsUiAnimatedListItem>.of(widget.items);
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiAnimatedListView oldWidget) {
+  void didUpdateWidget(covariant JsUiAnimatedListView oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncItems(widget.items);
   }
 
-  void _syncItems(List<QuickjsUiAnimatedListItem> target) {
+  void _syncItems(List<JsUiAnimatedListItem> target) {
     final listState = _listKey.currentState;
     if (listState == null) {
-      _items = List<QuickjsUiAnimatedListItem>.of(target);
+      _items = List<JsUiAnimatedListItem>.of(target);
       return;
     }
 
-    final targetByKey = <String, QuickjsUiAnimatedListItem>{
+    final targetByKey = <String, JsUiAnimatedListItem>{
       for (final item in target) item.key: item,
     };
 
@@ -693,7 +690,7 @@ final class _QuickjsUiAnimatedListViewState
     }
 
     final existingKeys = _items.map((item) => item.key).toSet();
-    final reordered = <QuickjsUiAnimatedListItem>[];
+    final reordered = <JsUiAnimatedListItem>[];
     for (final item in target) {
       if (existingKeys.contains(item.key)) {
         reordered.add(item);

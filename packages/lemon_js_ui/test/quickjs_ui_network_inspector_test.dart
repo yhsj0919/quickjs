@@ -22,24 +22,24 @@ void main() {
       final url = Uri.parse(
         'http://${server.address.address}:${server.port}/main.mjs',
       );
-      final bundle = await QuickjsUiNetworkLoader().load(url: url);
+      final bundle = await JsUiNetworkLoader().load(url: url);
       await requestTask;
 
       expect(bundle.modules[bundle.entry], source);
     });
 
     test('journal merges bundle request lifecycle into one record', () async {
-      final journal = QuickjsUiNetworkJournal();
-      final loader = QuickjsUiNetworkLoader(
+      final journal = JsUiNetworkJournal();
+      final loader = JsUiNetworkLoader(
         onLog: journal.handleLogEvent,
         fetch: (request) async {
           if (request.headers['if-none-match'] == '"v1"') {
-            return const QuickjsUiNetworkResponse(
+            return const JsUiNetworkResponse(
               body: '',
               statusCode: HttpStatus.notModified,
             );
           }
-          return const QuickjsUiNetworkResponse(
+          return const JsUiNetworkResponse(
             body: 'export default 1;',
             headers: <String, String>{'etag': '"v1"'},
           );
@@ -51,20 +51,17 @@ void main() {
       await loader.load(url: url);
 
       expect(journal.records, hasLength(2));
-      expect(
-        journal.records.first.phase,
-        QuickjsUiNetworkRecordPhase.completed,
-      );
+      expect(journal.records.first.phase, JsUiNetworkRecordPhase.completed);
       expect(journal.records.first.bodyBytes, greaterThan(0));
-      expect(journal.records.last.phase, QuickjsUiNetworkRecordPhase.cacheHit);
+      expect(journal.records.last.phase, JsUiNetworkRecordPhase.cacheHit);
       expect(journal.records.last.fromCache, isTrue);
       expect(journal.records.last.durationMs, isNotNull);
     });
 
     test('journal records host network requests', () async {
-      final journal = QuickjsUiNetworkJournal();
+      final journal = JsUiNetworkJournal();
       final handlers = instrumentHostNetworkLogging(
-        QuickjsUiHostApiHandlers(
+        JsUiHostApiHandlers(
           onNetworkRequest: (request) async {
             return <String, Object?>{'statusCode': 200, 'body': '{"ok":true}'};
           },
@@ -80,18 +77,18 @@ void main() {
       expect(result, isA<Map>());
       expect(journal.records, hasLength(1));
       final record = journal.records.single;
-      expect(record.source, QuickjsUiNetworkSource.host);
+      expect(record.source, JsUiNetworkSource.host);
       expect(record.method, 'POST');
       expect(record.uri.toString(), 'https://api.example.com/profile');
-      expect(record.phase, QuickjsUiNetworkRecordPhase.completed);
+      expect(record.phase, JsUiNetworkRecordPhase.completed);
       expect(record.statusCode, 200);
       expect(record.bodyBytes, greaterThan(0));
     });
 
     test('inspector snapshot includes network records', () {
-      final inspector = QuickjsUiInspector();
+      final inspector = JsUiInspector();
       inspector.networkJournal.handleLogEvent(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: 'bundle-1',
           type: 'network.request',
           uri: Uri.parse('https://example.com/ui/pages/main.mjs'),
@@ -99,7 +96,7 @@ void main() {
         ),
       );
       inspector.networkJournal.handleLogEvent(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: 'bundle-1',
           type: 'network.cacheStore',
           uri: Uri.parse('https://example.com/ui/pages/main.mjs'),
@@ -110,23 +107,23 @@ void main() {
         ),
       );
 
-      final controller = QuickjsUiController(inspector: inspector);
+      final controller = JsUiController(inspector: inspector);
       addTearDown(controller.dispose);
-      final snapshot = controller.exportPageSnapshotMap();
+      final snapshot = controller.exportPageSnapshot().toMap();
       expect(snapshot['network'], isA<List>());
       expect((snapshot['network'] as List), hasLength(1));
     });
 
     test('network package force refresh bypasses conditional header', () async {
-      final requests = <QuickjsUiNetworkRequest>[];
+      final requests = <JsUiNetworkRequest>[];
       var sourceVersion = 1;
-      final loader = QuickjsUiNetworkLoader(
+      final loader = JsUiNetworkLoader(
         cacheBuster: (_) => 'dev',
         fetch: (request) async {
           requests.add(request);
           final path = request.uri.path;
           if (path.endsWith('/manifest.json')) {
-            return const QuickjsUiNetworkResponse(
+            return const JsUiNetworkResponse(
               body: '''
 {
   "schemaVersion": 1,
@@ -142,12 +139,12 @@ void main() {
             );
           }
           if (path.endsWith('/main.mjs')) {
-            return QuickjsUiNetworkResponse(
+            return JsUiNetworkResponse(
               body: 'export const version = $sourceVersion;',
               headers: <String, String>{'etag': '"main-v$sourceVersion"'},
             );
           }
-          return const QuickjsUiNetworkResponse(body: '', statusCode: 404);
+          return const JsUiNetworkResponse(body: '', statusCode: 404);
         },
       );
 
@@ -155,9 +152,9 @@ void main() {
         root: Uri.parse('https://example.com/ui/package/'),
       );
       sourceVersion = 2;
-      final refreshed = await loader.loadPackageWithRefresh(
+      final refreshed = await loader.loadPackage(
         root: Uri.parse('https://example.com/ui/package/'),
-        refreshMode: QuickjsUiNetworkRefreshMode.force,
+        refreshMode: JsUiNetworkRefreshMode.force,
       );
 
       expect(refreshed.modules['main.mjs'], contains('2'));
@@ -172,20 +169,20 @@ void main() {
     test(
       'network package stale-while-revalidate returns cached body',
       () async {
-        final requests = <QuickjsUiNetworkRequest>[];
+        final requests = <JsUiNetworkRequest>[];
         var sourceVersion = 1;
-        final loader = QuickjsUiNetworkLoader(
+        final loader = JsUiNetworkLoader(
           fetch: (request) async {
             requests.add(request);
             final path = request.uri.path;
             if (path.endsWith('/manifest.json')) {
               if (request.headers['if-none-match'] == '"manifest-v1"') {
-                return const QuickjsUiNetworkResponse(
+                return const JsUiNetworkResponse(
                   body: '',
                   statusCode: HttpStatus.notModified,
                 );
               }
-              return const QuickjsUiNetworkResponse(
+              return const JsUiNetworkResponse(
                 body: '''
 {
   "schemaVersion": 1,
@@ -201,12 +198,12 @@ void main() {
               );
             }
             if (path.endsWith('/main.mjs')) {
-              return QuickjsUiNetworkResponse(
+              return JsUiNetworkResponse(
                 body: 'export const version = $sourceVersion;',
                 headers: <String, String>{'etag': '"main-v$sourceVersion"'},
               );
             }
-            return const QuickjsUiNetworkResponse(body: '', statusCode: 404);
+            return const JsUiNetworkResponse(body: '', statusCode: 404);
           },
         );
 
@@ -214,9 +211,9 @@ void main() {
           root: Uri.parse('https://example.com/ui/package/'),
         );
         sourceVersion = 2;
-        final stale = await loader.loadPackageWithRefresh(
+        final stale = await loader.loadPackage(
           root: Uri.parse('https://example.com/ui/package/'),
-          refreshMode: QuickjsUiNetworkRefreshMode.staleWhileRevalidate,
+          refreshMode: JsUiNetworkRefreshMode.staleWhileRevalidate,
         );
 
         expect(stale.modules['main.mjs'], contains('1'));
@@ -232,22 +229,22 @@ void main() {
     test(
       'network package reuses cache store across loader instances',
       () async {
-        final store = QuickjsUiMemoryNetworkCacheStore();
-        final requests = <QuickjsUiNetworkRequest>[];
-        QuickjsUiNetworkLoader newLoader() {
-          return QuickjsUiNetworkLoader(
+        final store = JsUiMemoryNetworkCacheStore();
+        final requests = <JsUiNetworkRequest>[];
+        JsUiNetworkLoader newLoader() {
+          return JsUiNetworkLoader(
             cacheStore: store,
             fetch: (request) async {
               requests.add(request);
               final path = request.uri.path;
               if (request.headers['if-none-match'] == '"v1"') {
-                return const QuickjsUiNetworkResponse(
+                return const JsUiNetworkResponse(
                   body: '',
                   statusCode: HttpStatus.notModified,
                 );
               }
               if (path.endsWith('/manifest.json')) {
-                return const QuickjsUiNetworkResponse(
+                return const JsUiNetworkResponse(
                   body: '''
 {
   "schemaVersion": 1,
@@ -263,12 +260,12 @@ void main() {
                 );
               }
               if (path.endsWith('/main.mjs')) {
-                return const QuickjsUiNetworkResponse(
+                return const JsUiNetworkResponse(
                   body: 'export const cached = true;',
                   headers: <String, String>{'etag': '"v1"'},
                 );
               }
-              return const QuickjsUiNetworkResponse(body: '', statusCode: 404);
+              return const JsUiNetworkResponse(body: '', statusCode: 404);
             },
           );
         }

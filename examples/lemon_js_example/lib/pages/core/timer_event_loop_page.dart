@@ -12,7 +12,7 @@ class TimerEventLoopPage extends StatefulWidget {
 }
 
 class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -32,20 +32,20 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -128,12 +128,12 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   void _appendLog(String message) {
@@ -155,14 +155,14 @@ class _TimerEventLoopPageState extends State<TimerEventLoopPage> {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('定时器与事件循环')),

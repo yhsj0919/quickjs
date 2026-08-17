@@ -8,7 +8,7 @@ import {
 } from 'quickjs_ui';
 
 function hostKeys() {
-  const host = globalThis.quickjsUiHost;
+  const host = globalThis.jsUiHost;
   if (!host) {
     return [];
   }
@@ -16,7 +16,7 @@ function hostKeys() {
 }
 
 function appKeys() {
-  const app = globalThis.quickjsUiApp;
+  const app = globalThis.jsUiApp;
   if (!app) {
     return [];
   }
@@ -156,40 +156,40 @@ export default Page({
           onPressed: page.recordKeys()
         }),
         Text(
-          '宿主 API 调用由异步 provider 提供。此页面的按钮都在 JS 页面内声明并调用 quickjsUiHost / quickjsUiApp；Flutter 外壳只负责注册能力、处理 provider、展示 snackbar/dialog/bottom sheet，并维护 route registry。navigationIntent 只允许进入 route registry 中注册过的页面。'
+          '宿主 API 调用由异步 provider 提供。此页面的按钮都在 JS 页面内声明并调用 jsUiHost / jsUiApp；Flutter 外壳只负责注册能力、处理 provider、展示 snackbar/dialog/bottom sheet，并维护 route registry。navigationIntent 只允许进入 route registry 中注册过的页面。'
         )
       ]
     });
   },
 
   async callToast(state) {
-    const result = await quickjsUiHost.toast('Hello from JS page', {
+    const result = await jsUiHost.toast('Hello from JS page', {
       source: 'mjs'
     });
-    return appendCall(state, `quickjsUiHost.toast => ${describe(result)}`);
+    return appendCall(state, `jsUiHost.toast => ${describe(result)}`);
   },
 
   async callConfirm(state) {
-    const result = await quickjsUiHost.confirm('确认启用宿主能力？');
-    return appendCall(state, `quickjsUiHost.confirm => ${describe(result)}`);
+    const result = await jsUiHost.confirm('确认启用宿主能力？');
+    return appendCall(state, `jsUiHost.confirm => ${describe(result)}`);
   },
 
   async callStorage(state) {
-    await quickjsUiHost.storage.setItem('demo', 'stored-from-js');
-    const result = await quickjsUiHost.storage.getItem('demo');
-    return appendCall(state, `quickjsUiHost.storage => ${describe(result)}`);
+    await jsUiHost.storage.setItem('demo', 'stored-from-js');
+    const result = await jsUiHost.storage.getItem('demo');
+    return appendCall(state, `jsUiHost.storage => ${describe(result)}`);
   },
 
   async callNative(state) {
-    const result = await quickjsUiHost.nativeCall('example.echo', {
+    const result = await jsUiHost.nativeCall('example.echo', {
       value: 42,
       source: 'mjs'
     });
-    return appendCall(state, `quickjsUiHost.nativeCall => ${describe(result)}`);
+    return appendCall(state, `jsUiHost.nativeCall => ${describe(result)}`);
   },
 
   async callDialog(state) {
-    const result = await quickjsUiHost.dialog({
+    const result = await jsUiHost.dialog({
       title: '来自 JS 的 Dialog',
       content: Column({
         crossAxisAlignment: 'stretch',
@@ -202,62 +202,62 @@ export default Page({
         ]
       })
     });
-    return appendCall(state, `quickjsUiHost.dialog => ${describe(result)}`);
+    return appendCall(state, `jsUiHost.dialog => ${describe(result)}`);
   },
 
   async callSnackbar(state) {
-    const result = await quickjsUiHost.snackbar({
-      message: '这是 JS 通过 quickjsUiHost.snackbar 打开的 SnackBar'
+    const result = await jsUiHost.snackbar({
+      message: '这是 JS 通过 jsUiHost.snackbar 打开的 SnackBar'
     });
-    return appendCall(state, `quickjsUiHost.snackbar => ${describe(result)}`);
+    return appendCall(state, `jsUiHost.snackbar => ${describe(result)}`);
   },
 
   async callBottomSheet(state) {
-    const result = await quickjsUiHost.bottomSheet({
+    const result = await jsUiHost.bottomSheet({
       title: '来自 JS 的 BottomSheet',
       content: Column({
         crossAxisAlignment: 'stretch',
         gap: 8,
         children: [
-          Text('这是 JS 通过 quickjsUiHost.bottomSheet 打开的宿主 bottom sheet。'),
+          Text('这是 JS 通过 jsUiHost.bottomSheet 打开的宿主 bottom sheet。'),
           Text('bottomSheet 也可以传入自定义 quickjs_ui 内容。', {
             style: { color: '$secondary', fontWeight: 'w700' }
           })
         ]
       })
     });
-    return appendCall(state, `quickjsUiHost.bottomSheet => ${describe(result)}`);
+    return appendCall(state, `jsUiHost.bottomSheet => ${describe(result)}`);
   },
 
   async callCustomEcho(state) {
-    const result = await quickjsUiApp.customEcho('custom capability from JS');
-    return appendCall(state, `quickjsUiApp.customEcho => ${describe(result)}`);
+    const result = await jsUiApp.customEcho('custom capability from JS');
+    return appendCall(state, `jsUiApp.customEcho => ${describe(result)}`);
   },
 
   async callAdd(state) {
-    const result = await quickjsUiApp.add(20, 22);
-    return appendCall(state, `quickjsUiApp.add => ${describe(result)}`);
+    const result = await jsUiApp.add(20, 22);
+    return appendCall(state, `jsUiApp.add => ${describe(result)}`);
   },
 
   async callNavigation(state) {
-    const result = await quickjsUiHost.navigationIntent({
+    const result = await jsUiHost.navigationIntent({
       route: 'quickjs-ui.host-capabilities.detail',
       params: { source: 'mjs-page' }
     });
     return appendCall(
       state,
-      `quickjsUiHost.navigationIntent => ${describe(result)}`
+      `jsUiHost.navigationIntent => ${describe(result)}`
     );
   },
 
   checkNetwork(state) {
-    return appendCall(state, `typeof quickjsUiHost.network => ${typeof quickjsUiHost.network}`);
+    return appendCall(state, `typeof jsUiHost.network => ${typeof jsUiHost.network}`);
   },
 
   recordKeys(state) {
     return appendCall(
       state,
-      `quickjsUiHost => ${hostKeys().join(', ')} | quickjsUiApp => ${appKeys().join(', ')}`
+      `jsUiHost => ${hostKeys().join(', ')} | jsUiApp => ${appKeys().join(', ')}`
     );
   },
 

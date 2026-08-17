@@ -71,7 +71,7 @@ export default Page({
   },
 
   async openNativeSettings(state, _payload, props) {
-    const result = await quickjsUiNavigation.push({
+    const result = await jsUiNavigation.push({
       route: 'quickjs-ui.navigation.settings',
       transition: {
         type: 'slide',
@@ -98,7 +98,7 @@ export default Page({
 
   async openJsuiChild(state, _payload, props) {
     try {
-      const result = await quickjsUiNavigation.push({
+      const result = await jsUiNavigation.push({
         route: 'quickjs-ui.navigation.child',
         path: './navigation_child_page.mjs',
         transition: {
@@ -127,7 +127,7 @@ export default Page({
 
   async openMissingRoute(state) {
     try {
-      await quickjsUiNavigation.push({
+      await jsUiNavigation.push({
         route: 'quickjs-ui.navigation.missing',
         transition: {
           type: 'slide',
@@ -164,7 +164,7 @@ export default Page({
   },
 
   async popToNativeList(state, _payload, props) {
-    await quickjsUiNavigation.pop({
+    await jsUiNavigation.pop({
       from: 'jsui-detail',
       itemId: props.itemId,
       title: props.title

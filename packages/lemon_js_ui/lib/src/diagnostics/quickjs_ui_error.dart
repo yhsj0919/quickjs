@@ -1,22 +1,48 @@
 import 'package:lemon_js/lemon_js.dart';
 
-enum QuickjsUiErrorKind {
+/// Categorizes failures reported by the JSUI runtime and renderer.
+enum JsUiErrorKind {
+  /// Page or bundle loading failed.
   load,
+
+  /// JavaScript execution failed.
   runtime,
+
+  /// An action or event could not be dispatched.
   dispatch,
+
+  /// A lifecycle hook failed.
   lifecycle,
+
+  /// Page state was invalid or could not be updated.
   state,
+
+  /// Flutter rendering failed.
   render,
+
+  /// A JSUI node or payload violated its schema.
   schema,
+
+  /// A referenced resource could not be resolved or loaded.
   resource,
+
+  /// A network operation failed.
   network,
+
+  /// A requested permission was rejected or missing.
   permission,
+
+  /// An operation targeted a disposed page or controller.
   disposed,
+
+  /// The failure has not been classified.
   unknown,
 }
 
-final class QuickjsUiErrorContext {
-  const QuickjsUiErrorContext({
+/// Optional location and operation metadata attached to a [JsUiError].
+final class JsUiErrorContext {
+  /// Creates error context from the available diagnostic fields.
+  const JsUiErrorContext({
     this.operation,
     this.action,
     this.lifecycle,
@@ -26,17 +52,32 @@ final class QuickjsUiErrorContext {
     this.schemaPath,
   });
 
+  /// Runtime or host operation being performed.
   final String? operation;
+
+  /// JavaScript action associated with the failure.
   final String? action;
+
+  /// Lifecycle hook associated with the failure.
   final String? lifecycle;
+
+  /// Route associated with the failure.
   final String? route;
+
+  /// Source module or script associated with the failure.
   final String? source;
+
+  /// Resource URI or path associated with the failure.
   final String? resource;
+
+  /// Path to the invalid value within a JSUI schema.
   final String? schemaPath;
 }
 
-final class QuickjsUiError implements Exception {
-  const QuickjsUiError({
+/// A classified JSUI failure retaining its original cause and context.
+final class JsUiError implements Exception {
+  /// Creates an error with an explicit [kind], [message], and [cause].
+  const JsUiError({
     required this.kind,
     required this.message,
     required this.cause,
@@ -50,9 +91,13 @@ final class QuickjsUiError implements Exception {
     this.schemaPath,
   });
 
-  factory QuickjsUiError.wrap(
+  /// Wraps [cause] while preserving an existing [JsUiError].
+  ///
+  /// Explicit context values take precedence over values from [context]. An
+  /// existing error keeps its kind unless that kind is [JsUiErrorKind.unknown].
+  factory JsUiError.wrap(
     Object cause, {
-    required QuickjsUiErrorKind kind,
+    required JsUiErrorKind kind,
     String? message,
     StackTrace? stackTrace,
     String? operation,
@@ -62,11 +107,11 @@ final class QuickjsUiError implements Exception {
     String? source,
     String? resource,
     String? schemaPath,
-    QuickjsUiErrorContext context = const QuickjsUiErrorContext(),
+    JsUiErrorContext context = const JsUiErrorContext(),
   }) {
-    if (cause is QuickjsUiError) {
+    if (cause is JsUiError) {
       return cause.withContext(
-        kind: cause.kind == QuickjsUiErrorKind.unknown ? kind : null,
+        kind: cause.kind == JsUiErrorKind.unknown ? kind : null,
         operation: operation ?? context.operation,
         action: action ?? context.action,
         lifecycle: lifecycle ?? context.lifecycle,
@@ -76,7 +121,7 @@ final class QuickjsUiError implements Exception {
         schemaPath: schemaPath ?? context.schemaPath,
       );
     }
-    return QuickjsUiError(
+    return JsUiError(
       kind: kind,
       message: message ?? _messageFor(cause),
       cause: cause,
@@ -91,20 +136,42 @@ final class QuickjsUiError implements Exception {
     );
   }
 
-  final QuickjsUiErrorKind kind;
+  /// Error category.
+  final JsUiErrorKind kind;
+
+  /// Human-readable summary.
   final String message;
+
+  /// Original exception or error object.
   final Object cause;
+
+  /// Stack trace captured from the cause when available.
   final StackTrace? stackTrace;
+
+  /// Runtime or host operation being performed.
   final String? operation;
+
+  /// JavaScript action associated with the failure.
   final String? action;
+
+  /// Lifecycle hook associated with the failure.
   final String? lifecycle;
+
+  /// Route associated with the failure.
   final String? route;
+
+  /// Source module or script associated with the failure.
   final String? source;
+
+  /// Resource URI or path associated with the failure.
   final String? resource;
+
+  /// Path to the invalid value within a JSUI schema.
   final String? schemaPath;
 
-  QuickjsUiError withContext({
-    QuickjsUiErrorKind? kind,
+  /// Returns a copy enriched with any non-null context values.
+  JsUiError withContext({
+    JsUiErrorKind? kind,
     String? operation,
     String? action,
     String? lifecycle,
@@ -113,7 +180,7 @@ final class QuickjsUiError implements Exception {
     String? resource,
     String? schemaPath,
   }) {
-    return QuickjsUiError(
+    return JsUiError(
       kind: kind ?? this.kind,
       message: message,
       cause: cause,
@@ -128,6 +195,7 @@ final class QuickjsUiError implements Exception {
     );
   }
 
+  /// Serializes diagnostics to JSON-compatible structured data.
   Map<String, Object?> toMap() => <String, Object?>{
     'kind': kind.name,
     'message': message,
@@ -152,7 +220,7 @@ final class QuickjsUiError implements Exception {
         .where((entry) => entry.key != 'stackTrace')
         .map((entry) => '${entry.key}=${entry.value}')
         .join(' ');
-    return 'QuickjsUiError($details)';
+    return 'JsUiError($details)';
   }
 }
 

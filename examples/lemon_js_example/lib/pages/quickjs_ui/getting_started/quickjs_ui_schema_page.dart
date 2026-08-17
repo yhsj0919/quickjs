@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
-/// JSON Schema Demo：从纯 JSON UI schema asset 解析 [QuickjsUiNode]，
+/// JSON Schema Demo：从纯 JSON UI schema asset 解析 [JsUiNode]，
 /// 不经过 JS 直接渲染。
-class QuickjsUiSchemaPage extends StatefulWidget {
-  const QuickjsUiSchemaPage({super.key});
+class JsUiSchemaPage extends StatefulWidget {
+  const JsUiSchemaPage({super.key});
 
   /// 预览用 UI schema 的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/schema_preview.json';
@@ -17,11 +17,11 @@ class QuickjsUiSchemaPage extends StatefulWidget {
       'packages/lemon_js_ui/js/quickjs_ui.schema.json';
 
   @override
-  State<QuickjsUiSchemaPage> createState() => _QuickjsUiSchemaPageState();
+  State<JsUiSchemaPage> createState() => _JsUiSchemaPageState();
 }
 
-class _QuickjsUiSchemaPageState extends State<QuickjsUiSchemaPage> {
-  QuickjsUiNode? _node;
+class _JsUiSchemaPageState extends State<JsUiSchemaPage> {
+  JsUiNode? _node;
   Object? _error;
   Map<String, Object?>? _lastEvent;
   String? _schemaTitle;
@@ -48,7 +48,7 @@ class _QuickjsUiSchemaPageState extends State<QuickjsUiSchemaPage> {
               child: Text(
                 _lastEvent == null
                     ? _schemaTitle == null
-                          ? 'Loaded ${QuickjsUiSchemaPage.path}'
+                          ? 'Loaded ${JsUiSchemaPage.path}'
                           : 'Loaded $_schemaTitle with $_schemaNodeCount node variants'
                     : 'Last JSON event: $_lastEvent',
                 style: Theme.of(context).textTheme.bodySmall,
@@ -63,7 +63,7 @@ class _QuickjsUiSchemaPageState extends State<QuickjsUiSchemaPage> {
                   )
                 : _node == null
                 ? const Center(child: CircularProgressIndicator())
-                : QuickjsUiRenderer(
+                : JsUiRenderer(
                     onEvent: _handleEvent,
                   ).build(_node!, buildContext: context),
           ),
@@ -74,9 +74,9 @@ class _QuickjsUiSchemaPageState extends State<QuickjsUiSchemaPage> {
 
   Future<void> _loadSchema() async {
     try {
-      final source = await rootBundle.loadString(QuickjsUiSchemaPage.path);
+      final source = await rootBundle.loadString(JsUiSchemaPage.path);
       final schemaSource = await rootBundle.loadString(
-        QuickjsUiSchemaPage.schemaPath,
+        JsUiSchemaPage.schemaPath,
       );
       final decoded = jsonDecode(source);
       final schemaDecoded = jsonDecode(schemaSource);
@@ -97,7 +97,7 @@ class _QuickjsUiSchemaPageState extends State<QuickjsUiSchemaPage> {
           ? ((defs['node'] as Map?)?['oneOf'] as List?)?.length
           : null;
       setState(() {
-        _node = QuickjsUiNode.fromMap(schema);
+        _node = JsUiNode.fromMap(schema);
         _schemaTitle = '${schemaObject['title']}';
         _schemaNodeCount = nodeCount;
       });

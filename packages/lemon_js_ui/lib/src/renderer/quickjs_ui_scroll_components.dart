@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -7,8 +10,8 @@ import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_scrollable.dart';
 
-final QuickjsUiComponentBuilderMap quickjsUiScrollComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{
+final JsUiComponentBuilderMap jsUiScrollComponentBuilders =
+    <String, JsUiComponentBuilder>{
       'ListView': _buildListView,
       'ListViewBuilder': _buildListViewBuilder,
       'SingleChildScrollView': _buildSingleChildScrollView,
@@ -17,20 +20,19 @@ final QuickjsUiComponentBuilderMap quickjsUiScrollComponentBuilders =
       'RefreshIndicator': _buildRefreshIndicator,
     };
 
-Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final axis = QuickjsUiProps.axis(node.props['scrollDirection']);
-  final rawKeys = quickjsUiChildKeys(node);
-  final gap = quickjsUiGap(context, node);
-  final animateItems =
-      QuickjsUiProps.boolValue(node.props['animateItems']) ?? false;
+Widget _buildListView(JsUiRenderContext context, JsUiNode node) {
+  final axis = JsUiProps.axis(node.props['scrollDirection']);
+  final rawKeys = jsUiChildKeys(node);
+  final gap = jsUiGap(context, node);
+  final animateItems = JsUiProps.boolValue(node.props['animateItems']) ?? false;
   if (animateItems && rawKeys.any((key) => key == null || key.isEmpty)) {
     throw const FormatException(
       'quickjs_ui ListView animateItems requires stable string keys on children',
     );
   }
-  final listView = QuickjsUiScrollableList(
+  final listView = JsUiScrollableList(
     axis: axis,
-    shrinkWrap: QuickjsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
+    shrinkWrap: JsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
     padding: context.edgeInsets(node.props['padding']),
     childCount: node.children.length,
     childKeys: rawKeys,
@@ -42,19 +44,19 @@ Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
       name: 'cacheExtent',
     ),
     addAutomaticKeepAlives:
-        QuickjsUiProps.boolValue(node.props['addAutomaticKeepAlives']) ?? true,
+        JsUiProps.boolValue(node.props['addAutomaticKeepAlives']) ?? true,
     addRepaintBoundaries:
-        QuickjsUiProps.boolValue(node.props['addRepaintBoundaries']) ?? true,
-    scroll: QuickjsUiScrollCommand.fromNode(node),
+        JsUiProps.boolValue(node.props['addRepaintBoundaries']) ?? true,
+    scroll: JsUiScrollCommand.fromNode(node),
     animateItems: animateItems,
-    itemDuration: quickjsUiItemTransitionDuration(node),
-    itemCurve: quickjsUiItemTransitionCurve(node),
+    itemDuration: jsUiItemTransitionDuration(node),
+    itemCurve: jsUiItemTransitionCurve(node),
     physics: _scrollPhysics(node.props['physics']),
   );
-  final withGestures = withQuickjsUiGestures(context, node, listView);
+  final withGestures = withJsUiGestures(context, node, listView);
   return _withScrollConfiguration(
     node,
-    quickjsUiWrapScrollNotifications(
+    jsUiWrapScrollNotifications(
       context: context,
       node: node,
       child: withGestures,
@@ -62,34 +64,30 @@ Widget _buildListView(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildListViewBuilder(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final listKey = QuickjsUiProps.string(node.props['key']);
+Widget _buildListViewBuilder(JsUiRenderContext context, JsUiNode node) {
+  final listKey = JsUiProps.string(node.props['key']);
   if (listKey == null || listKey.isEmpty) {
     throw const FormatException(
       'quickjs_ui ListView.builder requires a stable string key',
     );
   }
-  final onLoadMore = QuickjsUiProps.event(node.props['onLoadMore']);
-  final listView = QuickjsUiBuilderList(
+  final onLoadMore = JsUiProps.event(node.props['onLoadMore']);
+  final listView = JsUiBuilderList(
     listKey: listKey,
-    itemCount: QuickjsUiProps.intValue(node.props['itemCount']) ?? 0,
-    batchStart: QuickjsUiProps.intValue(node.props['batchStart']) ?? 0,
-    batchEnd: QuickjsUiProps.intValue(node.props['batchEnd']) ?? 0,
+    itemCount: JsUiProps.intValue(node.props['itemCount']) ?? 0,
+    batchStart: JsUiProps.intValue(node.props['batchStart']) ?? 0,
+    batchEnd: JsUiProps.intValue(node.props['batchEnd']) ?? 0,
     prefetchItemCount:
-        QuickjsUiProps.intValue(node.props['prefetchItemCount']) ?? 20,
+        JsUiProps.intValue(node.props['prefetchItemCount']) ?? 20,
     resetToken: node.props['resetToken'],
     hasMore:
         onLoadMore != null &&
-        (QuickjsUiProps.boolValue(node.props['hasMore']) ?? false),
-    loading: QuickjsUiProps.boolValue(node.props['loading']) ?? false,
-    loadMoreThreshold:
-        QuickjsUiProps.intValue(node.props['loadMoreThreshold']) ?? 5,
-    loadingText: QuickjsUiProps.string(node.props['loadingText']),
-    axis: QuickjsUiProps.axis(node.props['scrollDirection']),
-    shrinkWrap: QuickjsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
+        (JsUiProps.boolValue(node.props['hasMore']) ?? false),
+    loading: JsUiProps.boolValue(node.props['loading']) ?? false,
+    loadMoreThreshold: JsUiProps.intValue(node.props['loadMoreThreshold']) ?? 5,
+    loadingText: JsUiProps.string(node.props['loadingText']),
+    axis: JsUiProps.axis(node.props['scrollDirection']),
+    shrinkWrap: JsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
     padding: context.edgeInsets(node.props['padding']),
     itemExtent: context.spacing(node.props['itemExtent'], name: 'itemExtent'),
     estimatedItemExtent: context.spacing(
@@ -100,13 +98,13 @@ Widget _buildListViewBuilder(
       node.props['cacheExtent'],
       name: 'cacheExtent',
     ),
-    scroll: QuickjsUiScrollCommand.fromNode(node),
+    scroll: JsUiScrollCommand.fromNode(node),
     batchChildren: <Widget>[
       for (var index = 0; index < node.children.length; index++)
         context.childAt(node, index),
     ],
     requestRange: (start, end) => context.dispatch(<String, Object?>{
-      'method': '__quickjsUiListBuilderRange',
+      'method': '__jsUiListBuilderRange',
       'listKey': listKey,
       'start': start,
       'end': end,
@@ -114,17 +112,17 @@ Widget _buildListViewBuilder(
     loadMore: onLoadMore == null
         ? null
         : () {
-            context.dispatchEvent(
+            context.dispatch(
               onLoadMore,
-              defaultCoalesceKey: quickjsUiEventKey(node, 'onLoadMore'),
+              defaultCoalesceKey: jsUiEventKey(node, 'onLoadMore'),
             );
           },
     physics: _scrollPhysics(node.props['physics']),
   );
-  final withGestures = withQuickjsUiGestures(context, node, listView);
+  final withGestures = withJsUiGestures(context, node, listView);
   return _withScrollConfiguration(
     node,
-    quickjsUiWrapScrollNotifications(
+    jsUiWrapScrollNotifications(
       context: context,
       node: node,
       child: withGestures,
@@ -132,20 +130,17 @@ Widget _buildListViewBuilder(
   );
 }
 
-Widget _buildSingleChildScrollView(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final scrollView = QuickjsUiScrollableColumn(
+Widget _buildSingleChildScrollView(JsUiRenderContext context, JsUiNode node) {
+  final scrollView = JsUiScrollableColumn(
     padding: context.edgeInsets(node.props['padding']),
-    scroll: QuickjsUiScrollCommand.fromNode(node),
+    scroll: JsUiScrollCommand.fromNode(node),
     physics: _scrollPhysics(node.props['physics']),
     children: _childrenWithGap(context, node, Axis.vertical),
   );
-  final withGestures = withQuickjsUiGestures(context, node, scrollView);
+  final withGestures = withJsUiGestures(context, node, scrollView);
   return _withScrollConfiguration(
     node,
-    quickjsUiWrapScrollNotifications(
+    jsUiWrapScrollNotifications(
       context: context,
       node: node,
       child: withGestures,
@@ -153,13 +148,13 @@ Widget _buildSingleChildScrollView(
   );
 }
 
-Widget _buildGridView(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final axis = QuickjsUiProps.axis(node.props['scrollDirection']);
+Widget _buildGridView(JsUiRenderContext context, JsUiNode node) {
+  final axis = JsUiProps.axis(node.props['scrollDirection']);
   final gridView = GridView.count(
     scrollDirection: axis,
-    crossAxisCount: QuickjsUiProps.intValue(node.props['crossAxisCount']) ?? 2,
+    crossAxisCount: JsUiProps.intValue(node.props['crossAxisCount']) ?? 2,
     childAspectRatio:
-        QuickjsUiProps.doubleValue(node.props['childAspectRatio']) ?? 1,
+        JsUiProps.doubleValue(node.props['childAspectRatio']) ?? 1,
     crossAxisSpacing:
         context.spacing(
           node.props['crossAxisSpacing'],
@@ -173,14 +168,14 @@ Widget _buildGridView(QuickjsUiRenderContext context, QuickjsUiNode node) {
         ) ??
         0,
     padding: context.edgeInsets(node.props['padding']),
-    shrinkWrap: QuickjsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
+    shrinkWrap: JsUiProps.boolValue(node.props['shrinkWrap']) ?? false,
     physics: _scrollPhysics(node.props['physics']),
     children: context.children(node),
   );
-  final withGestures = withQuickjsUiGestures(context, node, gridView);
+  final withGestures = withJsUiGestures(context, node, gridView);
   return _withScrollConfiguration(
     node,
-    quickjsUiWrapScrollNotifications(
+    jsUiWrapScrollNotifications(
       context: context,
       node: node,
       child: withGestures,
@@ -188,28 +183,28 @@ Widget _buildGridView(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildPageView(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final onPageChanged = QuickjsUiProps.event(node.props['onPageChanged']);
+Widget _buildPageView(JsUiRenderContext context, JsUiNode node) {
+  final onPageChanged = JsUiProps.event(node.props['onPageChanged']);
   final pageView = PageView(
     scrollDirection: node.props['scrollDirection'] == null
         ? Axis.horizontal
-        : QuickjsUiProps.axis(node.props['scrollDirection']),
-    pageSnapping: QuickjsUiProps.boolValue(node.props['pageSnapping']) ?? true,
+        : JsUiProps.axis(node.props['scrollDirection']),
+    pageSnapping: JsUiProps.boolValue(node.props['pageSnapping']) ?? true,
     physics: _scrollPhysics(node.props['physics']),
     onPageChanged: onPageChanged == null
         ? null
-        : (index) => context.dispatchEvent(
+        : (index) => context.dispatch(
             onPageChanged,
-            defaultCoalesceKey: quickjsUiEventKey(node, 'onPageChanged'),
-            kind: QuickjsUiEventKind.sample,
+            defaultCoalesceKey: jsUiEventKey(node, 'onPageChanged'),
+            kind: JsUiEventKind.sample,
             payload: <String, Object?>{'index': index},
           ),
     children: context.children(node),
   );
-  final withGestures = withQuickjsUiGestures(context, node, pageView);
+  final withGestures = withJsUiGestures(context, node, pageView);
   return _withScrollConfiguration(
     node,
-    quickjsUiWrapScrollNotifications(
+    jsUiWrapScrollNotifications(
       context: context,
       node: node,
       child: withGestures,
@@ -226,14 +221,14 @@ ScrollPhysics? _scrollPhysics(Object? value) => switch (value) {
   _ => throw const FormatException('Unknown quickjs_ui scroll physics'),
 };
 
-Widget _withScrollConfiguration(QuickjsUiNode node, Widget child) {
-  final scrollbars = QuickjsUiProps.boolValue(node.props['scrollbar']);
+Widget _withScrollConfiguration(JsUiNode node, Widget child) {
+  final scrollbars = JsUiProps.boolValue(node.props['scrollbar']);
   if (scrollbars == null) return child;
-  return _QuickjsUiScrollConfiguration(scrollbars: scrollbars, child: child);
+  return _JsUiScrollConfiguration(scrollbars: scrollbars, child: child);
 }
 
-final class _QuickjsUiScrollConfiguration extends StatelessWidget {
-  const _QuickjsUiScrollConfiguration({
+final class _JsUiScrollConfiguration extends StatelessWidget {
+  const _JsUiScrollConfiguration({
     required this.scrollbars,
     required this.child,
   });
@@ -252,15 +247,12 @@ final class _QuickjsUiScrollConfiguration extends StatelessWidget {
   }
 }
 
-Widget _buildRefreshIndicator(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final onRefresh = QuickjsUiProps.event(node.props['onRefresh']);
+Widget _buildRefreshIndicator(JsUiRenderContext context, JsUiNode node) {
+  final onRefresh = JsUiProps.event(node.props['onRefresh']);
   return RefreshIndicator(
     onRefresh: () async {
       if (onRefresh != null) {
-        context.dispatchEvent(onRefresh);
+        context.dispatch(onRefresh);
       }
     },
     child: context.child(node) ?? ListView(children: const <Widget>[]),
@@ -268,12 +260,12 @@ Widget _buildRefreshIndicator(
 }
 
 List<Widget> _childrenWithGap(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+  JsUiRenderContext context,
+  JsUiNode node,
   Axis axis,
 ) {
   final children = context.children(node);
-  final gap = quickjsUiGap(context, node);
+  final gap = jsUiGap(context, node);
   if (children.length < 2 || gap <= 0) {
     return children;
   }

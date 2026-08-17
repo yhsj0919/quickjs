@@ -5,62 +5,92 @@ import 'package:crypto/crypto.dart';
 import 'quickjs_ui_resource.dart';
 import 'quickjs_ui_resource_resolver.dart';
 
-const int quickjsUiManifestSchemaVersion = 1;
-const String quickjsUiPackageEntry = 'main.mjs';
-const String quickjsUiPackageManifest = 'manifest.json';
+/// The package manifest schema version supported by this library.
+const int jsUiManifestSchemaVersion = 1;
 
-final class QuickjsUiManifest {
-  const QuickjsUiManifest({
-    required this.schemaVersion,
+/// The required entry module for a package-root manifest.
+const String jsUiPackageEntry = 'main.mjs';
+
+/// The conventional package manifest file name.
+const String jsUiPackageManifest = 'manifest.json';
+
+/// Describes the modules, resources, routes, and permissions in a JSUI package.
+final class JsUiManifest {
+  /// Creates a package manifest from validated values.
+  const JsUiManifest({
+    this.schemaVersion = jsUiManifestSchemaVersion,
     required this.id,
     required this.version,
     required this.entry,
     required this.modules,
     this.name,
-    this.resources = const <String, QuickjsUiResourceReference>{},
+    this.resources = const <String, JsUiResourceReference>{},
     this.permissions = const <String>[],
-    this.routes = const <String, QuickjsUiRouteManifest>{},
+    this.routes = const <String, JsUiRouteManifest>{},
     this.cache,
     this.metadata = const <String, Object?>{},
   });
 
+  /// Manifest schema version.
   final int schemaVersion;
+
+  /// Stable package identifier.
   final String id;
+
+  /// Optional user-visible package name.
   final String? name;
+
+  /// Application-defined package version.
   final String version;
+
+  /// Normalized entry-module path.
   final String entry;
-  final Map<String, QuickjsUiModuleManifest> modules;
-  final Map<String, QuickjsUiResourceReference> resources;
+
+  /// Declared JavaScript modules keyed by normalized package path.
+  final Map<String, JsUiModuleManifest> modules;
+
+  /// Declared non-module resources.
+  final Map<String, JsUiResourceReference> resources;
+
+  /// Host permission names requested by the package.
   final List<String> permissions;
-  final Map<String, QuickjsUiRouteManifest> routes;
-  final QuickjsUiCacheManifest? cache;
+
+  /// Named routes exported by the package.
+  final Map<String, JsUiRouteManifest> routes;
+
+  /// Optional cache policy metadata.
+  final JsUiCacheManifest? cache;
+
+  /// Application-defined structured metadata.
   final Map<String, Object?> metadata;
 
-  factory QuickjsUiManifest.parse(String source) {
+  /// Parses and validates a JSON manifest [source].
+  factory JsUiManifest.parse(String source) {
     final decoded = jsonDecode(source);
     if (decoded is! Map) {
       throw const FormatException(
         'quickjs_ui package manifest must be an object',
       );
     }
-    return QuickjsUiManifest.fromMap(
+    return JsUiManifest.fromMap(
       decoded.map((key, value) => MapEntry<String, Object?>('$key', value)),
     );
   }
 
-  factory QuickjsUiManifest.fromMap(Map<String, Object?> manifest) {
+  /// Parses and validates structured manifest data.
+  factory JsUiManifest.fromMap(Map<String, Object?> manifest) {
     final schemaVersion = _intValue(
       manifest['schemaVersion'],
       'schemaVersion',
-      defaultValue: quickjsUiManifestSchemaVersion,
+      defaultValue: jsUiManifestSchemaVersion,
     )!;
-    if (schemaVersion != quickjsUiManifestSchemaVersion) {
+    if (schemaVersion != jsUiManifestSchemaVersion) {
       throw FormatException(
         'quickjs_ui package manifest schemaVersion is not supported: '
         '$schemaVersion',
       );
     }
-    final entry = QuickjsUiResourceResolver.normalizePath(
+    final entry = JsUiResourceResolver.normalizePath(
       _string(manifest['entry'], 'entry'),
     );
     final modules = _modules(manifest['modules']);
@@ -69,7 +99,7 @@ final class QuickjsUiManifest {
         'quickjs_ui package manifest entry must be listed in modules: $entry',
       );
     }
-    return QuickjsUiManifest(
+    return JsUiManifest(
       schemaVersion: schemaVersion,
       id: _string(manifest['id'], 'id'),
       name: _optionalString(manifest['name'], 'name'),
@@ -81,32 +111,34 @@ final class QuickjsUiManifest {
       routes: _routes(manifest['routes']),
       cache: manifest['cache'] == null
           ? null
-          : QuickjsUiCacheManifest.fromMap(_map(manifest['cache'], 'cache')),
+          : JsUiCacheManifest.fromMap(_map(manifest['cache'], 'cache')),
       metadata: _metadata(manifest['metadata']),
     );
   }
 
+  /// Validates the stricter entry requirements for a package root.
   void validatePackageRoot() {
-    if (entry != quickjsUiPackageEntry) {
+    if (entry != jsUiPackageEntry) {
       throw FormatException(
-        'quickjs_ui package manifest entry must be "$quickjsUiPackageEntry"',
+        'quickjs_ui package manifest entry must be "$jsUiPackageEntry"',
       );
     }
-    if (!modules.containsKey(quickjsUiPackageEntry)) {
+    if (!modules.containsKey(jsUiPackageEntry)) {
       throw const FormatException(
         'quickjs_ui package modules must contain main.mjs',
       );
     }
   }
 
+  /// Verifies that relative imports in [loadedModules] are declared modules.
   void validateImports(Map<String, String> loadedModules) {
     final declared = modules.keys.toSet();
     for (final module in loadedModules.entries) {
-      for (final importPath in quickjsUiStaticImports(module.value)) {
-        if (!quickjsUiIsRelativeImport(importPath)) {
+      for (final importPath in jsUiStaticImports(module.value)) {
+        if (!jsUiIsRelativeImport(importPath)) {
           continue;
         }
-        final imported = QuickjsUiResourceResolver.normalizePath(
+        final imported = JsUiResourceResolver.normalizePath(
           importPath,
           from: module.key,
         );
@@ -119,6 +151,7 @@ final class QuickjsUiManifest {
     }
   }
 
+  /// Serializes this manifest to JSON-compatible structured data.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'schemaVersion': schemaVersion,
@@ -144,26 +177,37 @@ final class QuickjsUiManifest {
   }
 }
 
-final class QuickjsUiModuleManifest {
-  const QuickjsUiModuleManifest({
+/// Describes one JavaScript module declared by a package manifest.
+final class JsUiModuleManifest {
+  /// Creates a module declaration.
+  const JsUiModuleManifest({
     required this.path,
     this.source,
     this.sha256,
     this.type = 'module',
   });
 
+  /// Normalized logical module path used by imports.
   final String path;
+
+  /// Optional resource path from which the module source is loaded.
   final String? source;
+
+  /// Optional lowercase SHA-256 digest of the source text.
   final String? sha256;
+
+  /// Module content type, normally `module`.
   final String type;
 
+  /// The resource path used to load this module.
   String get loadPath => source ?? path;
 
+  /// Verifies [content] against [sha256] when a digest is declared.
   void verifySource(String content) {
     if (sha256 == null) {
       return;
     }
-    final actual = quickjsUiSha256Hex(content);
+    final actual = jsUiSha256Hex(content);
     if (actual != sha256) {
       throw FormatException(
         'quickjs_ui package module checksum mismatch: $path',
@@ -171,6 +215,7 @@ final class QuickjsUiModuleManifest {
     }
   }
 
+  /// Serializes this module declaration.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       if (source != null) 'source': source,
@@ -180,20 +225,28 @@ final class QuickjsUiModuleManifest {
   }
 }
 
-final class QuickjsUiRouteManifest {
-  const QuickjsUiRouteManifest({
+/// Declares a named navigation entry exported by a JSUI package.
+final class JsUiRouteManifest {
+  /// Creates a route declaration.
+  const JsUiRouteManifest({
     required this.entry,
     this.title,
     this.initialProps = const <String, Object?>{},
   });
 
+  /// Normalized module entry path for the route.
   final String entry;
+
+  /// Optional user-visible route title.
   final String? title;
+
+  /// Structured properties supplied when the route opens.
   final Map<String, Object?> initialProps;
 
-  factory QuickjsUiRouteManifest.fromMap(Map<String, Object?> map) {
-    return QuickjsUiRouteManifest(
-      entry: QuickjsUiResourceResolver.normalizePath(
+  /// Parses a route declaration from structured manifest data.
+  factory JsUiRouteManifest.fromMap(Map<String, Object?> map) {
+    return JsUiRouteManifest(
+      entry: JsUiResourceResolver.normalizePath(
         _string(map['entry'], 'routes.entry'),
       ),
       title: _optionalString(map['title'], 'routes.title'),
@@ -201,6 +254,7 @@ final class QuickjsUiRouteManifest {
     );
   }
 
+  /// Serializes this route declaration.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'entry': entry,
@@ -210,25 +264,34 @@ final class QuickjsUiRouteManifest {
   }
 }
 
-final class QuickjsUiCacheManifest {
-  const QuickjsUiCacheManifest({
-    required this.mode,
+/// Describes package resource caching preferences.
+final class JsUiCacheManifest {
+  /// Creates cache metadata.
+  const JsUiCacheManifest({
+    this.mode = 'versioned',
     this.immutable = false,
     this.maxAgeSeconds,
   });
 
+  /// Application-defined cache strategy name.
   final String mode;
+
+  /// Whether resources may be treated as immutable.
   final bool immutable;
+
+  /// Optional maximum cache age in seconds.
   final int? maxAgeSeconds;
 
-  factory QuickjsUiCacheManifest.fromMap(Map<String, Object?> map) {
-    return QuickjsUiCacheManifest(
+  /// Parses cache metadata from structured manifest data.
+  factory JsUiCacheManifest.fromMap(Map<String, Object?> map) {
+    return JsUiCacheManifest(
       mode: _optionalString(map['mode'], 'cache.mode') ?? 'versioned',
       immutable: _boolValue(map['immutable'], 'cache.immutable') ?? false,
       maxAgeSeconds: _intValue(map['maxAgeSeconds'], 'cache.maxAgeSeconds'),
     );
   }
 
+  /// Serializes this cache metadata.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'mode': mode,
@@ -238,11 +301,15 @@ final class QuickjsUiCacheManifest {
   }
 }
 
-String quickjsUiSha256Hex(String source) {
+/// Returns the lowercase SHA-256 digest of UTF-8 [source].
+String jsUiSha256Hex(String source) {
   return sha256.convert(utf8.encode(source)).toString();
 }
 
-Iterable<String> quickjsUiStaticImports(String source) sync* {
+/// Extracts static `import` and re-export specifiers from module [source].
+///
+/// Dynamic `import()` expressions are not included.
+Iterable<String> jsUiStaticImports(String source) sync* {
   final patterns = <RegExp>[
     RegExp(
       r'''import\s+(?:[^'"]*?\s+from\s+)?["']([^"']+)["']''',
@@ -260,46 +327,46 @@ Iterable<String> quickjsUiStaticImports(String source) sync* {
   }
 }
 
-bool quickjsUiIsRelativeImport(String specifier) {
+/// Whether [specifier] is a `./` or `../` relative module import.
+bool jsUiIsRelativeImport(String specifier) {
   return specifier.startsWith('./') || specifier.startsWith('../');
 }
 
-Map<String, QuickjsUiModuleManifest> _modules(Object? value) {
+Map<String, JsUiModuleManifest> _modules(Object? value) {
   if (value is List) {
-    return Map<String, QuickjsUiModuleManifest>.unmodifiable(
-      <String, QuickjsUiModuleManifest>{
-        for (final item in value)
-          QuickjsUiResourceResolver.normalizePath(
-            _string(item, 'modules[]'),
-          ): QuickjsUiModuleManifest(
-            path: QuickjsUiResourceResolver.normalizePath(
-              _string(item, 'modules[]'),
-            ),
-          ),
-      },
-    );
+    return Map<String, JsUiModuleManifest>.unmodifiable(<
+      String,
+      JsUiModuleManifest
+    >{
+      for (final item in value)
+        JsUiResourceResolver.normalizePath(
+          _string(item, 'modules[]'),
+        ): JsUiModuleManifest(
+          path: JsUiResourceResolver.normalizePath(_string(item, 'modules[]')),
+        ),
+    });
   }
   if (value is Map) {
-    return Map<String, QuickjsUiModuleManifest>.unmodifiable(
+    return Map<String, JsUiModuleManifest>.unmodifiable(
       value.map((key, moduleValue) {
-        final path = QuickjsUiResourceResolver.normalizePath('$key');
+        final path = JsUiResourceResolver.normalizePath('$key');
         if (moduleValue is String) {
-          return MapEntry<String, QuickjsUiModuleManifest>(
+          return MapEntry<String, JsUiModuleManifest>(
             path,
-            QuickjsUiModuleManifest(
+            JsUiModuleManifest(
               path: path,
-              source: QuickjsUiResourceResolver.normalizePath(moduleValue),
+              source: JsUiResourceResolver.normalizePath(moduleValue),
             ),
           );
         }
         final map = _map(moduleValue, 'modules.$key');
-        return MapEntry<String, QuickjsUiModuleManifest>(
+        return MapEntry<String, JsUiModuleManifest>(
           path,
-          QuickjsUiModuleManifest(
+          JsUiModuleManifest(
             path: path,
             source: map['source'] == null
                 ? null
-                : QuickjsUiResourceResolver.normalizePath(
+                : JsUiResourceResolver.normalizePath(
                     _string(map['source'], 'modules.$key.source'),
                   ),
             sha256: _sha256(map['sha256'] ?? map['checksum'], 'modules.$key'),
@@ -314,27 +381,23 @@ Map<String, QuickjsUiModuleManifest> _modules(Object? value) {
   );
 }
 
-Map<String, QuickjsUiResourceReference> _resources(Object? value) {
+Map<String, JsUiResourceReference> _resources(Object? value) {
   if (value == null) {
-    return const <String, QuickjsUiResourceReference>{};
+    return const <String, JsUiResourceReference>{};
   }
   if (value is List) {
-    return Map<String, QuickjsUiResourceReference>.unmodifiable(
-      <String, QuickjsUiResourceReference>{
+    return Map<String, JsUiResourceReference>.unmodifiable(
+      <String, JsUiResourceReference>{
         for (final item in value)
-          _resourceKey(
-            QuickjsUiResourceReference.parse(item, name: 'resources[]'),
-          ): QuickjsUiResourceReference.parse(
-            item,
-            name: 'resources[]',
-          ),
+          _resourceKey(JsUiResourceReference.parse(item, name: 'resources[]')):
+              JsUiResourceReference.parse(item, name: 'resources[]'),
       },
     );
   }
   if (value is Map) {
-    return Map<String, QuickjsUiResourceReference>.unmodifiable(
+    return Map<String, JsUiResourceReference>.unmodifiable(
       value.map((key, resourceValue) {
-        final resource = QuickjsUiResourceReference.parse(
+        final resource = JsUiResourceReference.parse(
           resourceValue is Map
               ? <String, Object?>{
                   'uri': '$key',
@@ -345,7 +408,7 @@ Map<String, QuickjsUiResourceReference> _resources(Object? value) {
               : resourceValue,
           name: 'resources.$key',
         );
-        return MapEntry<String, QuickjsUiResourceReference>('$key', resource);
+        return MapEntry<String, JsUiResourceReference>('$key', resource);
       }),
     );
   }
@@ -354,16 +417,16 @@ Map<String, QuickjsUiResourceReference> _resources(Object? value) {
   );
 }
 
-Map<String, QuickjsUiRouteManifest> _routes(Object? value) {
+Map<String, JsUiRouteManifest> _routes(Object? value) {
   if (value == null) {
-    return const <String, QuickjsUiRouteManifest>{};
+    return const <String, JsUiRouteManifest>{};
   }
   final map = _map(value, 'routes');
-  return Map<String, QuickjsUiRouteManifest>.unmodifiable(
+  return Map<String, JsUiRouteManifest>.unmodifiable(
     map.map((key, value) {
-      return MapEntry<String, QuickjsUiRouteManifest>(
+      return MapEntry<String, JsUiRouteManifest>(
         key,
-        QuickjsUiRouteManifest.fromMap(_map(value, 'routes.$key')),
+        JsUiRouteManifest.fromMap(_map(value, 'routes.$key')),
       );
     }),
   );
@@ -376,11 +439,11 @@ Map<String, Object?> _metadata(Object? value) {
   return Map<String, Object?>.unmodifiable(_map(value, 'metadata'));
 }
 
-String _resourceKey(QuickjsUiResourceReference resource) {
-  if (resource.kind == QuickjsUiResourceKind.asset) {
-    return QuickjsUiResourceResolver.normalizePath(resource.location);
+String _resourceKey(JsUiResourceReference resource) {
+  if (resource.kind == JsUiResourceKind.asset) {
+    return JsUiResourceResolver.normalizePath(resource.uri);
   }
-  return resource.location;
+  return resource.uri;
 }
 
 Map<String, Object?> _map(Object? value, String name) {

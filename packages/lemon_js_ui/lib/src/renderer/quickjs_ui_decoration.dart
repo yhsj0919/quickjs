@@ -1,7 +1,11 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 
-({BoxDecoration? background, Decoration? foreground})
-splitQuickjsUiRoundedBorder(BoxDecoration? decoration) {
+({BoxDecoration? background, Decoration? foreground}) splitJsUiRoundedBorder(
+  BoxDecoration? decoration,
+) {
   final border = decoration?.border;
   if (decoration == null || border is! Border || border.isUniform) {
     return (background: decoration, foreground: null);

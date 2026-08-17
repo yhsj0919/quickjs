@@ -152,21 +152,21 @@ modules/resources/permissions/cache 都来自 manifest
 建议 API 语义：
 
 ```dart
-QuickjsUiBundle.asset(path: 'assets/demo/pages/dev.mjs'); // 开发期多文件加载
-QuickjsUiBundle.file(path: 'E:/demo/pages/dev.mjs');      // 开发期多文件加载
-QuickjsUiBundle.network(url: devEntry);                   // 开发期多文件加载
+JsUiBundle.asset(path: 'assets/demo/pages/dev.mjs'); // 开发期多文件加载
+JsUiBundle.file(path: 'E:/demo/pages/dev.mjs');      // 开发期多文件加载
+JsUiBundle.network(url: devEntry);                   // 开发期多文件加载
 
-QuickjsUiBundle.assetPackage(root: 'assets/profile/');
-QuickjsUiBundle.filePackage(root: 'E:/packages/profile/');
-QuickjsUiBundle.networkPackage(root: Uri.parse('https://example.com/profile/'));
-QuickjsUiBundle.assetZipPackage(assetKey: 'assets/profile.quickjsui.zip');
-QuickjsUiBundle.fileZipPackage(path: 'E:/packages/profile.quickjsui.zip');
+JsUiBundle.packageAsset(root: 'assets/profile/');
+JsUiBundle.packageFile(root: 'E:/packages/profile/');
+JsUiBundle.packageNetwork(root: Uri.parse('https://example.com/profile/'));
+JsUiBundle.archiveAsset(path: 'assets/profile.quickjsui.zip');
+JsUiBundle.archiveFile(path: 'E:/packages/profile.quickjsui.zip');
 ```
 
 如果需要保留可配置校验模式，可以在开发期入口加载上增加：
 
 ```dart
-enum QuickjsUiManifestMode {
+enum JsUiManifestMode {
   disabled,
   optional,
   required,
@@ -211,17 +211,17 @@ dart run lemon_js_ui:manifest --root assets/quickjs_ui/profile --check
 如果需要跨 loader 或跨进程复用，可以传入 cache store：
 
 ```dart
-final bundle = await QuickjsUiBundle.networkPackage(
+final bundle = await JsUiBundle.packageNetwork(
   root: Uri.parse('https://example.com/profile/'),
-  cacheStore: QuickjsUiFileNetworkCacheStore(
+  cacheStore: JsUiFileNetworkCacheStore(
     directory: Directory('quickjs_ui_cache'),
   ),
 );
 ```
 
-`QuickjsUiFileNetworkCacheStore` 以 URL hash 为文件名保存 body、etag 和 cachedAt。
+`JsUiFileNetworkCacheStore` 以 URL hash 为文件名保存 body、etag 和 cachedAt。
 当前实现只做基础持久缓存，不做复杂淘汰；生产应用可以通过自定义
-`QuickjsUiNetworkCacheStore` 接入自己的缓存目录、容量限制和迁移策略。
+`JsUiNetworkCacheStore` 接入自己的缓存目录、容量限制和迁移策略。
 
 ## 校验规则
 
@@ -246,7 +246,7 @@ final bundle = await QuickjsUiBundle.networkPackage(
 ```text
 发布包 root/zip/network
   -> quickjs_ui loader 校验 manifest/resources
-  -> QuickjsUiBundle
+  -> JsUiBundle
   -> JsPlugin
   -> quickjs core runtime
 ```

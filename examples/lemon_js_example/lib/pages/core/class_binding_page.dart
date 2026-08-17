@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// Class Binding Demo：使用 [Quickjs.injectClass] 注册 Dart 类，
+/// Class Binding Demo：使用 [JsEngine.injectClass] 注册 Dart 类，
 /// 演示 `new User`、`await` getter/method 与显式释放。
 class ClassBindingPage extends StatefulWidget {
   const ClassBindingPage({super.key});
@@ -19,7 +19,7 @@ final class _ExampleUser {
 }
 
 class _ClassBindingPageState extends State<ClassBindingPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   JsClassHandle? _userClass;
   bool _disposed = false;
   bool _busy = false;
@@ -41,12 +41,12 @@ class _ClassBindingPageState extends State<ClassBindingPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
-      final userClass = await quickjs.injectClass<_ExampleUser>(
+      final engine = await JsEngine.create();
+      final userClass = await engine.injectClass<_ExampleUser>(
         'User',
         JsClass<_ExampleUser>(
           create: (args) => _ExampleUser(args.single as String),
@@ -70,14 +70,14 @@ class _ClassBindingPageState extends State<ClassBindingPage> {
         ),
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _userClass = userClass;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -177,12 +177,12 @@ return await leakedUser.name;
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   void _appendLog(String message) {
@@ -197,16 +197,16 @@ return await leakedUser.name;
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     _userClass = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null && _userClass != null;
-    final canCheckDisposed = _quickjs != null && _userClass == null;
+    final hasRuntime = _engine != null && _userClass != null;
+    final canCheckDisposed = _engine != null && _userClass == null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('类绑定')),

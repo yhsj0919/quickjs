@@ -14,16 +14,15 @@ enum _PackageSource {
 }
 
 /// 0.5 发布包 Demo：固定包根 `main.mjs` + `manifest.json` 的加载与校验。
-class QuickjsUiPackageDemoPage extends StatefulWidget {
-  const QuickjsUiPackageDemoPage({super.key});
+class JsUiPackageDemoPage extends StatefulWidget {
+  const JsUiPackageDemoPage({super.key});
 
   @override
-  State<QuickjsUiPackageDemoPage> createState() =>
-      _QuickjsUiPackageDemoPageState();
+  State<JsUiPackageDemoPage> createState() => _JsUiPackageDemoPageState();
 }
 
-class _QuickjsUiPackageDemoPageState extends State<QuickjsUiPackageDemoPage> {
-  QuickjsUiBundle? _bundle;
+class _JsUiPackageDemoPageState extends State<JsUiPackageDemoPage> {
+  JsUiBundle? _bundle;
   Object? _error;
   _PackageSource _source = _PackageSource.asset;
   int _loadVersion = 0;
@@ -42,13 +41,13 @@ class _QuickjsUiPackageDemoPageState extends State<QuickjsUiPackageDemoPage> {
     });
     try {
       final bundle = switch (nextSource) {
-        _PackageSource.asset => await QuickjsUiBundle.assetPackage(
+        _PackageSource.asset => await JsUiBundle.packageAsset(
           root: nextSource.location,
         ),
-        _PackageSource.zip => await QuickjsUiBundle.assetZipPackage(
-          assetKey: nextSource.location,
+        _PackageSource.zip => await JsUiBundle.archiveAsset(
+          path: nextSource.location,
         ),
-        _PackageSource.network => await QuickjsUiBundle.networkPackage(
+        _PackageSource.network => await JsUiBundle.packageNetwork(
           root: Uri.parse(nextSource.location),
         ),
       };
@@ -109,7 +108,7 @@ class _QuickjsUiPackageDemoPageState extends State<QuickjsUiPackageDemoPage> {
                   )
                 : bundle == null
                 ? const Center(child: CircularProgressIndicator())
-                : QuickjsUiView.plugin(
+                : JsUiView.plugin(
                     bundle.toPlugin(),
                     key: ValueKey<String>(
                       '${bundle.id}:${bundle.version}:$_loadVersion',
@@ -139,7 +138,7 @@ class _PackageHeader extends StatelessWidget {
   });
 
   final _PackageSource source;
-  final QuickjsUiBundle? bundle;
+  final JsUiBundle? bundle;
   final Object? error;
   final ValueChanged<_PackageSource> onSourceChanged;
 

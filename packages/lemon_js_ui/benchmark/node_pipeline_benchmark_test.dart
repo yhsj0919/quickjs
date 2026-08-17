@@ -5,8 +5,8 @@ void main() {
   test('benchmarks large schema preparation and keyed diff identity', () {
     final schema = _largeSchema(sections: 20, itemsPerSection: 50);
 
-    final parse = _measure(30, () => QuickjsUiNode.fromMap(schema));
-    final node = QuickjsUiNode.fromMap(schema);
+    final parse = _measure(30, () => JsUiNode.fromMap(schema));
+    final node = JsUiNode.fromMap(schema);
     final cachedDiff = _measure(5000, () => node.structuralSignature);
     final recursiveDiff = _measure(100, () => _legacySignature(node));
 
@@ -31,16 +31,16 @@ void main() {
     final items = section['children']! as List<Object?>;
     (items[25]! as Map<String, Object?>)['data'] = 'Updated leaf';
 
-    QuickjsUiDiffStats? stats;
-    final renderer = QuickjsUiRenderer(
+    JsUiDiffStats? stats;
+    final renderer = JsUiRenderer(
       onEvent: (_) {},
       onDiffStats: (value) => stats = value,
     );
     addTearDown(renderer.dispose);
-    renderer.build(QuickjsUiNode.fromMap(initialSchema));
+    renderer.build(JsUiNode.fromMap(initialSchema));
 
     final stopwatch = Stopwatch()..start();
-    renderer.build(QuickjsUiNode.fromMap(updatedSchema));
+    renderer.build(JsUiNode.fromMap(updatedSchema));
     stopwatch.stop();
 
     // Only root, the changed section and the changed leaf are rebuilt. The 19
@@ -104,7 +104,7 @@ _Measurements _measure(int iterations, Object? Function() action) {
   return _Measurements(samples[samples.length ~/ 2]);
 }
 
-String _legacySignature(QuickjsUiNode node) {
+String _legacySignature(JsUiNode node) {
   final children = node.children.map(_legacySignature).join(',');
   return '${node.type}|${_stableValue(node.props)}|[$children]';
 }

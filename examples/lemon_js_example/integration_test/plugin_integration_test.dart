@@ -6,9 +6,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('evaluates JavaScript', (tester) async {
-    final engine = await Quickjs.create();
+    final engine = await JsEngine.create();
     addTearDown(engine.dispose);
-    expect(engine.quickjsVersion, '0.15.1');
+    expect(engine.engineVersion, '0.15.1');
     expect(await engine.eval('1 + 2'), '3');
   });
 }

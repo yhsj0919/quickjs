@@ -30,11 +30,11 @@ class ExampleIndexPage extends StatelessWidget {
         body: TabBarView(
           children: <Widget>[
             _ExamplePageList(pages: <ExamplePageSpec>[...examplePages]),
-            _ExamplePageList(pages: quickjsUiGettingStartedExamplePages),
-            _ExamplePageList(pages: quickjsUiFoundationExamplePages),
-            _ExamplePageList(pages: quickjsUiPlatformExamplePages),
-            _ExamplePageList(pages: quickjsUiScenarioExamplePages),
-            _ExamplePageList(pages: quickjsUiLabExamplePages),
+            _ExamplePageList(pages: jsUiGettingStartedExamplePages),
+            _ExamplePageList(pages: jsUiFoundationExamplePages),
+            _ExamplePageList(pages: jsUiPlatformExamplePages),
+            _ExamplePageList(pages: jsUiScenarioExamplePages),
+            _ExamplePageList(pages: jsUiLabExamplePages),
           ],
         ),
       ),

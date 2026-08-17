@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 用于验证 ListView.builder 分批预取能力的超长列表测试页。
-class QuickjsUiHugeListPage extends StatelessWidget {
-  const QuickjsUiHugeListPage({super.key});
+class JsUiHugeListPage extends StatelessWidget {
+  const JsUiHugeListPage({super.key});
 
   static const String path = 'assets/quickjs_ui/huge_list_page.mjs';
 
@@ -11,7 +11,7 @@ class QuickjsUiHugeListPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('列表性能 · 100,000 项')),
-      body: QuickjsUiView.asset(
+      body: JsUiView.asset(
         path: path,
         loadingBuilder: (_) => const Center(child: CircularProgressIndicator()),
         errorBuilder: (_, error) => Padding(

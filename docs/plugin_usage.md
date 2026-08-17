@@ -18,23 +18,23 @@ import 'package:lemon_js/lemon_js.dart';
 最小用法：
 
 ```dart
-final quickjs = await Quickjs.create();
+final engine = await JsEngine.create();
 
 try {
-  final result = await quickjs.eval('1 + 2 * 3');
+  final result = await engine.eval('1 + 2 * 3');
   print(result); // 7
 } finally {
-  await quickjs.dispose();
+  await engine.dispose();
 }
 ```
 
-`Quickjs` 是一个独立运行时。页面退出、业务结束或不再使用时应调用 `dispose()`。
+`JsEngine` 是一个独立运行时。页面退出、业务结束或不再使用时应调用 `dispose()`。
 
 Flutter 页面中常见写法：
 
 ```dart
 class MyPageState extends State<MyPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
 
   @override
   void initState() {
@@ -43,12 +43,12 @@ class MyPageState extends State<MyPage> {
   }
 
   Future<void> _init() async {
-    _quickjs = await Quickjs.create();
+    _engine = await JsEngine.create();
   }
 
   @override
   void dispose() {
-    unawaited(_quickjs?.dispose());
+    unawaited(_engine?.dispose());
     super.dispose();
   }
 }
@@ -59,13 +59,13 @@ class MyPageState extends State<MyPage> {
 通过 `JsOptions` 配置运行时：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   options: JsOptions(
     memoryLimitBytes: 64 * 1024 * 1024,
     stackLimitBytes: 1024 * 1024,
   ),
   features: <JsFeatures>[
-      JsFeatures.web(),
+      WebFeatures(),
     ],
   onConsole: (event) {
     print('[${event.level.name}] ${event.text}');
@@ -80,12 +80,12 @@ final quickjs = await Quickjs.create(
 - `moduleLoader`：ES module 依赖加载器。
 - `scripts`：启动时注入的 JS 脚本。
 - `modules`：预注册 ES module / CommonJS module。
-- `providers`：Dart/Flutter 方法提供者。
+- `methods`：Dart/Flutter 方法提供者。
 - `features`：批量能力包，例如 Web、Node、fetch、crypto、plugin。
 
 ## 默认内置能力
 
-即使不安装任何 features，runtime 也会默认安装少量基础能力：
+即使不加载任何 features，runtime 也会默认提供少量基础能力：
 
 - `console.log` / `console.warn` / `console.error`
 - `TextEncoder`
@@ -94,7 +94,7 @@ final quickjs = await Quickjs.create(
 `TextEncoder` / `TextDecoder` 目前提供 UTF-8 编解码能力，适合配合 `crypto.subtle.digest()`、二进制协议、Buffer 类工具使用。
 
 ```dart
-final text = await quickjs.run('''
+final text = await engine.run('''
 const bytes = new TextEncoder().encode('hello');
 return new TextDecoder().decode(bytes);
 ''');
@@ -105,14 +105,14 @@ return new TextDecoder().decode(bytes);
 `eval()` 执行普通 JS，并返回转换后的 Dart 值：
 
 ```dart
-final value = await quickjs.eval('1 + 2');
+final value = await engine.eval('1 + 2');
 print(value); // 3
 ```
 
 可以传入 `name`，用于错误堆栈和调试：
 
 ```dart
-await quickjs.eval(
+await engine.eval(
   'throw new Error("boom")',
   name: 'app:main.js',
 );
@@ -121,7 +121,7 @@ await quickjs.eval(
 可以传入 `timeout`，防止长时间同步执行：
 
 ```dart
-await quickjs.eval(
+await engine.eval(
   'while (true) {}',
   timeout: const Duration(milliseconds: 100),
 );
@@ -132,7 +132,7 @@ await quickjs.eval(
 `run()` 会把代码包在 `async () => { ... }` 中执行，所以需要用 `return` 返回值：
 
 ```dart
-final result = await quickjs.run('''
+final result = await engine.run('''
 const value = await Promise.resolve(42);
 return value;
 ''');
@@ -140,7 +140,7 @@ return value;
 print(result); // 42
 ```
 
-`run()` 适合调用 Promise、timer、fetch、Dart provider 等异步能力。
+`run()` 适合调用 Promise、timer、fetch、Dart 宿主方法等异步能力。
 
 ## 5. 返回 Dart 结构化值
 
@@ -148,7 +148,7 @@ print(result); // 42
 `evalRaw()` 和 `runRaw()`：
 
 ```dart
-final value = await quickjs.eval('''
+final value = await engine.eval('''
 ({
   name: 'QuickJS',
   count: 3,
@@ -169,27 +169,27 @@ print(value); // {name: QuickJS, count: 3, ok: true, tags: [js, dart]}
 - `BigInt`
 - `List`
 - plain object -> `Map<String, Object?>`
-- `ArrayBuffer`
+- `ArrayBuffer` -> `Uint8List`
 - `Uint8Array` -> `Uint8List`
 - `undefined` -> `JsUndefined.value`
 
 示例：
 
 ```dart
-final bytes = await quickjs.eval('new Uint8Array([1, 2, 255])');
+final bytes = await engine.eval('new Uint8Array([1, 2, 255])');
 print(bytes is Uint8List); // true
 ```
 
 不支持直接转换的值会抛出 `JsValueConversionException`，例如 function、symbol、循环引用对象。
 
-## 6. 临时注入 globals
+## 6. 临时注入全局值
 
 执行某次 JS 时，可以临时把 Dart 值注入 `globalThis`：
 
 ```dart
-final result = await quickjs.eval(
+final result = await engine.eval(
   'count + price',
-  globals: <String, Object?>{
+  tempGlobals: <String, Object?>{
     'count': 40,
     'price': 2,
   },
@@ -198,20 +198,20 @@ final result = await quickjs.eval(
 print(result); // 42
 ```
 
-这些 globals 只在本次执行期间存在，执行结束后会恢复原状态。
+这些 `tempGlobals` 只在本次执行期间存在，执行结束后会恢复原状态。
 
 ## 7. 接收 console 日志
 
 创建 runtime 时传入 `onConsole`：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   onConsole: (event) {
     print('${event.timestamp} ${event.level.name}: ${event.text}');
   },
 );
 
-await quickjs.eval('console.log("hello", 123)');
+await engine.eval('console.log("hello", 123)');
 ```
 
 支持：
@@ -222,18 +222,18 @@ await quickjs.eval('console.log("hello", 123)');
 
 ## 8. 注入简单 Dart 方法
 
-最简单的方式是创建 runtime 时使用 `JsProvider.global()`：
+最简单的方式是创建 runtime 时使用 `JsHostMethod.global()`：
 
 ```dart
-final quickjs = await Quickjs.create(
-  providers: <JsProvider>[
-      JsProvider.global(
+final engine = await JsEngine.create(
+  methods: <JsHostMethod>[
+      JsHostMethod.global(
         name: 'getDataAsync',
         callback: (args, context) async {
           return 'data from Dart';
         },
       ),
-      JsProvider.global(
+      JsHostMethod.global(
         name: 'dartMethod',
         callback: (args, context) {
           return 'method result';
@@ -246,39 +246,39 @@ final quickjs = await Quickjs.create(
 JS 调用：
 
 ```dart
-final result = await quickjs.eval('''
+final result = await engine.eval('''
 const data = await getDataAsync();
 const value = await dartMethod('hello');
 ({ data, value });
 ''');
 ```
 
-注意：provider 在 JS 侧总是返回 Promise，所以建议始终使用 `await`。
+注意：宿主方法在 JS 侧总是返回 Promise，所以建议始终使用 `await`。
 
 ## 9. 运行后绑定 Dart 方法
 
 也可以在 runtime 创建后用 `bind()` 绑定全局函数：
 
 ```dart
-await quickjs.bind('addFromDart', (args) {
+await engine.bind('addFromDart', (args) {
   return (args[0] as num) + (args[1] as num);
 });
 
-final result = await quickjs.run('''
+final result = await engine.run('''
 return await addFromDart(20, 22);
 ''');
 
 print(result); // 42
 ```
 
-`bind()` 适合少量临时绑定。更推荐在创建 runtime 时使用 `providers`，这样 runtime 重建时配置可以恢复。
+`bind()` 适合少量临时绑定。更推荐在创建 runtime 时使用 `methods`，这样 runtime 重建时配置可以恢复。
 
-## 10. Provider 高级写法
+## 10. Method 高级写法
 
-`JsProvider.global()` 是语法糖：
+`JsHostMethod.global()` 是语法糖：
 
 ```dart
-JsProvider.global(
+JsHostMethod.global(
   name: 'alert',
   callback: (args, _) {
     print(args.join(' '));
@@ -287,12 +287,12 @@ JsProvider.global(
 )
 ```
 
-这里的 `name` 是 JS 侧全局函数名，内部 provider id 会自动生成。
+这里的 `name` 是 JS 侧全局函数名，内部方法 id 会自动生成。
 
-需要自定义内部 provider 名时，用 `JsProvider.dart()`：
+需要自定义内部方法名时，用 `JsHostMethod()`：
 
 ```dart
-JsProvider.dart(
+JsHostMethod(
   name: 'example.getDataAsync',
   globalName: 'getDataAsync',
   callback: (args, _) async {
@@ -303,22 +303,22 @@ JsProvider.dart(
 
 字段含义：
 
-- `name`：内部 provider 名，用于映射、冲突检测、调试。
+- `name`：内部宿主方法名，用于映射、冲突检测、调试。
 - `globalName`：可选，声明要自动注入的 JS 全局函数名。
 - `debugName`：可选，调试显示名。
 - `implementation`：标记实现来源，支持 `dart`、`platform`、`web`。
 - `callback`：Dart 侧实现。
 
-如果不传 `globalName`，provider 只注册到内部表，不会自动出现在 `globalThis`。
+如果不传 `globalName`，宿主方法只注册到内部表，不会自动出现在 `globalThis`。
 
 ## 11. 使用 Host Script 注入 JS
 
 `JsScript` 用于启动时注入 JS 脚本，比如 polyfill、全局对象、兼容层。
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   scripts: <JsScript>[
-      JsScript.js(
+      JsScript(
         name: 'app:env.js',
         globals: <String>['appVersion'],
         source: 'globalThis.appVersion = "1.0.0";',
@@ -336,23 +336,23 @@ final quickjs = await Quickjs.create(
 ```dart
 final axiosScript = await JsScript.asset(
   name: 'app:axios.js',
-  assetKey: 'assets/js/axios.js',
+  path: 'assets/js/axios.js',
   globals: const <String>['axios'],
 );
 
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   scripts: <JsScript>[
       axiosScript,
     ],
 );
 ```
 
-## 13. Provider 映射语法糖
+## 13. Method 映射语法糖
 
-如果你已经有多个 provider，并想集中声明全局函数映射，可以使用 `JsScript.providerGlobals()`：
+如果已经有多个宿主方法，并想集中声明全局函数映射，可以使用 `JsScript.methodGlobals()`：
 
 ```dart
-JsScript.providerGlobals(
+JsScript.methodGlobals(
   name: 'app:globals.js',
   globals: const <String, String>{
     'getDataAsync': 'example.getDataAsync',
@@ -365,10 +365,10 @@ JsScript.providerGlobals(
 
 ```js
 globalThis.getDataAsync = (...args) =>
-  globalThis.__quickjsHostProviders['example.getDataAsync'](...args);
+  globalThis.__engineHostMethods['example.getDataAsync'](...args);
 ```
 
-简单函数推荐 `JsProvider.global()`；需要集中管理映射或构建复杂 API 时再使用 `providerGlobals()`。
+简单函数推荐 `JsHostMethod.global()`；需要集中管理映射或构建复杂 API 时再使用 `methodGlobals()`。
 
 ## 14. Host Features 能力包
 
@@ -379,22 +379,22 @@ globalThis.getDataAsync = (...args) =>
 - `capabilities`：基础 host 能力，例如 `window` / `self` 这类别名。
 - `scripts`：启动时执行的 JS 补丁，例如安装 `fetch`、`crypto`、`Buffer`、`location`。
 - `modules`：预注册模块，例如 `node:buffer`、`node:crypto`、插件 ES module。
-- `providers`：Dart/Flutter 实现的方法，例如 fetch 请求、crypto digest、应用自定义 API。
+- `methods`：Dart/Flutter 实现的方法，例如 fetch 请求、crypto digest、应用自定义 API。
 
 换句话说，features 是“能力边界”的组织单位。比如 `FetchFeatures` 同时需要：
 
 - 注入 JS 侧 `fetch` / `Headers` / `Response` 类。
-- 注册 Dart 侧真正发 HTTP 请求的 provider。
+- 注册 Dart 侧真正发 HTTP 请求的 method。
 - 保存允许访问的 origin、超时、大小限制等配置。
 
-这些东西拆开写很容易漏，所以用一个 features 表示“安装 fetch 能力”。
+这些东西拆开写很容易漏，所以用一个 features 表示“加载 fetch 能力”。
 
 ### Features 和 JS 注入的区别
 
-`JsScript.js` 只是“启动时执行一段 JS”。它适合做很薄的环境补丁：
+`JsScript` 只是“启动时执行一段 JS”。它适合做很薄的环境补丁：
 
 ```dart
-JsScript.js(
+JsScript(
   name: 'app:env.js',
   globals: const <String>['appVersion'],
   source: 'globalThis.appVersion = "1.0.0";',
@@ -405,7 +405,7 @@ JsScript.js(
 
 - 写一个全局变量。
 - 安装一个小 polyfill。
-- 把已有 provider 包装成某个 JS API。
+- 把已有 method 包装成某个 JS API。
 - 加载 axios 这类纯 JS 库。
 
 但 JS 注入本身不适合表达“完整能力”。例如 fetch 能力不只是这段 JS：
@@ -414,32 +414,32 @@ JsScript.js(
 globalThis.fetch = ...
 ```
 
-它还需要 Dart 侧 HTTP provider、origin 白名单、请求/响应大小限制、超时、重定向规则、`Headers` / `Request` / `Response` / `AbortController` 等配套对象。只用 `JsScript.js` 会把这些配置拆散到多个地方，后续很难判断“这个 runtime 到底安装了什么能力”。
+它还需要 Dart 侧 HTTP method、origin 白名单、请求/响应大小限制、超时、重定向规则、`Headers` / `Request` / `Response` / `AbortController` 等配套对象。只用 `JsScript` 会把这些配置拆散到多个地方，后续很难判断“这个 runtime 到底安装了什么能力”。
 
 所以单独做 features 的原因是：
 
-- **组合能力**：把 JS patch、Dart provider、模块、capability 放在一个对象里。
+- **组合能力**：把 JS patch、Dart 宿主方法、模块和底层能力放在一个对象里。
 - **明确边界**：`FetchFeatures` 就代表 fetch 能力，`WebCryptoFeatures` 就代表 crypto 能力。
 - **集中配置**：网络白名单、超时、环境变量、crypto 开关都跟能力本身放在一起。
 - **可复用**：同一个 features 可以在多个 runtime 或页面中复用。
-- **可检查**：运行时可以统一做 features name、global、provider、module 冲突检测。
-- **可调试**：`debugInspect()` 可以看到当前 runtime 安装了哪些 features 和 provider。
+- **可检查**：运行时可以统一检查 features、global、宿主方法和模块名称冲突。
+- **可调试**：`debugInspect()` 可以看到当前 runtime 安装了哪些 features 和宿主方法。
 - **可重建**：runtime `restart()` 或 `loadFeatures()` 重建后，features 描述的能力可以自动恢复。
 
 简单判断：
 
-- 只注入一段独立 JS：用 `JsScript.js`。
-- 只暴露一个 Dart 全局函数：用 `JsProvider.global`。
+- 只注入一段独立 JS：用 `JsScript`。
+- 只暴露一个 Dart 全局函数：用 `JsHostMethod.global`。
 - 一组 JS API 需要配套 Dart 实现、模块或配置：做成 `JsFeatures`。
 - 想把能力作为产品级开关安装/卸载/复用：做成 `JsFeatures`。
 
 创建 runtime 时安装：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
-      JsFeatures.web(),
-      JsFeatures.essential(globalBuffer: true),
+      WebFeatures(),
+      EssentialFeatures(globalBuffer: true),
       FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
       ),
@@ -453,21 +453,21 @@ final quickjs = await Quickjs.create(
 final appFeatures = JsFeatures(
   name: 'app-api',
   scripts: const <JsScript>[
-    JsScript.js(
+    JsScript(
       name: 'app:env.js',
       globals: <String>['appName'],
       source: 'globalThis.appName = "Demo";',
     ),
   ],
-  providers: <JsProvider>[
-    JsProvider.global(
+  methods: <JsHostMethod>[
+    JsHostMethod.global(
       name: 'ping',
       callback: (_, __) => 'pong',
     ),
   ],
   modules: const <JsModule>[
-    JsModule.esModule(
-      specifier: 'app/config',
+    JsModule(
+      name: 'app/config',
       source: 'export const version = "1.0.0";',
     ),
   ],
@@ -477,7 +477,7 @@ final appFeatures = JsFeatures(
 安装：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[appFeatures],
 );
 ```
@@ -490,28 +490,28 @@ console.log(await ping());
 const { version } = await import('app/config');
 ```
 
-运行时也可以安装 features：
+运行时也可以加载 features：
 
 ```dart
-await quickjs.loadFeatures(appFeatures);
+await engine.loadFeatures(appFeatures);
 ```
 
-但要注意：运行时 `loadFeatures()` 会重建 runtime。重建后会重新安装 options 里的 features、providers、scripts、modules，以及运行时 features；但 JS 执行期间临时写入的全局状态不会保留。因此：
+但要注意：运行时 `loadFeatures()` 会重建 runtime。重建后会重新安装创建参数里的 features、methods、scripts、modules，以及运行时 features；但 JS 执行期间临时写入的全局状态不会保留。因此：
 
-- 核心环境能力建议在 `Quickjs.create()` 时通过 `options.features` 安装。
+- 核心环境能力建议在 `JsEngine.create(features: ...)` 时加载。
 - 运行时 `loadFeatures()` 更适合“用户打开某个功能后再加载能力”的场景。
 - 长期存在的能力不要依赖手动 `eval()` 注入，应该放进 features 或 options。
 
-features 还负责冲突检测。重复的 features name、重复 global、重复 provider name、重复 module specifier 都会报错。这样可以尽早发现两个能力包互相覆盖的问题。
+features 还负责冲突检测。重复的 features 名、global、宿主方法名或模块名都会报错。这样可以尽早发现两个能力包互相覆盖的问题。
 
 ## 15. Web 兼容环境
 
-`JsFeatures.web()` 提供轻量 Web-like 环境：
+`WebFeatures()` 提供轻量 Web-like 环境：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
-      JsFeatures.web(
+      WebFeatures(
         locationHref: 'https://example.com/app',
         userAgent: 'MyApp QuickJS',
       ),
@@ -531,18 +531,18 @@ final quickjs = await Quickjs.create(
 
 它不包含完整 DOM、CSSOM、WebView、真实浏览器渲染环境。
 
-如果脚本只缺某个很小的 Web API，可以在 `JsFeatures.web()` 的基础上自己补一段 JS。比如给 `navigator` 补 `language` 和 `languages`：
+如果脚本只缺某个很小的 Web API，可以在 `WebFeatures()` 的基础上自己补一段 JS。比如给 `navigator` 补 `language` 和 `languages`：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
-      JsFeatures.web(
+      WebFeatures(
         locationHref: 'https://example.com/app',
         userAgent: 'MyApp QuickJS',
       ),
     ],
   scripts: const <JsScript>[
-      JsScript.js(
+      JsScript(
         name: 'app:navigator-language.js',
         source: '''
 Object.defineProperty(globalThis.navigator, 'language', {
@@ -568,19 +568,19 @@ console.log(navigator.language); // zh-CN
 console.log(navigator.languages[0]); // zh-CN
 ```
 
-这种做法适合补很薄的、纯 JS 能表达的兼容字段。如果要补的是一整套能力，例如网络请求、加密、文件访问、原生存储，就不要只靠 `JsScript.js` 堆脚本，应该封装成独立 `JsFeatures`，把 JS API、Dart provider、权限和配置放在一起。
+这种做法适合补很薄的、纯 JS 能表达的兼容字段。如果要补的是一整套能力，例如网络请求、加密、文件访问、原生存储，就不要只靠 `JsScript` 堆脚本，应该封装成独立 `JsFeatures`，把 JS API、Dart method、权限和配置放在一起。
 
-如果要替换 `web()` 已经提供的能力，优先使用 features 自带的开关关掉内置实现，再安装自己的实现。比如 `localStorage` / `sessionStorage` 已经由 `JsFeatures.web()` 提供，想换成自己的实现时，可以这样做：
+如果要替换 `web()` 已经提供的能力，优先使用 features 自带的开关关掉内置实现，再加载自己的实现。比如 `localStorage` / `sessionStorage` 已经由 `WebFeatures()` 提供，想换成自己的实现时，可以这样做：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
-      JsFeatures.web(
+      WebFeatures(
         storage: false,
       ),
     ],
   scripts: const <JsScript>[
-      JsScript.js(
+      JsScript(
         name: 'app:storage.js',
         globals: <String>['localStorage'],
         source: '''
@@ -613,19 +613,19 @@ globalThis.localStorage = {
 如果只是临时实验，也可以在 runtime 创建后用 `eval()` 手动覆盖：
 
 ```dart
-await quickjs.eval('globalThis.localStorage = myStorage;');
+await engine.eval('globalThis.localStorage = myStorage;');
 ```
 
 但这种覆盖不推荐作为正式能力使用，因为 `restart()`、`loadFeatures()` 或 runtime 重建后不会自动恢复。正式方案应该放进 `JsOptions`，或者封装成自己的 `JsFeatures`。
 
 ## 16. Essential / Buffer
 
-`JsFeatures.essential()` 提供低风险常用能力，目前主要是 `buffer` / `node:buffer`。
+`EssentialFeatures()` 提供低风险常用能力，目前主要是 `buffer` / `node:buffer`。
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
-      JsFeatures.essential(globalBuffer: true),
+      EssentialFeatures(globalBuffer: true),
     ],
 );
 ```
@@ -638,12 +638,12 @@ const bytes = Buffer.from('hello');
 
 ## 17. Node 兼容环境
 
-`JsFeatures.node()` 提供小型 Node-like 模块环境：
+`NodeFeatures()` 提供小型 Node-like 模块环境：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
-      JsFeatures.node(
+      NodeFeatures(
         globalBuffer: true,
         globalProcess: true,
         env: <String, String>{'NODE_ENV': 'production'},
@@ -669,7 +669,7 @@ final quickjs = await Quickjs.create(
 需要网络请求时安装 `FetchFeatures`：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
       FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
@@ -685,7 +685,7 @@ final quickjs = await Quickjs.create(
 JS：
 
 ```dart
-final result = await quickjs.run('''
+final result = await engine.run('''
 const response = await fetch('https://example.com/');
 return await response.text();
 ''');
@@ -730,7 +730,7 @@ FetchFeatures(
 如果你的 JS 依赖 axios，需要先加载 axios 脚本，并且安装 `FetchFeatures`：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
       FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
@@ -739,7 +739,7 @@ final quickjs = await Quickjs.create(
   scripts: <JsScript>[
       await JsScript.asset(
         name: 'app:axios.js',
-        assetKey: 'assets/js/axios.js',
+        path: 'assets/js/axios.js',
         globals: const <String>['axios'],
       ),
     ],
@@ -757,7 +757,7 @@ const response = await axios.get('https://example.com/');
 `WebCryptoFeatures` 提供可选 Web Crypto 兼容能力：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
       WebCryptoFeatures(
         randomUUID: true,
@@ -781,7 +781,7 @@ final quickjs = await Quickjs.create(
 Digest 示例：
 
 ```dart
-final hex = await quickjs.run('''
+final hex = await engine.run('''
 const bytes = new TextEncoder().encode('hello');
 const digest = await crypto.subtle.digest('SHA-256', bytes);
 return Array.from(new Uint8Array(digest))
@@ -795,7 +795,7 @@ return Array.from(new Uint8Array(digest))
 直接执行 ES module：
 
 ```dart
-await quickjs.evalModule(
+await engine.runModule(
   '''
 export const answer = 42;
 globalThis.answer = answer;
@@ -807,7 +807,7 @@ globalThis.answer = answer;
 读取结果：
 
 ```dart
-final answer = await quickjs.eval('globalThis.answer');
+final answer = await engine.eval('globalThis.answer');
 ```
 
 ## 22. Module Loader
@@ -815,7 +815,7 @@ final answer = await quickjs.eval('globalThis.answer');
 如果模块有静态 import，可以通过 `moduleLoader` 加载依赖：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   moduleLoader: (moduleName) {
       return <String, String>{
         'app/helper.mjs': 'export const suffix = " from helper";',
@@ -823,7 +823,7 @@ final quickjs = await Quickjs.create(
     },
 );
 
-await quickjs.evalModule(
+await engine.runModule(
   '''
 import { suffix } from './helper.mjs';
 globalThis.message = 'hello' + suffix;
@@ -839,16 +839,16 @@ globalThis.message = 'hello' + suffix;
 可以在 options 中注册 ES module：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   modules: <JsModule>[
-      JsModule.esModule(
-        specifier: 'app/config',
+      JsModule(
+        name: 'app/config',
         source: 'export const version = "1.0.0";',
       ),
     ],
 );
 
-await quickjs.evalModule(
+await engine.runModule(
   '''
 import { version } from 'app/config';
 globalThis.version = version;
@@ -862,7 +862,7 @@ globalThis.version = version;
 执行 CommonJS：
 
 ```dart
-final result = await quickjs.evalCommonJs(
+final result = await engine.runCommonJs(
   '''
 const value = 20 + 22;
 module.exports = value;
@@ -876,10 +876,10 @@ print(result); // 42
 注册 CommonJS host module：
 
 ```dart
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   modules: <JsModule>[
       JsModule.commonJs(
-        specifier: 'app/math',
+        name: 'app/math',
         source: 'exports.add = (a, b) => a + b;',
       ),
     ],
@@ -900,21 +900,21 @@ math.add(1, 2);
 典型思路：
 
 ```dart
-final quickjs = await Quickjs.create(
-  moduleLoader: jsAssetModuleLoader(
+final engine = await JsEngine.create(
+  moduleLoader: assetModuleLoader(
       prefix: 'assets/js/',
     ),
 );
 ```
 
-然后在 `pubspec.yaml` 中声明对应资源。模块名和 asset 路径的映射以 `jsAssetModuleLoader` 的参数为准。
+然后在 `pubspec.yaml` 中声明对应资源。模块名和 asset 路径的映射以 `assetModuleLoader` 的参数为准。
 
 ## 26. 函数句柄
 
 如果要多次调用同一个 JS 函数，可以用 `bindFunction()`：
 
 ```dart
-final handle = await quickjs.bindFunction('''
+final handle = await engine.bindFunction('''
 (name) => 'hello ' + name
 ''');
 
@@ -929,7 +929,7 @@ try {
 如果函数返回 Promise，用 `run()`：
 
 ```dart
-final handle = await quickjs.bindFunction('''
+final handle = await engine.bindFunction('''
 async (name) => 'hello ' + name
 ''');
 
@@ -945,7 +945,7 @@ final result = await handle.run(<Object?>['QuickJS']);
 ```dart
 var count = 0;
 
-final handle = await quickjs.injectObject(
+final handle = await engine.injectObject(
   'counter',
   JsObject(
     target: Object(),
@@ -973,7 +973,7 @@ final handle = await quickjs.injectObject(
 );
 
 try {
-  final result = await quickjs.run('''
+  final result = await engine.run('''
 await counter.inc(2);
 counter.count = 10;
 return await counter.inc();
@@ -991,7 +991,7 @@ return await counter.inc();
 `injectClass()` 可以把 Dart 类注入为 JS 构造器。
 
 ```dart
-final handle = await quickjs.injectClass<_User>(
+final handle = await engine.injectClass<_User>(
   'User',
   JsClass<_User>(
     create: (args) {
@@ -1015,7 +1015,7 @@ final handle = await quickjs.injectClass<_User>(
 JS：
 
 ```dart
-final result = await quickjs.run('''
+final result = await engine.run('''
 const user = new User('QuickJS');
 return await user.hello();
 ''');
@@ -1035,12 +1035,12 @@ final class _User {
 `bindSink()` 会在 JS 侧创建 `{ emit, close, error }`，Dart 侧得到 `Stream<Object?>`：
 
 ```dart
-final stream = await quickjs.bindSink('progress');
+final stream = await engine.bindSink('progress');
 final sub = stream.listen((value) {
   print('progress: $value');
 });
 
-await quickjs.run('''
+await engine.run('''
 for (let i = 1; i <= 3; i++) {
   await progress.emit(i);
 }
@@ -1072,7 +1072,7 @@ manifest 描述：
 ## 31. 创建单文件插件
 
 ```dart
-final plugin = JsPlugin.singleFile(
+final plugin = JsPlugin.source(
   id: 'demoApi',
   version: '1.0.0',
   exports: const <String>['hello', 'sum'],
@@ -1101,10 +1101,10 @@ flutter:
 Dart：
 
 ```dart
-final plugin = await JsPlugin.singleFileAsset(
+final plugin = await JsPlugin.asset(
   id: 'demoApi',
   version: '1.0.0',
-  assetKey: 'assets/js/demo_plugin.mjs',
+  path: 'assets/js/demo_plugin.mjs',
   exports: const <String>['hello', 'sum'],
 );
 ```
@@ -1124,7 +1124,7 @@ export function sum(a, b) {
 ## 33. 创建多文件插件
 
 ```dart
-final plugin = await JsPlugin.asset(
+final plugin = await JsPlugin.assets(
   manifest: const JsPluginManifest(
     id: 'mathApi',
     version: '1.0.0',
@@ -1231,7 +1231,7 @@ Dart：
 
 ```dart
 final plugin = await JsZipPlugin.asset(
-  assetKey: 'assets/plugins/zip_api.zip',
+  path: 'assets/plugins/zip_api.zip',
 );
 ```
 
@@ -1255,17 +1255,15 @@ final plugin = await JsZipPlugin.asset(
 创建 runtime 时安装：
 
 ```dart
-final quickjs = await Quickjs.create(
-  features: <JsFeatures>[
-      plugin.asFeatures(),
-    ],
+final engine = await JsEngine.create(
+  plugins: <JsPlugin>[plugin],
 );
 ```
 
 运行时安装：
 
 ```dart
-await quickjs.loadFeatures(plugin.asFeatures());
+await engine.loadPlugin(plugin);
 ```
 
 建议优先在创建 runtime 时安装插件，运行时安装会触发 runtime 重建。
@@ -1275,7 +1273,7 @@ await quickjs.loadFeatures(plugin.asFeatures());
 如果只有一个插件导出了某个方法：
 
 ```dart
-final result = await quickjs.invokePlugin(
+final result = await engine.callPlugin(
   'hello',
   const <Object?>['QuickJS'],
 );
@@ -1284,7 +1282,7 @@ final result = await quickjs.invokePlugin(
 如果多个插件导出了同名方法，需要指定 `pluginId`：
 
 ```dart
-final result = await quickjs.invokePlugin(
+final result = await engine.callPlugin(
   'hello',
   const <Object?>['QuickJS'],
   pluginId: 'demoApi',
@@ -1294,7 +1292,7 @@ final result = await quickjs.invokePlugin(
 也可以指定插件对象：
 
 ```dart
-final result = await quickjs.callPlugin(
+final result = await engine.callPluginExport(
   plugin,
   'hello',
   const <Object?>['QuickJS'],
@@ -1304,16 +1302,16 @@ final result = await quickjs.callPlugin(
 提前验证插件导出：
 
 ```dart
-await quickjs.validatePlugin(plugin);
+await engine.validatePlugin(plugin);
 ```
 
 常用语法糖：
 
 ```dart
-final client = JsPluginClient(quickjs, plugin);
+final client = JsPluginClient(engine, plugin);
 
 await client.validate();
-await client.init({'locale': 'zh-CN'});
+await client.init(context: {'locale': 'zh-CN'});
 final result = await client.call('hello', ['QuickJS']);
 await client.dispose();
 ```
@@ -1321,8 +1319,8 @@ await client.dispose();
 从 manifest asset 和模块 asset map 创建插件包：
 
 ```dart
-final plugin = await JsPluginBundle.asset(
-  manifestAsset: 'assets/plugins/demo/manifest.json',
+final plugin = await JsPlugin.manifestAsset(
+  path: 'assets/plugins/demo/manifest.json',
   modules: const <String, String>{
     'demo/main': 'assets/plugins/demo/main.js',
     'demo/helper': 'assets/plugins/demo/modules/helper.js',
@@ -1333,19 +1331,19 @@ final plugin = await JsPluginBundle.asset(
 把多个插件注册成工具集：
 
 ```dart
-final tools = JsToolRegistry(quickjs)
+final tools = JsPluginRegistry(engine)
   ..register(translatorPlugin)
   ..register(summaryPlugin);
 
-final text = await tools.call('translator.translate', ['hello']);
+final text = await tools.call('translator', 'translate', ['hello']);
 ```
 
 Stream 绑定直接由 runtime 提供：
 
 ```dart
-final progress = await quickjs.bindStream('progress');
+final progress = await engine.bindStream('progress');
 
-await quickjs.injectFunction('hostCount', (_) {
+await engine.injectFunction('hostCount', (_) {
   return Stream.periodic(const Duration(seconds: 1), (i) => i + 1).take(3);
 });
 ```
@@ -1355,18 +1353,16 @@ await quickjs.injectFunction('hostCount', (_) {
 Dart：
 
 ```dart
-final quickjs = await Quickjs.create(
-  features: <JsFeatures>[
-      plugin.asFeatures(),
-    ],
-  providers: <JsProvider>[
-      JsProvider.global(
+final engine = await JsEngine.create(
+  plugins: <JsPlugin>[plugin],
+  methods: <JsHostMethod>[
+      JsHostMethod.global(
         name: 'getDataAsync',
         callback: (args, _) async {
           return 'data from Dart';
         },
       ),
-      JsProvider.global(
+      JsHostMethod.global(
         name: 'dartMethod',
         callback: (args, _) {
           return 'method result from Dart';
@@ -1391,35 +1387,35 @@ export async function test() {
 Dart：
 
 ```dart
-final plugin = await JsPlugin.singleFileAsset(
+final plugin = await JsPlugin.asset(
   id: 'assetApi',
   version: '1.0.0',
-  assetKey: 'assets/js/js_call_dart_plugin.mjs',
+  path: 'assets/js/js_call_dart_plugin.mjs',
   exports: const <String>['test2', 'axiosGet'],
 );
 
-final quickjs = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
       FetchFeatures(
         allowedOrigins: <String>{'https://example.com'},
       ),
-      plugin.asFeatures(),
     ],
-  providers: <JsProvider>[
-      JsProvider.global(
+  plugins: <JsPlugin>[plugin],
+  methods: <JsHostMethod>[
+      JsHostMethod.global(
         name: 'alert',
         callback: (args, _) {
           print('alert: ${args.join(' ')}');
           return null;
         },
       ),
-      JsProvider.global(
+      JsHostMethod.global(
         name: 'getDataAsync',
         callback: (args, _) async {
           return 'data from Dart';
         },
       ),
-      JsProvider.global(
+      JsHostMethod.global(
         name: 'dartMethod',
         callback: (args, _) {
           return 'method result from Dart';
@@ -1427,15 +1423,15 @@ final quickjs = await Quickjs.create(
       ),
     ],
   scripts: <JsScript>[
-      await JsScript.asset(
+      JsScript.asset(
         name: 'app:axios.js',
-        assetKey: 'assets/js/axios.js',
+        path: 'assets/js/axios.js',
         globals: const <String>['axios'],
       ),
     ],
 );
 
-final result = await quickjs.invokePlugin(
+final result = await engine.callPlugin(
   'test2',
   const <Object?>['hello from Dart'],
   pluginId: 'assetApi',
@@ -1466,10 +1462,10 @@ export async function axiosGet(url) {
 `debugInspect()` 可以查看 runtime 当前状态：
 
 ```dart
-final snapshot = await quickjs.debugInspect(includeGlobals: true);
+final snapshot = await engine.debugInspect(includeGlobals: true);
 
 print(snapshot.state);
-print(snapshot.registeredProviders);
+print(snapshot.registeredMethods);
 print(snapshot.registeredFeatures);
 print(snapshot.pluginDetails);
 print(snapshot.moduleNames);
@@ -1479,12 +1475,12 @@ print(snapshot.globals);
 常用字段：
 
 - `state`
-- `quickjsVersion`
+- `engineVersion`
 - `running`
-- `pendingEvaluations`
+- `pendingTasks`
 - `registeredCallbacks`
-- `registeredProviders`
-- `providerDetails`
+- `registeredMethods`
+- `methodDetails`
 - `registeredFeatures`
 - `pluginDetails`
 - `moduleNames`
@@ -1498,7 +1494,7 @@ print(snapshot.globals);
 如果 JS 是由 TypeScript、Babel、打包器生成的，可以注册 source map：
 
 ```dart
-quickjs.registerSourceMap(
+engine.registerSourceMap(
   'app:bundle.js',
   JsSourceMap.fromJson(sourceMapJson),
 );
@@ -1507,7 +1503,7 @@ quickjs.registerSourceMap(
 执行时 `name` 要和注册名一致：
 
 ```dart
-await quickjs.eval(
+await engine.eval(
   generatedCode,
   name: 'app:bundle.js',
 );
@@ -1518,8 +1514,8 @@ await quickjs.eval(
 移除：
 
 ```dart
-quickjs.unregisterSourceMap('app:bundle.js');
-quickjs.clearSourceMaps();
+engine.unregisterSourceMap('app:bundle.js');
+engine.clearSourceMaps();
 ```
 
 ## 41. 异常处理
@@ -1539,7 +1535,7 @@ quickjs.clearSourceMaps();
 
 ```dart
 try {
-  await quickjs.eval('throw new Error("boom")', name: 'app:error.js');
+  await engine.eval('throw new Error("boom")', name: 'app:error.js');
 } on JsException catch (error) {
   print(error.name);
   print(error.message);
@@ -1554,14 +1550,14 @@ try {
 `restart()` 会停止当前 runtime。后续运行会在内部重建：
 
 ```dart
-await quickjs.restart();
+await engine.restart();
 ```
 
 适合用户主动取消、页面进入后台、长任务中断等场景。
 
-`loadFeatures()` 运行时安装能力也会重建 runtime。重建后：
+`loadFeatures()` 运行时加载能力也会重建 runtime。重建后：
 
-- options 中的 features/providers/scripts/modules 会重新安装。
+- 创建参数中的 features/methods/scripts/modules 会重新加载。
 - 运行期间临时写入的 JS global 状态不会保留。
 - Dart 侧旧的 function/object/class handle 不应继续使用。
 
@@ -1571,7 +1567,7 @@ await quickjs.restart();
 
 - 页面退出时 `dispose()`。
 - 长时间停留页面可以在运行前检查 runtime 年龄，必要时重建。
-- 插件、fetch、crypto、provider 等能力尽量在创建 runtime 时声明。
+- 插件、fetch、crypto、宿主方法等能力尽量在创建 runtime 时声明。
 - 大对象、函数句柄、对象代理、类绑定不用时释放对应 handle。
 - 不要把不可信 JS 放在拥有过多 host 能力的 runtime 中执行。
 
@@ -1581,10 +1577,10 @@ await quickjs.restart();
 static const runtimeMaxAge = Duration(minutes: 30);
 
 DateTime? createdAt;
-Quickjs? quickjs;
+JsEngine? engine;
 
-Future<Quickjs> runtimeForRun() async {
-  final current = quickjs;
+Future<JsEngine> runtimeForRun() async {
+  final current = engine;
   final time = createdAt;
   if (current != null &&
       time != null &&
@@ -1592,10 +1588,10 @@ Future<Quickjs> runtimeForRun() async {
     return current;
   }
 
-  await quickjs?.dispose();
-  quickjs = await Quickjs.create();
+  await engine?.dispose();
+  engine = await JsEngine.create();
   createdAt = DateTime.now();
-  return quickjs!;
+  return engine!;
 }
 ```
 
@@ -1604,21 +1600,21 @@ Future<Quickjs> runtimeForRun() async {
 只执行简单 JS：
 
 ```dart
-final quickjs = await Quickjs.create();
-final result = await quickjs.eval('1 + 2');
+final engine = await JsEngine.create();
+final result = await engine.eval('1 + 2');
 ```
 
 需要 Web-like 全局对象：
 
 ```dart
-JsFeatures.web();
+WebFeatures();
 ```
 
 需要 Buffer / Node 子集：
 
 ```dart
-JsFeatures.essential(globalBuffer: true);
-JsFeatures.node(globalBuffer: true, globalProcess: true);
+EssentialFeatures(globalBuffer: true);
+NodeFeatures(globalBuffer: true, globalProcess: true);
 ```
 
 需要网络：
@@ -1643,7 +1639,7 @@ WebCryptoFeatures(
 需要 Dart 方法注入：
 
 ```dart
-JsProvider.global(
+JsHostMethod.global(
   name: 'methodName',
   callback: (args, _) async => 'result',
 );
@@ -1652,9 +1648,9 @@ JsProvider.global(
 需要插件：
 
 ```dart
-final plugin = await JsPlugin.singleFileAsset(...);
-final quickjs = await Quickjs.create(
-  features: <JsFeatures>[plugin.asFeatures()],
+final plugin = await JsPlugin.asset(...);
+final engine = await JsEngine.create(
+  plugins: <JsPlugin>[plugin],
 );
-final result = await quickjs.invokePlugin('methodName', args);
+final result = await engine.callPlugin('methodName', args);
 ```

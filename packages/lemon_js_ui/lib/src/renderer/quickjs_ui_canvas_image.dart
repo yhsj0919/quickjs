@@ -4,7 +4,7 @@ void _drawSnapshotImage(
   Canvas canvas,
   Map<String, Object?> command,
   _CanvasClock clock,
-  QuickjsUiSnapshotRegistry registry,
+  JsUiSnapshotRegistry registry,
   Map<String, String> resources,
 ) {
   final slot = command['imageSlot'];

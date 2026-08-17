@@ -6,7 +6,7 @@ import 'package:crypto/crypto.dart';
 const _manifestFileName = 'manifest.json';
 const _packageEntry = 'main.mjs';
 
-Future<void> runQuickjsUiManifestTool(List<String> args) async {
+Future<void> runJsUiManifestTool(List<String> args) async {
   final options = _ManifestToolOptions.parse(args);
   if (options.help) {
     stdout.writeln(_usage);

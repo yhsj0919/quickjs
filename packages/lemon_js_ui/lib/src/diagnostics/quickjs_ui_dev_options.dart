@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 /// Development-time options for quickjs_ui pages.
 ///
 /// Controls error overlay visibility, reload behavior, and diagnostic logging.
-final class QuickjsUiDevOptions {
-  const QuickjsUiDevOptions({
+final class JsUiDevOptions {
+  /// 创建一组页面开发期诊断选项。
+  const JsUiDevOptions({
     this.showErrorOverlay = true,
     this.preserveStateOnReload = false,
     this.logSchema = false,
@@ -12,11 +13,11 @@ final class QuickjsUiDevOptions {
     this.logResources = false,
   });
 
-  /// Shows [QuickjsUiErrorOverlay] for runtime/schema errors when no custom
-  /// [QuickjsUiErrorBuilder] is provided.
+  /// Shows [JsUiErrorOverlay] for runtime/schema errors when no custom
+  /// [JsUiErrorBuilder] is provided.
   final bool showErrorOverlay;
 
-  /// Keeps the current JS page state when [QuickjsUiController.reload] runs.
+  /// Keeps the current JS page state when [JsUiController.reload] runs.
   final bool preserveStateOnReload;
 
   /// Logs the current UI schema after each successful render.
@@ -29,15 +30,15 @@ final class QuickjsUiDevOptions {
   final bool logResources;
 
   /// Convenient defaults for local debugging.
-  static const QuickjsUiDevOptions debug = QuickjsUiDevOptions(
+  static const JsUiDevOptions debug = JsUiDevOptions(
     logDiff: true,
     logSchema: false,
     logResources: true,
   );
 
   /// Production-safe defaults.
-  static const QuickjsUiDevOptions release = QuickjsUiDevOptions();
+  static const JsUiDevOptions release = JsUiDevOptions();
 
   /// Debug-mode defaults used when callers do not pass explicit options.
-  static QuickjsUiDevOptions get defaults => kDebugMode ? debug : release;
+  static JsUiDevOptions get defaults => kDebugMode ? debug : release;
 }

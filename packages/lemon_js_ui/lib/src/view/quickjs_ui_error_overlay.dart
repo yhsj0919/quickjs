@@ -2,10 +2,13 @@ import 'package:flutter/widgets.dart';
 
 import '../diagnostics/quickjs_ui_error.dart';
 
-final class QuickjsUiErrorOverlay extends StatelessWidget {
-  const QuickjsUiErrorOverlay({super.key, required this.error});
+/// Public JSUI js ui error overlay API.
+final class JsUiErrorOverlay extends StatelessWidget {
+  /// Creates a js ui error overlay.
+  const JsUiErrorOverlay({super.key, required this.error});
 
-  final QuickjsUiError error;
+  /// The error value.
+  final JsUiError error;
 
   @override
   Widget build(BuildContext context) {

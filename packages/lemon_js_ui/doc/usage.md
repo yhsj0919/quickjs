@@ -42,7 +42,7 @@ Canvas 命令都不会有完整提示。
 第三方 UI 模块的声明文件需要包含模块名，例如：
 
 ```ts
-import type { QuickjsUiNode } from 'quickjs_ui';
+import type { JsUiNode } from 'quickjs_ui';
 
 declare module 'quickjs_ui/video_player' {
   export type VideoPlayerProps = {
@@ -50,7 +50,7 @@ declare module 'quickjs_ui/video_player' {
     playing?: boolean;
   };
 
-  export function VideoPlayer(props: VideoPlayerProps): QuickjsUiNode;
+  export function VideoPlayer(props: VideoPlayerProps): JsUiNode;
 }
 ```
 
@@ -102,7 +102,7 @@ quickjs_ui 最重要的边界约定是：
 Flutter ElevatedButton.onPressed          ← 只捕获手势，不修改 count
     │
     ▼
-dispatchEvent({ method: 'increment' })      ← 事件入队，跨帧 flush
+dispatch({ method: 'increment' })           ← 事件入队，跨帧 flush
     │
     ▼
 JS handleEvent → increment(state)         ← 业务逻辑在 JS
@@ -111,7 +111,7 @@ JS handleEvent → increment(state)         ← 业务逻辑在 JS
 JS commit() → build(state) → UiNode 树    ← 重新描述 UI（count 已变）
     │
     ▼
-Flutter QuickjsUiRenderer 渲染新树         ← 只根据 schema 更新 Widget
+Flutter JsUiRenderer 渲染新树         ← 只根据 schema 更新 Widget
 ```
 
 **JS 侧负责：**
@@ -119,17 +119,17 @@ Flutter QuickjsUiRenderer 渲染新树         ← 只根据 schema 更新 Widge
 - 页面 state 的创建、更新与权威持有
 - 所有控件事件对应的 handler（点击、输入、滑动等）
 - `build()` 根据 state 生成完整的 UI 描述
-- 生命周期 hook、路由跳转意图、调用 `quickjsUiHost` / `quickjsUiApp`
+- 生命周期 hook、路由跳转意图、调用 `jsUiHost` / `jsUiApp`
 
 **Flutter 侧负责：**
 
 - 加载 JS 页面、运行 QuickJS 运行时
-- 将 `QuickjsUiNode` 渲染为 Material/Cupertino 控件
+- 将 `JsUiNode` 渲染为 Material/Cupertino 控件
 - 把 Widget 回调包装成事件描述符，发给 JS 的 `handleEvent`
 - 在 JS `commit()` 后刷新 Widget 树
 - （可选）注册宿主能力、自定义控件 renderer、路由解析
 
-因此，如果你在 Flutter 里写 `onPressed: () => setState(() => count++)`，那是传统 Flutter 写法，**不符合** quickjs_ui 模型。正确做法是：Flutter 只挂载 `QuickjsUiView`，计数逻辑完全在 JS 的 `increment(state)` 中实现。
+因此，如果你在 Flutter 里写 `onPressed: () => setState(() => count++)`，那是传统 Flutter 写法，**不符合** quickjs_ui 模型。正确做法是：Flutter 只挂载 `JsUiView`，计数逻辑完全在 JS 的 `increment(state)` 中实现。
 
 Dart 侧的 `controller.setState` / `controller.dispatch` 是给宿主主动干预的**补充入口**（如原生按钮触发 JS 逻辑、调试面板改状态），并不改变「state 权威在 JS」这一原则。
 
@@ -179,7 +179,7 @@ class CounterPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: QuickjsUiView.asset(
+      body: JsUiView.asset(
         path: 'assets/quickjs_ui/counter_page.mjs',
         initialProps: const {
           'title': 'Counter',
@@ -235,7 +235,7 @@ export default Page({
 
 ## 3. Page() 页面编写
 
-`Page({ ... })` 是 quickjs_ui 的核心入口。传入页面对象后，运行时将其包装为 `quickjs_ui.runtime.v1` 协议对象，由 Dart 侧 `QuickjsUiSession` 驱动。
+`Page({ ... })` 是 quickjs_ui 的核心入口。传入页面对象后，运行时将其包装为 `quickjs_ui.runtime.v1` 协议对象，由 Dart 侧 `JsUiSession` 驱动。
 
 ### 3.1 声明属性一览
 
@@ -245,7 +245,7 @@ export default Page({
 | `props` | `Record<string, string>` | 否 | Props 类型声明（文档/校验提示，不影响运行时） |
 | `metadata` | `object` | 否 | 附加元数据，出现在诊断快照中 |
 | `schemaVersion` | `number` | 否 | 页面 schema 版本，默认 `1` |
-| `minimumQuickjsUiVersion` / `minQuickjsUiVersion` | `number` | 否 | 要求的最低 quickjs_ui 运行时版本 |
+| `minimumJsUiVersion` / `minJsUiVersion` | `number` | 否 | 要求的最低 quickjs_ui 运行时版本 |
 | `unknownProps` | `'ignore' \| 'warn' \| 'error'` | 否 | 未知节点属性的处理策略，默认 `ignore` |
 | `deprecatedProps` | `Record<string, string>` | 否 | 已废弃属性及迁移提示 |
 | `createState` | `(props) => state` | 否* | 根据 props 初始化 state |
@@ -280,7 +280,7 @@ export default Page({
 
   // 兼容性声明
   schemaVersion: 1,
-  minimumQuickjsUiVersion: 1,
+  minimumJsUiVersion: 1,
   unknownProps: 'warn',
   deprecatedProps: {
     oldText: '请改用 Text 的 data 属性'
@@ -307,7 +307,7 @@ export default Page({
 Flutter 侧传入 props：
 
 ```dart
-QuickjsUiView.asset(
+JsUiView.asset(
   path: 'assets/quickjs_ui/profile_page.mjs',
   initialProps: const {
     'userId': 'u-001',
@@ -354,7 +354,7 @@ export default Page({
 
 ```js
 async createState(props) {
-  const cached = await quickjsUiHost.storage.getItem('draft');
+  const cached = await jsUiHost.storage.getItem('draft');
   return { draft: cached ?? props.defaultDraft ?? '' };
 }
 ```
@@ -377,7 +377,7 @@ build(state, props, actions) {
 }
 ```
 
-`actions` 由运行时根据页面对象上的**非保留函数**自动生成。保留名（不能作为事件方法）包括：`name`、`build`、`createState`、`onMount` 等，完整列表见 `quickjs_ui.d.ts` 中的 `QuickjsUiReservedPageKeys`。
+`actions` 由运行时根据页面对象上的**非保留函数**自动生成。保留名（不能作为事件方法）包括：`name`、`build`、`createState`、`onMount` 等，完整列表见 `quickjs_ui.d.ts` 中的 `JsUiReservedPageKeys`。
 
 第三个参数在类型定义里可能写作 `actions`，示例代码里也常见 `page` 作为参数名，二者等价：
 
@@ -457,12 +457,12 @@ Handler 可返回 `Promise<patch>`，适合调用宿主 API：
 
 ```js
 async callToast(state) {
-  const result = await quickjsUiHost.toast('保存成功');
+  const result = await jsUiHost.toast('保存成功');
   return { status: `toast => ${JSON.stringify(result)}` };
 }
 
 async openSettings(state, _payload, props) {
-  const result = await quickjsUiNavigation.push({
+  const result = await jsUiNavigation.push({
     route: 'app.settings',
     params: { source: props.itemId }
   });
@@ -476,7 +476,7 @@ async openSettings(state, _payload, props) {
 
 ```js
 popToList(state, _payload, props) {
-  quickjsUiNavigation.pop({ itemId: props.itemId });
+  jsUiNavigation.pop({ itemId: props.itemId });
   return null;
 }
 ```
@@ -596,7 +596,7 @@ export default Page({
 Dart 侧触发：
 
 ```dart
-final controller = QuickjsUiController();
+final controller = JsUiController();
 
 // 页面显示时
 await controller.lifecycle('show');
@@ -641,7 +641,7 @@ export default Page({
   },
 
   async openChild(state, _payload, props) {
-    const result = await quickjsUiNavigation.push({
+    const result = await jsUiNavigation.push({
       route: 'app.child',
       path: './child_page.mjs',
       params: { itemId: props.itemId, count: state.count }
@@ -677,7 +677,7 @@ export default Page({
 ```js
 export default Page({
   schemaVersion: 1,              // 当前仅支持 1
-  minimumQuickjsUiVersion: 1,    // 要求 quickjs_ui >= 1
+  minimumJsUiVersion: 1,    // 要求 quickjs_ui >= 1
   unknownProps: 'warn',          // 未知 UI 属性：ignore | warn | error
   deprecatedProps: {
     oldText: '请改用 Text 的 data 属性'
@@ -688,7 +688,12 @@ export default Page({
 });
 ```
 
-版本不匹配时，`QuickjsUiSession.loadPlugin` 会抛出 `StateError`（如 `unsupported schema version`）。
+版本不匹配时，低层 `JsUiSession.loadPlugin` 会抛出 `StateError`（如
+`unsupported schema version`）。Session 只从高级入口导入：
+
+```dart
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
+```
 
 ### 3.9 runtime v1 协议（Dart 调用边界）
 
@@ -1145,7 +1150,7 @@ methodName(state, payload, props, event) {
 }
 ```
 
-Handler 可以是 `async`，支持 `await quickjsUiHost.toast(...)` 等异步宿主调用。
+Handler 可以是 `async`，支持 `await jsUiHost.toast(...)` 等异步宿主调用。
 
 ---
 
@@ -1165,8 +1170,8 @@ Dart 侧定义模块：
 const JsFeatures features = JsFeatures(
   name: 'quickjs_ui:plugin:video_player',
   modules: [
-    JsModule.esModule(
-      specifier: 'quickjs_ui/video_player',
+    JsModule(
+      name: 'quickjs_ui/video_player',
       source: '''
 export function VideoPlayer(props = {}) {
   return {
@@ -1187,9 +1192,9 @@ export function VideoPlayer(props = {}) {
 Flutter 页面配置：
 
 ```dart
-QuickjsUiView.asset(
+JsUiView.asset(
   path: 'assets/quickjs_ui/video_player_plugin_page.mjs',
-  uiPlugins: const [QuickjsUiVideoPlayerPlugin.plugin],
+  uiPlugins: const [JsUiVideoPlayerPlugin.plugin],
 )
 ```
 
@@ -1205,19 +1210,19 @@ VideoPlayer({
 })
 ```
 
-### 7.2 注册 Dart 渲染器（QuickjsUiComponentRegistry）
+### 7.2 注册 Dart 渲染器（JsUiComponentRegistry）
 
 仅有 JS helper 不够，还需在 Flutter 侧注册对应 `type` 的 builder：
 
 ```dart
-final registry = QuickjsUiComponentRegistry.defaults()
-  ..register('VideoPlayer', QuickjsUiVideoPlayerPlugin.build);
+final registry = JsUiComponentRegistry.defaults()
+  ..register('VideoPlayer', JsUiVideoPlayerPlugin.build);
 ```
 
 或使用插件提供的工厂：
 
 ```dart
-final registry = QuickjsUiVideoPlayerPlugin.registry();
+final registry = JsUiVideoPlayerPlugin.registry();
 ```
 
 **重要：** `registry` 应是**稳定实例**，不要在 `build()` 里每次 `new`，否则窗口 resize 时会重建 renderer 引发事件队列问题。
@@ -1259,24 +1264,24 @@ Dart 侧为 `Card` 注册 renderer 后即可在任意页面使用。
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Flutter 宿主                                        │
-│  QuickjsUiView / QuickjsUiController                │
-│  QuickjsUiHostCapabilities → JsFeatures       │
-│  QuickjsUiComponentRegistry                         │
+│  JsUiView / JsUiController                │
+│  JsUiHostFeatures → JsFeatures       │
+│  JsUiComponentRegistry                         │
 └──────────────┬──────────────────────┬───────────────┘
-               │ features / provider   │ 渲染 UiNode
+               │ features / method   │ 渲染 UiNode
                ▼                       ▼
 ┌─────────────────────────────────────────────────────┐
 │  QuickJS 运行时                                      │
-│  globalThis.quickjsUiHost   — 系统宿主 API           │
-│  globalThis.quickjsUiApp    — 应用自定义 API         │
-│  globalThis.quickjsUiNavigation — JS 路由 API        │
+│  globalThis.jsUiHost   — 系统宿主 API           │
+│  globalThis.jsUiApp    — 应用自定义 API         │
+│  globalThis.jsUiNavigation — JS 路由 API        │
 │  Page({ build, ...methods }) — 页面逻辑与 state      │
 └─────────────────────────────────────────────────────┘
 ```
 
-### 8.2 系统宿主 API（quickjsUiHost）
+### 8.2 系统宿主 API（jsUiHost）
 
-通过 `QuickjsUiHostCapabilities` 挂载，JS 侧使用 `globalThis.quickjsUiHost`：
+通过 `JsUiHostFeatures` 挂载，JS 侧使用 `globalThis.jsUiHost`：
 
 | API | 说明 |
 |---|---|
@@ -1295,19 +1300,19 @@ Dart 侧为 `Card` 注册 renderer 后即可在任意页面使用。
 #### Dart 侧配置示例
 
 ```dart
-final capabilities = QuickjsUiHostCapabilities(
+final capabilities = JsUiHostFeatures(
   groups: [
-    QuickjsUiCapabilityGroup.system(
-      options: const QuickjsUiHostCapabilityOptions(
+    JsUiCapabilityGroup.system(
+      options: const JsUiHostCapabilityOptions(
         enabled: {
-          QuickjsUiHostCapability.toast,
-          QuickjsUiHostCapability.confirm,
-          QuickjsUiHostCapability.navigation,
-          QuickjsUiHostCapability.storage,
-          QuickjsUiHostCapability.nativeCall,
+          JsUiHostCapability.toast,
+          JsUiHostCapability.confirm,
+          JsUiHostCapability.navigation,
+          JsUiHostCapability.storage,
+          JsUiHostCapability.nativeCall,
         },
       ),
-      handlers: QuickjsUiHostApiHandlers(
+      handlers: JsUiHostApiHandlers(
         onToast: (message, options) async {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
           return {'shown': true, 'message': message};
@@ -1327,7 +1332,7 @@ final capabilities = QuickjsUiHostCapabilities(
   ],
 );
 
-QuickjsUiView.asset(
+JsUiView.asset(
   path: 'assets/quickjs_ui/host_capabilities_page.mjs',
   features: capabilities.features,
   grantedPermissions: capabilities.permissions,
@@ -1338,43 +1343,49 @@ QuickjsUiView.asset(
 
 ```js
 async callToast(state) {
-  const result = await quickjsUiHost.toast('Hello from JS', { source: 'mjs' });
+  const result = await jsUiHost.toast('Hello from JS', { source: 'mjs' });
   return { lastResult: result };
 }
 
 async callNative(state) {
-  const result = await quickjsUiHost.nativeCall('example.echo', { value: 42 });
+  const result = await jsUiHost.nativeCall('example.echo', { value: 42 });
   return { lastResult: result };
 }
 ```
 
-### 8.3 应用自定义 API（quickjsUiApp）
+### 8.3 应用自定义 API（jsUiApp）
 
-通过 `QuickjsUiCapabilityGroup.functions` 或 `.methods` 注入业务方法：
+通过 `JsUiCapabilityGroup.methods` 注入有明确签名的业务方法：
 
 ```dart
-QuickjsUiCapabilityGroup.functions(
+JsUiCapabilityGroup.methods(
   name: 'app-custom',
-  globalName: 'quickjsUiApp',
-  functions: {
-    'customEcho': (Object? value) => 'echo:$value',
-    'add': (num a, num b) => a + b,
-  },
+  globalName: 'jsUiApp',
+  methods: <JsUiHostMethod>[
+    JsUiHostMethod(
+      name: 'customEcho',
+      callback: (args, _) => 'echo:${args[0]}',
+    ),
+    JsUiHostMethod(
+      name: 'add',
+      callback: (args, _) => (args[0] as num) + (args[1] as num),
+    ),
+  ],
 )
 ```
 
 JS 侧：
 
 ```js
-const text = await quickjsUiApp.customEcho('hello');
-const sum = await quickjsUiApp.add(20, 22);
+const text = await jsUiApp.customEcho('hello');
+const sum = await jsUiApp.add(20, 22);
 ```
 
 ### 8.4 导航互操作
 
-**JS → 宿主：** `quickjsUiHost.navigationIntent({ route, params })`，宿主在 route registry 中查找并 `Navigator.push`。
+**JS → 宿主：** `jsUiHost.navigationIntent({ route, params })`，宿主在 route registry 中查找并 `Navigator.push`。
 
-**JS → JS 页面：** `quickjsUiNavigation.push({ route, path, params })`，由 `QuickjsUiNavigator` 管理 JS 路由栈。
+**JS → JS 页面：** `jsUiNavigation.push({ route, path, params })`，由 `JsUiNavigator` 管理 JS 路由栈。
 
 **路由生命周期：** 使用 `onRouteEnter` / `onRouteLeave` / `onRouteResult` hook；Dart 侧对应 `controller.routeLifecycle(...)`。
 
@@ -1382,17 +1393,17 @@ const sum = await quickjsUiApp.add(20, 22);
 
 | 方式 | API | 说明 |
 |---|---|---|
-| 初始参数 | `QuickjsUiView.initialProps` | 页面 `mount` 时传入 |
+| 初始参数 | `JsUiView.initialProps` | 页面 `mount` 时传入 |
 | 显式改状态 | `controller.setState({'key': value})` | 合并 patch 并 re-render |
 | 模拟事件 | `controller.dispatch({'method': 'foo', 'value': true})` | 触发页面方法 |
 | 生命周期 | `controller.lifecycle('show')` | 触发 hook |
 | 读取状态 | `controller.state` | Dart 侧 state 快照（权威在 JS） |
-| 读取 UI 树 | `controller.node` | 当前 `QuickjsUiNode` |
+| 读取 UI 树 | `controller.node` | 当前 `JsUiNode` |
 | 刷新 | `controller.refresh()` | 强制 `commit()` |
 | 控制台 | `controller` 构造时 `onConsole` | 接收 JS `console.log` |
 
 ```dart
-final controller = QuickjsUiController();
+final controller = JsUiController();
 
 // 宿主按钮触发 JS 逻辑
 FilledButton(
@@ -1400,7 +1411,7 @@ FilledButton(
   child: const Text('Dart 触发 +1'),
 )
 
-QuickjsUiView.asset(
+JsUiView.asset(
   path: 'assets/quickjs_ui/counter_page.mjs',
   controller: controller,
 )
@@ -1408,11 +1419,11 @@ QuickjsUiView.asset(
 
 ### 8.6 权限
 
-- `QuickjsUiHostCapabilities` 的 `permissions` 集合描述已声明能力。
-- `QuickjsUiView.grantedPermissions` 传入实际授权。
-- `QuickjsUiPermissionPolicy.restricted(allowed: {...})` 可在应用层限制页面 manifest 请求的权限。
+- `JsUiHostFeatures` 的 `permissions` 集合描述已声明能力。
+- `JsUiView.grantedPermissions` 传入实际授权。
+- `JsUiPermissionPolicy.restricted(allowed: {...})` 可在应用层限制页面 manifest 请求的权限。
 
-未授权的 provider 调用会被 QuickJS 宿主层拒绝。
+未授权的 method 调用会被 QuickJS 宿主层拒绝。
 
 ---
 
@@ -1420,11 +1431,11 @@ QuickjsUiView.asset(
 
 | 方式 | API | 场景 |
 |---|---|---|
-| Asset 单文件 | `QuickjsUiView.asset(path: '...')` | 开发期最常见 |
-| 本地文件 | `QuickjsUiView.file(path: '...')` | 桌面端调试 |
-| 网络 URL | `QuickjsUiView.network(url: '...')` | 远程页面 |
-| 已有 Plugin | `QuickjsUiView.plugin(plugin)` | 手动构造 |
-| 发布包 | `QuickjsUiBundle.assetPackage(...)` | 生产分发、checksum 校验 |
+| Asset 单文件 | `JsUiView.asset(path: '...')` | 开发期最常见 |
+| 本地文件 | `JsUiView.file(path: '...')` | 桌面端调试 |
+| 网络 URL | `JsUiView.network(url: '...')` | 远程页面 |
+| 已有 Plugin | `JsUiView.plugin(plugin)` | 手动构造 |
+| 发布包 | `JsUiBundle.packageAsset(...)` | 生产分发、checksum 校验 |
 
 发布包格式（`main.mjs` + `manifest.json`）见 [quickjs_ui_package_format.md](../../../docs/quickjs_ui_package_format.md)。
 
@@ -1473,7 +1484,7 @@ import { Column, ElevatedButton, Page, Text } from 'quickjs_ui';
 - `Page()`、`Component()` 及页面方法保留名
 - 内置控件名与常用属性（`child`、`children`、`onPressed` 等）
 - 主题 token（`$primary`、`$surface`、`$text.bodyLarge` 等）
-- `quickjsUiHost`、`quickjsUiNavigation` 等全局宿主 API（见 `.d.ts` 的 `declare global`）
+- `jsUiHost`、`jsUiNavigation` 等全局宿主 API（见 `.d.ts` 的 `declare global`）
 
 #### 10.1.2 最小配置（monorepo / path 依赖）
 
@@ -1595,7 +1606,7 @@ import { VideoPlayer } from 'quickjs_ui/video_player';
  * @property {number} count
  */
 
-/** @type {import('quickjs_ui').QuickjsUiPageDefinition<CounterState, CounterProps>} */
+/** @type {import('quickjs_ui').JsUiPageDefinition<CounterState, CounterProps>} */
 export default Page({
   name: 'CounterPage',
 
@@ -1640,7 +1651,7 @@ export default Page({
 | `import 'quickjs_ui'` 报「找不到模块」 | 检查 `paths` 是否指向存在的 `quickjs_ui.d.ts`；修改后执行 **Developer: Reload Window** |
 | 只有语法高亮、没有补全 | 确认当前文件扩展名在 `include` 内（如 `*.mjs`）；确认已保存 `jsconfig.json` |
 | 子目录页面无提示 | 将 `include` 改为 `**/*.mjs`，或在上级目录再放一份 `jsconfig` |
-| `$surface` 等 token 无提示 | 主题 token 在 `.d.ts` 的 `QuickjsUiThemeColorToken` 中；自定义 token 需宿主注册 `QuickjsUiDesignTokens` |
+| `$surface` 等 token 无提示 | 主题 token 在 `.d.ts` 的 `JsUiThemeColorToken` 中；自定义 token 需宿主注册 `JsUiDesignTokens` |
 | 颜色运行时报 `must be an int or hex string` | 说明 token 未在运行时主题中解析；优先使用 `.d.ts` 列出的 `$error`、`$surface` 等，或直接用 `#RRGGBB` |
 
 代码提示仅作用于 **开发期编辑体验**，不影响 Flutter 运行时加载；运行时仍加载 asset 中的 `.mjs` 与 QuickJS helper。
@@ -1667,7 +1678,7 @@ export default Page({
 | 控件集 | `controls_page.mjs` | TextField、Image、主题 token |
 | 自定义组件 | `custom_components_page.mjs` | `Component()` + Dart registry |
 | 滚动与动画 | `scroll_transition_page.mjs` | `scrollToKey`、手势、列表过渡 |
-| 宿主能力 | `host_capabilities_page.mjs` | `quickjsUiHost` / `quickjsUiApp` |
+| 宿主能力 | `host_capabilities_page.mjs` | `jsUiHost` / `jsUiApp` |
 | 视频插件 | `video_player_plugin_page.mjs` | 第三方模块 + lifecycle 控件 |
 | 导航 | `navigation_*.mjs` | JS 路由与 route lifecycle |
 | 表单 | `profile_form_page.mjs` | 多控件表单 |

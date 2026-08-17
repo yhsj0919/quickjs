@@ -14,19 +14,17 @@ class HybridExtensionPage extends StatefulWidget {
 }
 
 class _HybridExtensionPageState extends State<HybridExtensionPage> {
-  late final QuickjsExtensionManager _manager = QuickjsExtensionManager(
-    store: InMemoryQuickjsExtensionStore(),
-    compatibilityRegistry: QuickjsExtensionCompatibilityRegistry(
-      <QuickjsExtensionCompatibilityPolicy>[
-        QuickjsExtensionCompatibilityPolicy(
-          compatibilityCode: 'lemon-content-source-v1',
-          requiredPublicExports: const <String>{'getHome'},
-        ),
-      ],
-    ),
+  late final JsExtensionManager _manager = JsExtensionManager(
+    store: JsExtensionMemoryStore(),
+    constraints: <JsExtensionConstraint>[
+      JsExtensionConstraint(
+        compatibilityCode: 'lemon-content-source-v1',
+        requiredPublicExports: const <String>{'getHome'},
+      ),
+    ],
   );
   late final Future<_LoadedHybridDemo> _loading = _load();
-  InstalledQuickjsExtension? _installed;
+  JsExtensionInstallation? _installed;
   bool _disposed = false;
   bool _callingCore = false;
   bool _hasCoreResult = false;
@@ -34,8 +32,11 @@ class _HybridExtensionPageState extends State<HybridExtensionPage> {
   Object? _coreError;
 
   Future<_LoadedHybridDemo> _load() async {
-    final managed = await _manager.installAsset(
+    final package = await JsExtensionPackage.asset(
       manifestAsset: '$_assetRoot/manifest.json',
+    );
+    final managed = await _manager.install(
+      package,
       grantedPermissions: const <String>['storage'],
     );
     final installed = managed.installed!;
@@ -47,7 +48,7 @@ class _HybridExtensionPageState extends State<HybridExtensionPage> {
     return _LoadedHybridDemo(installed: installed);
   }
 
-  Future<void> _callCore(InstalledQuickjsExtension installed) async {
+  Future<void> _callCore(JsExtensionInstallation installed) async {
     setState(() {
       _callingCore = true;
       _coreError = null;
@@ -119,7 +120,7 @@ class _HybridExtensionPageState extends State<HybridExtensionPage> {
                     ? null
                     : () => Navigator.of(context).push<void>(
                         MaterialPageRoute<void>(
-                          builder: (_) => QuickjsExtensionView.route(
+                          builder: (_) => JsExtensionView.route(
                             session: demo.installed.session,
                             route: flow.route,
                           ),
@@ -152,5 +153,5 @@ class _HybridExtensionPageState extends State<HybridExtensionPage> {
 final class _LoadedHybridDemo {
   const _LoadedHybridDemo({required this.installed});
 
-  final InstalledQuickjsExtension installed;
+  final JsExtensionInstallation installed;
 }

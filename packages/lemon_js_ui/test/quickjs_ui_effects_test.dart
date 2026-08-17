@@ -6,8 +6,8 @@ void main() {
   testWidgets('effects follow VSync unless JS supplies a frame interval', (
     tester,
   ) async {
-    QuickjsUiNode animatedNode({int? interval}) =>
-        QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode animatedNode({int? interval}) =>
+        JsUiNode.fromMap(<String, Object?>{
           'type': 'Container',
           'width': 40,
           'height': 40,
@@ -17,9 +17,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: QuickjsUiRenderer(
-          onEvent: (_) {},
-        ).build(animatedNode(interval: 100)),
+        home: JsUiRenderer(onEvent: (_) {}).build(animatedNode(interval: 100)),
       ),
     );
     await tester.pump(const Duration(milliseconds: 20));
@@ -39,9 +37,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     await tester.pumpWidget(
-      MaterialApp(
-        home: QuickjsUiRenderer(onEvent: (_) {}).build(animatedNode()),
-      ),
+      MaterialApp(home: JsUiRenderer(onEvent: (_) {}).build(animatedNode())),
     );
     await tester.pump(const Duration(milliseconds: 20));
     final firstVsyncFrame = tester
@@ -55,7 +51,7 @@ void main() {
   });
 
   testWidgets('universal effects wrap any registered node', (tester) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Text',
       'data': 'effects',
       'opacity': 0.7,
@@ -73,7 +69,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: (_) {}).build(node)),
     );
 
     expect(find.byType(Opacity), findsOneWidget);
@@ -102,7 +98,7 @@ void main() {
   testWidgets('blur and backdrop blur stay inside their paint bounds', (
     tester,
   ) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Container',
       'width': 80,
       'height': 40,
@@ -112,7 +108,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: (_) {}).build(node)),
     );
 
     expect(
@@ -133,9 +129,9 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Container',
       'key': 'animated-effects',
       'width': 80,
@@ -179,10 +175,10 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
 
-    QuickjsUiNode node({required bool paused, required int playToken}) =>
-        QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode node({required bool paused, required int playToken}) =>
+        JsUiNode.fromMap(<String, Object?>{
           'type': 'Container',
           'key': 'effect-generation',
           'paused': paused,
@@ -221,8 +217,8 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final renderer = JsUiRenderer(onEvent: events.add);
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Container',
       'key': 'removed-effect',
       'opacity': <String, Object?>{'from': 0, 'to': 1, 'durationMs': 100},

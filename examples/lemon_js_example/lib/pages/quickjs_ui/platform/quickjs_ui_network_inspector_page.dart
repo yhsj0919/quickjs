@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 网络调试 Demo：bundle 网络加载请求列表、缓存命中、耗时与 Inspector 网络面板。
-class QuickjsUiNetworkInspectorPage extends StatefulWidget {
-  const QuickjsUiNetworkInspectorPage({super.key});
+class JsUiNetworkInspectorPage extends StatefulWidget {
+  const JsUiNetworkInspectorPage({super.key});
 
   /// 远程入口脚本的 URL（需先启动本地静态文件服务器）。
   static final Uri url = Uri.parse(
@@ -11,21 +11,20 @@ class QuickjsUiNetworkInspectorPage extends StatefulWidget {
   );
 
   @override
-  State<QuickjsUiNetworkInspectorPage> createState() =>
-      _QuickjsUiNetworkInspectorPageState();
+  State<JsUiNetworkInspectorPage> createState() =>
+      _JsUiNetworkInspectorPageState();
 }
 
-class _QuickjsUiNetworkInspectorPageState
-    extends State<QuickjsUiNetworkInspectorPage> {
-  late final QuickjsUiInspector _inspector;
-  late final QuickjsUiController _controller;
+class _JsUiNetworkInspectorPageState extends State<JsUiNetworkInspectorPage> {
+  late final JsUiInspector _inspector;
+  late final JsUiController _controller;
 
   @override
   void initState() {
     super.initState();
-    _inspector = QuickjsUiInspector();
-    _controller = QuickjsUiController(
-      devOptions: const QuickjsUiDevOptions(logDiff: false, logResources: true),
+    _inspector = JsUiInspector();
+    _controller = JsUiController(
+      devOptions: const JsUiDevOptions(logDiff: false, logResources: true),
       inspector: _inspector,
     );
   }
@@ -53,8 +52,8 @@ class _QuickjsUiNetworkInspectorPageState
         children: <Widget>[
           Expanded(
             flex: 3,
-            child: QuickjsUiView.network(
-              url: QuickjsUiNetworkInspectorPage.url,
+            child: JsUiView.network(
+              url: JsUiNetworkInspectorPage.url,
               controller: _controller,
               initialProps: const <String, Object?>{
                 'title': '网络调试',
@@ -74,7 +73,7 @@ class _QuickjsUiNetworkInspectorPageState
           const Divider(height: 1),
           Expanded(
             flex: 2,
-            child: QuickjsUiInspectorPanel(
+            child: JsUiInspectorPanel(
               controller: _controller,
               inspector: _inspector,
             ),

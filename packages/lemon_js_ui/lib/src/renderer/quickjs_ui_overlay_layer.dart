@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -5,14 +8,14 @@ import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_helpers.dart';
 import 'quickjs_ui_render_context.dart';
 
-sealed class QuickjsUiOverlayIntent {
-  const QuickjsUiOverlayIntent({required this.signature});
+sealed class JsUiOverlayIntent {
+  const JsUiOverlayIntent({required this.signature});
 
   final String signature;
 }
 
-final class QuickjsUiSnackBarOverlayIntent extends QuickjsUiOverlayIntent {
-  const QuickjsUiSnackBarOverlayIntent({
+final class JsUiSnackBarOverlayIntent extends JsUiOverlayIntent {
+  const JsUiSnackBarOverlayIntent({
     required super.signature,
     required this.content,
     required this.duration,
@@ -24,8 +27,8 @@ final class QuickjsUiSnackBarOverlayIntent extends QuickjsUiOverlayIntent {
   final Color? backgroundColor;
 }
 
-final class QuickjsUiDialogOverlayIntent extends QuickjsUiOverlayIntent {
-  const QuickjsUiDialogOverlayIntent({
+final class JsUiDialogOverlayIntent extends JsUiOverlayIntent {
+  const JsUiDialogOverlayIntent({
     required super.signature,
     required this.dialog,
     required this.barrierDismissible,
@@ -37,8 +40,8 @@ final class QuickjsUiDialogOverlayIntent extends QuickjsUiOverlayIntent {
   final VoidCallback onDismissed;
 }
 
-final class QuickjsUiBottomSheetOverlayIntent extends QuickjsUiOverlayIntent {
-  const QuickjsUiBottomSheetOverlayIntent({
+final class JsUiBottomSheetOverlayIntent extends JsUiOverlayIntent {
+  const JsUiBottomSheetOverlayIntent({
     required super.signature,
     required this.child,
     required this.onClosing,
@@ -50,8 +53,8 @@ final class QuickjsUiBottomSheetOverlayIntent extends QuickjsUiOverlayIntent {
   final Color? backgroundColor;
 }
 
-final class QuickjsUiCustomOverlayIntent extends QuickjsUiOverlayIntent {
-  const QuickjsUiCustomOverlayIntent({
+final class JsUiCustomOverlayIntent extends JsUiOverlayIntent {
+  const JsUiCustomOverlayIntent({
     required super.signature,
     required this.child,
     required this.alignment,
@@ -75,11 +78,11 @@ final class QuickjsUiCustomOverlayIntent extends QuickjsUiOverlayIntent {
   final VoidCallback onDismissed;
 }
 
-List<QuickjsUiOverlayIntent> collectQuickjsUiOverlayIntents(
-  QuickjsUiNode root,
-  QuickjsUiRenderContext context,
+List<JsUiOverlayIntent> collectJsUiOverlayIntents(
+  JsUiNode root,
+  JsUiRenderContext context,
 ) {
-  final intents = <QuickjsUiOverlayIntent>[];
+  final intents = <JsUiOverlayIntent>[];
   for (final node in root.overlayNodes) {
     final intent = switch (node.type) {
       'Overlay' => _customOverlayIntent(context, node),
@@ -95,18 +98,17 @@ List<QuickjsUiOverlayIntent> collectQuickjsUiOverlayIntents(
   return intents;
 }
 
-QuickjsUiOverlayIntent? _customOverlayIntent(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+JsUiOverlayIntent? _customOverlayIntent(
+  JsUiRenderContext context,
+  JsUiNode node,
 ) {
   if (!_visible(node)) {
     return null;
   }
-  final onDismissed = QuickjsUiProps.event(
+  final onDismissed = JsUiProps.event(
     node.props['onDismissed'] ?? node.props['onClosing'],
   );
-  final transition =
-      QuickjsUiProps.string(node.props['transition']) ?? 'fadeScale';
+  final transition = JsUiProps.string(node.props['transition']) ?? 'fadeScale';
   if (!const <String>{
     'fade',
     'scale',
@@ -119,115 +121,101 @@ QuickjsUiOverlayIntent? _customOverlayIntent(
       'Unknown quickjs_ui Overlay transition "$transition"',
     );
   }
-  return QuickjsUiCustomOverlayIntent(
+  return JsUiCustomOverlayIntent(
     signature: node.structuralSignature,
     child: context.child(node) ?? const SizedBox.shrink(),
-    alignment:
-        QuickjsUiProps.alignment(node.props['alignment']) ?? Alignment.center,
+    alignment: JsUiProps.alignment(node.props['alignment']) ?? Alignment.center,
     padding:
         context.edgeInsets(node.props['padding']) ?? const EdgeInsets.all(24),
     barrierDismissible:
-        QuickjsUiProps.boolValue(node.props['barrierDismissible']) ?? true,
+        JsUiProps.boolValue(node.props['barrierDismissible']) ?? true,
     barrierColor:
         context.color(node.props['barrierColor']) ?? const Color(0x8A000000),
     duration:
-        QuickjsUiProps.duration(node.props['durationMs']) ??
+        JsUiProps.duration(node.props['durationMs']) ??
         const Duration(milliseconds: 180),
-    curve: QuickjsUiProps.curve(node.props['curve'] ?? 'easeOutCubic'),
+    curve: JsUiProps.curve(node.props['curve'] ?? 'easeOutCubic'),
     transition: transition,
     onDismissed: () {
-      if (onDismissed != null) context.dispatchEvent(onDismissed);
+      if (onDismissed != null) context.dispatch(onDismissed);
     },
   );
 }
 
-QuickjsUiOverlayIntent? _snackBarIntent(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
+JsUiOverlayIntent? _snackBarIntent(JsUiRenderContext context, JsUiNode node) {
   if (!_visible(node)) {
     return null;
   }
   final content =
       context.child(node) ??
-      Text(
-        QuickjsUiProps.string(node.props['content'] ?? node.props['text']) ??
-            '',
-      );
-  return QuickjsUiSnackBarOverlayIntent(
+      Text(JsUiProps.string(node.props['content'] ?? node.props['text']) ?? '');
+  return JsUiSnackBarOverlayIntent(
     signature: node.structuralSignature,
     content: content,
     backgroundColor: context.color(node.props['backgroundColor']),
     duration:
-        QuickjsUiProps.duration(node.props['durationMs']) ??
+        JsUiProps.duration(node.props['durationMs']) ??
         const Duration(seconds: 4),
   );
 }
 
-QuickjsUiOverlayIntent? _dialogIntent(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
+JsUiOverlayIntent? _dialogIntent(JsUiRenderContext context, JsUiNode node) {
   if (!_visible(node)) {
     return null;
   }
-  final title = quickjsUiNodeProp(node.props['title']);
-  final content = quickjsUiNodeProp(node.props['content']);
-  final onDismissed = QuickjsUiProps.event(
+  final title = jsUiNodeProp(node.props['title']);
+  final content = jsUiNodeProp(node.props['content']);
+  final onDismissed = JsUiProps.event(
     node.props['onDismissed'] ?? node.props['onClosing'],
   );
-  return QuickjsUiDialogOverlayIntent(
+  return JsUiDialogOverlayIntent(
     signature: node.structuralSignature,
     barrierDismissible:
-        QuickjsUiProps.boolValue(node.props['barrierDismissible']) != false,
+        JsUiProps.boolValue(node.props['barrierDismissible']) != false,
     onDismissed: () {
       if (onDismissed != null) {
-        context.dispatchEvent(onDismissed);
+        context.dispatch(onDismissed);
       }
     },
     dialog: AlertDialog(
       title: title == null
-          ? quickjsUiOptionalText(
-              QuickjsUiProps.string(node.props['titleText']),
-            )
+          ? jsUiOptionalText(JsUiProps.string(node.props['titleText']))
           : context.build(title),
       content: content == null
-          ? quickjsUiOptionalText(
-              QuickjsUiProps.string(node.props['contentText']),
-            )
+          ? jsUiOptionalText(JsUiProps.string(node.props['contentText']))
           : context.build(content),
-      actions: quickjsUiNodeListProp(context, node.props['actions']),
+      actions: jsUiNodeListProp(context, node.props['actions']),
       backgroundColor: context.color(node.props['backgroundColor']),
     ),
   );
 }
 
-QuickjsUiOverlayIntent? _bottomSheetIntent(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+JsUiOverlayIntent? _bottomSheetIntent(
+  JsUiRenderContext context,
+  JsUiNode node,
 ) {
   if (!_visible(node)) {
     return null;
   }
-  final onClosing = QuickjsUiProps.event(node.props['onClosing']);
-  return QuickjsUiBottomSheetOverlayIntent(
+  final onClosing = JsUiProps.event(node.props['onClosing']);
+  return JsUiBottomSheetOverlayIntent(
     signature: node.structuralSignature,
     backgroundColor: context.color(node.props['backgroundColor']),
     onClosing: () {
       if (onClosing != null) {
-        context.dispatchEvent(onClosing);
+        context.dispatch(onClosing);
       }
     },
     child: context.child(node) ?? const SizedBox.shrink(),
   );
 }
 
-bool _visible(QuickjsUiNode node) {
-  return QuickjsUiProps.boolValue(node.props['visible']) != false;
+bool _visible(JsUiNode node) {
+  return JsUiProps.boolValue(node.props['visible']) != false;
 }
 
-final class QuickjsUiOverlayLayer extends StatefulWidget {
-  const QuickjsUiOverlayLayer({
+final class JsUiOverlayLayer extends StatefulWidget {
+  const JsUiOverlayLayer({
     super.key,
     required this.overlayContext,
     required this.intents,
@@ -235,14 +223,14 @@ final class QuickjsUiOverlayLayer extends StatefulWidget {
   });
 
   final BuildContext overlayContext;
-  final List<QuickjsUiOverlayIntent> intents;
+  final List<JsUiOverlayIntent> intents;
   final Widget child;
 
   @override
-  State<QuickjsUiOverlayLayer> createState() => _QuickjsUiOverlayLayerState();
+  State<JsUiOverlayLayer> createState() => _JsUiOverlayLayerState();
 }
 
-final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
+final class _JsUiOverlayLayerState extends State<JsUiOverlayLayer> {
   final Set<String> _shownSnackBars = <String>{};
   final Map<_ModalKey, _ModalEntry> _modals = <_ModalKey, _ModalEntry>{};
   ScaffoldMessengerState? _messenger;
@@ -265,7 +253,7 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiOverlayLayer oldWidget) {
+  void didUpdateWidget(covariant JsUiOverlayLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     _scheduleSync();
   }
@@ -284,22 +272,22 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   void _syncOverlays() {
-    final snackBars = <QuickjsUiSnackBarOverlayIntent>[
+    final snackBars = <JsUiSnackBarOverlayIntent>[
       for (final intent in widget.intents)
-        if (intent is QuickjsUiSnackBarOverlayIntent) intent,
+        if (intent is JsUiSnackBarOverlayIntent) intent,
     ];
-    final modals = <QuickjsUiOverlayIntent>[
+    final modals = <JsUiOverlayIntent>[
       for (final intent in widget.intents)
-        if (intent is QuickjsUiDialogOverlayIntent ||
-            intent is QuickjsUiBottomSheetOverlayIntent ||
-            intent is QuickjsUiCustomOverlayIntent)
+        if (intent is JsUiDialogOverlayIntent ||
+            intent is JsUiBottomSheetOverlayIntent ||
+            intent is JsUiCustomOverlayIntent)
           intent,
     ];
     _syncSnackBars(snackBars);
     _syncModals(modals);
   }
 
-  void _syncSnackBars(List<QuickjsUiSnackBarOverlayIntent> intents) {
+  void _syncSnackBars(List<JsUiSnackBarOverlayIntent> intents) {
     final active = <String>{for (final intent in intents) intent.signature};
     final removed = _shownSnackBars.where(
       (signature) => !active.contains(signature),
@@ -322,8 +310,8 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   /// declaration is active. The page must observe onClosing/onDismissed and
   /// render it inactive before a later false -> true transition can reopen it.
   /// This is the same controlled-component contract for Dialog and BottomSheet.
-  void _syncModals(List<QuickjsUiOverlayIntent> intents) {
-    final active = <_ModalKey, QuickjsUiOverlayIntent>{
+  void _syncModals(List<JsUiOverlayIntent> intents) {
+    final active = <_ModalKey, JsUiOverlayIntent>{
       for (final intent in intents) _modalKey(intent): intent,
     };
     for (final key in _modals.keys.toList(growable: false)) {
@@ -343,7 +331,7 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
     }
   }
 
-  void _openModal(_ModalKey key, QuickjsUiOverlayIntent intent) {
+  void _openModal(_ModalKey key, JsUiOverlayIntent intent) {
     final routeBinding = _createModalRoute(intent);
     final entry = _ModalEntry(
       navigator: routeBinding.navigator,
@@ -364,11 +352,11 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   ({NavigatorState navigator, Route<void> route}) _createModalRoute(
-    QuickjsUiOverlayIntent intent,
+    JsUiOverlayIntent intent,
   ) {
     final context = widget.overlayContext;
     return switch (intent) {
-      QuickjsUiDialogOverlayIntent() => () {
+      JsUiDialogOverlayIntent() => () {
         final navigator = Navigator.of(context, rootNavigator: true);
         return (
           navigator: navigator,
@@ -383,7 +371,7 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
           ),
         );
       }(),
-      QuickjsUiBottomSheetOverlayIntent() => () {
+      JsUiBottomSheetOverlayIntent() => () {
         final navigator = Navigator.of(context);
         final localizations = MaterialLocalizations.of(context);
         return (
@@ -406,7 +394,7 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
           ),
         );
       }(),
-      QuickjsUiCustomOverlayIntent() => () {
+      JsUiCustomOverlayIntent() => () {
         final navigator = Navigator.of(context, rootNavigator: true);
         return (
           navigator: navigator,
@@ -439,23 +427,23 @@ final class _QuickjsUiOverlayLayerState extends State<QuickjsUiOverlayLayer> {
   }
 
   void _notifyModalClosed(
-    QuickjsUiOverlayIntent intent, {
+    JsUiOverlayIntent intent, {
     required bool userInitiated,
   }) {
     switch (intent) {
-      case QuickjsUiDialogOverlayIntent():
+      case JsUiDialogOverlayIntent():
         if (userInitiated) intent.onDismissed();
-      case QuickjsUiBottomSheetOverlayIntent():
+      case JsUiBottomSheetOverlayIntent():
         // BottomSheet historically reports both user and schema-driven close.
         intent.onClosing();
-      case QuickjsUiCustomOverlayIntent():
+      case JsUiCustomOverlayIntent():
         if (userInitiated) intent.onDismissed();
       default:
         throw StateError('Unsupported modal intent ${intent.runtimeType}');
     }
   }
 
-  void _showSnackBar(QuickjsUiSnackBarOverlayIntent intent) {
+  void _showSnackBar(JsUiSnackBarOverlayIntent intent) {
     if (_shownSnackBars.contains(intent.signature)) {
       return;
     }
@@ -533,26 +521,20 @@ final class _ModalEntry {
   }
 }
 
-_ModalKey _modalKey(QuickjsUiOverlayIntent intent) {
+_ModalKey _modalKey(JsUiOverlayIntent intent) {
   return switch (intent) {
-    QuickjsUiDialogOverlayIntent() => _ModalKey(
-      _ModalKind.dialog,
-      intent.signature,
-    ),
-    QuickjsUiBottomSheetOverlayIntent() => _ModalKey(
+    JsUiDialogOverlayIntent() => _ModalKey(_ModalKind.dialog, intent.signature),
+    JsUiBottomSheetOverlayIntent() => _ModalKey(
       _ModalKind.bottomSheet,
       intent.signature,
     ),
-    QuickjsUiCustomOverlayIntent() => _ModalKey(
-      _ModalKind.custom,
-      intent.signature,
-    ),
+    JsUiCustomOverlayIntent() => _ModalKey(_ModalKind.custom, intent.signature),
     _ => throw StateError('Unsupported modal intent ${intent.runtimeType}'),
   };
 }
 
 Widget _buildCustomTransition(
-  QuickjsUiCustomOverlayIntent intent,
+  JsUiCustomOverlayIntent intent,
   Animation<double> animation,
   Widget child,
 ) {

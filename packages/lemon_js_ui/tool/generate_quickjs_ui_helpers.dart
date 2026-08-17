@@ -21,7 +21,7 @@ void main() {
 
 part of 'quickjs_ui_helpers.dart';
 
-const String quickjsUiHelperModuleSource = $encodedSource;
+const String jsUiHelperModuleSource = $encodedSource;
 ''';
 
   outputFile.writeAsStringSync(generated);

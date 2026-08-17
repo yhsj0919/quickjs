@@ -3,56 +3,100 @@ import 'dart:convert';
 
 import 'package:lemon_js/lemon_js.dart';
 
-enum QuickjsUiHostCapability {
+/// A system service that may be exposed to a QuickJS UI page.
+enum JsUiHostCapability {
+  /// Displays a short, non-interactive message.
   toast,
+
+  /// Asks the user to confirm an action.
   confirm,
+
+  /// Presents a host-defined dialog.
   dialog,
+
+  /// Presents a transient snackbar message.
   snackbar,
+
+  /// Presents content in a host-defined bottom sheet.
   bottomSheet,
+
+  /// Sends a navigation intent to the host application.
   navigation,
+
+  /// Reads or writes text through the platform clipboard.
   clipboard,
+
+  /// Accesses the in-memory key-value store supplied to the capability group.
   storage,
+
+  /// Delegates a network request to the host application.
   network,
+
+  /// Delegates a file-system operation to the host application.
   fileSystem,
+
+  /// Invokes an application-specific native method.
   nativeCall,
 }
 
-enum QuickjsUiCapabilityConflictPolicy { reject, replace, namespace }
+/// Determines how [JsUiHostFeatures] resolves conflicting feature groups.
+enum JsUiCapabilityConflictPolicy {
+  /// Throws a [StateError] when two groups expose the same feature surface.
+  reject,
 
-typedef QuickjsUiToastHandler =
+  /// Removes previously resolved conflicts and keeps the later group.
+  replace,
+
+  /// Keeps both groups and assigns the later feature a distinct feature name.
+  namespace,
+}
+
+/// Handles `jsUiHost.toast(message, options)`.
+typedef JsUiToastHandler =
     FutureOr<Object?> Function(String message, Map<String, Object?> options);
 
-typedef QuickjsUiConfirmHandler =
+/// Handles `jsUiHost.confirm(message, options)` and returns the user's choice.
+typedef JsUiConfirmHandler =
     FutureOr<bool> Function(String message, Map<String, Object?> options);
 
-typedef QuickjsUiDialogHandler =
+/// Handles `jsUiHost.dialog(payload)` with an application-defined payload.
+typedef JsUiDialogHandler =
     FutureOr<Object?> Function(Map<String, Object?> payload);
 
-typedef QuickjsUiSnackbarHandler =
+/// Handles `jsUiHost.snackbar(payload)` with an application-defined payload.
+typedef JsUiSnackbarHandler =
     FutureOr<Object?> Function(Map<String, Object?> payload);
 
-typedef QuickjsUiBottomSheetHandler =
+/// Handles `jsUiHost.bottomSheet(payload)`.
+typedef JsUiBottomSheetHandler =
     FutureOr<Object?> Function(Map<String, Object?> payload);
 
-typedef QuickjsUiNavigationHandler =
+/// Handles a host-specific navigation [intent].
+typedef JsUiNavigationHandler =
     FutureOr<Object?> Function(Map<String, Object?> intent);
 
-typedef QuickjsUiClipboardReadHandler = FutureOr<String?> Function();
+/// Reads text from the platform clipboard, or returns `null` when unavailable.
+typedef JsUiClipboardReadHandler = FutureOr<String?> Function();
 
-typedef QuickjsUiClipboardWriteHandler =
-    FutureOr<Object?> Function(String text);
+/// Writes [text] to the platform clipboard.
+typedef JsUiClipboardWriteHandler = FutureOr<Object?> Function(String text);
 
-typedef QuickjsUiNetworkHandler =
+/// Handles a host-mediated network [request].
+typedef JsUiNetworkHandler =
     FutureOr<Object?> Function(Map<String, Object?> request);
 
-typedef QuickjsUiFileSystemHandler =
+/// Handles a host-mediated file-system [operation].
+typedef JsUiFileSystemHandler =
     FutureOr<Object?> Function(Map<String, Object?> operation);
 
-typedef QuickjsUiNativeCallHandler =
+/// Invokes the application-defined native [method] with an optional [payload].
+typedef JsUiNativeCallHandler =
     FutureOr<Object?> Function(String method, Object? payload);
 
-final class QuickjsUiHostMethod {
-  const QuickjsUiHostMethod({
+/// Describes an application host method exposed to a QuickJS UI page.
+final class JsUiHostMethod {
+  /// Creates a host method with its callback, schemas, and permission metadata.
+  const JsUiHostMethod({
     required this.name,
     required this.callback,
     this.permission,
@@ -62,50 +106,75 @@ final class QuickjsUiHostMethod {
     this.debugName,
   });
 
+  /// The method name local to the generated JavaScript global.
   final String name;
-  final JsProviderCallback callback;
+
+  /// The callback invoked by the Lemon JS host-method bridge.
+  final JsHostMethodCallback callback;
+
+  /// The required permission, or the generated host method name when omitted.
   final String? permission;
+
+  /// A structured schema describing the method arguments.
   final Map<String, Object?> inputSchema;
+
+  /// A structured schema describing the method result.
   final Map<String, Object?> outputSchema;
+
+  /// Whether callers should treat the method result as asynchronous.
   final bool isAsync;
+
+  /// An optional diagnostic name used by the host-method bridge.
   final String? debugName;
 }
 
-final class QuickjsUiHostCapabilityOptions {
-  const QuickjsUiHostCapabilityOptions({
-    this.enabled = const <QuickjsUiHostCapability>{
-      QuickjsUiHostCapability.toast,
-      QuickjsUiHostCapability.confirm,
+/// Selects which built-in `jsUiHost` services are installed.
+final class JsUiHostCapabilityOptions {
+  /// Creates options that enable toast and confirmation services by default.
+  const JsUiHostCapabilityOptions({
+    this.enabled = const <JsUiHostCapability>{
+      JsUiHostCapability.toast,
+      JsUiHostCapability.confirm,
     },
   });
 
-  const QuickjsUiHostCapabilityOptions.none()
-    : enabled = const <QuickjsUiHostCapability>{};
+  /// Creates options with no built-in host services enabled.
+  const JsUiHostCapabilityOptions.none()
+    : enabled = const <JsUiHostCapability>{};
 
-  const QuickjsUiHostCapabilityOptions.all()
-    : enabled = const <QuickjsUiHostCapability>{
-        QuickjsUiHostCapability.toast,
-        QuickjsUiHostCapability.confirm,
-        QuickjsUiHostCapability.dialog,
-        QuickjsUiHostCapability.snackbar,
-        QuickjsUiHostCapability.bottomSheet,
-        QuickjsUiHostCapability.navigation,
-        QuickjsUiHostCapability.clipboard,
-        QuickjsUiHostCapability.storage,
-        QuickjsUiHostCapability.network,
-        QuickjsUiHostCapability.fileSystem,
-        QuickjsUiHostCapability.nativeCall,
+  /// Creates options with every built-in host service enabled.
+  const JsUiHostCapabilityOptions.all()
+    : enabled = const <JsUiHostCapability>{
+        JsUiHostCapability.toast,
+        JsUiHostCapability.confirm,
+        JsUiHostCapability.dialog,
+        JsUiHostCapability.snackbar,
+        JsUiHostCapability.bottomSheet,
+        JsUiHostCapability.navigation,
+        JsUiHostCapability.clipboard,
+        JsUiHostCapability.storage,
+        JsUiHostCapability.network,
+        JsUiHostCapability.fileSystem,
+        JsUiHostCapability.nativeCall,
       };
 
-  final Set<QuickjsUiHostCapability> enabled;
+  /// The built-in services to install in the JavaScript runtime.
+  final Set<JsUiHostCapability> enabled;
 
-  bool isEnabled(QuickjsUiHostCapability capability) {
+  /// Whether [capability] is enabled.
+  bool isEnabled(JsUiHostCapability capability) {
     return enabled.contains(capability);
   }
 }
 
-final class QuickjsUiHostApiHandlers {
-  const QuickjsUiHostApiHandlers({
+/// Supplies application callbacks for the built-in `jsUiHost` services.
+///
+/// Enabling a service does not install a default privileged implementation.
+/// Services that require a handler throw [StateError] when invoked without one;
+/// missing clipboard handlers instead produce a `null` bridge result.
+final class JsUiHostApiHandlers {
+  /// Creates a set of optional host-service callbacks.
+  const JsUiHostApiHandlers({
     this.onToast,
     this.onConfirm,
     this.onDialog,
@@ -119,38 +188,71 @@ final class QuickjsUiHostApiHandlers {
     this.onNativeCall,
   });
 
-  final QuickjsUiToastHandler? onToast;
-  final QuickjsUiConfirmHandler? onConfirm;
-  final QuickjsUiDialogHandler? onDialog;
-  final QuickjsUiSnackbarHandler? onSnackbar;
-  final QuickjsUiBottomSheetHandler? onBottomSheet;
-  final QuickjsUiNavigationHandler? onNavigationIntent;
-  final QuickjsUiClipboardReadHandler? onClipboardReadText;
-  final QuickjsUiClipboardWriteHandler? onClipboardWriteText;
-  final QuickjsUiNetworkHandler? onNetworkRequest;
-  final QuickjsUiFileSystemHandler? onFileSystemOperation;
-  final QuickjsUiNativeCallHandler? onNativeCall;
+  /// Callback for toast messages.
+  final JsUiToastHandler? onToast;
+
+  /// Callback for confirmation prompts.
+  final JsUiConfirmHandler? onConfirm;
+
+  /// Callback for dialogs.
+  final JsUiDialogHandler? onDialog;
+
+  /// Callback for snackbar messages.
+  final JsUiSnackbarHandler? onSnackbar;
+
+  /// Callback for bottom sheets.
+  final JsUiBottomSheetHandler? onBottomSheet;
+
+  /// Callback for navigation intents.
+  final JsUiNavigationHandler? onNavigationIntent;
+
+  /// Callback for clipboard reads.
+  final JsUiClipboardReadHandler? onClipboardReadText;
+
+  /// Callback for clipboard writes.
+  final JsUiClipboardWriteHandler? onClipboardWriteText;
+
+  /// Callback for network requests.
+  final JsUiNetworkHandler? onNetworkRequest;
+
+  /// Callback for file-system operations.
+  final JsUiFileSystemHandler? onFileSystemOperation;
+
+  /// Callback for application-specific native calls.
+  final JsUiNativeCallHandler? onNativeCall;
 }
 
-final class QuickjsUiHostMethodDeclaration {
-  const QuickjsUiHostMethodDeclaration({
+/// Metadata describing a JavaScript method exposed by a capability group.
+final class JsUiHostMethodDeclaration {
+  /// Creates a declaration used by tooling and permission inspection.
+  const JsUiHostMethodDeclaration({
     required this.name,
-    this.providerName,
+    this.hostMethodName,
     this.inputSchema = const <String, Object?>{},
     this.outputSchema = const <String, Object?>{},
     this.isAsync = true,
   });
 
+  /// The fully qualified method name visible to JavaScript.
   final String name;
-  final String? providerName;
+
+  /// The backing Lemon JS host method, if the declaration has one.
+  final String? hostMethodName;
+
+  /// A structured schema describing the method arguments.
   final Map<String, Object?> inputSchema;
+
+  /// A structured schema describing the method result.
   final Map<String, Object?> outputSchema;
+
+  /// Whether callers should treat the result as asynchronous.
   final bool isAsync;
 
+  /// Serializes this declaration to structured manifest metadata.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'name': name,
-      if (providerName != null) 'providerName': providerName,
+      if (hostMethodName != null) 'hostMethodName': hostMethodName,
       'async': isAsync,
       if (inputSchema.isNotEmpty) 'inputSchema': inputSchema,
       if (outputSchema.isNotEmpty) 'outputSchema': outputSchema,
@@ -158,27 +260,33 @@ final class QuickjsUiHostMethodDeclaration {
   }
 }
 
-final class QuickjsUiCapabilityGroup {
-  const QuickjsUiCapabilityGroup({
+/// A named collection of runtime features, permissions, and method metadata.
+final class JsUiCapabilityGroup {
+  /// Creates a capability group from already constructed Lemon JS [features].
+  const JsUiCapabilityGroup({
     required this.name,
     required this.features,
     this.namespace,
     this.permissions = const <String>{},
-    this.methods = const <QuickjsUiHostMethodDeclaration>[],
+    this.methods = const <JsUiHostMethodDeclaration>[],
   });
 
-  factory QuickjsUiCapabilityGroup.system({
+  /// Creates the built-in `jsUiHost` capability group.
+  ///
+  /// [storage] is copied into a private, per-group in-memory store. Privileged
+  /// capabilities such as network, file-system, and native calls are only
+  /// delegated through the corresponding callback in [handlers].
+  factory JsUiCapabilityGroup.system({
     String name = 'quickjs_ui:host:system',
-    QuickjsUiHostCapabilityOptions options =
-        const QuickjsUiHostCapabilityOptions(),
-    QuickjsUiHostApiHandlers handlers = const QuickjsUiHostApiHandlers(),
+    JsUiHostCapabilityOptions options = const JsUiHostCapabilityOptions(),
+    JsUiHostApiHandlers handlers = const JsUiHostApiHandlers(),
     Map<String, Object?> storage = const <String, Object?>{},
   }) {
-    return QuickjsUiCapabilityGroup(
+    return JsUiCapabilityGroup(
       name: name,
       namespace: 'system',
       features: <JsFeatures>[
-        _buildSystemMount(
+        _buildSystemFeatures(
           name: name,
           options: options,
           handlers: handlers,
@@ -190,60 +298,64 @@ final class QuickjsUiCapabilityGroup {
     );
   }
 
-  factory QuickjsUiCapabilityGroup.methods({
+  /// Creates an application method group exposed below [globalName].
+  ///
+  /// Each method receives the host name `<namespace>.<method>` and requires its
+  /// explicit permission, or that generated host name when none is supplied.
+  factory JsUiCapabilityGroup.methods({
     required String name,
-    required List<QuickjsUiHostMethod> methods,
+    required List<JsUiHostMethod> methods,
     String namespace = 'app',
-    String globalName = 'quickjsUiApp',
+    String globalName = 'jsUiApp',
     Set<String> permissions = const <String>{},
   }) {
-    final providerEntries = <JsProvider>[];
-    final declarations = <QuickjsUiHostMethodDeclaration>[];
+    final hostMethods = <JsHostMethod>[];
+    final declarations = <JsUiHostMethodDeclaration>[];
     final apiEntries = <String>[];
     final resolvedPermissions = <String>{...permissions};
 
     for (final method in methods) {
       final methodName = _validateMethodName(method.name);
-      final providerName = '$namespace.$methodName';
-      providerEntries.add(
-        JsProvider.dart(
-          name: providerName,
+      final hostMethodName = '$namespace.$methodName';
+      hostMethods.add(
+        JsHostMethod(
+          name: hostMethodName,
           debugName: method.debugName ?? '$name.$methodName',
           callback: method.callback,
         ),
       );
       declarations.add(
-        QuickjsUiHostMethodDeclaration(
+        JsUiHostMethodDeclaration(
           name: '$globalName.$methodName',
-          providerName: providerName,
+          hostMethodName: hostMethodName,
           inputSchema: method.inputSchema,
           outputSchema: method.outputSchema,
           isAsync: method.isAsync,
         ),
       );
-      resolvedPermissions.add(method.permission ?? providerName);
+      resolvedPermissions.add(method.permission ?? hostMethodName);
       apiEntries.add(
-        '[${jsonEncode(methodName)}](...args) { return providers[${jsonEncode(providerName)}](...args); }',
+        '[${jsonEncode(methodName)}](...args) { return methods[${jsonEncode(hostMethodName)}](...args); }',
       );
     }
 
-    return QuickjsUiCapabilityGroup(
+    return JsUiCapabilityGroup(
       name: name,
       namespace: namespace,
       permissions: Set<String>.unmodifiable(resolvedPermissions),
-      methods: List<QuickjsUiHostMethodDeclaration>.unmodifiable(declarations),
+      methods: List<JsUiHostMethodDeclaration>.unmodifiable(declarations),
       features: <JsFeatures>[
         JsFeatures(
           name: name,
-          providers: List<JsProvider>.unmodifiable(providerEntries),
+          methods: List<JsHostMethod>.unmodifiable(hostMethods),
           scripts: <JsScript>[
-            JsScript.js(
+            JsScript(
               name: '$name:globals.js',
               globals: <String>[globalName],
               source:
                   '''
 (() => {
-  const providers = globalThis.__quickjsHostProviders;
+  const methods = globalThis.__jsHostMethods;
   const current = globalThis[${jsonEncode(globalName)}] ?? {};
   globalThis[${jsonEncode(globalName)}] = Object.freeze({
     ...current,
@@ -258,52 +370,41 @@ final class QuickjsUiCapabilityGroup {
     );
   }
 
-  factory QuickjsUiCapabilityGroup.functions({
-    required String name,
-    required Map<String, Function> functions,
-    String namespace = 'app',
-    String globalName = 'quickjsUiApp',
-    Set<String> permissions = const <String>{},
-  }) {
-    return QuickjsUiCapabilityGroup.methods(
-      name: name,
-      namespace: namespace,
-      globalName: globalName,
-      permissions: permissions,
-      methods: <QuickjsUiHostMethod>[
-        for (final entry in functions.entries)
-          QuickjsUiHostMethod(
-            name: entry.key,
-            callback: (args, _) => Function.apply(entry.value, args),
-          ),
-      ],
-    );
-  }
-
+  /// The diagnostic and Lemon JS feature name for this group.
   final String name;
+
+  /// The namespace used for generated host methods and conflict resolution.
   final String? namespace;
+
+  /// The Lemon JS runtime features installed by this group.
   final List<JsFeatures> features;
+
+  /// Permissions declared or inferred for the group.
   final Set<String> permissions;
-  final List<QuickjsUiHostMethodDeclaration> methods;
+
+  /// JavaScript method declarations exposed for inspection and tooling.
+  final List<JsUiHostMethodDeclaration> methods;
 }
 
-final class QuickjsUiHostCapabilities {
-  const QuickjsUiHostCapabilities({
-    this.groups = const <QuickjsUiCapabilityGroup>[],
-    this.conflictPolicy = QuickjsUiCapabilityConflictPolicy.reject,
+/// Resolves capability groups into installable Lemon JS runtime features.
+final class JsUiHostFeatures {
+  /// Creates a feature collection with the specified conflict policy.
+  const JsUiHostFeatures({
+    this.groups = const <JsUiCapabilityGroup>[],
+    this.conflictPolicy = JsUiCapabilityConflictPolicy.reject,
   });
 
-  factory QuickjsUiHostCapabilities.system({
-    QuickjsUiHostCapabilityOptions options =
-        const QuickjsUiHostCapabilityOptions(),
-    QuickjsUiHostApiHandlers handlers = const QuickjsUiHostApiHandlers(),
+  /// Creates a feature collection containing the built-in system group.
+  factory JsUiHostFeatures.system({
+    JsUiHostCapabilityOptions options = const JsUiHostCapabilityOptions(),
+    JsUiHostApiHandlers handlers = const JsUiHostApiHandlers(),
     Map<String, Object?> storage = const <String, Object?>{},
-    QuickjsUiCapabilityConflictPolicy conflictPolicy =
-        QuickjsUiCapabilityConflictPolicy.reject,
+    JsUiCapabilityConflictPolicy conflictPolicy =
+        JsUiCapabilityConflictPolicy.reject,
   }) {
-    return QuickjsUiHostCapabilities(
-      groups: <QuickjsUiCapabilityGroup>[
-        QuickjsUiCapabilityGroup.system(
+    return JsUiHostFeatures(
+      groups: <JsUiCapabilityGroup>[
+        JsUiCapabilityGroup.system(
           options: options,
           handlers: handlers,
           storage: storage,
@@ -313,28 +414,28 @@ final class QuickjsUiHostCapabilities {
     );
   }
 
-  final List<QuickjsUiCapabilityGroup> groups;
-  final QuickjsUiCapabilityConflictPolicy conflictPolicy;
+  /// Capability groups in resolution order.
+  final List<JsUiCapabilityGroup> groups;
 
-  List<JsFeatures> get features => toMounts();
+  /// The policy applied when groups expose overlapping runtime surfaces.
+  final JsUiCapabilityConflictPolicy conflictPolicy;
 
+  /// Resolved Lemon JS features ready to install in a runtime.
+  List<JsFeatures> get features => _resolveFeatures();
+
+  /// The union of permissions declared by all [groups].
   Set<String> get permissions {
     return <String>{for (final group in groups) ...group.permissions};
   }
 
-  List<QuickjsUiHostMethodDeclaration> get methods {
-    return List<QuickjsUiHostMethodDeclaration>.unmodifiable(
+  /// All method declarations in [groups], in group order.
+  List<JsUiHostMethodDeclaration> get methods {
+    return List<JsUiHostMethodDeclaration>.unmodifiable(
       groups.expand((group) => group.methods),
     );
   }
 
-  List<Map<String, Object?>> get methodMaps {
-    return List<Map<String, Object?>>.unmodifiable(
-      methods.map((method) => method.toMap()),
-    );
-  }
-
-  List<JsFeatures> toMounts() {
+  List<JsFeatures> _resolveFeatures() {
     final resolved = <JsFeatures>[];
     for (final group in groups) {
       _validateMethodDeclarations(group);
@@ -347,7 +448,7 @@ final class QuickjsUiHostCapabilities {
 
   void _appendFeatures(
     List<JsFeatures> resolved,
-    QuickjsUiCapabilityGroup group,
+    JsUiCapabilityGroup group,
     JsFeatures features,
   ) {
     final conflicts = <int>{
@@ -359,27 +460,27 @@ final class QuickjsUiHostCapabilities {
       return;
     }
     switch (conflictPolicy) {
-      case QuickjsUiCapabilityConflictPolicy.reject:
+      case JsUiCapabilityConflictPolicy.reject:
         throw StateError(
           'quickjs_ui host capability conflict for features "${features.name}"',
         );
-      case QuickjsUiCapabilityConflictPolicy.replace:
+      case JsUiCapabilityConflictPolicy.replace:
         for (final index in conflicts.toList().reversed) {
           resolved.removeAt(index);
         }
         resolved.add(features);
-      case QuickjsUiCapabilityConflictPolicy.namespace:
+      case JsUiCapabilityConflictPolicy.namespace:
         resolved.add(_namespaceFeatures(group, features, resolved.length));
     }
   }
 }
 
-void _validateMethodDeclarations(QuickjsUiCapabilityGroup group) {
-  final providerNames = <String>{
+void _validateMethodDeclarations(JsUiCapabilityGroup group) {
+  final hostMethodNames = <String>{
     for (final features in group.features)
-      for (final provider in features.providers) provider.name,
+      for (final method in features.methods) method.name,
   };
-  final declaredProviderNames = <String>{};
+  final declaredHostMethodNames = <String>{};
 
   for (final method in group.methods) {
     if (method.name.trim().isEmpty) {
@@ -390,27 +491,27 @@ void _validateMethodDeclarations(QuickjsUiCapabilityGroup group) {
     _validateStructuredValue(method.inputSchema, 'inputSchema', method.name);
     _validateStructuredValue(method.outputSchema, 'outputSchema', method.name);
 
-    final providerName = method.providerName;
-    if (providerName == null) {
+    final hostMethodName = method.hostMethodName;
+    if (hostMethodName == null) {
       continue;
     }
-    if (providerName.trim().isEmpty) {
+    if (hostMethodName.trim().isEmpty) {
       throw StateError(
-        'quickjs_ui capability method "${method.name}" declares an empty providerName',
+        'quickjs_ui capability method "${method.name}" declares an empty hostMethodName',
       );
     }
-    if (!providerNames.contains(providerName)) {
+    if (!hostMethodNames.contains(hostMethodName)) {
       throw StateError(
-        'quickjs_ui capability method "${method.name}" references unknown provider "$providerName"',
+        'quickjs_ui capability method "${method.name}" references unknown host method "$hostMethodName"',
       );
     }
-    declaredProviderNames.add(providerName);
+    declaredHostMethodNames.add(hostMethodName);
   }
 
-  final missing = providerNames.difference(declaredProviderNames);
+  final missing = hostMethodNames.difference(declaredHostMethodNames);
   if (missing.isNotEmpty) {
     throw StateError(
-      'quickjs_ui capability group "${group.name}" exposes providers without method declarations: ${missing.join(', ')}',
+      'quickjs_ui capability group "${group.name}" exposes host methods without declarations: ${missing.join(', ')}',
     );
   }
 }
@@ -454,15 +555,15 @@ String _validateMethodName(String value) {
   return name;
 }
 
-List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
-  QuickjsUiHostCapabilityOptions options,
+List<JsUiHostMethodDeclaration> _systemMethodDeclarations(
+  JsUiHostCapabilityOptions options,
 ) {
-  final methods = <QuickjsUiHostMethodDeclaration>[];
+  final methods = <JsUiHostMethodDeclaration>[];
 
   void method(
-    QuickjsUiHostCapability capability,
+    JsUiHostCapability capability,
     String name, {
-    String? providerName,
+    String? hostMethodName,
     Map<String, Object?> inputSchema = const <String, Object?>{},
     Map<String, Object?> outputSchema = const <String, Object?>{},
   }) {
@@ -470,9 +571,9 @@ List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
       return;
     }
     methods.add(
-      QuickjsUiHostMethodDeclaration(
+      JsUiHostMethodDeclaration(
         name: name,
-        providerName: providerName,
+        hostMethodName: hostMethodName,
         inputSchema: inputSchema,
         outputSchema: outputSchema,
       ),
@@ -480,9 +581,9 @@ List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
   }
 
   method(
-    QuickjsUiHostCapability.toast,
-    'quickjsUiHost.toast',
-    providerName: 'quickjs_ui.host.toast',
+    JsUiHostCapability.toast,
+    'jsUiHost.toast',
+    hostMethodName: 'quickjs_ui.host.toast',
     inputSchema: _objectSchema(
       <String, Object?>{'message': _stringSchema(), 'options': _objectSchema()},
       const <String>['message'],
@@ -490,9 +591,9 @@ List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
     outputSchema: _objectSchema(),
   );
   method(
-    QuickjsUiHostCapability.confirm,
-    'quickjsUiHost.confirm',
-    providerName: 'quickjs_ui.host.confirm',
+    JsUiHostCapability.confirm,
+    'jsUiHost.confirm',
+    hostMethodName: 'quickjs_ui.host.confirm',
     inputSchema: _objectSchema(
       <String, Object?>{'message': _stringSchema(), 'options': _objectSchema()},
       const <String>['message'],
@@ -500,59 +601,59 @@ List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
     outputSchema: _boolSchema(),
   );
   method(
-    QuickjsUiHostCapability.navigation,
-    'quickjsUiHost.navigationIntent',
-    providerName: 'quickjs_ui.host.navigation',
+    JsUiHostCapability.navigation,
+    'jsUiHost.navigationIntent',
+    hostMethodName: 'quickjs_ui.host.navigation',
     inputSchema: _objectSchema(<String, Object?>{'intent': _objectSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.dialog,
-    'quickjsUiHost.dialog',
-    providerName: 'quickjs_ui.host.dialog',
+    JsUiHostCapability.dialog,
+    'jsUiHost.dialog',
+    hostMethodName: 'quickjs_ui.host.dialog',
     inputSchema: _objectSchema(<String, Object?>{'payload': _objectSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.snackbar,
-    'quickjsUiHost.snackbar',
-    providerName: 'quickjs_ui.host.snackbar',
+    JsUiHostCapability.snackbar,
+    'jsUiHost.snackbar',
+    hostMethodName: 'quickjs_ui.host.snackbar',
     inputSchema: _objectSchema(<String, Object?>{'payload': _objectSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.bottomSheet,
-    'quickjsUiHost.bottomSheet',
-    providerName: 'quickjs_ui.host.bottomSheet',
+    JsUiHostCapability.bottomSheet,
+    'jsUiHost.bottomSheet',
+    hostMethodName: 'quickjs_ui.host.bottomSheet',
     inputSchema: _objectSchema(<String, Object?>{'payload': _objectSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.clipboard,
-    'quickjsUiHost.clipboard.readText',
-    providerName: 'quickjs_ui.host.clipboard.readText',
+    JsUiHostCapability.clipboard,
+    'jsUiHost.clipboard.readText',
+    hostMethodName: 'quickjs_ui.host.clipboard.readText',
     outputSchema: <String, Object?>{
       'oneOf': <Object?>[_stringSchema(), _nullSchema()],
     },
   );
   method(
-    QuickjsUiHostCapability.clipboard,
-    'quickjsUiHost.clipboard.writeText',
-    providerName: 'quickjs_ui.host.clipboard.writeText',
+    JsUiHostCapability.clipboard,
+    'jsUiHost.clipboard.writeText',
+    hostMethodName: 'quickjs_ui.host.clipboard.writeText',
     inputSchema: _objectSchema(<String, Object?>{'text': _stringSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.storage,
-    'quickjsUiHost.storage.getItem',
-    providerName: 'quickjs_ui.host.storage.getItem',
+    JsUiHostCapability.storage,
+    'jsUiHost.storage.getItem',
+    hostMethodName: 'quickjs_ui.host.storage.getItem',
     inputSchema: _objectSchema(<String, Object?>{'key': _stringSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.storage,
-    'quickjsUiHost.storage.setItem',
-    providerName: 'quickjs_ui.host.storage.setItem',
+    JsUiHostCapability.storage,
+    'jsUiHost.storage.setItem',
+    hostMethodName: 'quickjs_ui.host.storage.setItem',
     inputSchema: _objectSchema(
       <String, Object?>{'key': _stringSchema(), 'value': _anySchema()},
       const <String>['key'],
@@ -560,58 +661,58 @@ List<QuickjsUiHostMethodDeclaration> _systemMethodDeclarations(
     outputSchema: _boolSchema(),
   );
   method(
-    QuickjsUiHostCapability.storage,
-    'quickjsUiHost.storage.removeItem',
-    providerName: 'quickjs_ui.host.storage.removeItem',
+    JsUiHostCapability.storage,
+    'jsUiHost.storage.removeItem',
+    hostMethodName: 'quickjs_ui.host.storage.removeItem',
     inputSchema: _objectSchema(<String, Object?>{'key': _stringSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.network,
-    'quickjsUiHost.network',
-    providerName: 'quickjs_ui.host.network',
+    JsUiHostCapability.network,
+    'jsUiHost.network',
+    hostMethodName: 'quickjs_ui.host.network',
     inputSchema: _objectSchema(<String, Object?>{'request': _objectSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.fileSystem,
-    'quickjsUiHost.fileSystem',
-    providerName: 'quickjs_ui.host.fileSystem',
+    JsUiHostCapability.fileSystem,
+    'jsUiHost.fileSystem',
+    hostMethodName: 'quickjs_ui.host.fileSystem',
     inputSchema: _objectSchema(<String, Object?>{'operation': _objectSchema()}),
     outputSchema: _anySchema(),
   );
   method(
-    QuickjsUiHostCapability.nativeCall,
-    'quickjsUiHost.nativeCall',
-    providerName: 'quickjs_ui.host.nativeCall',
+    JsUiHostCapability.nativeCall,
+    'jsUiHost.nativeCall',
+    hostMethodName: 'quickjs_ui.host.nativeCall',
     inputSchema: _objectSchema(
       <String, Object?>{'method': _stringSchema(), 'payload': _anySchema()},
       const <String>['method'],
     ),
     outputSchema: _anySchema(),
   );
-  return List<QuickjsUiHostMethodDeclaration>.unmodifiable(methods);
+  return List<JsUiHostMethodDeclaration>.unmodifiable(methods);
 }
 
-JsFeatures _buildSystemMount({
+JsFeatures _buildSystemFeatures({
   required String name,
-  required QuickjsUiHostCapabilityOptions options,
-  required QuickjsUiHostApiHandlers handlers,
+  required JsUiHostCapabilityOptions options,
+  required JsUiHostApiHandlers handlers,
   required Map<String, Object?> storage,
 }) {
-  final providers = <JsProvider>[];
+  final methods = <JsHostMethod>[];
   final apiEntries = <String>[];
 
-  void provider(
-    QuickjsUiHostCapability capability,
+  void method(
+    JsUiHostCapability capability,
     String name,
-    JsProviderCallback callback,
+    JsHostMethodCallback callback,
   ) {
     if (!options.isEnabled(capability)) {
       return;
     }
-    providers.add(
-      JsProvider.dart(
+    methods.add(
+      JsHostMethod(
         name: name,
         debugName: 'quickjs_ui host ${capability.name}',
         callback: callback,
@@ -619,33 +720,30 @@ JsFeatures _buildSystemMount({
     );
   }
 
-  provider(QuickjsUiHostCapability.toast, 'quickjs_ui.host.toast', (args, _) {
+  method(JsUiHostCapability.toast, 'quickjs_ui.host.toast', (args, _) {
     final message = _stringArg(args, 0, 'toast message');
     final options = _mapArg(args, 1);
     return handlers.onToast?.call(message, options) ??
         <String, Object?>{'shown': true, 'message': message};
   });
-  if (options.isEnabled(QuickjsUiHostCapability.toast)) {
+  if (options.isEnabled(JsUiHostCapability.toast)) {
     apiEntries.add(
-      'toast(message, options = {}) { return providers[${jsonEncode('quickjs_ui.host.toast')}](message, options); }',
+      'toast(message, options = {}) { return methods[${jsonEncode('quickjs_ui.host.toast')}](message, options); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.confirm, 'quickjs_ui.host.confirm', (
-    args,
-    _,
-  ) {
+  method(JsUiHostCapability.confirm, 'quickjs_ui.host.confirm', (args, _) {
     final message = _stringArg(args, 0, 'confirm message');
     final options = _mapArg(args, 1);
     return handlers.onConfirm?.call(message, options) ?? false;
   });
-  if (options.isEnabled(QuickjsUiHostCapability.confirm)) {
+  if (options.isEnabled(JsUiHostCapability.confirm)) {
     apiEntries.add(
-      'confirm(message, options = {}) { return providers[${jsonEncode('quickjs_ui.host.confirm')}](message, options); }',
+      'confirm(message, options = {}) { return methods[${jsonEncode('quickjs_ui.host.confirm')}](message, options); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.navigation, 'quickjs_ui.host.navigation', (
+  method(JsUiHostCapability.navigation, 'quickjs_ui.host.navigation', (
     args,
     _,
   ) {
@@ -655,52 +753,49 @@ JsFeatures _buildSystemMount({
       'navigation',
     ).call(intent);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.navigation)) {
+  if (options.isEnabled(JsUiHostCapability.navigation)) {
     apiEntries.add(
-      'navigationIntent(intent) { return providers[${jsonEncode('quickjs_ui.host.navigation')}](intent); }',
+      'navigationIntent(intent) { return methods[${jsonEncode('quickjs_ui.host.navigation')}](intent); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.dialog, 'quickjs_ui.host.dialog', (args, _) {
+  method(JsUiHostCapability.dialog, 'quickjs_ui.host.dialog', (args, _) {
     final payload = _mapArg(args, 0);
     return _requireHandler(handlers.onDialog, 'dialog').call(payload);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.dialog)) {
+  if (options.isEnabled(JsUiHostCapability.dialog)) {
     apiEntries.add(
-      'dialog(payload) { return providers[${jsonEncode('quickjs_ui.host.dialog')}](payload); }',
+      'dialog(payload) { return methods[${jsonEncode('quickjs_ui.host.dialog')}](payload); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.snackbar, 'quickjs_ui.host.snackbar', (
-    args,
-    _,
-  ) {
+  method(JsUiHostCapability.snackbar, 'quickjs_ui.host.snackbar', (args, _) {
     final payload = _mapArg(args, 0);
     return _requireHandler(handlers.onSnackbar, 'snackbar').call(payload);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.snackbar)) {
+  if (options.isEnabled(JsUiHostCapability.snackbar)) {
     apiEntries.add(
-      'snackbar(payload) { return providers[${jsonEncode('quickjs_ui.host.snackbar')}](payload); }',
+      'snackbar(payload) { return methods[${jsonEncode('quickjs_ui.host.snackbar')}](payload); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.bottomSheet, 'quickjs_ui.host.bottomSheet', (
+  method(JsUiHostCapability.bottomSheet, 'quickjs_ui.host.bottomSheet', (
     args,
     _,
   ) {
     final payload = _mapArg(args, 0);
     return _requireHandler(handlers.onBottomSheet, 'bottomSheet').call(payload);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.bottomSheet)) {
+  if (options.isEnabled(JsUiHostCapability.bottomSheet)) {
     apiEntries.add(
-      'bottomSheet(payload) { return providers[${jsonEncode('quickjs_ui.host.bottomSheet')}](payload); }',
+      'bottomSheet(payload) { return methods[${jsonEncode('quickjs_ui.host.bottomSheet')}](payload); }',
     );
   }
 
-  if (options.isEnabled(QuickjsUiHostCapability.clipboard)) {
-    providers
+  if (options.isEnabled(JsUiHostCapability.clipboard)) {
+    methods
       ..add(
-        JsProvider.dart(
+        JsHostMethod(
           name: 'quickjs_ui.host.clipboard.readText',
           debugName: 'quickjs_ui host clipboard readText',
           callback: (_, _) {
@@ -709,7 +804,7 @@ JsFeatures _buildSystemMount({
         ),
       )
       ..add(
-        JsProvider.dart(
+        JsHostMethod(
           name: 'quickjs_ui.host.clipboard.writeText',
           debugName: 'quickjs_ui host clipboard writeText',
           callback: (args, _) {
@@ -720,15 +815,15 @@ JsFeatures _buildSystemMount({
       );
     apiEntries.add('''
 clipboard: {
-  readText() { return providers[${jsonEncode('quickjs_ui.host.clipboard.readText')}](); },
-  writeText(text) { return providers[${jsonEncode('quickjs_ui.host.clipboard.writeText')}](text); }
+  readText() { return methods[${jsonEncode('quickjs_ui.host.clipboard.readText')}](); },
+  writeText(text) { return methods[${jsonEncode('quickjs_ui.host.clipboard.writeText')}](text); }
 }''');
   }
 
-  if (options.isEnabled(QuickjsUiHostCapability.storage)) {
-    providers
+  if (options.isEnabled(JsUiHostCapability.storage)) {
+    methods
       ..add(
-        JsProvider.dart(
+        JsHostMethod(
           name: 'quickjs_ui.host.storage.getItem',
           debugName: 'quickjs_ui host storage getItem',
           callback: (args, _) {
@@ -737,7 +832,7 @@ clipboard: {
         ),
       )
       ..add(
-        JsProvider.dart(
+        JsHostMethod(
           name: 'quickjs_ui.host.storage.setItem',
           debugName: 'quickjs_ui host storage setItem',
           callback: (args, _) {
@@ -749,7 +844,7 @@ clipboard: {
         ),
       )
       ..add(
-        JsProvider.dart(
+        JsHostMethod(
           name: 'quickjs_ui.host.storage.removeItem',
           debugName: 'quickjs_ui host storage removeItem',
           callback: (args, _) {
@@ -759,26 +854,23 @@ clipboard: {
       );
     apiEntries.add('''
 storage: {
-  getItem(key) { return providers[${jsonEncode('quickjs_ui.host.storage.getItem')}](key); },
-  setItem(key, value) { return providers[${jsonEncode('quickjs_ui.host.storage.setItem')}](key, value); },
-  removeItem(key) { return providers[${jsonEncode('quickjs_ui.host.storage.removeItem')}](key); }
+  getItem(key) { return methods[${jsonEncode('quickjs_ui.host.storage.getItem')}](key); },
+  setItem(key, value) { return methods[${jsonEncode('quickjs_ui.host.storage.setItem')}](key, value); },
+  removeItem(key) { return methods[${jsonEncode('quickjs_ui.host.storage.removeItem')}](key); }
 }''');
   }
 
-  provider(QuickjsUiHostCapability.network, 'quickjs_ui.host.network', (
-    args,
-    _,
-  ) {
+  method(JsUiHostCapability.network, 'quickjs_ui.host.network', (args, _) {
     final request = _mapArg(args, 0);
     return _requireHandler(handlers.onNetworkRequest, 'network').call(request);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.network)) {
+  if (options.isEnabled(JsUiHostCapability.network)) {
     apiEntries.add(
-      'network(request) { return providers[${jsonEncode('quickjs_ui.host.network')}](request); }',
+      'network(request) { return methods[${jsonEncode('quickjs_ui.host.network')}](request); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.fileSystem, 'quickjs_ui.host.fileSystem', (
+  method(JsUiHostCapability.fileSystem, 'quickjs_ui.host.fileSystem', (
     args,
     _,
   ) {
@@ -788,13 +880,13 @@ storage: {
       'fileSystem',
     ).call(operation);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.fileSystem)) {
+  if (options.isEnabled(JsUiHostCapability.fileSystem)) {
     apiEntries.add(
-      'fileSystem(operation) { return providers[${jsonEncode('quickjs_ui.host.fileSystem')}](operation); }',
+      'fileSystem(operation) { return methods[${jsonEncode('quickjs_ui.host.fileSystem')}](operation); }',
     );
   }
 
-  provider(QuickjsUiHostCapability.nativeCall, 'quickjs_ui.host.nativeCall', (
+  method(JsUiHostCapability.nativeCall, 'quickjs_ui.host.nativeCall', (
     args,
     _,
   ) {
@@ -805,24 +897,24 @@ storage: {
       'nativeCall',
     ).call(method, payload);
   });
-  if (options.isEnabled(QuickjsUiHostCapability.nativeCall)) {
+  if (options.isEnabled(JsUiHostCapability.nativeCall)) {
     apiEntries.add(
-      'nativeCall(method, payload) { return providers[${jsonEncode('quickjs_ui.host.nativeCall')}](method, payload); }',
+      'nativeCall(method, payload) { return methods[${jsonEncode('quickjs_ui.host.nativeCall')}](method, payload); }',
     );
   }
 
   return JsFeatures(
     name: name,
-    providers: providers,
+    methods: methods,
     scripts: <JsScript>[
-      JsScript.js(
+      JsScript(
         name: '$name:globals.js',
-        globals: const <String>['quickjsUiHost'],
+        globals: const <String>['jsUiHost'],
         source:
             '''
 (() => {
-  const providers = globalThis.__quickjsHostProviders;
-  globalThis.quickjsUiHost = Object.freeze({
+  const methods = globalThis.__jsHostMethods;
+  globalThis.jsUiHost = Object.freeze({
     ${apiEntries.join(',\n    ')}
   });
 })();
@@ -835,16 +927,16 @@ storage: {
 bool _featuresConflict(JsFeatures left, JsFeatures right) {
   return left.name == right.name ||
       _intersects(
-        left.providers.map((provider) => provider.name),
-        right.providers.map((provider) => provider.name),
+        left.methods.map((method) => method.name),
+        right.methods.map((method) => method.name),
       ) ||
       _intersects(
         left.scripts.expand((script) => script.globals),
         right.scripts.expand((script) => script.globals),
       ) ||
       _intersects(
-        left.modules.map((module) => module.specifier),
-        right.modules.map((module) => module.specifier),
+        left.modules.map((module) => module.name),
+        right.modules.map((module) => module.name),
       );
 }
 
@@ -881,7 +973,7 @@ Map<String, Object?> _stringSchema() {
 }
 
 JsFeatures _namespaceFeatures(
-  QuickjsUiCapabilityGroup group,
+  JsUiCapabilityGroup group,
   JsFeatures features,
   int index,
 ) {
@@ -891,7 +983,7 @@ JsFeatures _namespaceFeatures(
     browserGlobals: features.browserGlobals,
     scripts: features.scripts,
     modules: features.modules,
-    providers: features.providers,
+    methods: features.methods,
   );
 }
 

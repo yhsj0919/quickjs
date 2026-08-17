@@ -5,7 +5,7 @@ import 'dart:io';
 ///
 /// The public TypeScript declarations remain the source of truth. This tool
 /// only discovers declaration modules and writes project-side indexes.
-Future<void> runQuickjsUiCodegen(List<String> args) async {
+Future<void> runJsUiCodegen(List<String> args) async {
   final options = _CodegenOptions.parse(args);
   if (options.help) {
     stdout.write(_CodegenOptions.usage);

@@ -9,7 +9,7 @@ import 'pages/core/exception_model_page.dart';
 import 'pages/core/fetch_page.dart';
 import 'pages/core/function_handle_page.dart';
 import 'pages/core/host_modules_page.dart';
-import 'pages/core/host_mounts_page.dart';
+import 'pages/core/features_page.dart';
 import 'pages/core/hybrid_extension_page.dart';
 import 'pages/core/js_call_dart_plugin_page.dart';
 import 'pages/core/memory_limit_page.dart';
@@ -28,14 +28,14 @@ import 'pages/core/websocket_page.dart';
 import 'pages/core/zip_plugin_page.dart';
 
 // 规则：每个新功能都必须在这里同步注册一个 example 测试页面。
-// 每个页面必须能独立运行，进入页面时创建自己的 Quickjs 实例，退出页面时销毁。
+// 每个页面必须能独立运行，进入页面时创建自己的 JsEngine 实例，退出页面时销毁。
 // 页面注册表：每个新功能都应该在这里新增一个独立 example 页面。
-// 页面之间不能共享 Quickjs runtime，避免状态污染手动验收结果。
+// 页面之间不能共享 JsEngine runtime，避免状态污染手动验收结果。
 // 新页面必须追加到列表末尾，已有页面顺序和首页序号保持稳定。
 final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '基础执行',
-    description: '创建 Quickjs，执行一段 JavaScript，退出页面时销毁。',
+    description: '创建 JsEngine，执行一段 JavaScript，退出页面时销毁。',
     builder: (_) => const BasicEvalPage(),
   ),
   ExamplePageSpec(
@@ -60,7 +60,7 @@ final List<ExamplePageSpec> examplePages = [
   ),
   ExamplePageSpec(
     title: '运行时隔离',
-    description: '验证多个 Quickjs 实例的 globals 隔离，以及 dispose 一个不影响另一个。',
+    description: '验证多个 JsEngine 实例的 globals 隔离，以及 dispose 一个不影响另一个。',
     builder: (_) => const RuntimeIsolationPage(),
   ),
   ExamplePageSpec(
@@ -104,7 +104,7 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: 'Web 宿主环境',
     description:
-        '使用 JsFeatures.web() 注入 window、location、navigator、URL 和内存版 storage。',
+        '使用 WebFeatures() 注入 window、location、navigator、URL 和内存版 storage。',
     builder: (_) => const WebHostEnvironmentPage(),
   ),
   ExamplePageSpec(
@@ -127,7 +127,7 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '控制台输出',
     description:
-        '使用 Quickjs.create(onConsole:) 接收 console.log / warn / error 事件。',
+        '使用 JsEngine.create(onConsole:) 接收 console.log / warn / error 事件。',
     builder: (_) => const ConsolePage(),
   ),
   ExamplePageSpec(
@@ -139,8 +139,8 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: '基础功能加载',
     description:
-        '使用 JsOptions.features 和 Quickjs.loadFeatures() 批量安装环境补全、模块与 provider。',
-    builder: (_) => const HostMountsPage(),
+        '使用 JsEngine.create(features: ...) 和 loadFeatures() 组合加载环境补全、模块与宿主方法。',
+    builder: (_) => const FeaturesPage(),
   ),
   ExamplePageSpec(
     title: 'NPM 打包模块',
@@ -157,7 +157,7 @@ final List<ExamplePageSpec> examplePages = [
   ExamplePageSpec(
     title: 'JS 插件',
     description:
-        '使用 JsPlugin 注册单文件插件和多模块插件包，验证 validatePlugin、invokePlugin、structured codec 和错误返回。',
+        '使用 JsPlugin 注册单文件插件和多模块插件包，验证 validatePlugin、callPlugin、structured codec 和错误返回。',
     builder: (_) => const PluginPage(),
   ),
   ExamplePageSpec(

@@ -5,37 +5,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
-class QuickjsUiAdaptivePerformanceLabPage extends StatefulWidget {
-  const QuickjsUiAdaptivePerformanceLabPage({super.key});
+class JsUiAdaptivePerformanceLabPage extends StatefulWidget {
+  const JsUiAdaptivePerformanceLabPage({super.key});
 
   @override
-  State<QuickjsUiAdaptivePerformanceLabPage> createState() =>
-      _QuickjsUiAdaptivePerformanceLabPageState();
+  State<JsUiAdaptivePerformanceLabPage> createState() =>
+      _JsUiAdaptivePerformanceLabPageState();
 }
 
-class _QuickjsUiAdaptivePerformanceLabPageState
-    extends State<QuickjsUiAdaptivePerformanceLabPage> {
-  late final QuickjsUiController _controller;
-  late QuickjsUiPerformanceController _performance;
-  QuickjsUiPerformanceMode _mode = QuickjsUiPerformanceMode.auto;
+class _JsUiAdaptivePerformanceLabPageState
+    extends State<JsUiAdaptivePerformanceLabPage> {
+  late final JsUiController _controller;
+  late JsUiPerformanceController _performance;
+  JsUiPerformanceMode _mode = JsUiPerformanceMode.auto;
   Timer? _refreshTimer;
-  QuickjsUiPerformanceReport? _report;
+  JsUiPerformanceReport? _report;
 
   @override
   void initState() {
     super.initState();
-    _controller = QuickjsUiController();
+    _controller = JsUiController();
     _performance = _createPerformance(_mode);
     _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (mounted) setState(() {});
     });
   }
 
-  QuickjsUiPerformanceController _createPerformance(
-    QuickjsUiPerformanceMode mode,
-  ) => QuickjsUiPerformanceController(mode: mode);
+  JsUiPerformanceController _createPerformance(JsUiPerformanceMode mode) =>
+      JsUiPerformanceController(mode: mode);
 
-  void _setMode(QuickjsUiPerformanceMode mode) {
+  void _setMode(JsUiPerformanceMode mode) {
     if (_mode == mode) return;
     final previous = _performance;
     setState(() {
@@ -101,7 +100,7 @@ class _QuickjsUiAdaptivePerformanceLabPageState
             onCopy: _copyReport,
           ),
           Expanded(
-            child: QuickjsUiView.asset(
+            child: JsUiView.asset(
               path: 'assets/quickjs_ui/adaptive_performance_lab_page.mjs',
               controller: _controller,
               performanceController: _performance,
@@ -161,9 +160,9 @@ class _QualitySelector extends StatelessWidget {
     required this.onChanged,
   });
 
-  final QuickjsUiPerformanceMode mode;
+  final JsUiPerformanceMode mode;
   final bool enabled;
-  final ValueChanged<QuickjsUiPerformanceMode> onChanged;
+  final ValueChanged<JsUiPerformanceMode> onChanged;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -171,7 +170,7 @@ class _QualitySelector extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
     child: Row(
       children: <Widget>[
-        for (final value in QuickjsUiPerformanceMode.values)
+        for (final value in JsUiPerformanceMode.values)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 3),
             child: ChoiceChip(
@@ -189,7 +188,7 @@ class _MetricsPanel extends StatelessWidget {
   const _MetricsPanel({required this.metrics, required this.report});
 
   final Map<String, Object?> metrics;
-  final QuickjsUiPerformanceReport? report;
+  final JsUiPerformanceReport? report;
 
   String _metric(Object? value, {int digits = 2}) {
     if (value is num) return value.toStringAsFixed(digits);

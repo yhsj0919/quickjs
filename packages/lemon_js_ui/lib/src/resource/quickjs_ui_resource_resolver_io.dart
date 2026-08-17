@@ -2,17 +2,20 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-final class QuickjsUiResourceResolver {
-  QuickjsUiResourceResolver.asset({
-    AssetBundle? bundle,
-    String baseAssetKey = '',
-  }) : this._(
-         loadString: (path) => (bundle ?? rootBundle).loadString(
-           _resolveResourcePath(baseAssetKey, path),
-         ),
-       );
+/// Loads normalized JSUI text resources from a configured backing store.
+final class JsUiResourceResolver {
+  /// Creates a resolver backed by a Flutter [AssetBundle].
+  JsUiResourceResolver.asset({AssetBundle? bundle, String basePath = ''})
+    : this._(
+        loadString: (path) => (bundle ?? rootBundle).loadString(
+          _resolveResourcePath(basePath, path),
+        ),
+      );
 
-  QuickjsUiResourceResolver.file({String basePath = ''})
+  /// Creates a resolver backed by local files.
+  ///
+  /// Invocations throw [UnsupportedError] on platforms without file I/O.
+  JsUiResourceResolver.file({String basePath = ''})
     : this._(
         loadString: (path) {
           final resolved = _resolveFilePath(basePath, path);
@@ -20,7 +23,8 @@ final class QuickjsUiResourceResolver {
         },
       );
 
-  QuickjsUiResourceResolver.memory(Map<String, String> resources)
+  /// Creates a resolver backed by an in-memory resource map.
+  JsUiResourceResolver.memory(Map<String, String> resources)
     : this._(
         loadString: (path) async {
           final normalized = normalizePath(path);
@@ -32,10 +36,12 @@ final class QuickjsUiResourceResolver {
         },
       );
 
-  const QuickjsUiResourceResolver._({required this.loadString});
+  const JsUiResourceResolver._({required this.loadString});
 
+  /// Loads one normalized resource [path] as text.
   final Future<String> Function(String path) loadString;
 
+  /// Normalizes [path] relative to [from] and rejects root traversal.
   static String normalizePath(String path, {String from = ''}) {
     final normalizedPath = path.replaceAll('\\', '/');
     final baseParts = <String>[];
@@ -66,13 +72,14 @@ final class QuickjsUiResourceResolver {
     return parts.join('/');
   }
 
+  /// Creates a Lemon JS module specifier from [pluginId] and [path].
   static String moduleSpecifier(String pluginId, String path) {
     return '$pluginId/${normalizePath(path)}';
   }
 }
 
 String _resolveFilePath(String basePath, String path) {
-  final normalized = QuickjsUiResourceResolver.normalizePath(path);
+  final normalized = JsUiResourceResolver.normalizePath(path);
   if (basePath.isEmpty) {
     return normalized;
   }
@@ -81,12 +88,12 @@ String _resolveFilePath(String basePath, String path) {
   return '$root/$normalized';
 }
 
-String _resolveResourcePath(String baseAssetKey, String path) {
-  final normalized = QuickjsUiResourceResolver.normalizePath(path);
-  if (baseAssetKey.isEmpty) {
+String _resolveResourcePath(String basePath, String path) {
+  final normalized = JsUiResourceResolver.normalizePath(path);
+  if (basePath.isEmpty) {
     return normalized;
   }
-  final base = baseAssetKey.replaceAll('\\', '/');
+  final base = basePath.replaceAll('\\', '/');
   final index = base.lastIndexOf('/');
   if (index == -1) {
     return normalized;

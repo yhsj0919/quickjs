@@ -13,7 +13,7 @@ class StructuredValuesPage extends StatefulWidget {
 }
 
 class _StructuredValuesPageState extends State<StructuredValuesPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -33,20 +33,20 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -67,7 +67,7 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
     });
 
     try {
-      final quickjs = _requireRuntime();
+      final engine = _requireRuntime();
       final cases = <String>[
         '1 + 2',
         '1.5 + 2',
@@ -82,17 +82,17 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
       ];
       final rows = <String>[];
       for (final code in cases) {
-        final value = await quickjs.eval(code);
+        final value = await engine.eval(code);
         rows.add('$code => ${_describeValue(value)}');
       }
       try {
-        await quickjs.eval('[1, Symbol("id")]');
+        await engine.eval('[1, Symbol("id")]');
       } on JsValueConversionException catch (error) {
         rows.add('[1, Symbol("id")] => ${error.runtimeType}: ${error.message}');
       }
-      final globalsValue = await quickjs.eval(
+      final globalsValue = await engine.eval(
         '({ total: count + price, bytes: Array.from(bytes), date: date.toISOString() })',
-        globals: {
+        tempGlobals: {
           'count': 40,
           'price': 2.5,
           'bytes': Uint8List.fromList([1, 2, 255]),
@@ -100,7 +100,7 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
         },
       );
       rows.add('globals => ${_describeValue(globalsValue)}');
-      rows.add('eval("undefined") => ${await quickjs.eval('undefined')}');
+      rows.add('eval("undefined") => ${await engine.eval('undefined')}');
 
       if (!mounted || _disposed) {
         return;
@@ -121,12 +121,12 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeValue(Object? value) {
@@ -142,14 +142,14 @@ class _StructuredValuesPageState extends State<StructuredValuesPage> {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('结构化值返回')),

@@ -6,12 +6,10 @@ import 'package:lemon_js_ui/lemon_js_ui.dart';
 /// The runtime intentionally outlives individual routes. Every page owns a
 /// short-lived context; disposing a route releases that context while keeping
 /// the native worker and JSRuntime warm.
-final QuickjsUiRuntime exampleQuickjsUiRuntime = QuickjsUiRuntime(
-  maxCapacity: 2,
-);
+final JsUiRuntime exampleJsUiRuntime = JsUiRuntime(maxContexts: 2);
 
 /// Initializes the shared runtime before Flutter builds the first application
 /// frame, keeping native worker startup out of the counter page timing.
-Future<void> initExampleQuickjsUiRuntime() {
-  return exampleQuickjsUiRuntime.init();
+Future<void> initExampleJsUiRuntime() {
+  return exampleJsUiRuntime.init();
 }

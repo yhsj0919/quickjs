@@ -14,45 +14,71 @@ import '../resource/quickjs_ui_network_loader.dart';
 /// Collects quickjs_ui runtime diagnostics for development and debugging.
 ///
 /// Listener notifications are deferred to the next frame so renderer diff/schema
-/// updates never rebuild inspector panels during [QuickjsUiView.build].
-final class QuickjsUiInspector extends ChangeNotifier {
+/// updates never rebuild inspector panels during [JsUiView.build].
+final class JsUiInspector extends ChangeNotifier {
+  /// The max lifecycle events value.
+  /// The max lifecycle events value.
   static const int maxLifecycleEvents = 256;
 
-  final List<QuickjsUiLifecycleEvent> _lifecycle = <QuickjsUiLifecycleEvent>[];
+  final List<JsUiLifecycleEvent> _lifecycle = <JsUiLifecycleEvent>[];
   Map<String, Object?>? _lastAction;
-  QuickjsUiDiffStats? _lastDiff;
+  JsUiDiffStats? _lastDiff;
   Map<String, Object?>? _lastSchema;
   final List<String> _resourceLog = <String>[];
-  final QuickjsUiNetworkJournal networkJournal = QuickjsUiNetworkJournal();
+
+  /// The network journal value.
+  /// The network journal value.
+  final JsUiNetworkJournal networkJournal = JsUiNetworkJournal();
   Object? _lastError;
-  QuickjsUiPerformanceSnapshot? _performance;
+  JsUiPerformanceSnapshot? _performance;
   bool _notifyScheduled = false;
   bool _disposed = false;
 
-  List<QuickjsUiLifecycleEvent> get lifecycleTimeline =>
-      List<QuickjsUiLifecycleEvent>.unmodifiable(_lifecycle);
+  /// Returns the current lifecycle timeline.
+  /// Returns the current lifecycle timeline.
+  List<JsUiLifecycleEvent> get lifecycleTimeline =>
+      List<JsUiLifecycleEvent>.unmodifiable(_lifecycle);
 
+  /// Returns the current last action.
+  /// Returns the current last action.
   Map<String, Object?>? get lastAction => _lastAction;
 
-  QuickjsUiDiffStats? get lastDiff => _lastDiff;
+  /// Returns the current last diff.
+  /// Returns the current last diff.
+  JsUiDiffStats? get lastDiff => _lastDiff;
 
+  /// Returns the current last schema.
+  /// Returns the current last schema.
   Map<String, Object?>? get lastSchema => _lastSchema;
 
+  /// Returns the current resource log.
+  /// Returns the current resource log.
   List<String> get resourceLog => List<String>.unmodifiable(_resourceLog);
 
-  List<QuickjsUiNetworkRecord> get networkRecords => networkJournal.records;
+  /// Returns the current network records.
+  /// Returns the current network records.
+  List<JsUiNetworkRecord> get networkRecords => networkJournal.records;
 
+  /// Returns the current last error.
+  /// Returns the current last error.
   Object? get lastError => _lastError;
-  QuickjsUiPerformanceSnapshot? get performance => _performance;
 
-  void recordPerformance(QuickjsUiPerformanceSnapshot snapshot) {
+  /// Returns the current performance.
+  /// Returns the current performance.
+  JsUiPerformanceSnapshot? get performance => _performance;
+
+  /// Performs the record performance operation.
+  /// Performs the record performance operation.
+  void recordPerformance(JsUiPerformanceSnapshot snapshot) {
     _performance = snapshot;
     _scheduleNotify();
   }
 
+  /// Performs the record lifecycle operation.
+  /// Performs the record lifecycle operation.
   void recordLifecycle(String phase, String type, {Object? payload}) {
     _lifecycle.add(
-      QuickjsUiLifecycleEvent(
+      JsUiLifecycleEvent(
         phase: phase,
         type: type,
         payload: payload,
@@ -65,10 +91,12 @@ final class QuickjsUiInspector extends ChangeNotifier {
     _scheduleNotify();
   }
 
+  /// Performs the record action operation.
+  /// Performs the record action operation.
   void recordAction(Map<String, Object?> event) {
     _lastAction = Map<String, Object?>.unmodifiable(event);
     _lifecycle.add(
-      QuickjsUiLifecycleEvent(
+      JsUiLifecycleEvent(
         phase: 'action',
         type: _actionType(event),
         payload: event,
@@ -81,16 +109,22 @@ final class QuickjsUiInspector extends ChangeNotifier {
     _scheduleNotify();
   }
 
-  void recordDiff(QuickjsUiDiffStats stats) {
+  /// Performs the record diff operation.
+  /// Performs the record diff operation.
+  void recordDiff(JsUiDiffStats stats) {
     _lastDiff = stats;
     _scheduleNotify();
   }
 
+  /// Performs the record schema operation.
+  /// Performs the record schema operation.
   void recordSchema(Map<String, Object?> schema) {
     _lastSchema = schema;
     _scheduleNotify();
   }
 
+  /// Performs the record resource operation.
+  /// Performs the record resource operation.
   void recordResource(String message) {
     _resourceLog.add(message);
     if (_resourceLog.length > maxLifecycleEvents) {
@@ -99,16 +133,22 @@ final class QuickjsUiInspector extends ChangeNotifier {
     _scheduleNotify();
   }
 
-  void recordNetworkEvent(QuickjsUiNetworkLogEvent event) {
+  /// Performs the record network event operation.
+  /// Performs the record network event operation.
+  void recordNetworkEvent(JsUiNetworkLogEvent event) {
     networkJournal.handleLogEvent(event);
     _scheduleNotify();
   }
 
+  /// Performs the record error operation.
+  /// Performs the record error operation.
   void recordError(Object? error) {
     _lastError = error;
     _scheduleNotify();
   }
 
+  /// Performs the clear operation.
+  /// Performs the clear operation.
   void clear() {
     _lifecycle.clear();
     _lastAction = null;
@@ -142,51 +182,35 @@ final class QuickjsUiInspector extends ChangeNotifier {
     });
   }
 
-  QuickjsUiPageSnapshot buildSnapshot({
+  /// Performs the build snapshot operation.
+  /// Performs the build snapshot operation.
+  JsUiPageSnapshot buildSnapshot({
     required Map<String, Object?> props,
     required Object? state,
-    required QuickjsUiNode? node,
+    required JsUiNode? node,
     required JsPlugin? plugin,
     required List<JsFeatures> features,
     Object? error,
   }) {
     final pageName = plugin?.manifest.metadata['name'];
-    return QuickjsUiPageSnapshot(
+    return JsUiPageSnapshot(
       exportedAt: DateTime.now(),
       pageId: plugin?.manifest.id,
       pageVersion: plugin?.manifest.version,
       pageName: pageName is String ? pageName : null,
       props: props,
       state: state,
-      schema: QuickjsUiPageSnapshot.schemaFor(node),
-      manifest: QuickjsUiPageSnapshot.manifestFor(plugin),
+      schema: JsUiPageSnapshot.schemaFor(node),
+      manifest: JsUiPageSnapshot.manifestFor(plugin),
       lastAction: _lastAction,
       lifecycle: lifecycleTimeline,
-      hostApis: QuickjsUiPageSnapshot.hostApisFor(features),
-      resources: QuickjsUiPageSnapshot.resourcesFor(plugin),
+      hostApis: JsUiPageSnapshot.hostApisFor(features),
+      resources: JsUiPageSnapshot.resourcesFor(plugin),
       network: networkRecords.map((record) => record.toMap()).toList(),
       diff: _lastDiff,
       performance: _performance,
       error: error ?? _lastError,
     );
-  }
-
-  Map<String, Object?> buildSnapshotMap({
-    required Map<String, Object?> props,
-    required Object? state,
-    required QuickjsUiNode? node,
-    required JsPlugin? plugin,
-    required List<JsFeatures> features,
-    Object? error,
-  }) {
-    return buildSnapshot(
-      props: props,
-      state: state,
-      node: node,
-      plugin: plugin,
-      features: features,
-      error: error,
-    ).toMap();
   }
 
   String _actionType(Map<String, Object?> event) {

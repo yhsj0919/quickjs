@@ -1,5 +1,36 @@
 # 更新日志 / Changelog
 
+## 0.2.0
+
+### 中文
+
+- **破坏性更新：** 本次重构调整了公开类型、构造入口、参数和 JS helper，且不提供旧名称
+  兼容别名。升级前必须阅读
+  [破坏性 API 迁移指南](../../docs/breaking_api_migration.md)。
+- 公开类型统一使用 `JsUi*`；低层 `JsUiSession` 移至独立的
+  `package:lemon_js_ui/lemon_js_ui_session.dart` 入口。
+- `JsUiView`、Bundle、Manifest、网络加载、资源引用、导航和生命周期 API 已简化并统一命名。
+- 宿主注入模型统一为 `JsUiHostFeatures` 和 `JsUiCapabilityGroup.methods()`。
+- 删除重复的 Snapshot Map、Inspector Map、网络刷新和事件合并入口。
+- JS helper 删除 `defineComponent/action/event`，页面组件统一使用 `Component()` 和标准事件对象。
+- 启用完整公开 API 文档检查，并明确区分稳定导出与内部 renderer/helper 实现。
+
+### English
+
+- **Breaking update:** This refactor changes public types, constructors, parameters, and JavaScript
+  helpers. No compatibility aliases are provided. Read the
+  [breaking API migration guide](../../docs/breaking_api_migration.md) before upgrading.
+- Standardized public types on the `JsUi*` prefix and moved the low-level `JsUiSession` API to
+  `package:lemon_js_ui/lemon_js_ui_session.dart`.
+- Simplified and standardized `JsUiView`, bundle, manifest, network loading, resource reference,
+  navigation, and lifecycle APIs.
+- Replaced host injection with `JsUiHostFeatures` and `JsUiCapabilityGroup.methods()`.
+- Removed duplicate snapshot-map, inspector-map, network-refresh, and event-coalescing entry points.
+- Removed the `defineComponent/action/event` JavaScript helpers in favor of `Component()` and standard
+  event objects.
+- Enabled complete public API documentation checks and clarified stable exports versus internal
+  renderer/helper implementations.
+
 ## 0.1.1
 
 ### 中文

@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -6,8 +9,8 @@ import 'quickjs_ui_component_helpers.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 
-final QuickjsUiComponentBuilderMap quickjsUiNavigationComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{
+final JsUiComponentBuilderMap jsUiNavigationComponentBuilders =
+    <String, JsUiComponentBuilder>{
       'Scaffold': _buildScaffold,
       'AppBar': _buildAppBar,
       'BottomNavigationBar': _buildBottomNavigationBar,
@@ -16,23 +19,16 @@ final QuickjsUiComponentBuilderMap quickjsUiNavigationComponentBuilders =
       'Drawer': _buildDrawer,
     };
 
-Widget _buildScaffold(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final appBar = quickjsUiNodeProp(node.props['appBar']);
-  final body = quickjsUiNodeProp(node.props['body']);
-  final bottomNavigationBar = quickjsUiNodeProp(
-    node.props['bottomNavigationBar'],
-  );
-  final drawer = quickjsUiNodeProp(node.props['drawer']);
-  final floatingActionButton = quickjsUiNodeProp(
-    node.props['floatingActionButton'],
-  );
+Widget _buildScaffold(JsUiRenderContext context, JsUiNode node) {
+  final appBar = jsUiNodeProp(node.props['appBar']);
+  final body = jsUiNodeProp(node.props['body']);
+  final bottomNavigationBar = jsUiNodeProp(node.props['bottomNavigationBar']);
+  final drawer = jsUiNodeProp(node.props['drawer']);
+  final floatingActionButton = jsUiNodeProp(node.props['floatingActionButton']);
   final scaffold = Scaffold(
     appBar: appBar == null
         ? null
-        : quickjsUiAsPreferredSizeWidget(
-            context.build(appBar),
-            'Scaffold.appBar',
-          ),
+        : jsUiAsPreferredSizeWidget(context.build(appBar), 'Scaffold.appBar'),
     body: body == null ? context.child(node) : context.build(body),
     drawer: drawer == null ? null : context.build(drawer),
     bottomNavigationBar: bottomNavigationBar == null
@@ -43,82 +39,76 @@ Widget _buildScaffold(QuickjsUiRenderContext context, QuickjsUiNode node) {
         : context.build(floatingActionButton),
     backgroundColor: context.color(node.props['backgroundColor']),
   );
-  final tabLength = QuickjsUiProps.intValue(node.props['tabLength']);
+  final tabLength = JsUiProps.intValue(node.props['tabLength']);
   if (tabLength == null || tabLength <= 0) {
     return scaffold;
   }
   return DefaultTabController(
     length: tabLength,
-    initialIndex: QuickjsUiProps.intValue(node.props['initialTabIndex']) ?? 0,
+    initialIndex: JsUiProps.intValue(node.props['initialTabIndex']) ?? 0,
     child: scaffold,
   );
 }
 
-Widget _buildAppBar(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final title = quickjsUiNodeProp(node.props['title']);
-  final leading = quickjsUiNodeProp(node.props['leading']);
-  final bottom = quickjsUiNodeProp(node.props['bottom']);
+Widget _buildAppBar(JsUiRenderContext context, JsUiNode node) {
+  final title = jsUiNodeProp(node.props['title']);
+  final leading = jsUiNodeProp(node.props['leading']);
+  final bottom = jsUiNodeProp(node.props['bottom']);
   return AppBar(
     title: title == null
-        ? quickjsUiOptionalText(QuickjsUiProps.string(node.props['titleText']))
+        ? jsUiOptionalText(JsUiProps.string(node.props['titleText']))
         : context.build(title),
     leading: leading == null ? null : context.build(leading),
-    actions: quickjsUiNodeListProp(context, node.props['actions']),
+    actions: jsUiNodeListProp(context, node.props['actions']),
     backgroundColor: context.color(node.props['backgroundColor']),
     foregroundColor: context.color(node.props['foregroundColor']),
-    centerTitle: QuickjsUiProps.boolValue(node.props['centerTitle']),
+    centerTitle: JsUiProps.boolValue(node.props['centerTitle']),
     elevation: context.elevation(node.props['elevation']),
     bottom: bottom == null
         ? null
-        : quickjsUiAsPreferredSizeWidget(
-            context.build(bottom),
-            'AppBar.bottom',
-          ),
+        : jsUiAsPreferredSizeWidget(context.build(bottom), 'AppBar.bottom'),
   );
 }
 
-Widget _buildBottomNavigationBar(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final onTap = QuickjsUiProps.event(node.props['onTap']);
+Widget _buildBottomNavigationBar(JsUiRenderContext context, JsUiNode node) {
+  final onTap = JsUiProps.event(node.props['onTap']);
   return BottomNavigationBar(
-    currentIndex: QuickjsUiProps.intValue(node.props['currentIndex']) ?? 0,
+    currentIndex: JsUiProps.intValue(node.props['currentIndex']) ?? 0,
     type: node.props['typeMode'] == 'shifting'
         ? BottomNavigationBarType.shifting
         : BottomNavigationBarType.fixed,
     onTap: onTap == null
         ? null
-        : (index) => context.dispatchEvent(
+        : (index) => context.dispatch(
             onTap,
-            defaultCoalesceKey: quickjsUiEventKey(node, 'onTap'),
-            kind: QuickjsUiEventKind.sample,
+            defaultCoalesceKey: jsUiEventKey(node, 'onTap'),
+            kind: JsUiEventKind.sample,
             payload: <String, Object?>{'index': index},
           ),
-    items: quickjsUiBottomNavigationItems(context, node.props['items']),
+    items: jsUiBottomNavigationItems(context, node.props['items']),
   );
 }
 
-Widget _buildTabBar(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final onTap = QuickjsUiProps.event(node.props['onTap']);
+Widget _buildTabBar(JsUiRenderContext context, JsUiNode node) {
+  final onTap = JsUiProps.event(node.props['onTap']);
   return TabBar(
-    isScrollable: QuickjsUiProps.boolValue(node.props['isScrollable']) ?? false,
+    isScrollable: JsUiProps.boolValue(node.props['isScrollable']) ?? false,
     onTap: onTap == null
         ? null
-        : (index) => context.dispatchEvent(
+        : (index) => context.dispatch(
             onTap,
-            defaultCoalesceKey: quickjsUiEventKey(node, 'onTap'),
-            kind: QuickjsUiEventKind.sample,
+            defaultCoalesceKey: jsUiEventKey(node, 'onTap'),
+            kind: JsUiEventKind.sample,
             payload: <String, Object?>{'index': index},
           ),
-    tabs: quickjsUiTabs(context, node.props['tabs']),
+    tabs: jsUiTabs(context, node.props['tabs']),
   );
 }
 
-Widget _buildTabBarView(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildTabBarView(JsUiRenderContext context, JsUiNode node) {
   return TabBarView(children: context.children(node));
 }
 
-Widget _buildDrawer(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildDrawer(JsUiRenderContext context, JsUiNode node) {
   return Drawer(child: context.child(node));
 }

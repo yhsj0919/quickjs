@@ -10,7 +10,7 @@ JavaScript 中，Flutter 将 JS 返回的 Schema 渲染成原生 Widget。它适
 
 ```yaml
 dependencies:
-  lemon_js_ui: ^0.1.1
+  lemon_js_ui: ^0.2.0
 ```
 
 ```dart
@@ -80,7 +80,7 @@ flutter:
 Flutter 页面中加载：
 
 ```dart
-QuickjsUiView.asset(
+JsUiView.asset(
   path: 'assets/quickjs_ui/counter_page.mjs',
   initialProps: const <String, Object?>{
     'title': 'QuickJS UI',
@@ -97,13 +97,13 @@ JS 持有 state 并处理事件；Flutter 负责渲染和把事件送回 JS。
 
 ## 加载方式
 
-`QuickjsUiView` 支持多种来源：
+`JsUiView` 支持多种来源：
 
-- `QuickjsUiView.asset()`：Flutter asset；
-- `QuickjsUiView.file()`：原生平台文件；
-- `QuickjsUiView.network()`：网络页面；
-- `QuickjsUiView.plugin()`：已经构建的 QuickJS 插件；
-- `QuickjsUiBundle`：多模块或 ZIP UI 包。
+- `JsUiView.asset()`：Flutter asset；
+- `JsUiView.file()`：原生平台文件；
+- `JsUiView.network()`：网络页面；
+- `JsUiView.plugin()`：已经构建的 QuickJS 插件；
+- `JsUiBundle`：多模块或 ZIP UI 包。
 
 网络加载仍受来源策略、CORS 和宿主权限限制。页面加载失败可通过 `errorBuilder` 显示系统
 回退 UI。
@@ -113,11 +113,21 @@ JS 持有 state 并处理事件；Flutter 负责渲染和把事件送回 JS。
 主要组件包括布局、文本、按钮、表单、列表、图片、SVG、浮层、主题、动画和 Canvas。
 此外还提供：
 
-- `QuickjsUiController`：刷新、暂停、恢复和宿主控制；
-- `QuickjsUiPlugin`：第三方 JS 模块、宿主 features 和 Flutter 组件注册；
-- `QuickjsUiNavigator`：受控页面导航；
-- `QuickjsUiComponentRegistry`：注册自定义原生组件；
+- `JsUiController`：刷新、暂停、恢复和宿主控制；
+- `JsUiPlugin`：第三方 JS 模块、宿主 features 和 Flutter 组件注册；
+- `JsUiNavigator`：受控页面导航；
+- `JsUiComponentRegistry`：注册自定义原生组件；
 - Inspector、加载指标、网络记录和性能报告。
+
+直接驱动页面协议、编写基准或自定义宿主时，才使用低层 Session 入口：
+
+```dart
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
+
+final session = JsUiSession(engine: engine);
+```
+
+普通应用不需要创建 Session，使用 `JsUiView` 或 `JsUiController` 即可。
 
 Canvas 与控件动画由 Flutter VSync 驱动。系统启用“减少动态效果”时，Flutter Web 的
 `MediaQuery.disableAnimations` 可能停止动画；排查方法见
@@ -128,9 +138,9 @@ Canvas 与控件动画由 Flutter VSync 驱动。系统启用“减少动态效�
 插件通常同时提供 JS module、`.d.ts` 类型声明和 Flutter renderer：
 
 ```dart
-QuickjsUiView.asset(
+JsUiView.asset(
   path: 'assets/quickjs_ui/page.mjs',
-  uiPlugins: <QuickjsUiPlugin>[
+  uiPlugins: <JsUiPlugin>[
     thirdPartyPlugin,
   ],
 )

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 待办列表 Demo：ListView、TextField、事件、受控输入与 ThemeData token 的实际列表场景。
-class QuickjsUiTodoPage extends StatelessWidget {
-  const QuickjsUiTodoPage({super.key});
+class JsUiTodoPage extends StatelessWidget {
+  const JsUiTodoPage({super.key});
 
   /// 入口 JS 页面的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/todo_page.mjs';
@@ -12,7 +12,7 @@ class QuickjsUiTodoPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('待办列表')),
-      body: QuickjsUiView.asset(
+      body: JsUiView.asset(
         path: path,
         loadingBuilder: (_) => const Center(child: CircularProgressIndicator()),
         errorBuilder: (_, error) => Padding(

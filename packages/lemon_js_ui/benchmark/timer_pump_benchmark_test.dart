@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -8,13 +9,13 @@ void main() {
   test('compares 60-second idle timer pump schedules', () async {
     const ticks = 120;
     const warmupTicks = 10;
-    final optimized = QuickjsUiSession();
-    final legacy = QuickjsUiSession();
+    final optimized = JsUiSession();
+    final legacy = JsUiSession();
     addTearDown(optimized.dispose);
     addTearDown(legacy.dispose);
 
     await optimized.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'timer_pump_optimized_benchmark',
         version: '1.0.0',
         source: '''
@@ -48,7 +49,7 @@ export default Page({
 }
 
 Future<_PumpBenchmarkResult> _measureScheduled(
-  QuickjsUiSession session,
+  JsUiSession session,
   int ticks,
 ) async {
   final samples = <int>[];
@@ -107,7 +108,7 @@ JsPlugin _legacyIdlePlugin() {
     ),
     modules: const <JsPluginModule>[
       JsPluginModule(
-        specifier: 'timer_pump_legacy_benchmark/main',
+        name: 'timer_pump_legacy_benchmark/main',
         source: '''
 let firstCommit = true;
 export function capabilities() {
@@ -115,7 +116,7 @@ export function capabilities() {
     protocol: 'quickjs_ui.runtime.v1',
     schemaVersion: 1,
     helperVersion: 1,
-    minimumQuickjsUiVersion: 1,
+    minimumJsUiVersion: 1,
     lifecycle: []
   };
 }

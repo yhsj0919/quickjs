@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -8,7 +11,7 @@ import 'package:vector_graphics/vector_graphics_compat.dart'
 
 import 'quickjs_ui_svg_compat.dart';
 
-Widget buildQuickjsUiFileImage(
+Widget buildJsUiFileImage(
   String location, {
   double? width,
   double? height,
@@ -25,7 +28,7 @@ Widget buildQuickjsUiFileImage(
   BlendMode? colorBlendMode,
 }) {
   return Image.file(
-    File(quickjsUiFilePath(location)),
+    File(jsUiFilePath(location)),
     width: width,
     height: height,
     fit: fit,
@@ -42,7 +45,7 @@ Widget buildQuickjsUiFileImage(
   );
 }
 
-Widget buildQuickjsUiFileSvg(
+Widget buildJsUiFileSvg(
   String location, {
   double? width,
   double? height,
@@ -53,7 +56,7 @@ Widget buildQuickjsUiFileSvg(
   RenderingStrategy renderingStrategy = RenderingStrategy.picture,
 }) {
   return SvgPicture(
-    _QuickjsUiSvgFileLoader(File(quickjsUiFilePath(location))),
+    _JsUiSvgFileLoader(File(jsUiFilePath(location))),
     width: width,
     height: height,
     fit: fit,
@@ -64,15 +67,15 @@ Widget buildQuickjsUiFileSvg(
   );
 }
 
-final class _QuickjsUiSvgFileLoader extends SvgFileLoader {
-  const _QuickjsUiSvgFileLoader(super.file);
+final class _JsUiSvgFileLoader extends SvgFileLoader {
+  const _JsUiSvgFileLoader(super.file);
 
   @override
   String provideSvg(void message) =>
-      normalizeQuickjsUiSvg(super.provideSvg(message));
+      normalizeJsUiSvg(super.provideSvg(message));
 }
 
-String quickjsUiFilePath(String location) {
+String jsUiFilePath(String location) {
   final uri = Uri.tryParse(location);
   if (uri != null && uri.scheme == 'file') {
     return uri.toFilePath();

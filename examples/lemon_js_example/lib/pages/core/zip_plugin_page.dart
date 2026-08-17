@@ -12,7 +12,7 @@ class ZipPluginPage extends StatefulWidget {
 }
 
 class _ZipPluginPageState extends State<ZipPluginPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   JsPlugin? _plugin;
   JsPluginClient? _client;
   bool _disposed = false;
@@ -34,17 +34,17 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       _plugin = null;
       _client = null;
       await previous?.dispose();
 
       final plugin = await JsZipPlugin.asset(
-        assetKey: 'assets/plugins/zip_demo.zip',
+        path: 'assets/plugins/zip_demo.zip',
       );
-      final quickjs = await Quickjs.create(
-        features: <JsFeatures>[plugin.asFeatures()],
+      final engine = await JsEngine.create(
+        plugins: <JsPlugin>[plugin],
         onConsole: (event) {
           if (!mounted || _disposed) {
             return;
@@ -54,19 +54,19 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
           });
         },
       );
-      final client = JsPluginClient(quickjs, plugin);
+      final client = JsPluginClient(engine, plugin);
       await client.validate();
-      final initResult = await client.init(<String, Object?>{
-        'locale': 'zh-CN',
-      });
+      final initResult = await client.init(
+        context: <String, Object?>{'locale': 'zh-CN'},
+      );
 
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _plugin = plugin;
         _client = client;
         _busy = false;
@@ -116,7 +116,7 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
       );
       _log.insert(
         0,
-        'modules => ${plugin.modules.map((module) => module.specifier).join(', ')}',
+        'modules => ${plugin.modules.map((module) => module.name).join(', ')}',
       );
       _status = 'Zip manifest and modules decoded';
     });
@@ -175,14 +175,14 @@ class _ZipPluginPageState extends State<ZipPluginPage> {
     _disposed = true;
     unawaited(_client?.dispose() ?? Future<Object?>.value());
     _client = null;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
     return Scaffold(
       appBar: AppBar(title: const Text('ZIP 插件包')),
       body: Padding(

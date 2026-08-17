@@ -21,8 +21,8 @@
 - [ ] 所有 UI 功能默认基于 `quickjs` core 已有能力完成；如果实现明显繁琐、绕路或无法可靠完成，可以提出
   修改 `quickjs` core 的申请，再评估是否扩展 core。
 - [ ] **功能修复允许重构，不要一直在错误的路径上打补丁。** 当 bug 暴露生命周期或边界归属错误时，优先修正
-  架构（例如 renderer 事件经 `QuickjsUiEventIngress` 帧后进入 `dispatch()`），不要在
-  `QuickjsUiView`、controller、自定义 renderer 和示例页上分别叠加 `addPostFrameCallback`、
+  架构（例如 renderer 事件经 `JsUiEventIngress` 帧后进入 `dispatch()`），不要在
+  `JsUiView`、controller、自定义 renderer 和示例页上分别叠加 `addPostFrameCallback`、
   延迟 `setState` 或重复 `notifyListeners` 兜底。结构修复落地后应删除旧 workaround，并把新契约写入
   `docs/quickjs_ui_cross_cutting.md`。
 
@@ -77,7 +77,7 @@ export default Page({
 - [x] renderer update pipeline 支持基于 schema 的局部刷新判断；未变化的 keyed 节点不参与刷新，避免整页无差别 rebuild。
 - [ ] schema patch 传输后续按需要再补，当前先重 render + renderer 侧 diff。
 - [x] diff 第一版基于 stable key、节点类型和 props hash 判断变化；没有 key 的节点按保守策略刷新。
-- [x] 页面调用走 `QuickjsPluginClient` 或等价封装，复用插件 validate/init/call/dispose 生命周期。
+- [x] 页面调用走 `JsPluginClient` 或等价封装，复用插件 validate/init/call/dispose 生命周期。
 
 ### 开发工具与编辑提示
 
@@ -98,26 +98,26 @@ export default Page({
 ### Dart API 草案
 
 ```dart
-final view = QuickjsUiView.asset(
+final view = JsUiView.asset(
   path: 'assets/pages/counter.mjs',
   initialProps: {'title': 'Counter'},
 );
 ```
 
 ```dart
-final fileView = QuickjsUiView.file(
+final fileView = JsUiView.file(
   path: 'C:/pages/counter.mjs',
 );
 ```
 
 ```dart
-final networkView = QuickjsUiView.network(
+final networkView = JsUiView.network(
   url: Uri.parse('https://example.com/pages/counter.mjs'),
 );
 ```
 
 ```dart
-QuickjsUiView.plugin(
+JsUiView.plugin(
   plugin,
   initialProps: const <String, Object?>{},
   features: <JsFeatures>[
@@ -126,40 +126,40 @@ QuickjsUiView.plugin(
 );
 ```
 
-- [x] `QuickjsUiView.plugin(plugin, {initialProps, features})`：直接渲染一个已构建的 `JsPlugin` 页面。
-- [x] `QuickjsUiView.asset(path, {initialProps, features})`：从 Flutter asset 加载 JS module 页面；单文件和多文件入口统一走
+- [x] `JsUiView.plugin(plugin, {initialProps, features})`：直接渲染一个已构建的 `JsPlugin` 页面。
+- [x] `JsUiView.asset(path, {initialProps, features})`：从 Flutter asset 加载 JS module 页面；单文件和多文件入口统一走
   `path`。
-- [x] `QuickjsUiView.file(path, {initialProps, features})`：从本地文件系统入口加载 JS module 页面，用于桌面调试、开发工具和
+- [x] `JsUiView.file(path, {initialProps, features})`：从本地文件系统入口加载 JS module 页面，用于桌面调试、开发工具和
   外部页面目录。
-- [x] `QuickjsUiView.network(url, {initialProps, features})`：从 network 入口加载 JS module 页面；默认只做显式入口加载，
+- [x] `JsUiView.network(url, {initialProps, features})`：从 network 入口加载 JS module 页面；默认只做显式入口加载，
   缓存、校验和权限由后续 network loader 策略补齐。
-- [x] `QuickjsUiController`：提供 `reload()`、`dispatch(event)`、`state`、`dispose()` 和错误状态观察。
-- [x] `QuickjsUiErrorBuilder`：渲染 JS exception、schema error、runtime closed、资源加载失败等错误状态。
+- [x] `JsUiController`：提供 `reload()`、`dispatch(event)`、`state`、`dispose()` 和错误状态观察。
+- [x] `JsUiErrorBuilder`：渲染 JS exception、schema error、runtime closed、资源加载失败等错误状态。
 
 ### 可吸收的实现参考
 
 从外部 quickjs_ui demo 中吸收工程结构，但不照搬公开页面写法。公开协议仍保持 `Page(...)` 和
 Flutter 风格控件名称。
 
-- [x] `QuickjsUiSession`：把 runtime、page plugin、state、current tree、dispatch、refresh、dispose
+- [x] `JsUiSession`：把 runtime、page plugin、state、current tree、dispatch、refresh、dispose
   从 controller 中拆出，controller/view 只负责绑定 Flutter 生命周期和监听状态变化。
-- [x] `QuickjsUiComponentRegistry`：内置组件 + 宿主自定义组件注册，支持注册、替换、注销和列出组件类型。
-- [x] `QuickjsUiProps`：集中解析 Flutter 风格属性，例如 color、EdgeInsets、BorderRadius、BoxFit、
+- [x] `JsUiComponentRegistry`：内置组件 + 宿主自定义组件注册，支持注册、替换、注销和列出组件类型。
+- [x] `JsUiProps`：集中解析 Flutter 风格属性，例如 color、EdgeInsets、BorderRadius、BoxFit、
   Alignment、FontWeight、opacity，替换 renderer 中分散的私有解析函数。
-- [x] `QuickjsUiRenderContext`：renderer 构建子节点、派发事件、读取 theme/resource 时统一走 context。
-- [x] `QuickjsUiEventIngress`：renderer / 自定义组件事件先入队，帧结束后 flush 到
-  `QuickjsUiController.dispatch()`，避免 build 期间同步 `setState`；设计说明见
+- [x] `JsUiRenderContext`：renderer 构建子节点、派发事件、读取 theme/resource 时统一走 context。
+- [x] `JsUiEventIngress`：renderer / 自定义组件事件先入队，帧结束后 flush 到
+  `JsUiController.dispatch()`，避免 build 期间同步 `setState`；设计说明见
   `docs/quickjs_ui_cross_cutting.md`。
-- [x] `QuickjsUiNetworkLoader`：网络 `.mjs` 页面加载支持 ETag、304、错误状态和可替换 HTTP client。
+- [x] `JsUiNetworkLoader`：网络 `.mjs` 页面加载支持 ETag、304、错误状态和可替换 HTTP client。
 - [ ] 自定义组件 JS module 模板可参考外部 demo，但生成的组件仍返回 Page/UI schema，不直接操作 Widget。
 
 ### 开发模式与调试
 
-- [x] 提供 `QuickjsUiDevOptions`：控制 reload、error overlay、schema dump、diff log、resource/network log。
+- [x] 提供 `JsUiDevOptions`：控制 reload、error overlay、schema dump、diff log、resource/network log。
 - [x] 支持页面热重载：重新加载 loader/plugin，并保留 route params / initial props。
 - [x] 热重载是否保留 JS state 由 `preserveStateOnReload` 控制。
-- [x] error overlay 使用统一 `QuickjsUiError`，展示并向 inspector 传递 cause/stack、schema path、resource、action、route 和 lifecycle 上下文。
-- [x] 提供 `QuickjsUiInspector`：查看 page name、props、state、当前 UI schema、resource graph、mounted host APIs。
+- [x] error overlay 使用统一 `JsUiError`，展示并向 inspector 传递 cause/stack、schema path、resource、action、route 和 lifecycle 上下文。
+- [x] 提供 `JsUiInspector`：查看 page name、props、state、当前 UI schema、resource graph、mounted host APIs。
 - [x] 支持导出当前 page snapshot：props、state、schema、resource manifest 和最近一次 action，方便复现问题。
 - [x] 支持 rebuild / diff 诊断日志：记录刷新、复用、无 key 节点和 key 列表。
 
@@ -170,7 +170,7 @@ DOM/CSSOM/WebView。资源加载属于 `quickjs_ui` / 应用层能力，不进�
 
 - [x] 支持单页面多文件 bundle：本地开发优先从入口 `.mjs` 加载，递归解析静态相对 `import`；manifest 用于发布、
   远程、缓存和校验场景。
-- [x] 提供 `QuickjsUiBundle` / `QuickjsUiResourceResolver`：统一解析 asset、plugin zip、内存资源和可选远程资源。
+- [x] 提供 `JsUiBundle` / `JsUiResourceResolver`：统一解析 asset、plugin zip、内存资源和可选远程资源。
 - [ ] 支持第三方资源接入：图片、字体、JSON 数据、JS helper module、主题包等统一经过 resolver；
   allowlist、checksum、MIME/type 校验作为可配置安全策略。
 - [x] 支持类网页路径引用：页面内可用相对路径引用 `./components/card.js`、`./theme.json`、
@@ -243,9 +243,9 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 - [x] 支持受控输入组件：`TextField` 的 value 由 JS 控制或显式同步。
 - [ ] 支持 `TextField` 的 selection、composition 状态同步。
 - [ ] 支持弹窗/浮层交互：dialog、bottom sheet、menu、snackbar/toast 通过 host API 或 overlay schema 显式打开。
-- [x] 支持事件节流/合并策略（renderer 侧 `QuickjsUiEventDispatcher`），避免 scroll/text input/custom
+- [x] 支持事件节流/合并策略（renderer 侧 `JsUiEventDispatcher`），避免 scroll/text input/custom
   renderer 高频跨边界调用。
-- [x] renderer 事件经 `QuickjsUiEventIngress` 帧后投递，避免在 view/controller/自定义 renderer 上分别打
+- [x] renderer 事件经 `JsUiEventIngress` 帧后投递，避免在 view/controller/自定义 renderer 上分别打
   帧时序补丁。
 - [ ] 支持 disabled/loading/pressed/focused/error 等基础交互状态，状态来源仍由 JS schema 描述。
 - [ ] 支持语义化和无障碍字段：`semanticsLabel`、`tooltip`、`enabled`、`role`，由 Flutter renderer 映射到原生能力。
@@ -260,7 +260,7 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 - [x] 支持列表 item enter/exit/reorder 的基础过渡，依赖 stable key 判断节点身份。
 - [ ] 支持页面转场配置：JSUI -> JSUI、原生 -> JSUI 可声明 transition intent，由 Flutter adapter 决定是否执行。
 - [ ] 支持交互状态动画：pressed、focused、loading、error 状态变化可映射为 Flutter 原生动画。
-- [~] 控件状态动画已响应 reduced motion；宿主可通过 `QuickjsUiPerformanceController`
+- [~] 控件状态动画已响应 reduced motion；宿主可通过 `JsUiPerformanceController`
   强制 high/balanced/low/off 或根据 Flutter build/raster FrameTiming 自动降级 Canvas、粒子和
   通用 Effect。Canvas/Effect 自动合并系统 reduced motion 待补。
 - [ ] 第一版不做 JS `requestAnimationFrame`、逐帧 canvas 动画、自定义物理引擎和任意 timeline 脚本。
@@ -270,12 +270,12 @@ JS 页面。事件不传 Flutter object，也不在 schema 中传 JS function。
 导航属于 `quickjs_ui` / 应用层集成能力，不进入 `quickjs` core。原生页面与 JSUI 页面互通使用显式 host API 和
 Flutter adapter；JSUI 页面之间的路由栈由 `quickjs_ui` 自己管理，宿主只参与权限、来源和边界策略判断。
 
-- [x] `QuickjsUiNavigator`：封装原生 -> JSUI、JSUI -> 原生以及 JSUI -> JSUI 的 push/pop/replace，并接入 Flutter `Navigator`。
+- [x] `JsUiNavigator`：封装原生 -> JSUI、JSUI -> 原生以及 JSUI -> JSUI 的 push/pop/replace，并接入 Flutter `Navigator`。
 - [x] 原生 Flutter 页面 -> JSUI 页面：支持传入 `initialProps` / route params，例如
-  `QuickjsUiNavigator.pushAsset(context, 'assets/pages/detail.js', props: {'id': 1})`。
+  `JsUiNavigator.pushAsset(context, 'assets/pages/detail.js', props: {'id': 1})`。
 - [x] JSUI 页面 -> 原生 Flutter 页面：通过显式 action descriptor 或 host API 发起导航，例如
   `{ action: 'native.push', route: 'settings', params: {...} }`。
-- [x] JSUI 页面 -> JSUI 页面：由 `quickjsUiNavigation.push/replace/pop` 执行并传递 JSON-compatible params，支持按当前页面解析
+- [x] JSUI 页面 -> JSUI 页面：由 `jsUiNavigation.push/replace/pop` 执行并传递 JSON-compatible params，支持按当前页面解析
   `./` / `../` 相对路径；
   新 JSUI 页面不需要由宿主逐个注册，宿主只校验是否允许本次跳转、目标资源是否可加载以及权限是否满足。
 - [x] 页面返回值：支持 `pop(result)`，result 走 structured value codec，可被原生页面或上一个 JSUI 页面接收。
@@ -422,13 +422,13 @@ Flutter 风格对象写法：
 ### 0.1：最小可用原型
 
 - [x] 新建 `packages/lemon_js_ui`：独立 Flutter package，依赖 `quickjs`，先提供导出入口、
-  `QuickjsUiNode`、`QuickjsUiController` 和 `QuickjsUiView` 骨架。
-- [x] 实现 `QuickjsUiView.plugin()`。
+  `JsUiNode`、`JsUiController` 和 `JsUiView` 骨架。
+- [x] 实现 `JsUiView.plugin()`。
 - [x] 实现 JS 页面协议：公开写法为 `Page({ createState, build, ...methods })`，底层适配
   `init/render/dispatch`。
 - [x] 支持 `export default Page(...)` 自动包装为底层 `init/render/dispatch`，页面作者不需要手写 adapter
   exports。
-- [x] 提供 `QuickjsUiPagePlugin.singleFile/asset`，手动构造 plugin 时也能复用 default Page adapter。
+- [x] 提供 `JsUiPagePlugin.singleFile/asset`，手动构造 plugin 时也能复用 default Page adapter。
 - [x] 实现基础 `UiNode` parser 和 Flutter renderer。
 - [x] 支持 `Text/ElevatedButton/Row/Column/Container`。
 - [x] 支持 button `onPressed` 事件到 JS `dispatch()`。
@@ -440,10 +440,10 @@ Flutter 风格对象写法：
 
 ### 0.1.x：渲染与 Session 打磨
 
-- [x] 引入 `QuickjsUiSession`，沉淀 runtime/plugin/state/tree/dispatch/refresh/dispose 逻辑。
-- [x] 引入 `QuickjsUiProps`，集中解析 color、EdgeInsets、BorderRadius、Alignment、FontWeight、BoxFit、
+- [x] 引入 `JsUiSession`，沉淀 runtime/plugin/state/tree/dispatch/refresh/dispose 逻辑。
+- [x] 引入 `JsUiProps`，集中解析 color、EdgeInsets、BorderRadius、Alignment、FontWeight、BoxFit、
   opacity 等 Flutter 风格属性。
-- [x] 引入 `QuickjsUiComponentRegistry` 和 `QuickjsUiRenderContext`，先用于内置组件注册和 renderer 拆分。
+- [x] 引入 `JsUiComponentRegistry` 和 `JsUiRenderContext`，先用于内置组件注册和 renderer 拆分。
 - [x] 保持公开 JS 写法为 `export default Page(...)`，不回退到全局导出函数协议。
 - [x] 自动生成 `quickjs_ui_helpers.dart` 中的 runtime helper module：以 `js/quickjs_ui.js` 为唯一源码生成 Dart raw string，
   并在测试中校验生成产物未过期，避免 JS helper、类型声明和运行时注入模块不一致。
@@ -451,24 +451,24 @@ Flutter 风格对象写法：
 
 ### 0.2：资源加载、多文件页面与表单
 
-- [x] `QuickjsUiView.asset(path)`：从入口 `.mjs` asset 加载单文件或多文件页面，递归解析静态相对 `import`。
-- [x] `QuickjsUiView.file(path)`：从本地文件系统入口 `.mjs` 加载单文件或多文件页面，递归解析静态相对 `import`。
-- [x] `QuickjsUiBundle.asset(path)`：从入口 `.mjs` asset 构建多文件 bundle。
-- [x] `QuickjsUiBundle.file(path)`：从本地文件系统入口 `.mjs` 构建多文件 bundle。
-- [x] `QuickjsUiBundle.network(url)`：从 network 入口 `.mjs` 构建多文件 bundle，递归解析静态相对 `import`。
-- [x] `QuickjsUiView.network(url)`：从 network 入口 `.mjs` 加载单文件或多文件页面。
-- [x] `QuickjsUiBundle.manifestAsset()`：加载 manifest 描述的发布/远程包格式。
-- [x] `QuickjsUiResourceResolver`：统一处理相对路径、asset key、plugin zip 资源和资源错误。
-- [x] `QuickjsUiController.reload()`。
+- [x] `JsUiView.asset(path)`：从入口 `.mjs` asset 加载单文件或多文件页面，递归解析静态相对 `import`。
+- [x] `JsUiView.file(path)`：从本地文件系统入口 `.mjs` 加载单文件或多文件页面，递归解析静态相对 `import`。
+- [x] `JsUiBundle.asset(path)`：从入口 `.mjs` asset 构建多文件 bundle。
+- [x] `JsUiBundle.file(path)`：从本地文件系统入口 `.mjs` 构建多文件 bundle。
+- [x] `JsUiBundle.network(url)`：从 network 入口 `.mjs` 构建多文件 bundle，递归解析静态相对 `import`。
+- [x] `JsUiView.network(url)`：从 network 入口 `.mjs` 加载单文件或多文件页面。
+- [x] `JsUiBundle.manifestAsset()`：加载 manifest 描述的发布/远程包格式。
+- [x] `JsUiResourceResolver`：统一处理相对路径、asset key、plugin zip 资源和资源错误。
+- [x] `JsUiController.reload()`。
 - [x] network bundle 开启后支持基础 `reload()`：重新拉取入口/manifest/resources 并刷新页面。
-- [x] `QuickjsUiNetworkLoader`：支持 network `.mjs` 加载、相对 import 解析、可替换 fetch client 和结构化状态码错误。
+- [x] `JsUiNetworkLoader`：支持 network `.mjs` 加载、相对 import 解析、可替换 fetch client 和结构化状态码错误。
 - [x] tool：`quickjs_ui_dev_server.dart`，本地 HTTP 服务 `examples/lemon_js_example/assets/quickjs_ui`，用于 network 页面开发调试。
-- [x] example：network counter 页面，通过 `QuickjsUiView.network(url)` 加载本地 dev server 页面。
-- [x] `QuickjsUiNetworkLoader`：补充 ETag、304 not modified 和内存缓存复用。
-- [x] `QuickjsUiNetworkLoader`：提供 request/response/cacheStore/cacheHit 日志回调，demo 可观察缓存命中。
-- [x] `QuickjsUiController.refresh()`：只用当前 state 重新 render，不重新加载资源。
-- [x] `QuickjsUiController.restart()`：使用当前 plugin 重新初始化页面，不重新加载资源。
-- [x] `QuickjsUiController.reload()`：重新加载 asset/file/network 源码并重建页面。
+- [x] example：network counter 页面，通过 `JsUiView.network(url)` 加载本地 dev server 页面。
+- [x] `JsUiNetworkLoader`：补充 ETag、304 not modified 和内存缓存复用。
+- [x] `JsUiNetworkLoader`：提供 request/response/cacheStore/cacheHit 日志回调，demo 可观察缓存命中。
+- [x] `JsUiController.refresh()`：只用当前 state 重新 render，不重新加载资源。
+- [x] `JsUiController.restart()`：使用当前 plugin 重新初始化页面，不重新加载资源。
+- [x] `JsUiController.reload()`：重新加载 asset/file/network 源码并重建页面。
 - [x] 支持 `Image/ListView/TextField`。
 - [x] 支持 input `onChanged` 事件。
 - [x] 支持 `TextField` 受控输入、submit 和基础软键盘配置。
@@ -492,17 +492,17 @@ Flutter 风格对象写法：
 ### 0.3：宿主能力与页面能力边界
 
 - [x] 支持 `mounts` 显式传入。
-- [x] 提供 `QuickjsUiHostCapabilities` 封装包：在 `JsFeatures` 之上组织 UI 层宿主能力，支持系统默认能力和用户自定义能力组合。
-- [x] `QuickjsUiHostCapabilities` 支持参数配置启用/禁用能力，例如 `toast`、`confirm`、`dialog`、`navigation`、
+- [x] 提供 `JsUiHostCapabilities` 封装包：在 `JsFeatures` 之上组织 UI 层宿主能力，支持系统默认能力和用户自定义能力组合。
+- [x] `JsUiHostCapabilities` 支持参数配置启用/禁用能力，例如 `toast`、`confirm`、`dialog`、`navigation`、
   `clipboard`、`storage`、`network`、`fileSystem`、`nativeCall`，默认只启用安全的基础能力。
-- [x] `QuickjsUiHostCapabilities` 支持传入多个 capability group，并按顺序合并为 mounts；冲突时提供明确策略
+- [x] `JsUiHostCapabilities` 支持传入多个 capability group，并按顺序合并为 mounts；冲突时提供明确策略
   `reject` / `replace` / `namespace`，避免能力名被静默覆盖。
 - [x] 系统默认 capability group 可包含 UI、网络、文件系统、任意原生调用等能力定义；敏感能力默认关闭，
   必须由宿主通过配置显式启用、限制范围并声明权限。
 - [x] 用户自定义 capability group 可声明 namespace、mounts 和所需 permission。
 - [x] 用户自定义 capability group 后续补方法列表、输入/输出 schema、是否 async 等声明。
-- [x] 提供 `QuickjsUiHostApi` 示例：toast、confirm、storage、nativeCall 等应用层能力，并通过
-  `QuickjsUiHostCapabilities` 显式启用。
+- [x] 提供 `JsUiHostApi` 示例：toast、confirm、storage、nativeCall 等应用层能力，并通过
+  `JsUiHostCapabilities` 显式启用。
 - [x] 补充 navigation intent 的完整示例和 route registry 对接。
 - [x] Flutter 暴露给 JS 的方法必须显式注册，并声明输入/输出 structured value 形状。
 - [x] JS 调用 Flutter 方法只作为宿主能力访问，不改变“JS 持有页面状态和控制流”的默认模型。
@@ -522,14 +522,14 @@ Flutter 风格对象写法：
 
 ### 0.3.1：原生 / JSUI 页面互通
 
-- [x] 实现 `QuickjsUiNavigator` 和 route registry。
+- [x] 实现 `JsUiNavigator` 和 route registry。
 - [x] 原生 Flutter 页面 push JSUI 页面并传参。
 - [x] JSUI 页面请求打开原生 Flutter 页面并传参。
-- [x] JSUI 页面通过独立 `quickjsUiNavigation.push({ route, path, params })` push 另一个 JSUI 页面并传参，
+- [x] JSUI 页面通过独立 `jsUiNavigation.push({ route, path, params })` push 另一个 JSUI 页面并传参，
   支持通过 `./` / `../` 相对路径打开新页面；该跳转由 JSUI router 自主管理，
   新页面不需要宿主 route registry 逐个注册，宿主只限制是否允许跳转和加载目标资源。
 - [x] JSUI 内部跳转支持宿主策略：可预设 route/path allowlist，也可通过实时回调提醒宿主并决定允许或拒绝。
-- [x] 支持 `await quickjsUiNavigation.push()` 按 Flutter `Navigator.push` 语义等待 `pop(result)`，并通过 structured route result 回传。
+- [x] 支持 `await jsUiNavigation.push()` 按 Flutter `Navigator.push` 语义等待 `pop(result)`，并通过 structured route result 回传。
 - [x] JSUI 页面支持通过显式按钮返回原生页并传 structured result；系统返回事件可被 JSUI 消费，
   当 JSUI 内部路由栈不为空时优先触发 JSUI `pop()`，否则再回退到原生返回。
 - [x] 支持 JSUI router `replace({ route, path, params })` 替换当前页；`replace()` 保留当前 pending result，
@@ -537,7 +537,7 @@ Flutter 风格对象写法：
 - [x] 支持页面转场 transition intent，由 Flutter route adapter 映射为原生转场；JSUI 内部 router
   动画并入 0.4 可见性生命周期与动画能力处理。
 - [x] 同步 route lifecycle：`onRouteEnter`、`onRouteLeave`、`onRouteResult`；route lifecycle、dispatch 和普通 lifecycle 共享单一有序状态通道，禁止并发修改 JS state。
-- [x] `quickjsUiNavigation` 按 route entry 注入并限制当前页单次 pending navigation，避免非当前页或重复调用持续入栈。
+- [x] `jsUiNavigation` 按 route entry 注入并限制当前页单次 pending navigation，避免非当前页或重复调用持续入栈。
 - [x] 支持 JSUI 页面跳转状态保持：JSUI router 持有已 push 页面的 state/schema snapshot，用于 route 返回、
   后台恢复和开发 reload 场景。
 - [x] example：原生列表页 -> JSUI 详情页 -> JSUI 子页 -> 原生设置页 -> 返回结果。
@@ -550,8 +550,8 @@ Flutter 风格对象写法：
 
 ### 0.4：组件化
 
-- [x] Dart 侧自定义 renderer registry：允许宿主注册自定义 `type` 到 Flutter Widget builder，并贯通 `QuickjsUiView` /
-  `QuickjsUiNavigator`。
+- [x] Dart 侧自定义 renderer registry：允许宿主注册自定义 `type` 到 Flutter Widget builder，并贯通 `JsUiView` /
+  `JsUiNavigator`。
 - [x] JS 侧轻量组件约定：组件仍返回 UI schema，不直接返回 Widget。
 - [x] 支持 props 下发和事件上抛的受限协议。
 - [x] 支持完整页面可见性生命周期：`onShow`、`onHide`、`onMount`、`onDispose`。
@@ -579,7 +579,7 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 
 - [x] Schema Versioning / Compatibility：schema version、helper/runtime protocol version、deprecated props、
   unknown prop 策略、minimum quickjs_ui version；当前 v1 通过 `Page().capabilities()` 暴露元数据，并在
-  `QuickjsUiSession` 加载期拒绝不兼容 schema/runtime/helper。
+  `JsUiSession` 加载期拒绝不兼容 schema/runtime/helper。
 - [x] Conformance Tests：已补 schema fixture、renderer smoke、lifecycle sequence、navigation sequence、
   event backpressure、bundle compatibility；golden 测试后续按视觉稳定性需要再补。
 - [x] Custom Renderer Lifecycle：自定义 renderer 支持 keyed controller 创建/更新/释放，以及 show/hide、
@@ -606,8 +606,8 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 
 依赖 0.4.1 的 schema/生命周期/兼容性基线，再补开发期观测与复现能力。
 
-- [x] `QuickjsUiDevOptions`：dev reload、error overlay、schema dump、diff/resource log。
-- [x] `QuickjsUiInspector`：查看 page、props、state、schema、resource graph、host APIs。
+- [x] `JsUiDevOptions`：dev reload、error overlay、schema dump、diff/resource log。
+- [x] `JsUiInspector`：查看 page、props、state、schema、resource graph、host APIs。
 - [x] 支持导出 page snapshot，包含 props、state、schema、manifest 和最近一次 action。
 - [x] inspector 记录 lifecycle timeline，包含 route/app/widget 生命周期事件顺序。
 - [x] example：开发调试面板。
@@ -615,10 +615,10 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 
 ### 0.4.3.x：网络 Inspector
 
-- [x] `QuickjsUiNetworkRecord` / `QuickjsUiNetworkJournal`：统一记录 bundle 加载与 host `network()` 请求。
-- [x] `QuickjsUiNetworkLoader` 日志补充 `id`、耗时、`bodyBytes`、错误信息。
-- [x] `QuickjsUiInspectorPanel` 新增「网络」Tab，展示请求方法、URL、状态码、耗时与缓存命中。
-- [x] `QuickjsUiController.instrumentHostHandlers()`：自动记录 JS 宿主网络 API 调用。
+- [x] `JsUiNetworkRecord` / `JsUiNetworkJournal`：统一记录 bundle 加载与 host `network()` 请求。
+- [x] `JsUiNetworkLoader` 日志补充 `id`、耗时、`bodyBytes`、错误信息。
+- [x] `JsUiInspectorPanel` 新增「网络」Tab，展示请求方法、URL、状态码、耗时与缓存命中。
+- [x] `JsUiController.instrumentHostHandlers()`：自动记录 JS 宿主网络 API 调用。
 - [x] example：网络调试页（需本地 dev server）。
 - [x] 测试：journal 合并、host 请求记录、snapshot 导出。
 
@@ -628,7 +628,7 @@ AnimatedList），再决定 quickjs_ui 暴露的 serializable schema 子集，�
 - [x] 支持 entry/modules/resources/routes/permissions/version/checksum。
 - [x] 支持 asset/file/network 发布包的统一加载入口，zip 包按同一根目录格式接入。
 - [x] 提供 `dart run quickjs_ui:manifest` 工具，扫描 `.mjs` 并生成/检查 module sha256。
-- [x] `QuickjsUiNetworkLoader`：发布包模块 checksum 校验与 ETag 条件请求。
+- [x] `JsUiNetworkLoader`：发布包模块 checksum 校验与 ETag 条件请求。
 - [x] 支持开发模式 force refresh cache busting。
 - [x] 支持远程 bundle force refresh、conditional refresh、stale-while-revalidate。
 - [x] 补充持久缓存策略：内存/file cache store，生产应用可自定义淘汰和迁移策略。

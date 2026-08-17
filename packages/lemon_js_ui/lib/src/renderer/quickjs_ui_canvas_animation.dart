@@ -1,9 +1,9 @@
 part of 'quickjs_ui_canvas_component.dart';
 
-typedef _CanvasClock = QuickjsUiAnimationClock;
+typedef _CanvasClock = JsUiAnimationClock;
 
 bool _containsAnimation(Object? value) =>
-    QuickjsUiAnimationTimeline.from(value).hasAnimations;
+    JsUiAnimationTimeline.from(value).hasAnimations;
 
 double _number(Object? raw, String name, _CanvasClock clock) {
   final value = _optionalNumber(raw, clock);
@@ -14,5 +14,5 @@ double _number(Object? raw, String name, _CanvasClock clock) {
 }
 
 double? _optionalNumber(Object? raw, _CanvasClock clock) {
-  return quickjsUiAnimatedNumber(raw, clock);
+  return jsUiAnimatedNumber(raw, clock);
 }

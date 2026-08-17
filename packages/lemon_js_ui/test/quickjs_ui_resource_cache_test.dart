@@ -9,7 +9,7 @@ void main() {
 
   test('asset cache reuses values and coalesces concurrent loads', () async {
     final bundle = _CountingAssetBundle(_pageSources());
-    final cache = QuickjsUiResourceCache();
+    final cache = JsUiResourceCache();
     final results = await Future.wait(<Future<Object>>[
       cache.loadAsset(path: 'pages/a.mjs', bundle: bundle),
       cache.loadAsset(path: 'pages/a.mjs', bundle: bundle),
@@ -21,7 +21,7 @@ void main() {
 
   test('asset cache evicts least recently used entries', () async {
     final bundle = _CountingAssetBundle(_pageSources());
-    final cache = QuickjsUiResourceCache(maxEntries: 1);
+    final cache = JsUiResourceCache(maxEntries: 1);
     await cache.loadAsset(path: 'pages/a.mjs', bundle: bundle);
     await cache.loadAsset(path: 'pages/b.mjs', bundle: bundle);
     await cache.loadAsset(path: 'pages/a.mjs', bundle: bundle);
@@ -32,15 +32,13 @@ void main() {
 
   test('oversized entries and expired entries are reloaded', () async {
     final bundle = _CountingAssetBundle(_pageSources());
-    final tooSmall = QuickjsUiResourceCache(maxBytes: 1);
+    final tooSmall = JsUiResourceCache(maxBytes: 1);
     await tooSmall.loadAsset(path: 'pages/a.mjs', bundle: bundle);
     await tooSmall.loadAsset(path: 'pages/a.mjs', bundle: bundle);
     expect(tooSmall.length, 0);
     expect(bundle.loads['pages/a.mjs'], 2);
 
-    final expiring = QuickjsUiResourceCache(
-      maxAge: const Duration(milliseconds: 1),
-    );
+    final expiring = JsUiResourceCache(maxAge: const Duration(milliseconds: 1));
     await expiring.loadAsset(path: 'pages/b.mjs', bundle: bundle);
     await Future<void>.delayed(const Duration(milliseconds: 5));
     await expiring.loadAsset(path: 'pages/b.mjs', bundle: bundle);
@@ -49,7 +47,7 @@ void main() {
 
   test('invalidate removes matching resource variants', () async {
     final bundle = _CountingAssetBundle(_pageSources());
-    final cache = QuickjsUiResourceCache();
+    final cache = JsUiResourceCache();
     await cache.loadAsset(path: 'pages/a.mjs', bundle: bundle);
     cache.invalidate('pages/a.mjs');
     await cache.loadAsset(path: 'pages/a.mjs', bundle: bundle);

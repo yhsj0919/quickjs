@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -6,22 +9,19 @@ import 'quickjs_ui_render_context.dart';
 
 export 'quickjs_ui_component_types.dart';
 
-QuickjsUiNode? quickjsUiNodeProp(Object? value) {
+JsUiNode? jsUiNodeProp(Object? value) {
   if (value == null) {
     return null;
   }
   if (value is Map) {
-    return QuickjsUiNode.fromMap(
+    return JsUiNode.fromMap(
       value.map((key, value) => MapEntry<String, Object?>('$key', value)),
     );
   }
   throw const FormatException('quickjs_ui node property must be an object');
 }
 
-List<Widget>? quickjsUiNodeListProp(
-  QuickjsUiRenderContext context,
-  Object? value,
-) {
+List<Widget>? jsUiNodeListProp(JsUiRenderContext context, Object? value) {
   if (value == null) {
     return null;
   }
@@ -30,36 +30,36 @@ List<Widget>? quickjsUiNodeListProp(
   }
   return <Widget>[
     for (final item in value)
-      if (quickjsUiNodeProp(item) case final node?) context.build(node),
+      if (jsUiNodeProp(item) case final node?) context.build(node),
   ];
 }
 
-PreferredSizeWidget quickjsUiAsPreferredSizeWidget(Widget widget, String name) {
+PreferredSizeWidget jsUiAsPreferredSizeWidget(Widget widget, String name) {
   if (widget is PreferredSizeWidget) {
     return widget;
   }
   throw FormatException('quickjs_ui $name must render a PreferredSizeWidget');
 }
 
-Widget? quickjsUiOptionalText(String? value) {
+Widget? jsUiOptionalText(String? value) {
   if (value == null) {
     return null;
   }
   return Text(value);
 }
 
-double quickjsUiGap(QuickjsUiRenderContext context, QuickjsUiNode node) {
+double jsUiGap(JsUiRenderContext context, JsUiNode node) {
   return context.spacing(node.props['gap'], name: 'gap') ?? 0;
 }
 
-Duration? quickjsUiAnimationDuration(QuickjsUiNode node) {
-  return QuickjsUiProps.duration(
+Duration? jsUiAnimationDuration(JsUiNode node) {
+  return JsUiProps.duration(
     node.props['animationDurationMs'] ?? node.props['durationMs'],
     name: 'animation duration',
   );
 }
 
-EdgeInsets quickjsUiEdgeInsets(EdgeInsetsGeometry? value) {
+EdgeInsets jsUiEdgeInsets(EdgeInsetsGeometry? value) {
   return switch (value) {
     null => EdgeInsets.zero,
     EdgeInsets edgeInsets => edgeInsets,
@@ -67,7 +67,7 @@ EdgeInsets quickjsUiEdgeInsets(EdgeInsetsGeometry? value) {
   };
 }
 
-IconData quickjsUiIconData(String? name) {
+IconData jsUiIconData(String? name) {
   return switch (name) {
     'add' => Icons.add,
     'arrowBack' || 'back' => Icons.arrow_back,
@@ -92,8 +92,8 @@ IconData quickjsUiIconData(String? name) {
   };
 }
 
-List<BottomNavigationBarItem> quickjsUiBottomNavigationItems(
-  QuickjsUiRenderContext context,
+List<BottomNavigationBarItem> jsUiBottomNavigationItems(
+  JsUiRenderContext context,
   Object? value,
 ) {
   if (value is! List || value.length < 2) {
@@ -107,7 +107,7 @@ List<BottomNavigationBarItem> quickjsUiBottomNavigationItems(
 }
 
 BottomNavigationBarItem _bottomNavigationItem(
-  QuickjsUiRenderContext context,
+  JsUiRenderContext context,
   Object? value,
 ) {
   if (value is! Map) {
@@ -118,19 +118,19 @@ BottomNavigationBarItem _bottomNavigationItem(
   final props = value.map(
     (key, value) => MapEntry<String, Object?>('$key', value),
   );
-  final icon = quickjsUiNodeProp(props['icon']);
-  final activeIcon = quickjsUiNodeProp(props['activeIcon']);
+  final icon = jsUiNodeProp(props['icon']);
+  final activeIcon = jsUiNodeProp(props['activeIcon']);
   return BottomNavigationBarItem(
     icon: icon == null
-        ? Icon(quickjsUiIconData(QuickjsUiProps.string(props['iconName'])))
+        ? Icon(jsUiIconData(JsUiProps.string(props['iconName'])))
         : context.build(icon),
     activeIcon: activeIcon == null ? null : context.build(activeIcon),
-    label: QuickjsUiProps.string(props['label']) ?? '',
-    tooltip: QuickjsUiProps.string(props['tooltip']),
+    label: JsUiProps.string(props['label']) ?? '',
+    tooltip: JsUiProps.string(props['tooltip']),
   );
 }
 
-List<Widget> quickjsUiTabs(QuickjsUiRenderContext context, Object? value) {
+List<Widget> jsUiTabs(JsUiRenderContext context, Object? value) {
   if (value is! List || value.isEmpty) {
     throw const FormatException(
       'quickjs_ui TabBar.tabs must be a non-empty list',
@@ -139,7 +139,7 @@ List<Widget> quickjsUiTabs(QuickjsUiRenderContext context, Object? value) {
   return <Widget>[for (final tab in value) _tab(context, tab)];
 }
 
-Widget _tab(QuickjsUiRenderContext context, Object? value) {
+Widget _tab(JsUiRenderContext context, Object? value) {
   if (value is String) {
     return Tab(text: value);
   }
@@ -147,10 +147,10 @@ Widget _tab(QuickjsUiRenderContext context, Object? value) {
     final props = value.map(
       (key, value) => MapEntry<String, Object?>('$key', value),
     );
-    final child = quickjsUiNodeProp(props['child']);
-    final icon = quickjsUiNodeProp(props['icon']);
+    final child = jsUiNodeProp(props['child']);
+    final icon = jsUiNodeProp(props['icon']);
     return Tab(
-      text: QuickjsUiProps.string(props['text'] ?? props['label']),
+      text: JsUiProps.string(props['text'] ?? props['label']),
       icon: icon == null ? null : context.build(icon),
       child: child == null ? null : context.build(child),
     );

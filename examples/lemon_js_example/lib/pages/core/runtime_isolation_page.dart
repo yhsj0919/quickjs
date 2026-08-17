@@ -12,8 +12,8 @@ class RuntimeIsolationPage extends StatefulWidget {
 }
 
 class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
-  Quickjs? _first;
-  Quickjs? _second;
+  JsEngine? _first;
+  JsEngine? _second;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -38,8 +38,8 @@ class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
       _first = null;
       _second = null;
 
-      final first = await Quickjs.create();
-      final second = await Quickjs.create();
+      final first = await JsEngine.create();
+      final second = await JsEngine.create();
       if (!mounted || _disposed) {
         await first.dispose();
         await second.dispose();
@@ -50,7 +50,7 @@ class _RuntimeIsolationPageState extends State<RuntimeIsolationPage> {
         _first = first;
         _second = second;
         _busy = false;
-        _status = '两个 runtime 已就绪（${first.quickjsVersion}）';
+        _status = '两个 runtime 已就绪（${first.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {

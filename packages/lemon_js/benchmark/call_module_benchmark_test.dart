@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lemon_js/lemon_js.dart';
+import 'package:lemon_js/lemon_js_context.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +18,7 @@ void main() {
       ),
       modules: const <JsPluginModule>[
         JsPluginModule(
-          specifier: 'call_module_benchmark/main',
+          name: 'call_module_benchmark/main',
           source: 'export function empty() { return null; }',
         ),
       ],
@@ -28,14 +28,14 @@ void main() {
     final context = await runtime.createContext(plugins: <JsPlugin>[plugin]);
     try {
       for (var index = 0; index < warmupIterations; index += 1) {
-        await context.callPlugin(plugin, 'empty', const <Object?>[]);
+        await context.callPluginExport(plugin, 'empty', const <Object?>[]);
       }
 
       final samples = <int>[];
       final total = Stopwatch()..start();
       for (var index = 0; index < iterations; index += 1) {
         final sample = Stopwatch()..start();
-        await context.callPlugin(plugin, 'empty', const <Object?>[]);
+        await context.callPluginExport(plugin, 'empty', const <Object?>[]);
         samples.add(sample.elapsedMicroseconds);
       }
       total.stop();

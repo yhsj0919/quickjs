@@ -13,7 +13,7 @@ class StreamCallbackPage extends StatefulWidget {
 }
 
 class _StreamCallbackPageState extends State<StreamCallbackPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   StreamSubscription<Object?>? _sinkSubscription;
   bool _disposed = false;
   bool _busy = false;
@@ -36,25 +36,25 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
     try {
       await _sinkSubscription?.cancel();
       _sinkSubscription = null;
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         onConsole: (event) {
           _appendLog('JS console.${event.level.name}: ${event.text}');
         },
       );
-      await _bindCallbacks(quickjs);
+      await _bindCallbacks(engine);
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -67,8 +67,8 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
     }
   }
 
-  Future<void> _bindCallbacks(Quickjs quickjs) async {
-    await quickjs.injectFunction('hostCount', (args) {
+  Future<void> _bindCallbacks(JsEngine engine) async {
+    await engine.injectFunction('hostCount', (args) {
       final max = (args.single as num).toInt();
       return Stream<Object?>.periodic(
         const Duration(seconds: 1),
@@ -76,7 +76,7 @@ class _StreamCallbackPageState extends State<StreamCallbackPage> {
       ).take(max);
     });
 
-    final sinkStream = await quickjs.bindStream('progress');
+    final sinkStream = await engine.bindStream('progress');
     _sinkSubscription = sinkStream.listen(
       (value) => _appendLog('Dart 收到 JS sink: $value'),
       onError: (Object error) => _appendLog('JS sink error: $error'),
@@ -151,12 +151,12 @@ return 'error sent';
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   void _appendLog(String message) {
@@ -173,14 +173,14 @@ return 'error sent';
     _disposed = true;
     unawaited(_sinkSubscription?.cancel() ?? Future<void>.value());
     _sinkSubscription = null;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('流式回调')),

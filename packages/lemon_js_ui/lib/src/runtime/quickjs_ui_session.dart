@@ -4,7 +4,8 @@ import 'dart:convert';
 
 // ignore_for_file: prefer_initializing_formals
 
-import 'package:lemon_js/lemon_js.dart';
+import 'package:lemon_js/lemon_js_context.dart';
+import 'package:lemon_js/lemon_js_internal.dart';
 
 import '../diagnostics/quickjs_ui_error.dart';
 import '../diagnostics/quickjs_ui_inspector.dart';
@@ -12,31 +13,35 @@ import '../diagnostics/quickjs_ui_load_metrics.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_helpers.dart';
+import 'quickjs_ui_lifecycle.dart';
 import 'quickjs_ui_runtime.dart';
 
-const int _quickjsUiStackLimitBytes = 1024 * 1024;
-const int _minimumSupportedQuickjsUiSchemaVersion = 1;
-const int _maximumSupportedQuickjsUiSchemaVersion = quickjsUiSchemaVersion;
-const int _currentQuickjsUiRuntimeVersion = 1;
-const String _quickjsUiPageMountSlot = 'quickjs_ui:page';
-const int _quickjsUiDispatchChunkSize = 128;
+const int _jsUiStackLimitBytes = 1024 * 1024;
+const int _minimumSupportedJsUiSchemaVersion = 1;
+const int _maximumSupportedJsUiSchemaVersion = jsUiSchemaVersion;
+const int _currentJsUiRuntimeVersion = 1;
+const String _jsUiPageFeaturesSlot = 'quickjs_ui:page';
+const int _jsUiDispatchChunkSize = 128;
 
-final class QuickjsUiSession {
+/// Owns or attaches to a Lemon JS host and manages one loaded JSUI page.
+final class JsUiSession {
   static final Expando<Object> _attachedEngineLeases = Expando<Object>(
     'quickjs_ui attached engine lease',
   );
 
   // Keep the public constructor parameters named `engine` and `onConsole`.
-  QuickjsUiSession({
-    Quickjs? engine,
-    QuickjsUiRuntime? runtime,
+  /// Creates a session using an attached [engine], shared [runtime], or a
+  /// lazily created owned engine. [engine] and [runtime] are mutually exclusive.
+  JsUiSession({
+    JsEngine? engine,
+    JsUiRuntime? runtime,
     JsConsoleSink? onConsole,
-    QuickjsUiInspector? inspector,
+    JsUiInspector? inspector,
   }) : assert(engine == null || runtime == null),
        _runtime = runtime,
        _engineBinding = engine == null
            ? null
-           : _QuickjsUiEngineBinding.attached(engine),
+           : _JsUiEngineBinding.attached(engine),
        _onConsole = onConsole,
        inspector = inspector {
     if (engine != null) {
@@ -44,15 +49,17 @@ final class QuickjsUiSession {
     }
   }
 
-  _QuickjsUiEngineBinding? _engineBinding;
-  final QuickjsUiRuntime? _runtime;
+  _JsUiEngineBinding? _engineBinding;
+  final JsUiRuntime? _runtime;
   final JsConsoleSink? _onConsole;
-  QuickjsUiInspector? inspector;
-  _QuickjsUiPageBinding? _pageBinding;
+
+  /// Inspector receiving page diagnostics, or `null` when disabled.
+  JsUiInspector? inspector;
+  _JsUiPageBinding? _pageBinding;
   Object? _state;
   int? _stateVersion;
-  QuickjsUiNode? _node;
-  QuickjsUiLoadMetrics? _lastLoadMetrics;
+  JsUiNode? _node;
+  JsUiLoadMetrics? _lastLoadMetrics;
   final Object _engineLease = Object();
   bool _disposed = false;
   Future<void>? _disposeFuture;
@@ -60,28 +67,49 @@ final class QuickjsUiSession {
   int _activeCalls = 0;
   final _SessionOperationScheduler _scheduler = _SessionOperationScheduler();
 
-  Quickjs? get engine => _engineBinding?.engine;
+  /// Attached or owned engine, when the session is engine-backed.
+  JsEngine? get engine => _engineBinding?.engine;
+
+  /// Active context, when the session is runtime-backed.
   JsContext? get context => _engineBinding?.context;
+
+  /// Currently loaded page plugin.
   JsPlugin? get plugin => _pageBinding?.plugin;
+
+  /// Immutable properties of the current page.
   Map<String, Object?> get props =>
       _pageBinding?.props ?? const <String, Object?>{};
+
+  /// Host feature groups installed for the current page.
   List<JsFeatures> get features =>
       _pageBinding?.features ?? const <JsFeatures>[];
+
+  /// Permission names granted to the current page.
   Set<String> get grantedPermissions =>
       _pageBinding?.grantedPermissions ?? const <String>{};
-  QuickjsUiPermissionPolicy? get permissionPolicy =>
-      _pageBinding?.permissionPolicy;
+
+  /// Permission policy used for the current page.
+  JsUiPermissionPolicy? get permissionPolicy => _pageBinding?.permissionPolicy;
+
+  /// Latest JavaScript-owned state snapshot.
   Object? get state => _state;
-  QuickjsUiNode? get node => _node;
-  QuickjsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
+
+  /// Latest committed JSUI node tree.
+  JsUiNode? get node => _node;
+
+  /// Timing metrics from the latest successful page load.
+  JsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
+
+  /// Whether this session has been disposed.
   bool get isDisposed => _disposed;
 
+  /// Loads [plugin], validates permissions, and commits its initial schema.
   Future<void> loadPlugin(
     JsPlugin plugin, {
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
+    JsUiPermissionPolicy? permissionPolicy,
   }) async {
     return _enqueue(() async {
       final total = Stopwatch()..start();
@@ -98,8 +126,8 @@ final class QuickjsUiSession {
         plugin: plugin,
         grantedPermissions: grantedPermissions,
       );
-      final requestedMounts = List<JsFeatures>.unmodifiable(features);
-      final hostBinding = await _hostForPage(requestedMounts, plugin);
+      final requestedFeatures = List<JsFeatures>.unmodifiable(features);
+      final hostBinding = await _hostForPage(requestedFeatures, plugin);
       final host = hostBinding.host;
       record('runtimeAcquire');
       if (_disposed) {
@@ -114,18 +142,18 @@ final class QuickjsUiSession {
         return;
       }
       if (!hostBinding.pagePluginInstalled) {
-        await _mountPagePlugin(host, plugin);
+        await _loadPagePlugin(host, plugin);
       }
-      record('pluginMount');
+      record('pluginLoad');
       if (_disposed) {
         return;
       }
       _disposeLifecycleSent = false;
-      final page = _QuickjsUiPageBinding(
+      final page = _JsUiPageBinding(
         plugin: plugin,
         client: JsPluginClient(host, plugin),
         props: Map<String, Object?>.unmodifiable(initialProps),
-        features: requestedMounts,
+        features: requestedFeatures,
         grantedPermissions: Set<String>.unmodifiable(grantedPermissions),
         permissionPolicy: permissionPolicy,
       );
@@ -157,7 +185,7 @@ final class QuickjsUiSession {
           record('firstCommit');
         }
         inspector?.recordLifecycle('widget', 'load');
-        _lastLoadMetrics = QuickjsUiLoadMetrics(
+        _lastLoadMetrics = JsUiLoadMetrics(
           stages: Map<String, Duration>.unmodifiable(stages),
           totalToSchema: total.elapsed,
         );
@@ -170,8 +198,8 @@ final class QuickjsUiSession {
     });
   }
 
-  Future<_QuickjsUiPageHost> _hostForPage(
-    List<JsFeatures> requestedMounts,
+  Future<_JsUiPageHost> _hostForPage(
+    List<JsFeatures> requestedFeatures,
     JsPlugin plugin,
   ) async {
     final currentBinding = _engineBinding;
@@ -179,18 +207,15 @@ final class QuickjsUiSession {
       final runtime = _runtime;
       if (runtime != null) {
         final lease = await runtime.acquire(
-          features: requestedMounts,
+          features: requestedFeatures,
           pagePlugin: plugin,
         );
-        _engineBinding = _QuickjsUiEngineBinding.leased(lease, requestedMounts);
-        return _QuickjsUiPageHost(
-          host: lease.context,
-          pagePluginInstalled: true,
-        );
+        _engineBinding = _JsUiEngineBinding.leased(lease, requestedFeatures);
+        return _JsUiPageHost(host: lease.context, pagePluginInstalled: true);
       }
-      final created = await _createOwnedEngine(requestedMounts);
-      _engineBinding = _QuickjsUiEngineBinding.owned(created, requestedMounts);
-      return _QuickjsUiPageHost(host: created, pagePluginInstalled: false);
+      final created = await _createOwnedEngine(requestedFeatures);
+      _engineBinding = _JsUiEngineBinding.owned(created, requestedFeatures);
+      return _JsUiPageHost(host: created, pagePluginInstalled: false);
     }
     final current = currentBinding.host;
     final currentLease = currentBinding.runtimeLease;
@@ -202,62 +227,59 @@ final class QuickjsUiSession {
       _engineBinding = null;
       await currentLease.release();
       final replacement = await _runtime!.acquire(
-        features: requestedMounts,
+        features: requestedFeatures,
         pagePlugin: plugin,
       );
-      _engineBinding = _QuickjsUiEngineBinding.leased(
+      _engineBinding = _JsUiEngineBinding.leased(
         replacement,
-        requestedMounts,
+        requestedFeatures,
       );
-      return _QuickjsUiPageHost(
+      return _JsUiPageHost(
         host: replacement.context,
         pagePluginInstalled: true,
       );
     }
     if (!currentBinding.ownsEngine) {
-      if (requestedMounts.isNotEmpty) {
+      if (requestedFeatures.isNotEmpty) {
         throw StateError(
-          'QuickjsUiSession cannot install host features on an attached engine; '
-          'configure the Quickjs engine before attaching it',
+          'JsUiSession cannot install host features on an attached engine; '
+          'configure the JsEngine engine before attaching it',
         );
       }
-      await _ensureHelperModuleMounted(currentBinding.engine!);
-      return _QuickjsUiPageHost(
+      await _ensureHelperFeaturesLoaded(currentBinding.engine!);
+      return _JsUiPageHost(
         host: currentBinding.engine!,
         pagePluginInstalled: false,
       );
     }
-    if (_sameMountConfiguration(currentBinding.features, requestedMounts)) {
-      return _QuickjsUiPageHost(host: current, pagePluginInstalled: false);
+    if (_sameFeatureConfiguration(currentBinding.features, requestedFeatures)) {
+      return _JsUiPageHost(host: current, pagePluginInstalled: false);
     }
 
     await _closeCurrentPage();
     _engineBinding = null;
     await _disposeHost(current);
-    final replacement = await _createOwnedEngine(requestedMounts);
-    _engineBinding = _QuickjsUiEngineBinding.owned(
-      replacement,
-      requestedMounts,
-    );
-    return _QuickjsUiPageHost(host: replacement, pagePluginInstalled: false);
+    final replacement = await _createOwnedEngine(requestedFeatures);
+    _engineBinding = _JsUiEngineBinding.owned(replacement, requestedFeatures);
+    return _JsUiPageHost(host: replacement, pagePluginInstalled: false);
   }
 
-  Future<Quickjs> _createOwnedEngine(List<JsFeatures> features) {
-    return Quickjs.create(
+  Future<JsEngine> _createOwnedEngine(List<JsFeatures> features) {
+    return JsEngine.create(
       onConsole: _onConsole,
-      options: JsOptions(stackLimitBytes: _quickjsUiStackLimitBytes),
-      features: <JsFeatures>[quickjsUiHelperMount, ...features],
+      options: JsOptions(stackLimitBytes: _jsUiStackLimitBytes),
+      features: <JsFeatures>[jsUiHelperFeatures, ...features],
     );
   }
 
-  Future<void> _mountPagePlugin(JsPluginHost host, JsPlugin plugin) {
-    final features = plugin.asFeatures(name: _quickjsUiPageMountSlot);
+  Future<void> _loadPagePlugin(JsPluginHost host, JsPlugin plugin) {
+    final features = plugin.asFeatures(name: _jsUiPageFeaturesSlot);
     return switch (host) {
       JsContext context => context.loadFeatures(
         features,
         conflictPolicy: JsFeaturesConflictPolicy.replace,
       ),
-      Quickjs engine => engine.loadFeatures(
+      JsEngine engine => engine.loadFeatures(
         features,
         conflictPolicy: JsFeaturesConflictPolicy.replace,
       ),
@@ -268,7 +290,7 @@ final class QuickjsUiSession {
   Future<void> _disposeHost(JsPluginHost host) {
     return switch (host) {
       JsContext context => context.dispose(),
-      Quickjs engine => engine.dispose(),
+      JsEngine engine => engine.dispose(),
       _ => Future<void>.value(),
     };
   }
@@ -306,6 +328,7 @@ final class QuickjsUiSession {
     }
   }
 
+  /// Dispatches one structured page event and refreshes when state changes.
   Future<void> dispatch(Map<String, Object?> event) async {
     return dispatchBatch(<Map<String, Object?>>[event]);
   }
@@ -340,6 +363,7 @@ final class QuickjsUiSession {
     });
   }
 
+  /// Applies a partial state update and refreshes the committed schema.
   Future<void> setState(Map<String, Object?> patch) async {
     return _enqueue(() async {
       _ensureActive();
@@ -356,24 +380,26 @@ final class QuickjsUiSession {
     });
   }
 
+  /// Sends a general lifecycle [type] and optionally refreshes the schema.
   Future<bool> lifecycle(
-    String type, {
+    JsUiLifecycle type, {
     Object? payload,
     bool render = true,
   }) async {
     return _enqueue(() async {
-      return _lifecycleImpl(type, payload: payload, render: render);
+      return _lifecycleImpl(type.name, payload: payload, render: render);
     });
   }
 
+  /// Sends a route lifecycle [type] only when the page declares support.
   Future<bool> routeLifecycle(
-    String type, {
+    JsUiLifecycle type, {
     Object? payload,
     bool render = true,
   }) {
     return _enqueue(() async {
       return _lifecycleImpl(
-        type,
+        type.name,
         payload: payload,
         render: render,
         phase: 'route',
@@ -381,10 +407,12 @@ final class QuickjsUiSession {
     });
   }
 
+  /// Recommits the current JavaScript page schema.
   Future<void> refresh() {
     return _enqueue(_refreshImpl);
   }
 
+  /// Runs due JavaScript timers and returns change and next-delay information.
   Future<({bool changed, Duration? nextDelay})> pumpTimers() {
     return _enqueue(() async {
       _ensureActive();
@@ -451,12 +479,13 @@ final class QuickjsUiSession {
         'quickjs_ui commit() must return a UI node object',
       );
     }
-    _node = QuickjsUiNode.fromMap(
+    _node = JsUiNode.fromMap(
       rendered.map((key, value) => MapEntry<String, Object?>('$key', value)),
     );
     inspector?.recordSchema(_node!.toMap());
   }
 
+  /// Reloads the current plugin with the same props, features, and permissions.
   Future<void> reload() async {
     _ensureActive();
     final page = _pageBinding;
@@ -470,26 +499,6 @@ final class QuickjsUiSession {
       grantedPermissions: page.grantedPermissions,
       permissionPolicy: page.permissionPolicy,
     );
-  }
-
-  /// Binds one externally owned engine before this session loads a page.
-  ///
-  /// A session cannot switch engines. The attached engine remains exclusively
-  /// leased to this session until [dispose] completes.
-  void attach(Quickjs engine) {
-    _ensureActive();
-    final current = _engineBinding?.engine;
-    if (identical(current, engine)) {
-      return;
-    }
-    if (current != null || _pageBinding != null) {
-      throw StateError(
-        'QuickjsUiSession.attach() is only valid before an engine is bound '
-        'or a page is loaded',
-      );
-    }
-    _claimAttachedEngine(engine);
-    _engineBinding = _QuickjsUiEngineBinding.attached(engine);
   }
 
   /// Terminates this page session and waits for runtime cleanup.
@@ -535,9 +544,9 @@ final class QuickjsUiSession {
 
   Future<void> _releaseEngineAfter(
     Future<void> cleanup, {
-    required Quickjs? engine,
+    required JsEngine? engine,
     required bool ownsEngine,
-    QuickjsUiRuntimeLease? runtimeLease,
+    JsUiRuntimeLease? runtimeLease,
   }) async {
     try {
       await cleanup;
@@ -550,18 +559,18 @@ final class QuickjsUiSession {
     }
   }
 
-  void _claimAttachedEngine(Quickjs engine) {
+  void _claimAttachedEngine(JsEngine engine) {
     final current = _attachedEngineLeases[engine];
     if (current != null && !identical(current, _engineLease)) {
       throw StateError(
-        'QuickjsUiSession requires exclusive access to an attached Quickjs '
+        'JsUiSession requires exclusive access to an attached JsEngine '
         'engine until dispose() completes',
       );
     }
     _attachedEngineLeases[engine] = _engineLease;
   }
 
-  void _releaseAttachedEngine(Quickjs engine) {
+  void _releaseAttachedEngine(JsEngine engine) {
     if (identical(_attachedEngineLeases[engine], _engineLease)) {
       _attachedEngineLeases[engine] = null;
     }
@@ -571,7 +580,7 @@ final class QuickjsUiSession {
     required JsPluginClient? client,
     required JsPlugin? plugin,
     required Set<String> lifecycleTypes,
-    required Quickjs? engine,
+    required JsEngine? engine,
     required bool ownsEngine,
   }) async {
     await _runCleanupStep(
@@ -602,16 +611,16 @@ final class QuickjsUiSession {
   }
 
   Future<void> _cancelActiveRuntime(
-    Quickjs? engine, {
+    JsEngine? engine, {
     required bool ownsEngine,
   }) async {
     if (engine == null) {
       return;
     }
-    // Calling a JS dispose hook while JS is awaiting a host provider would
+    // Calling a JS dispose hook while JS is awaiting a host method would
     // deadlock behind that same call. Runtime cancellation is therefore the
     // session boundary for active work. Attached engines are restarted and
-    // rebuilt by Quickjs so their owner can continue using them afterwards.
+    // rebuilt by JsEngine so their owner can continue using them afterwards.
     try {
       if (ownsEngine) {
         await engine.dispose();
@@ -698,7 +707,7 @@ final class QuickjsUiSession {
   }
 
   Future<void> _dispatchMutationBatch(List<Map<String, Object?>> events) async {
-    if (events.length <= _quickjsUiDispatchChunkSize) {
+    if (events.length <= _jsUiDispatchChunkSize) {
       await _applyMutation(
         await _resolveMutationResult(
           await _clientCall('mutate', <Object?>['dispatch', events, true]),
@@ -710,12 +719,9 @@ final class QuickjsUiSession {
     for (
       var offset = 0;
       offset < events.length;
-      offset += _quickjsUiDispatchChunkSize
+      offset += _jsUiDispatchChunkSize
     ) {
-      final end = (offset + _quickjsUiDispatchChunkSize).clamp(
-        0,
-        events.length,
-      );
+      final end = (offset + _jsUiDispatchChunkSize).clamp(0, events.length);
       final result = await _clientCall('mutate', <Object?>[
         'dispatch',
         events.sublist(offset, end),
@@ -786,7 +792,7 @@ final class QuickjsUiSession {
     return true;
   }
 
-  bool _supportsLifecycle(_QuickjsUiPageBinding page, String type) {
+  bool _supportsLifecycle(_JsUiPageBinding page, String type) {
     return page.plugin.manifest.exports.contains('lifecycle') &&
         page.lifecycleTypes.contains(type);
   }
@@ -794,7 +800,7 @@ final class QuickjsUiSession {
   JsPluginClient _requireClient() {
     final client = _pageBinding?.client;
     if (client == null) {
-      throw StateError('QuickjsUiSession has no loaded page');
+      throw StateError('JsUiSession has no loaded page');
     }
     return client;
   }
@@ -836,7 +842,7 @@ final class QuickjsUiSession {
     );
     if (value is! Map) return const <String>{};
     final protocol = value['protocol'];
-    if (protocol != quickjsUiRuntimeProtocol) {
+    if (protocol != jsUiRuntimeProtocol) {
       throw StateError('quickjs_ui unsupported runtime protocol: $protocol');
     }
     _validateCompatibility(value);
@@ -846,7 +852,7 @@ final class QuickjsUiSession {
         : const <String>{};
   }
 
-  void _applyBootstrapResult(_QuickjsUiPageBinding page, Object? value) {
+  void _applyBootstrapResult(_JsUiPageBinding page, Object? value) {
     if (value is! Map) {
       throw const FormatException(
         'quickjs_ui bootstrap() must return an object',
@@ -859,7 +865,7 @@ final class QuickjsUiSession {
       );
     }
     final protocol = capabilities['protocol'];
-    if (protocol != quickjsUiRuntimeProtocol) {
+    if (protocol != jsUiRuntimeProtocol) {
       throw StateError('quickjs_ui unsupported runtime protocol: $protocol');
     }
     _validateCompatibility(capabilities);
@@ -877,12 +883,12 @@ final class QuickjsUiSession {
       'schemaVersion',
       fallback: 1,
     );
-    if (schemaVersion < _minimumSupportedQuickjsUiSchemaVersion ||
-        schemaVersion > _maximumSupportedQuickjsUiSchemaVersion) {
+    if (schemaVersion < _minimumSupportedJsUiSchemaVersion ||
+        schemaVersion > _maximumSupportedJsUiSchemaVersion) {
       throw StateError(
         'quickjs_ui unsupported schema version: $schemaVersion '
-        '(supported $_minimumSupportedQuickjsUiSchemaVersion'
-        '-$_maximumSupportedQuickjsUiSchemaVersion)',
+        '(supported $_minimumSupportedJsUiSchemaVersion'
+        '-$_maximumSupportedJsUiSchemaVersion)',
       );
     }
 
@@ -891,22 +897,22 @@ final class QuickjsUiSession {
       'helperVersion',
       fallback: 1,
     );
-    if (helperVersion > quickjsUiHelperVersion) {
+    if (helperVersion > jsUiHelperVersion) {
       throw StateError(
         'quickjs_ui helper version is newer than runtime: $helperVersion '
-        '(runtime $quickjsUiHelperVersion)',
+        '(runtime $jsUiHelperVersion)',
       );
     }
 
     final minimumRuntime = _intCapability(
       capabilities,
-      'minimumQuickjsUiVersion',
+      'minimumJsUiVersion',
       fallback: 1,
     );
-    if (minimumRuntime > _currentQuickjsUiRuntimeVersion) {
+    if (minimumRuntime > _currentJsUiRuntimeVersion) {
       throw StateError(
         'quickjs_ui page requires runtime version $minimumRuntime '
-        'but current runtime is $_currentQuickjsUiRuntimeVersion',
+        'but current runtime is $_currentJsUiRuntimeVersion',
       );
     }
 
@@ -974,7 +980,7 @@ final class QuickjsUiSession {
     try {
       return await client.call(name, args);
     } catch (error, stackTrace) {
-      throw QuickjsUiError.wrap(
+      throw JsUiError.wrap(
         error,
         kind: _errorKindFor(logicalName),
         stackTrace: stackTrace,
@@ -1071,30 +1077,27 @@ final class QuickjsUiSession {
     return value == null ? null : '$value';
   }
 
-  QuickjsUiErrorKind _errorKindFor(String logicalName) {
+  JsUiErrorKind _errorKindFor(String logicalName) {
     return switch (logicalName) {
-      'dispatch' => QuickjsUiErrorKind.dispatch,
-      'lifecycle' => QuickjsUiErrorKind.lifecycle,
-      'setState' || 'state' => QuickjsUiErrorKind.state,
-      'render' => QuickjsUiErrorKind.render,
-      'bootstrap' || 'mount' || 'capabilities' => QuickjsUiErrorKind.load,
-      'dispose' => QuickjsUiErrorKind.disposed,
-      _ => QuickjsUiErrorKind.runtime,
+      'dispatch' => JsUiErrorKind.dispatch,
+      'lifecycle' => JsUiErrorKind.lifecycle,
+      'setState' || 'state' => JsUiErrorKind.state,
+      'render' => JsUiErrorKind.render,
+      'bootstrap' || 'mount' || 'capabilities' => JsUiErrorKind.load,
+      'dispose' => JsUiErrorKind.disposed,
+      _ => JsUiErrorKind.runtime,
     };
   }
 
   void _ensureActive() {
     if (_disposed) {
-      throw StateError('QuickjsUiSession is disposed');
+      throw StateError('JsUiSession is disposed');
     }
   }
 }
 
-final class _QuickjsUiPageHost {
-  const _QuickjsUiPageHost({
-    required this.host,
-    required this.pagePluginInstalled,
-  });
+final class _JsUiPageHost {
+  const _JsUiPageHost({required this.host, required this.pagePluginInstalled});
 
   final JsPluginHost host;
 
@@ -1103,8 +1106,8 @@ final class _QuickjsUiPageHost {
   final bool pagePluginInstalled;
 }
 
-final class _QuickjsUiEngineBinding {
-  const _QuickjsUiEngineBinding._({
+final class _JsUiEngineBinding {
+  const _JsUiEngineBinding._({
     this.engine,
     this.context,
     required this.ownsEngine,
@@ -1112,30 +1115,27 @@ final class _QuickjsUiEngineBinding {
     this.runtimeLease,
   });
 
-  factory _QuickjsUiEngineBinding.attached(Quickjs engine) {
-    return _QuickjsUiEngineBinding._(
+  factory _JsUiEngineBinding.attached(JsEngine engine) {
+    return _JsUiEngineBinding._(
       engine: engine,
       ownsEngine: false,
       features: const <JsFeatures>[],
     );
   }
 
-  factory _QuickjsUiEngineBinding.owned(
-    Quickjs engine,
-    List<JsFeatures> features,
-  ) {
-    return _QuickjsUiEngineBinding._(
+  factory _JsUiEngineBinding.owned(JsEngine engine, List<JsFeatures> features) {
+    return _JsUiEngineBinding._(
       engine: engine,
       ownsEngine: true,
       features: features,
     );
   }
 
-  factory _QuickjsUiEngineBinding.leased(
-    QuickjsUiRuntimeLease lease,
+  factory _JsUiEngineBinding.leased(
+    JsUiRuntimeLease lease,
     List<JsFeatures> features,
   ) {
-    return _QuickjsUiEngineBinding._(
+    return _JsUiEngineBinding._(
       context: lease.context,
       ownsEngine: false,
       features: features,
@@ -1143,16 +1143,16 @@ final class _QuickjsUiEngineBinding {
     );
   }
 
-  final Quickjs? engine;
+  final JsEngine? engine;
   final JsContext? context;
   JsPluginHost get host => context ?? engine!;
   final bool ownsEngine;
   final List<JsFeatures> features;
-  final QuickjsUiRuntimeLease? runtimeLease;
+  final JsUiRuntimeLease? runtimeLease;
 }
 
-final class _QuickjsUiPageBinding {
-  _QuickjsUiPageBinding({
+final class _JsUiPageBinding {
+  _JsUiPageBinding({
     required this.plugin,
     required this.client,
     required this.props,
@@ -1166,7 +1166,7 @@ final class _QuickjsUiPageBinding {
   final Map<String, Object?> props;
   final List<JsFeatures> features;
   final Set<String> grantedPermissions;
-  final QuickjsUiPermissionPolicy? permissionPolicy;
+  final JsUiPermissionPolicy? permissionPolicy;
   Set<String> lifecycleTypes = const <String>{};
 }
 
@@ -1222,15 +1222,15 @@ final class _SessionOperation<T> {
   }
 }
 
-Future<void> _ensureHelperModuleMounted(Quickjs engine) async {
+Future<void> _ensureHelperFeaturesLoaded(JsEngine engine) async {
   final snapshot = await engine.debugInspect();
-  if (snapshot.moduleNames.contains(quickjsUiHelperModuleSpecifier)) {
+  if (snapshot.moduleNames.contains(jsUiHelperModuleSpecifier)) {
     return;
   }
-  await engine.loadFeatures(quickjsUiHelperMount);
+  await engine.loadFeatures(jsUiHelperFeatures);
 }
 
-bool _sameMountConfiguration(List<JsFeatures> left, List<JsFeatures> right) {
+bool _sameFeatureConfiguration(List<JsFeatures> left, List<JsFeatures> right) {
   if (left.length != right.length) {
     return false;
   }

@@ -8,32 +8,33 @@ import '../diagnostics/quickjs_ui_error.dart';
 import '../diagnostics/quickjs_ui_inspector.dart';
 import '../diagnostics/quickjs_ui_load_metrics.dart';
 import '../diagnostics/quickjs_ui_page_snapshot.dart';
-import '../diagnostics/quickjs_ui_network_journal.dart';
-import '../host/quickjs_ui_host_capabilities.dart';
 import '../host/quickjs_ui_permission_policy.dart';
 import '../renderer/quickjs_ui_canvas_scene.dart';
 import '../resource/quickjs_ui_network_loader.dart';
 import '../schema/quickjs_ui_node.dart';
 import 'quickjs_ui_session.dart';
+import 'quickjs_ui_lifecycle.dart';
 import 'quickjs_ui_runtime.dart';
 
-typedef QuickjsUiPluginLoader = Future<JsPlugin> Function();
+/// Loads or rebuilds the JavaScript plugin for a page.
+typedef JsUiPluginLoader = Future<JsPlugin> Function();
 
 /// Controller for one quickjs_ui page instance.
 ///
 /// The controller is the Flutter binding layer: it owns loading/error
-/// notifications, while [QuickjsUiSession] owns runtime, plugin, state and tree
+/// notifications, while [JsUiSession] owns runtime, plugin, state and tree
 /// lifecycle.
-final class QuickjsUiController extends ChangeNotifier {
-  QuickjsUiController({
-    Quickjs? engine,
-    QuickjsUiRuntime? runtime,
+final class JsUiController extends ChangeNotifier {
+  /// Creates a controller backed by an owned engine or shared [runtime].
+  JsUiController({
+    JsEngine? engine,
+    JsUiRuntime? runtime,
     JsConsoleSink? onConsole,
-    QuickjsUiDevOptions? devOptions,
-    QuickjsUiInspector? inspector,
-  }) : devOptions = devOptions ?? QuickjsUiDevOptions.defaults,
-       inspector = inspector ?? QuickjsUiInspector(),
-       _session = QuickjsUiSession(
+    JsUiDevOptions? devOptions,
+    JsUiInspector? inspector,
+  }) : devOptions = devOptions ?? JsUiDevOptions.defaults,
+       inspector = inspector ?? JsUiInspector(),
+       _session = JsUiSession(
          engine: engine,
          runtime: runtime,
          onConsole: onConsole,
@@ -41,14 +42,19 @@ final class QuickjsUiController extends ChangeNotifier {
     _session.inspector = this.inspector;
   }
 
-  final QuickjsUiSession _session;
-  final QuickjsUiDevOptions devOptions;
-  final QuickjsUiInspector inspector;
-  final QuickjsUiCanvasSceneRegistry canvasSceneRegistry =
-      QuickjsUiCanvasSceneRegistry();
-  QuickjsUiError? _error;
-  QuickjsUiLoadMetrics? _lastLoadMetrics;
-  _QuickjsUiLoadConfig _loadConfig = _QuickjsUiLoadConfig.copy();
+  final JsUiSession _session;
+
+  /// Development and hot-reload behavior.
+  final JsUiDevOptions devOptions;
+
+  /// Diagnostics collector for this page.
+  final JsUiInspector inspector;
+
+  /// Canvas scenes retained by the current page revision.
+  final JsUiCanvasSceneRegistry canvasSceneRegistry = JsUiCanvasSceneRegistry();
+  JsUiError? _error;
+  JsUiLoadMetrics? _lastLoadMetrics;
+  _JsUiLoadConfig _loadConfig = _JsUiLoadConfig.copy();
   bool _loading = false;
   bool _disposed = false;
   bool _notifierDisposed = false;
@@ -58,38 +64,59 @@ final class QuickjsUiController extends ChangeNotifier {
   int _pageRevision = 0;
   Timer? _timerPump;
 
-  QuickjsUiSession get session => _session;
-  Quickjs? get engine => _session.engine;
+  /// Engine currently executing the page.
+  JsEngine? get engine => _session.engine;
+
+  /// Plugin currently loaded by the page.
   JsPlugin? get plugin => _session.plugin;
+
+  /// Host features installed for the current page.
+  List<JsFeatures> get features => _session.features;
+
+  /// Current immutable root props.
   Map<String, Object?> get props => _session.props;
+
+  /// Current JavaScript page state.
   Object? get state => _session.state;
-  QuickjsUiNode? get node => _session.node;
-  QuickjsUiError? get error => _error;
-  QuickjsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
+
+  /// Most recently rendered UI tree.
+  JsUiNode? get node => _session.node;
+
+  /// Most recent page error.
+  JsUiError? get error => _error;
+
+  /// Timing metrics for the most recent successful load.
+  JsUiLoadMetrics? get lastLoadMetrics => _lastLoadMetrics;
 
   /// Monotonically identifies the JS page instance currently owned by this
   /// controller. It changes only after a page replacement succeeds.
   int get pageRevision => _pageRevision;
 
-  void _acceptLoadMetrics(QuickjsUiLoadMetrics? metrics) {
+  void _acceptLoadMetrics(JsUiLoadMetrics? metrics) {
     if (metrics == null) return;
     _lastLoadMetrics = metrics;
   }
 
+  /// Whether the controller currently holds an error.
   bool get hasError => _error != null;
+
+  /// Whether a page load or replacement is in progress.
   bool get isLoading => _loading;
+
+  /// Whether the controller has begun shutdown.
   bool get isDisposed => _disposed;
 
+  /// Loads an already-created page [plugin].
   Future<void> loadPlugin(
     JsPlugin plugin, {
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiErrorContext errorContext = const JsUiErrorContext(),
     bool notifyLoading = true,
   }) async {
-    _loadConfig = _QuickjsUiLoadConfig.copy(
+    _loadConfig = _JsUiLoadConfig.copy(
       plugin: plugin,
       initialProps: initialProps,
       features: features,
@@ -110,17 +137,18 @@ final class QuickjsUiController extends ChangeNotifier {
     );
   }
 
+  /// Loads a page plugin produced asynchronously by [loader].
   Future<void> load(
-    QuickjsUiPluginLoader loader, {
+    JsUiPluginLoader loader, {
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiErrorContext errorContext = const JsUiErrorContext(),
     bool notifyLoading = true,
   }) async {
     _ensureActive();
-    _loadConfig = _QuickjsUiLoadConfig.copy(
+    _loadConfig = _JsUiLoadConfig.copy(
       loader: loader,
       initialProps: initialProps,
       features: features,
@@ -163,7 +191,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.load, context: errorContext);
+      _recordError(error, kind: JsUiErrorKind.load, context: errorContext);
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -178,8 +206,8 @@ final class QuickjsUiController extends ChangeNotifier {
     required Map<String, Object?> initialProps,
     required List<JsFeatures> features,
     required Iterable<String> grantedPermissions,
-    required QuickjsUiPermissionPolicy? permissionPolicy,
-    required QuickjsUiErrorContext errorContext,
+    required JsUiPermissionPolicy? permissionPolicy,
+    required JsUiErrorContext errorContext,
     required bool notifyLoading,
   }) async {
     _ensureActive();
@@ -211,7 +239,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.load, context: errorContext);
+      _recordError(error, kind: JsUiErrorKind.load, context: errorContext);
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -220,6 +248,7 @@ final class QuickjsUiController extends ChangeNotifier {
     }
   }
 
+  /// Dispatches one component [event] and renders any resulting state change.
   Future<void> dispatch(Map<String, Object?> event) async {
     _ensureActive();
     _error = null;
@@ -236,13 +265,14 @@ final class QuickjsUiController extends ChangeNotifier {
       }
       _recordError(
         error,
-        kind: QuickjsUiErrorKind.dispatch,
+        kind: JsUiErrorKind.dispatch,
         action: '${event['method'] ?? event['action'] ?? 'unknown'}',
       );
       notifyListeners();
     }
   }
 
+  /// Dispatches [events] in one serialized session operation.
   Future<void> dispatchBatch(Iterable<Map<String, Object?>> events) async {
     _ensureActive();
     _error = null;
@@ -253,11 +283,12 @@ final class QuickjsUiController extends ChangeNotifier {
       notifyListeners();
     } catch (error) {
       if (_disposed) return;
-      _recordError(error, kind: QuickjsUiErrorKind.dispatch);
+      _recordError(error, kind: JsUiErrorKind.dispatch);
       notifyListeners();
     }
   }
 
+  /// Merges [patch] into page state and renders the result.
   Future<void> setState(Map<String, Object?> patch) async {
     _ensureActive();
     _error = null;
@@ -272,11 +303,12 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.state);
+      _recordError(error, kind: JsUiErrorKind.state);
       notifyListeners();
     }
   }
 
+  /// Renders the page again without changing its props or state.
   Future<void> refresh() async {
     _ensureActive();
     _error = null;
@@ -291,13 +323,14 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.render);
+      _recordError(error, kind: JsUiErrorKind.render);
       notifyListeners();
     }
   }
 
+  /// Sends an application or widget lifecycle event to the page.
   Future<void> lifecycle(
-    String type, {
+    JsUiLifecycle type, {
     Object? payload,
     bool render = true,
   }) async {
@@ -320,13 +353,14 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.lifecycle, lifecycle: type);
+      _recordError(error, kind: JsUiErrorKind.lifecycle, lifecycle: type.name);
       notifyListeners();
     }
   }
 
+  /// Sends a navigation lifecycle event to the page.
   Future<void> routeLifecycle(
-    String type, {
+    JsUiLifecycle type, {
     Object? payload,
     bool render = true,
   }) async {
@@ -349,25 +383,20 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.lifecycle, lifecycle: type);
+      _recordError(error, kind: JsUiErrorKind.lifecycle, lifecycle: type.name);
       notifyListeners();
     }
   }
 
-  void attach(Quickjs engine) {
-    _ensureActive();
-    _session.attach(engine);
-    _error = null;
-    notifyListeners();
-  }
-
+  /// Records an externally detected page [error].
   void reportError(Object error) {
     _ensureActive();
-    _recordError(error, kind: QuickjsUiErrorKind.unknown);
+    _recordError(error, kind: JsUiErrorKind.unknown);
     notifyListeners();
   }
 
-  QuickjsUiPageSnapshot exportPageSnapshot() {
+  /// Captures the current page state for diagnostics.
+  JsUiPageSnapshot exportPageSnapshot() {
     return inspector.buildSnapshot(
       props: props,
       state: state,
@@ -378,35 +407,19 @@ final class QuickjsUiController extends ChangeNotifier {
     );
   }
 
-  Map<String, Object?> exportPageSnapshotMap() {
-    return exportPageSnapshot().toMap();
-  }
-
+  /// Adds an application lifecycle event to the inspector journal.
   void recordAppLifecycle(String type, {Object? payload}) {
     inspector.recordLifecycle('app', type, payload: payload);
   }
 
-  void recordResourceLog(String message) {
-    if (devOptions.logResources) {
-      inspector.recordResource(message);
-    }
-  }
-
-  void recordNetworkLog(QuickjsUiNetworkLogEvent event) {
+  /// Records [event] when resource logging is enabled.
+  void recordNetworkLog(JsUiNetworkLogEvent event) {
     if (devOptions.logResources) {
       inspector.recordNetworkEvent(event);
     }
   }
 
-  QuickjsUiHostApiHandlers instrumentHostHandlers(
-    QuickjsUiHostApiHandlers handlers,
-  ) {
-    if (!devOptions.logResources) {
-      return handlers;
-    }
-    return instrumentHostNetworkLogging(handlers, inspector.networkJournal);
-  }
-
+  /// Restarts execution of the current plugin without fetching it again.
   Future<void> restart() async {
     _ensureActive();
     final config = _loadConfig;
@@ -422,7 +435,7 @@ final class QuickjsUiController extends ChangeNotifier {
       } else {
         final configuredPlugin = config.plugin;
         if (configuredPlugin == null) {
-          throw StateError('QuickjsUiController has no page to restart');
+          throw StateError('JsUiController has no page to restart');
         }
         await _session.loadPlugin(
           configuredPlugin,
@@ -443,7 +456,7 @@ final class QuickjsUiController extends ChangeNotifier {
       }
       _recordError(
         error,
-        kind: QuickjsUiErrorKind.load,
+        kind: JsUiErrorKind.load,
         context: _loadConfig.errorContext,
       );
     } finally {
@@ -454,6 +467,7 @@ final class QuickjsUiController extends ChangeNotifier {
     }
   }
 
+  /// Reloads the page source and optionally restores its prior state.
   Future<void> reload() async {
     _ensureActive();
     final config = _loadConfig;
@@ -501,7 +515,7 @@ final class QuickjsUiController extends ChangeNotifier {
       }
       _recordError(
         error,
-        kind: QuickjsUiErrorKind.load,
+        kind: JsUiErrorKind.load,
         context: config.errorContext,
       );
     } finally {
@@ -513,6 +527,7 @@ final class QuickjsUiController extends ChangeNotifier {
   }
 
   @override
+  /// Starts asynchronous shutdown and releases notifier listeners.
   void dispose() {
     if (_notifierDisposed) {
       return;
@@ -577,7 +592,7 @@ final class QuickjsUiController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _recordError(error, kind: QuickjsUiErrorKind.runtime);
+      _recordError(error, kind: JsUiErrorKind.runtime);
       _stopTimerPump();
       notifyListeners();
     } finally {
@@ -589,26 +604,26 @@ final class QuickjsUiController extends ChangeNotifier {
 
   void _ensureActive() {
     if (_disposed) {
-      throw StateError('QuickjsUiController is disposed');
+      throw StateError('JsUiController is disposed');
     }
   }
 
   void _recordError(
     Object error, {
-    required QuickjsUiErrorKind kind,
+    required JsUiErrorKind kind,
     String? action,
     String? lifecycle,
-    QuickjsUiErrorContext context = const QuickjsUiErrorContext(),
+    JsUiErrorContext context = const JsUiErrorContext(),
   }) {
-    final cause = error is QuickjsUiError ? error.cause : error;
+    final cause = error is JsUiError ? error.cause : error;
     final resolvedKind = switch (cause) {
-      QuickjsUiNetworkException() => QuickjsUiErrorKind.network,
-      QuickjsUiPermissionException() => QuickjsUiErrorKind.permission,
-      FormatException() when kind == QuickjsUiErrorKind.load =>
-        QuickjsUiErrorKind.resource,
+      JsUiNetworkException() => JsUiErrorKind.network,
+      JsUiPermissionException() => JsUiErrorKind.permission,
+      FormatException() when kind == JsUiErrorKind.load =>
+        JsUiErrorKind.resource,
       _ => kind,
     };
-    final unified = QuickjsUiError.wrap(
+    final unified = JsUiError.wrap(
       error,
       kind: resolvedKind,
       action: action,
@@ -620,17 +635,17 @@ final class QuickjsUiController extends ChangeNotifier {
   }
 }
 
-final class _QuickjsUiLoadConfig {
-  factory _QuickjsUiLoadConfig.copy({
-    QuickjsUiPluginLoader? loader,
+final class _JsUiLoadConfig {
+  factory _JsUiLoadConfig.copy({
+    JsUiPluginLoader? loader,
     JsPlugin? plugin,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiErrorContext errorContext = const QuickjsUiErrorContext(),
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiErrorContext errorContext = const JsUiErrorContext(),
   }) {
-    return _QuickjsUiLoadConfig._(
+    return _JsUiLoadConfig._(
       loader: loader,
       plugin: plugin,
       initialProps: Map<String, Object?>.unmodifiable(initialProps),
@@ -641,7 +656,7 @@ final class _QuickjsUiLoadConfig {
     );
   }
 
-  const _QuickjsUiLoadConfig._({
+  const _JsUiLoadConfig._({
     required this.loader,
     required this.plugin,
     required this.initialProps,
@@ -651,11 +666,11 @@ final class _QuickjsUiLoadConfig {
     required this.errorContext,
   });
 
-  final QuickjsUiPluginLoader? loader;
+  final JsUiPluginLoader? loader;
   final JsPlugin? plugin;
   final Map<String, Object?> initialProps;
   final List<JsFeatures> features;
   final Set<String> grantedPermissions;
-  final QuickjsUiPermissionPolicy? permissionPolicy;
-  final QuickjsUiErrorContext errorContext;
+  final JsUiPermissionPolicy? permissionPolicy;
+  final JsUiErrorContext errorContext;
 }

@@ -1,13 +1,16 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:math' as math;
 
-final class QuickjsUiAnimationTimeline {
-  const QuickjsUiAnimationTimeline({
+final class JsUiAnimationTimeline {
+  const JsUiAnimationTimeline({
     required this.hasAnimations,
     required this.isContinuous,
     required this.endMs,
   });
 
-  factory QuickjsUiAnimationTimeline.from(Object? value) {
+  factory JsUiAnimationTimeline.from(Object? value) {
     var hasAnimations = false;
     var isContinuous = false;
     var endMs = 0.0;
@@ -22,10 +25,10 @@ final class QuickjsUiAnimationTimeline {
       if (current is! Map) return;
 
       if (current['op'] == 'snapshotParticleGrid') {
-        final bucketCount = quickjsUiRawNumber(current['bucketCount']);
-        final staggerMs = quickjsUiRawNumber(current['staggerMs']);
-        final travelMs = quickjsUiRawNumber(current['travelMs']);
-        final fadeMs = quickjsUiRawNumber(current['fadeMs']);
+        final bucketCount = jsUiRawNumber(current['bucketCount']);
+        final staggerMs = jsUiRawNumber(current['staggerMs']);
+        final travelMs = jsUiRawNumber(current['travelMs']);
+        final fadeMs = jsUiRawNumber(current['fadeMs']);
         hasAnimations = true;
         endMs = math.max(
           endMs,
@@ -45,8 +48,8 @@ final class QuickjsUiAnimationTimeline {
           return;
         }
         if (!isContinuous) {
-          final delay = quickjsUiRawNumber(current['delayMs']);
-          final phase = quickjsUiRawNumber(current['phaseMs']);
+          final delay = jsUiRawNumber(current['delayMs']);
+          final phase = jsUiRawNumber(current['phaseMs']);
           endMs = math.max(endMs, math.max(0, delay - phase + duration));
         }
         return;
@@ -57,7 +60,7 @@ final class QuickjsUiAnimationTimeline {
     }
 
     visit(value);
-    return QuickjsUiAnimationTimeline(
+    return JsUiAnimationTimeline(
       hasAnimations: hasAnimations,
       isContinuous: isContinuous,
       endMs: endMs,
@@ -69,17 +72,14 @@ final class QuickjsUiAnimationTimeline {
   final double endMs;
 }
 
-final class QuickjsUiAnimationClock {
-  const QuickjsUiAnimationClock({
-    required this.elapsedMs,
-    required this.epochMs,
-  });
+final class JsUiAnimationClock {
+  const JsUiAnimationClock({required this.elapsedMs, required this.epochMs});
 
   final double elapsedMs;
   final double epochMs;
 }
 
-double? quickjsUiAnimatedNumber(Object? raw, QuickjsUiAnimationClock clock) {
+double? jsUiAnimatedNumber(Object? raw, JsUiAnimationClock clock) {
   if (raw is num) return raw.toDouble();
   if (raw is! Map) return null;
   final from = raw['from'];
@@ -92,9 +92,7 @@ double? quickjsUiAnimatedNumber(Object? raw, QuickjsUiAnimationClock clock) {
   }
   final source = raw['timeSource'] == 'epoch' ? clock.epochMs : clock.elapsedMs;
   final time =
-      source +
-      quickjsUiRawNumber(raw['phaseMs']) -
-      quickjsUiRawNumber(raw['delayMs']);
+      source + jsUiRawNumber(raw['phaseMs']) - jsUiRawNumber(raw['delayMs']);
   var progress = 0.0;
   if (time > 0) {
     if (raw['repeat'] == true) {
@@ -107,7 +105,7 @@ double? quickjsUiAnimatedNumber(Object? raw, QuickjsUiAnimationClock clock) {
       progress = (time / duration).clamp(0.0, 1.0);
     }
   }
-  progress = quickjsUiAnimationCurve(progress, raw['curve']);
+  progress = jsUiAnimationCurve(progress, raw['curve']);
   final keyframes = raw['keyframes'];
   if (keyframes != null) {
     return _sampleKeyframes(keyframes, progress);
@@ -154,9 +152,9 @@ double _sampleKeyframes(Object? raw, double progress) {
   return frames.last.$2;
 }
 
-double quickjsUiRawNumber(Object? value) => value is num ? value.toDouble() : 0;
+double jsUiRawNumber(Object? value) => value is num ? value.toDouble() : 0;
 
-double quickjsUiAnimationCurve(double value, Object? curve) => switch (curve) {
+double jsUiAnimationCurve(double value, Object? curve) => switch (curve) {
   'easeIn' => value * value,
   'easeOut' => 1 - math.pow(1 - value, 2).toDouble(),
   'easeInOut' =>
@@ -166,14 +164,14 @@ double quickjsUiAnimationCurve(double value, Object? curve) => switch (curve) {
   _ => value,
 };
 
-int quickjsUiValueHash(Object? value) {
+int jsUiValueHash(Object? value) {
   if (value is List) {
-    return Object.hashAll(value.map(quickjsUiValueHash));
+    return Object.hashAll(value.map(jsUiValueHash));
   }
   if (value is Map) {
     return Object.hashAll(
       value.entries.map(
-        (entry) => Object.hash('${entry.key}', quickjsUiValueHash(entry.value)),
+        (entry) => Object.hash('${entry.key}', jsUiValueHash(entry.value)),
       ),
     );
   }

@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,14 +10,14 @@ import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_component_types.dart';
 import 'quickjs_ui_render_context.dart';
 
-final QuickjsUiComponentBuilderMap quickjsUiAutoRefreshComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{
+final JsUiComponentBuilderMap jsUiAutoRefreshComponentBuilders =
+    <String, JsUiComponentBuilder>{
       'AutoRefresh': _buildAutoRefresh,
       'DateTimeText': _buildDateTimeText,
     };
 
-Widget _buildAutoRefresh(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final intervalMs = QuickjsUiProps.intValue(
+Widget _buildAutoRefresh(JsUiRenderContext context, JsUiNode node) {
+  final intervalMs = JsUiProps.intValue(
     node.props['intervalMs'],
     name: 'AutoRefresh intervalMs',
   );
@@ -30,12 +33,12 @@ Widget _buildAutoRefresh(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildDateTimeText(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildDateTimeText(JsUiRenderContext context, JsUiNode node) {
   return _DateTimeText(
-    format: QuickjsUiProps.string(node.props['format']) ?? 'HH:mm:ss',
-    textAlign: QuickjsUiProps.textAlign(node.props['textAlign']),
-    maxLines: QuickjsUiProps.intValue(node.props['maxLines']),
-    softWrap: QuickjsUiProps.boolValue(node.props['softWrap']),
+    format: JsUiProps.string(node.props['format']) ?? 'HH:mm:ss',
+    textAlign: JsUiProps.textAlign(node.props['textAlign']),
+    maxLines: JsUiProps.intValue(node.props['maxLines']),
+    softWrap: JsUiProps.boolValue(node.props['softWrap']),
     overflow: _textOverflow(node.props['overflow']),
     style: context.textStyle(node.props['style']),
   );

@@ -6,16 +6,23 @@ import '../runtime/quickjs_ui_controller.dart';
 import 'quickjs_ui_inspector.dart';
 import 'quickjs_ui_network_record.dart';
 
-/// Development panel that visualizes [QuickjsUiInspector] data.
-final class QuickjsUiInspectorPanel extends StatelessWidget {
-  const QuickjsUiInspectorPanel({
+/// Development panel that visualizes [JsUiInspector] data.
+final class JsUiInspectorPanel extends StatelessWidget {
+  /// Creates a js ui inspector panel.
+  /// Creates a js ui inspector panel.
+  const JsUiInspectorPanel({
     super.key,
     required this.controller,
     required this.inspector,
   });
 
-  final QuickjsUiController controller;
-  final QuickjsUiInspector inspector;
+  /// The controller value.
+  /// The controller value.
+  final JsUiController controller;
+
+  /// The inspector value.
+  /// The inspector value.
+  final JsUiInspector inspector;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +34,7 @@ final class QuickjsUiInspectorPanel extends StatelessWidget {
           state: controller.state,
           node: controller.node,
           plugin: controller.plugin,
-          features: controller.session.features,
+          features: controller.features,
           error: controller.error,
         );
         return DefaultTabController(
@@ -97,7 +104,7 @@ final class QuickjsUiInspectorPanel extends StatelessWidget {
 final class _NetworkPane extends StatelessWidget {
   const _NetworkPane({required this.records});
 
-  final List<QuickjsUiNetworkRecord> records;
+  final List<JsUiNetworkRecord> records;
 
   @override
   Widget build(BuildContext context) {

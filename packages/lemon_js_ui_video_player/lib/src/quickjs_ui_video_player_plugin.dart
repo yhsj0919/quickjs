@@ -7,12 +7,13 @@ import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 import 'package:video_player/video_player.dart' as native;
 
-const String quickjsUiVideoPlayerModuleSpecifier = 'quickjs_ui/video_player';
+/// JavaScript 导入视频组件时使用的稳定 ES module 名称。
+const String jsUiVideoPlayerModuleSpecifier = 'quickjs_ui/video_player';
 
-/// VideoPlayer 缁勪欢瀵瑰簲鐨勫唴鑱?ES module 婧愮爜銆?
+/// `VideoPlayer` 组件对应的内置 ES module 源码。
 ///
-/// JS 渚ч€氳繃 `import { VideoPlayer } from 'quickjs_ui/video_player'` 浣跨敤銆?
-const String quickjsUiVideoPlayerModuleSource = '''
+/// JavaScript 通过 `import { VideoPlayer } from 'quickjs_ui/video_player'` 使用。
+const String jsUiVideoPlayerModuleSource = '''
 export function VideoPlayer(props = {}) {
   const key = props.key ?? props.playerKey ?? 'video-player';
   const progress = props.onProgress == null
@@ -43,36 +44,36 @@ export function VideoPlayer(props = {}) {
 }
 ''';
 
-/// QuickJS UI 瑙嗛鎾斁鍣ㄧ殑瀹樻柟鎻掍欢鍏ュ彛銆?
+/// lemon_js_ui 视频播放器的官方插件入口。
 ///
-/// 瀵瑰鍙毚闇?[plugin]锛氬悓鏃跺寘鍚?JS 妯″潡 features 涓?Flutter `VideoPlayer` 娓叉煋娉ㄥ唽銆?
-/// 鍦?[QuickjsUiView] 鐨?`uiPlugins` 涓紶鍏ュ嵆鍙紝鏃犻渶鍗曠嫭閰嶇疆 features 鎴?registry銆?
-final class QuickjsUiVideoPlayerPlugin {
-  const QuickjsUiVideoPlayerPlugin._();
+/// [plugin] 同时包含 JavaScript 模块 features 和 Flutter `VideoPlayer`
+/// 组件注册。传给 [JsUiView.uiPlugins] 即可，无需单独配置 features 或 registry。
+final class JsUiVideoPlayerPlugin {
+  const JsUiVideoPlayerPlugin._();
 
   static bool _desktopBackendRegistered = false;
 
-  /// 鍐呴儴 JS runtime mount锛屾敞鍐?`quickjs_ui/video_player` 妯″潡銆?
-  static const JsFeatures _mount = JsFeatures(
+  /// 注册 `quickjs_ui/video_player` 模块的内部 features。
+  static const JsFeatures _features = JsFeatures(
     name: 'quickjs_ui:plugin:video_player',
     modules: <JsModule>[
-      JsModule.esModule(
-        specifier: quickjsUiVideoPlayerModuleSpecifier,
-        source: quickjsUiVideoPlayerModuleSource,
+      JsModule(
+        name: jsUiVideoPlayerModuleSpecifier,
+        source: jsUiVideoPlayerModuleSource,
       ),
     ],
   );
 
-  /// 鍙洿鎺ヤ紶缁?[QuickjsUiView.uiPlugins] 鐨?UI 鎻掍欢瀹炰緥銆?
-  static final QuickjsUiPlugin plugin = QuickjsUiPlugin(
+  /// 可直接传给 [JsUiView.uiPlugins] 的 UI 插件实例。
+  static final JsUiPlugin plugin = JsUiPlugin(
     name: 'quickjs_ui:plugin:video_player',
-    features: const <JsFeatures>[_mount],
-    configureRegistry: _configureRegistry,
+    features: const <JsFeatures>[_features],
+    configure: _configure,
   );
 
-  static void _configureRegistry(QuickjsUiComponentRegistry registry) {
+  static void _configure(JsUiComponentRegistry registry) {
     _ensureDesktopBackendRegistered();
-    registry.register('VideoPlayer', build);
+    registry.register('VideoPlayer', _build);
   }
 
   /// Registers the desktop implementation used by `video_player`.
@@ -101,27 +102,22 @@ final class QuickjsUiVideoPlayerPlugin {
     registerDesktopBackend();
   }
 
-  /// 灏?schema 鑺傜偣 `type: 'VideoPlayer'` 鏋勫缓涓?Flutter Widget銆?
-  ///
-  /// - [context]锛氬綋鍓嶆覆鏌撲笂涓嬫枃锛岀敤浜庢淳鍙戜簨浠朵笌璇诲彇涓婚銆?
-  /// - [node]锛氳В鏋愬悗鐨?UI schema 鑺傜偣銆?
-  static Widget build(QuickjsUiRenderContext context, QuickjsUiNode node) {
-    return _QuickjsUiVideoPlayerHost(context: context, node: node);
+  static Widget _build(JsUiRenderContext context, JsUiNode node) {
+    return _JsUiVideoPlayerHost(context: context, node: node);
   }
 }
 
-class _QuickjsUiVideoPlayerHost extends StatefulWidget {
-  const _QuickjsUiVideoPlayerHost({required this.context, required this.node});
+class _JsUiVideoPlayerHost extends StatefulWidget {
+  const _JsUiVideoPlayerHost({required this.context, required this.node});
 
-  final QuickjsUiRenderContext context;
-  final QuickjsUiNode node;
+  final JsUiRenderContext context;
+  final JsUiNode node;
 
   @override
-  State<_QuickjsUiVideoPlayerHost> createState() =>
-      _QuickjsUiVideoPlayerHostState();
+  State<_JsUiVideoPlayerHost> createState() => _JsUiVideoPlayerHostState();
 }
 
-class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
+class _JsUiVideoPlayerHostState extends State<_JsUiVideoPlayerHost> {
   static const int _progressDispatchIntervalMs = 50;
   static const Duration _stalePauseRecoveryThreshold = Duration(seconds: 30);
 
@@ -129,7 +125,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   bool _initialized = false;
   bool _endedDispatched = false;
   String? _activeSource;
-  QuickjsUiResourceKind? _activeResourceKind;
+  JsUiResourceKind? _activeResourceKind;
   int _restartToken = 0;
   int _seekToken = 0;
   int _lastProgressDispatchMs = -1;
@@ -147,13 +143,13 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   }
 
   @override
-  void didUpdateWidget(covariant _QuickjsUiVideoPlayerHost oldWidget) {
+  void didUpdateWidget(covariant _JsUiVideoPlayerHost oldWidget) {
     super.didUpdateWidget(oldWidget);
     final resource = _tryResourceFromNode(widget.node);
     if (resource == null) {
       return;
     }
-    final source = resource.location;
+    final source = resource.uri;
     if (source != _activeSource) {
       _disposeController();
       _initializeController();
@@ -178,7 +174,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     if (resource == null) {
       return;
     }
-    final source = resource.location;
+    final source = resource.uri;
 
     _activeSource = source;
     _activeResourceKind = resource.kind;
@@ -213,9 +209,9 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     });
 
     _syncPlaying(force: true);
-    final onReady = QuickjsUiProps.event(widget.node.props['onReady']);
+    final onReady = JsUiProps.event(widget.node.props['onReady']);
     if (onReady != null) {
-      widget.context.dispatchEvent(
+      widget.context.dispatch(
         onReady,
         payload: <String, Object?>{
           'durationMs': controller.value.duration.inMilliseconds,
@@ -479,9 +475,9 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
         !_endedDispatched &&
         !_loopFromNode(widget.node)) {
       _endedDispatched = true;
-      final onEnded = QuickjsUiProps.event(widget.node.props['onEnded']);
+      final onEnded = JsUiProps.event(widget.node.props['onEnded']);
       if (onEnded != null) {
-        widget.context.dispatchEvent(onEnded);
+        widget.context.dispatch(onEnded);
       }
     }
   }
@@ -491,7 +487,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     if (controller == null || !controller.value.isInitialized) {
       return;
     }
-    final onProgress = QuickjsUiProps.event(widget.node.props['onProgress']);
+    final onProgress = JsUiProps.event(widget.node.props['onProgress']);
     if (onProgress == null) {
       return;
     }
@@ -503,11 +499,11 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     }
     _lastProgressDispatchMs = positionMs;
     _lastProgressDurationMs = durationMs;
-    widget.context.dispatchEvent(
+    widget.context.dispatch(
       onProgress,
       defaultCoalesceKey:
           'VideoPlayer:${widget.node.props['key'] ?? 'video-player'}:onProgress',
-      kind: QuickjsUiEventKind.sample,
+      kind: JsUiEventKind.sample,
       payload: <String, Object?>{
         'positionMs': positionMs,
         'durationMs': durationMs,
@@ -517,11 +513,11 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   }
 
   void _dispatchError(String message) {
-    final onError = QuickjsUiProps.event(widget.node.props['onError']);
+    final onError = JsUiProps.event(widget.node.props['onError']);
     if (onError == null) {
       return;
     }
-    widget.context.dispatchEvent(
+    widget.context.dispatch(
       onError,
       payload: <String, Object?>{'message': message},
     );
@@ -544,7 +540,7 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     }
   }
 
-  QuickjsUiResourceReference? _tryResourceFromNode(QuickjsUiNode node) {
+  JsUiResourceReference? _tryResourceFromNode(JsUiNode node) {
     try {
       return _resourceFromNode(node);
     } catch (error) {
@@ -553,17 +549,17 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     }
   }
 
-  QuickjsUiResourceReference _resourceFromNode(QuickjsUiNode node) {
+  JsUiResourceReference _resourceFromNode(JsUiNode node) {
     final rawSource = node.props['source'];
     if (rawSource == null) {
       throw const FormatException('quickjs_ui VideoPlayer.source is required');
     }
-    final resource = QuickjsUiResourceReference.parse(
+    final resource = JsUiResourceReference.parse(
       rawSource,
       name: 'VideoPlayer.source',
     );
     return switch (resource.kind) {
-      QuickjsUiResourceKind.network || QuickjsUiResourceKind.file => resource,
+      JsUiResourceKind.network || JsUiResourceKind.file => resource,
       _ => throw FormatException(
         'quickjs_ui VideoPlayer source must be a network or file resource: '
         '${resource.kind.name}',
@@ -572,16 +568,16 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   }
 
   native.VideoPlayerController _controllerForResource(
-    QuickjsUiResourceReference resource,
+    JsUiResourceReference resource,
   ) {
-    return _controllerForSource(resource.location, resource.kind);
+    return _controllerForSource(resource.uri, resource.kind);
   }
 
   native.VideoPlayerController _controllerForSource(
     String source,
-    QuickjsUiResourceKind? kind,
+    JsUiResourceKind? kind,
   ) {
-    if (kind == QuickjsUiResourceKind.file) {
+    if (kind == JsUiResourceKind.file) {
       final uri = Uri.tryParse(source);
       final path = uri != null && uri.scheme == 'file'
           ? uri.toFilePath()
@@ -591,11 +587,11 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     return native.VideoPlayerController.networkUrl(Uri.parse(source));
   }
 
-  bool _loopFromNode(QuickjsUiNode node) {
+  bool _loopFromNode(JsUiNode node) {
     return node.props['loop'] == true;
   }
 
-  double _playbackSpeedFromNode(QuickjsUiNode node) {
+  double _playbackSpeedFromNode(JsUiNode node) {
     final value = node.props['playbackSpeed'];
     if (value == null) {
       return 1;
@@ -608,18 +604,18 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     return value.toDouble();
   }
 
-  BoxFit _fitFromNode(QuickjsUiNode node) {
-    return QuickjsUiProps.boxFit(node.props['fit']) ?? BoxFit.contain;
+  BoxFit _fitFromNode(JsUiNode node) {
+    return JsUiProps.boxFit(node.props['fit']) ?? BoxFit.contain;
   }
 
-  Color _backgroundColorFromNode(QuickjsUiNode node) {
-    return QuickjsUiProps.color(
+  Color _backgroundColorFromNode(JsUiNode node) {
+    return JsUiProps.color(
           node.props['backgroundColor'] ?? node.props['color'],
         ) ??
         const Color(0xFF111827);
   }
 
-  bool _showLoadingFromNode(QuickjsUiNode node) {
+  bool _showLoadingFromNode(JsUiNode node) {
     final value = node.props['showLoading'] ?? node.props['showProgress'];
     if (value == null) {
       return true;
@@ -639,14 +635,14 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
     if (!_initialized ||
         controller == null ||
         !controller.value.isInitialized) {
-      return _QuickjsUiVideoPlayerSurface(
+      return _JsUiVideoPlayerSurface(
         backgroundColor: backgroundColor,
         child: _showLoadingFromNode(widget.node)
             ? const Center(child: CircularProgressIndicator())
             : const SizedBox.shrink(),
       );
     }
-    return _QuickjsUiVideoPlayerSurface(
+    return _JsUiVideoPlayerSurface(
       backgroundColor: backgroundColor,
       fit: _fitFromNode(widget.node),
       videoSize: controller.value.size,
@@ -655,8 +651,8 @@ class _QuickjsUiVideoPlayerHostState extends State<_QuickjsUiVideoPlayerHost> {
   }
 }
 
-class _QuickjsUiVideoPlayerSurface extends StatelessWidget {
-  const _QuickjsUiVideoPlayerSurface({
+class _JsUiVideoPlayerSurface extends StatelessWidget {
+  const _JsUiVideoPlayerSurface({
     required this.backgroundColor,
     required this.child,
     this.fit = BoxFit.contain,

@@ -3,7 +3,7 @@ param(
     [ValidateSet('targeted', 'full', 'ui')]
     [string]$Mode = 'targeted',
 
-    [string]$TestPath = 'test/quickjs_consistency_test.dart',
+    [string]$TestPath = 'test/consistency_test.dart',
 
     [string]$PlainName,
 
@@ -13,16 +13,23 @@ param(
 
     [switch]$SkipNativeBuild,
 
+    [switch]$SkipFormat,
+
+
     [int]$FailureTailLines = 80
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $QuickjsRoot = Join-Path $Root 'packages/lemon_js'
-$QuickjsUiRoot = Join-Path $Root 'packages/lemon_js_ui'
-$QuickjsUiVideoPlayerRoot = Join-Path $Root 'packages/lemon_js_ui_video_player'
+$JsUiRoot = Join-Path $Root 'packages/lemon_js_ui'
+$JsUiVideoPlayerRoot = Join-Path $Root 'packages/lemon_js_ui_video_player'
+$ExtensionsRoot = Join-Path $Root 'packages/lemon_js_extensions'
 $ExampleRoot = Join-Path $Root 'examples/lemon_js_example'
 $LogDirectory = Join-Path $Root 'build/verification-logs'
+$FlutterBin = Split-Path -Parent (Get-Command flutter -ErrorAction Stop).Source
+$DartExecutable = Join-Path $FlutterBin 'cache/dart-sdk/bin/dart.exe'
+$FlutterTool = Join-Path $FlutterBin 'cache/flutter_tools.snapshot'
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 
 function Invoke-LoggedCommand {
@@ -44,39 +51,21 @@ function Invoke-LoggedCommand {
     $stdoutPath = Join-Path $LogDirectory "$safeName.stdout.log"
     $stderrPath = Join-Path $LogDirectory "$safeName.stderr.log"
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $escapedArguments = foreach ($argument in $Arguments) {
-        if ($argument -match '[\s"]') {
-            '"' + ($argument -replace '"', '\"') + '"'
-        } else {
-            $argument
-        }
+    Push-Location $WorkingDirectory
+    try {
+        & $Executable @Arguments 1> $stdoutPath 2> $stderrPath
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Pop-Location
     }
 
-    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = $Executable
-    $startInfo.Arguments = ($escapedArguments -join ' ')
-    $startInfo.WorkingDirectory = $WorkingDirectory
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.CreateNoWindow = $true
-
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $startInfo
-    $null = $process.Start()
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-    Set-Content -Path $stdoutPath -Value $stdout -NoNewline
-    Set-Content -Path $stderrPath -Value $stderr -NoNewline
-
     $stopwatch.Stop()
-    if ($process.ExitCode -eq 0) {
+    if ($exitCode -eq 0) {
         Write-Host ("PASS {0} ({1:n1}s)" -f $Name, $stopwatch.Elapsed.TotalSeconds)
         return
     }
 
-    Write-Host ("FAIL {0} ({1:n1}s, exit {2})" -f $Name, $stopwatch.Elapsed.TotalSeconds, $process.ExitCode)
+    Write-Host ("FAIL {0} ({1:n1}s, exit {2})" -f $Name, $stopwatch.Elapsed.TotalSeconds, $exitCode)
     foreach ($path in @($stdoutPath, $stderrPath)) {
         if ((Test-Path $path) -and (Get-Item $path).Length -gt 0) {
             Write-Host "--- $(Split-Path -Leaf $path) (last $FailureTailLines lines) ---"
@@ -84,7 +73,7 @@ function Invoke-LoggedCommand {
         }
     }
     Write-Host "Full logs: $LogDirectory"
-    exit $process.ExitCode
+    exit $exitCode
 }
 
 function Invoke-FlutterTest {
@@ -94,12 +83,11 @@ function Invoke-FlutterTest {
         [string[]]$ExtraArguments = @()
     )
 
-    $flutterCommand = Get-Command flutter -ErrorAction Stop
     Invoke-LoggedCommand `
         -Name $Name `
         -WorkingDirectory $WorkingDirectory `
-        -Executable $flutterCommand.Source `
-        -Arguments (@('test', '--reporter', 'compact') + $ExtraArguments)
+        -Executable $DartExecutable `
+        -Arguments (@($FlutterTool, 'test', '--reporter', 'compact') + $ExtraArguments)
 }
 
 function Find-QuickjsWindowsDll {
@@ -142,12 +130,11 @@ function Initialize-QuickjsWindowsDll {
         if ($SkipNativeBuild) {
             throw 'quickjs.dll was not found and -SkipNativeBuild was specified.'
         }
-        $flutterCommand = Get-Command flutter -ErrorAction Stop
         Invoke-LoggedCommand `
             -Name 'build-windows-native' `
             -WorkingDirectory $ExampleRoot `
-            -Executable $flutterCommand.Source `
-            -Arguments @('build', 'windows', '--debug')
+            -Executable $DartExecutable `
+            -Arguments @($FlutterTool, 'build', 'windows', '--debug')
         $dllPath = Find-QuickjsWindowsDll
     }
 
@@ -155,6 +142,10 @@ function Initialize-QuickjsWindowsDll {
         throw 'Windows build completed but quickjs.dll could not be located.'
     }
     $env:QUICKJS_DLL_PATH = $dllPath
+    $nativeDirectory = Split-Path -Parent $dllPath
+    if ($env:PATH -notlike "$nativeDirectory;*") {
+        $env:PATH = "$nativeDirectory;$env:PATH"
+    }
     Write-Host "Using QUICKJS_DLL_PATH=$dllPath"
 }
 
@@ -164,25 +155,24 @@ if ($Mode -eq 'targeted') {
         $testArguments += @('--plain-name', $PlainName)
     }
     if ($Web) {
-        $testArguments += @('-d', 'chrome')
+        $testArguments += @('--platform', 'chrome')
     }
     Invoke-FlutterTest -Name 'targeted-test' -WorkingDirectory $QuickjsRoot -ExtraArguments $testArguments
     exit 0
 }
 
 if ($Mode -eq 'ui') {
-    $flutterCommand = Get-Command flutter -ErrorAction Stop
     Initialize-QuickjsWindowsDll
     Invoke-LoggedCommand `
         -Name 'quickjs-ui-analyze' `
-        -WorkingDirectory $QuickjsUiRoot `
-        -Executable $flutterCommand.Source `
-        -Arguments @('analyze')
-    Invoke-FlutterTest -Name 'quickjs-ui-tests' -WorkingDirectory $QuickjsUiRoot
+        -WorkingDirectory $JsUiRoot `
+        -Executable $DartExecutable `
+        -Arguments @($FlutterTool, 'analyze')
+    Invoke-FlutterTest -Name 'quickjs-ui-tests' -WorkingDirectory $JsUiRoot
     if ($Benchmark) {
         Invoke-FlutterTest `
             -Name 'quickjs-ui-benchmarks' `
-            -WorkingDirectory $QuickjsUiRoot `
+            -WorkingDirectory $JsUiRoot `
             -ExtraArguments @(
                 'benchmark/canvas_120hz_benchmark_test.dart',
                 'benchmark/control_state_120hz_benchmark_test.dart',
@@ -193,31 +183,35 @@ if ($Mode -eq 'ui') {
     exit 0
 }
 
-$dartCommand = Get-Command dart -ErrorAction Stop
-$flutterCommand = Get-Command flutter -ErrorAction Stop
-
-Invoke-LoggedCommand -Name 'format' -WorkingDirectory $Root -Executable $dartCommand.Source -Arguments @(
-    'format',
-    'packages/lemon_js/lib',
-    'packages/lemon_js/test',
-    'packages/lemon_js_ui/lib',
-    'packages/lemon_js_ui/test',
-    'packages/lemon_js_ui_video_player/lib',
-    'packages/lemon_js_ui_video_player/test',
-    'examples/lemon_js_example/lib',
-    'examples/lemon_js_example/test'
-)
-Invoke-LoggedCommand -Name 'quickjs-analyze' -WorkingDirectory $QuickjsRoot -Executable $flutterCommand.Source -Arguments @('analyze')
-Invoke-LoggedCommand -Name 'quickjs-ui-analyze' -WorkingDirectory $QuickjsUiRoot -Executable $flutterCommand.Source -Arguments @('analyze')
-Invoke-LoggedCommand -Name 'quickjs-ui-video-player-analyze' -WorkingDirectory $QuickjsUiVideoPlayerRoot -Executable $flutterCommand.Source -Arguments @('analyze')
-Invoke-LoggedCommand -Name 'example-analyze' -WorkingDirectory $ExampleRoot -Executable $flutterCommand.Source -Arguments @('analyze')
+if (-not $SkipFormat) {
+    Invoke-LoggedCommand -Name 'format' -WorkingDirectory $Root -Executable $DartExecutable -Arguments @(
+        'format',
+        'packages/lemon_js/lib',
+        'packages/lemon_js/test',
+        'packages/lemon_js_ui/lib',
+        'packages/lemon_js_ui/test',
+        'packages/lemon_js_ui_video_player/lib',
+        'packages/lemon_js_ui_video_player/test',
+        'packages/lemon_js_extensions/lib',
+        'packages/lemon_js_extensions/test',
+        'examples/lemon_js_example/lib',
+        'examples/lemon_js_example/test'
+    )
+}
+Invoke-LoggedCommand -Name 'quickjs-analyze' -WorkingDirectory $QuickjsRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
+Invoke-LoggedCommand -Name 'quickjs-ui-analyze' -WorkingDirectory $JsUiRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
+Invoke-LoggedCommand -Name 'quickjs-ui-video-player-analyze' -WorkingDirectory $JsUiVideoPlayerRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
+Invoke-LoggedCommand -Name 'extensions-analyze' -WorkingDirectory $ExtensionsRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
+Invoke-LoggedCommand -Name 'example-analyze' -WorkingDirectory $ExampleRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
+Initialize-QuickjsWindowsDll
 Invoke-FlutterTest -Name 'native-tests' -WorkingDirectory $QuickjsRoot
 Invoke-FlutterTest `
     -Name 'web-consistency-tests' `
     -WorkingDirectory $QuickjsRoot `
-    -ExtraArguments @('test/quickjs_consistency_test.dart', '-d', 'chrome')
-Invoke-FlutterTest -Name 'quickjs-ui-tests' -WorkingDirectory $QuickjsUiRoot
-Invoke-FlutterTest -Name 'quickjs-ui-video-player-tests' -WorkingDirectory $QuickjsUiVideoPlayerRoot
+    -ExtraArguments @('test/consistency_test.dart', '--platform', 'chrome')
+Invoke-FlutterTest -Name 'quickjs-ui-tests' -WorkingDirectory $JsUiRoot
+Invoke-FlutterTest -Name 'quickjs-ui-video-player-tests' -WorkingDirectory $JsUiVideoPlayerRoot
+Invoke-FlutterTest -Name 'extensions-tests' -WorkingDirectory $ExtensionsRoot
 Invoke-FlutterTest -Name 'example-tests' -WorkingDirectory $ExampleRoot
 
 Write-Host "All verification stages passed. Logs: $LogDirectory"

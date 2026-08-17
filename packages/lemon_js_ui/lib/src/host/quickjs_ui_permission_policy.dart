@@ -5,21 +5,31 @@ import 'package:lemon_js/lemon_js.dart';
 /// The policy only validates the page manifest. It does not expose host APIs or
 /// grant native capabilities by itself; callable APIs still come from explicit
 /// [JsFeatures] values.
-final class QuickjsUiPermissionPolicy {
-  const QuickjsUiPermissionPolicy.unrestricted()
+final class JsUiPermissionPolicy {
+  /// Creates a policy that accepts every manifest permission.
+  const JsUiPermissionPolicy.unrestricted()
     : _restricted = false,
       _allowedPermissions = const <String>{};
 
-  QuickjsUiPermissionPolicy.restricted({required Iterable<String> allowed})
+  /// Creates a policy restricted to permission names in [allowed].
+  JsUiPermissionPolicy.restricted({required Iterable<String> allowed})
     : _restricted = true,
       _allowedPermissions = Set<String>.unmodifiable(allowed);
 
   final bool _restricted;
   final Set<String> _allowedPermissions;
 
+  /// Whether manifest permissions must pass the allowlist and grant checks.
   bool get isRestricted => _restricted;
+
+  /// The immutable permission allowlist used by a restricted policy.
   Set<String> get allowedPermissions => _allowedPermissions;
 
+  /// Validates the permissions requested by [plugin].
+  ///
+  /// A restricted policy requires every requested permission to appear in both
+  /// [allowedPermissions] and [grantedPermissions]. Throws
+  /// [JsUiPermissionException] with both failure sets when validation fails.
   void validate({
     required JsPlugin plugin,
     Iterable<String> grantedPermissions = const <String>[],
@@ -34,7 +44,7 @@ final class QuickjsUiPermissionPolicy {
     if (deniedByPolicy.isEmpty && missingGrants.isEmpty) {
       return;
     }
-    throw QuickjsUiPermissionException(
+    throw JsUiPermissionException(
       pluginId: plugin.manifest.id,
       requestedPermissions: requested,
       allowedPermissions: _allowedPermissions,
@@ -46,7 +56,7 @@ final class QuickjsUiPermissionPolicy {
 
   @override
   bool operator ==(Object other) {
-    return other is QuickjsUiPermissionPolicy &&
+    return other is JsUiPermissionPolicy &&
         other._restricted == _restricted &&
         _setEquals(other._allowedPermissions, _allowedPermissions);
   }
@@ -58,8 +68,10 @@ final class QuickjsUiPermissionPolicy {
   );
 }
 
-final class QuickjsUiPermissionException implements Exception {
-  const QuickjsUiPermissionException({
+/// Reports permissions rejected by policy or absent from runtime feature grants.
+final class JsUiPermissionException implements Exception {
+  /// Creates a permission validation failure with its diagnostic sets.
+  const JsUiPermissionException({
     required this.pluginId,
     required this.requestedPermissions,
     required this.allowedPermissions,
@@ -68,11 +80,22 @@ final class QuickjsUiPermissionException implements Exception {
     required this.missingGrants,
   });
 
+  /// Identifier of the plugin whose manifest failed validation.
   final String pluginId;
+
+  /// All permissions requested by the plugin manifest.
   final Set<String> requestedPermissions;
+
+  /// Permissions accepted by the application policy.
   final Set<String> allowedPermissions;
+
+  /// Permissions provided to validation by the installed runtime features.
   final Set<String> grantedPermissions;
+
+  /// Requested permissions absent from [allowedPermissions].
   final Set<String> deniedByPolicy;
+
+  /// Requested permissions absent from [grantedPermissions].
   final Set<String> missingGrants;
 
   @override
@@ -86,7 +109,7 @@ final class QuickjsUiPermissionException implements Exception {
         'not granted by features: ${_sorted(missingGrants).join(', ')}',
       );
     }
-    return 'QuickjsUiPermissionException(plugin: $pluginId, ${details.join('; ')})';
+    return 'JsUiPermissionException(plugin: $pluginId, ${details.join('; ')})';
   }
 }
 

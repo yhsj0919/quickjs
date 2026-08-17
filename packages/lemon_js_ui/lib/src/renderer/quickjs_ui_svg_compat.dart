@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -19,7 +22,7 @@ final RegExp _blackFillPattern = RegExp(
 /// In an alpha mask black and white with the same opacity are equivalent. The
 /// rewrite is intentionally limited to black fills inside declared alpha masks
 /// so ordinary visible black artwork is never changed.
-String normalizeQuickjsUiSvg(String source) {
+String normalizeJsUiSvg(String source) {
   return source.replaceAllMapped(_alphaMaskPattern, (match) {
     return match.group(0)!.replaceAllMapped(_blackFillPattern, (fill) {
       return 'fill=${fill.group(1)}white${fill.group(1)}';
@@ -27,26 +30,26 @@ String normalizeQuickjsUiSvg(String source) {
   });
 }
 
-final class QuickjsUiSvgStringLoader extends SvgStringLoader {
-  const QuickjsUiSvgStringLoader(super.svg);
+final class JsUiSvgStringLoader extends SvgStringLoader {
+  const JsUiSvgStringLoader(super.svg);
 
   @override
   String provideSvg(void message) =>
-      normalizeQuickjsUiSvg(super.provideSvg(message));
+      normalizeJsUiSvg(super.provideSvg(message));
 }
 
-final class QuickjsUiSvgAssetLoader extends SvgAssetLoader {
-  const QuickjsUiSvgAssetLoader(super.assetName);
+final class JsUiSvgAssetLoader extends SvgAssetLoader {
+  const JsUiSvgAssetLoader(super.assetName);
 
   @override
   String provideSvg(ByteData? message) =>
-      normalizeQuickjsUiSvg(super.provideSvg(message));
+      normalizeJsUiSvg(super.provideSvg(message));
 }
 
-final class QuickjsUiSvgNetworkLoader extends SvgNetworkLoader {
-  const QuickjsUiSvgNetworkLoader(super.url, {super.headers});
+final class JsUiSvgNetworkLoader extends SvgNetworkLoader {
+  const JsUiSvgNetworkLoader(super.url, {super.headers});
 
   @override
   String provideSvg(Uint8List? message) =>
-      normalizeQuickjsUiSvg(super.provideSvg(message));
+      normalizeJsUiSvg(super.provideSvg(message));
 }

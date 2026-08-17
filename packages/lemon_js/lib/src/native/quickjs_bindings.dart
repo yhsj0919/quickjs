@@ -8,104 +8,101 @@ final class JsRuntime extends Opaque {}
 
 final class JsContext extends Opaque {}
 
-typedef QuickjsVersionNative = Pointer<Utf8> Function();
-typedef QuickjsVersion = Pointer<Utf8> Function();
+typedef JsVersionNative = Pointer<Utf8> Function();
+typedef JsVersion = Pointer<Utf8> Function();
 
-typedef QuickjsRuntimeNewNative = Pointer<JsRuntime> Function();
-typedef QuickjsRuntimeNew = Pointer<JsRuntime> Function();
+typedef JsRuntimeNewNative = Pointer<JsRuntime> Function();
+typedef JsRuntimeNew = Pointer<JsRuntime> Function();
 
-typedef QuickjsRuntimeFreeNative = Void Function(Pointer<JsRuntime>);
-typedef QuickjsRuntimeFree = void Function(Pointer<JsRuntime>);
-typedef QuickjsContextNewNative =
-    Pointer<JsContext> Function(Pointer<JsRuntime>);
-typedef QuickjsContextNew = Pointer<JsContext> Function(Pointer<JsRuntime>);
-typedef QuickjsContextFreeNative = Void Function(Pointer<JsContext>);
-typedef QuickjsContextFree = void Function(Pointer<JsContext>);
-typedef QuickjsContextEvalTimeoutNamedNative =
+typedef JsRuntimeFreeNative = Void Function(Pointer<JsRuntime>);
+typedef JsRuntimeFree = void Function(Pointer<JsRuntime>);
+typedef JsContextNewNative = Pointer<JsContext> Function(Pointer<JsRuntime>);
+typedef JsContextNew = Pointer<JsContext> Function(Pointer<JsRuntime>);
+typedef JsContextFreeNative = Void Function(Pointer<JsContext>);
+typedef JsContextFree = void Function(Pointer<JsContext>);
+typedef JsContextEvalTimeoutNamedNative =
     Pointer<Utf8> Function(
       Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Int64,
     );
-typedef QuickjsContextEvalTimeoutNamed =
+typedef JsContextEvalTimeoutNamed =
     Pointer<Utf8> Function(
       Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       int,
     );
-typedef QuickjsContextEvalModuleNative =
+typedef JsContextEvalModuleNative =
     Pointer<Utf8> Function(
       Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );
-typedef QuickjsContextEvalModule =
+typedef JsContextEvalModule =
     Pointer<Utf8> Function(
       Pointer<JsContext>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );
-typedef QuickjsContextBindCallbackNative =
+typedef JsContextBindCallbackNative =
     Int32 Function(
       Pointer<JsContext>,
       Int64,
       Pointer<Utf8>,
-      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+      Pointer<NativeFunction<JsHostCallbackNative>>,
     );
-typedef QuickjsContextBindCallback =
+typedef JsContextBindCallback =
     int Function(
       Pointer<JsContext>,
       int,
       Pointer<Utf8>,
-      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+      Pointer<NativeFunction<JsHostCallbackNative>>,
     );
-typedef QuickjsContextEvalAsyncStartNamedNative =
+typedef JsContextEvalAsyncStartNamedNative =
     Pointer<Utf8> Function(Pointer<JsContext>, Pointer<Utf8>, Pointer<Utf8>);
-typedef QuickjsContextEvalAsyncStartNamed =
+typedef JsContextEvalAsyncStartNamed =
     Pointer<Utf8> Function(Pointer<JsContext>, Pointer<Utf8>, Pointer<Utf8>);
-typedef QuickjsContextEvalAsyncPollNative =
+typedef JsContextEvalAsyncPollNative =
     Pointer<Utf8> Function(Pointer<JsContext>);
-typedef QuickjsContextEvalAsyncPoll =
-    Pointer<Utf8> Function(Pointer<JsContext>);
-typedef QuickjsContextPumpTimersNative = Int64 Function(Pointer<JsContext>);
-typedef QuickjsContextPumpTimers = int Function(Pointer<JsContext>);
-typedef QuickjsContextBindSinkNative =
+typedef JsContextEvalAsyncPoll = Pointer<Utf8> Function(Pointer<JsContext>);
+typedef JsContextPumpTimersNative = Int64 Function(Pointer<JsContext>);
+typedef JsContextPumpTimers = int Function(Pointer<JsContext>);
+typedef JsContextBindSinkNative =
     Int32 Function(Pointer<JsContext>, Int64, Pointer<Utf8>);
-typedef QuickjsContextBindSink =
+typedef JsContextBindSink =
     int Function(Pointer<JsContext>, int, Pointer<Utf8>);
 
-typedef QuickjsRuntimeSetMemoryLimitNative =
+typedef JsRuntimeSetMemoryLimitNative =
     Void Function(Pointer<JsRuntime>, Int64);
-typedef QuickjsRuntimeSetMemoryLimit = void Function(Pointer<JsRuntime>, int);
+typedef JsRuntimeSetMemoryLimit = void Function(Pointer<JsRuntime>, int);
 
-typedef QuickjsRuntimeSetStackLimitNative =
-    Void Function(Pointer<JsRuntime>, Int64);
-typedef QuickjsRuntimeSetStackLimit = void Function(Pointer<JsRuntime>, int);
+typedef JsRuntimeSetStackLimitNative = Void Function(Pointer<JsRuntime>, Int64);
+typedef JsRuntimeSetStackLimit = void Function(Pointer<JsRuntime>, int);
 
-typedef QuickjsRuntimeSetCancelFlagNative =
+typedef JsRuntimeSetCancelFlagNative =
     Void Function(Pointer<JsRuntime>, Pointer<Int32>);
-typedef QuickjsRuntimeSetCancelFlag =
+typedef JsRuntimeSetCancelFlag =
     void Function(Pointer<JsRuntime>, Pointer<Int32>);
-typedef QuickjsRuntimePumpTimersNative = Int64 Function(Pointer<JsRuntime>);
-typedef QuickjsRuntimePumpTimers = int Function(Pointer<JsRuntime>);
+typedef JsRuntimePumpTimersNative = Int64 Function(Pointer<JsRuntime>);
+typedef JsRuntimePumpTimers = int Function(Pointer<JsRuntime>);
 
-typedef QuickjsEvalTimeoutNative =
+typedef JsEvalTimeoutNative =
     Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, Int64);
-typedef QuickjsEvalTimeout =
+typedef JsEvalTimeout =
     Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, int);
 
-typedef QuickjsEvalTimeoutNamedNative =
+typedef JsEvalTimeoutNamedNative =
     Pointer<Utf8> Function(
       Pointer<JsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Int64,
     );
-typedef QuickjsEvalTimeoutNamed =
+typedef JsEvalTimeoutNamed =
     Pointer<Utf8> Function(
       Pointer<JsRuntime>,
       Pointer<Utf8>,
@@ -113,14 +110,14 @@ typedef QuickjsEvalTimeoutNamed =
       int,
     );
 
-typedef QuickjsEvalModuleNative =
+typedef JsEvalModuleNative =
     Pointer<Utf8> Function(
       Pointer<JsRuntime>,
       Pointer<Utf8>,
       Pointer<Utf8>,
       Pointer<Utf8>,
     );
-typedef QuickjsEvalModule =
+typedef JsEvalModule =
     Pointer<Utf8> Function(
       Pointer<JsRuntime>,
       Pointer<Utf8>,
@@ -128,259 +125,241 @@ typedef QuickjsEvalModule =
       Pointer<Utf8>,
     );
 
-typedef QuickjsFreeStringNative = Void Function(Pointer<Utf8>);
-typedef QuickjsFreeString = void Function(Pointer<Utf8>);
+typedef JsFreeStringNative = Void Function(Pointer<Utf8>);
+typedef JsFreeString = void Function(Pointer<Utf8>);
 
-typedef QuickjsHostCallbackNative =
+typedef JsHostCallbackNative =
     Int64 Function(Int64 callbackId, Pointer<Utf8> argsJson);
-typedef QuickjsHostCallback =
-    int Function(int callbackId, Pointer<Utf8> argsJson);
+typedef JsHostCallback = int Function(int callbackId, Pointer<Utf8> argsJson);
 
-typedef QuickjsRuntimeBindCallbackNative =
+typedef JsRuntimeBindCallbackNative =
     Int32 Function(
       Pointer<JsRuntime>,
       Int64,
       Pointer<Utf8>,
-      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+      Pointer<NativeFunction<JsHostCallbackNative>>,
     );
-typedef QuickjsRuntimeBindCallback =
+typedef JsRuntimeBindCallback =
     int Function(
       Pointer<JsRuntime>,
       int,
       Pointer<Utf8>,
-      Pointer<NativeFunction<QuickjsHostCallbackNative>>,
+      Pointer<NativeFunction<JsHostCallbackNative>>,
     );
 
-typedef QuickjsEvalAsyncStartNative =
+typedef JsEvalAsyncStartNative =
     Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>);
-typedef QuickjsEvalAsyncStart =
+typedef JsEvalAsyncStart =
     Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>);
 
-typedef QuickjsEvalAsyncStartNamedNative =
+typedef JsEvalAsyncStartNamedNative =
     Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, Pointer<Utf8>);
-typedef QuickjsEvalAsyncStartNamed =
+typedef JsEvalAsyncStartNamed =
     Pointer<Utf8> Function(Pointer<JsRuntime>, Pointer<Utf8>, Pointer<Utf8>);
 
-typedef QuickjsEvalAsyncPollNative = Pointer<Utf8> Function(Pointer<JsRuntime>);
-typedef QuickjsEvalAsyncPoll = Pointer<Utf8> Function(Pointer<JsRuntime>);
+typedef JsEvalAsyncPollNative = Pointer<Utf8> Function(Pointer<JsRuntime>);
+typedef JsEvalAsyncPoll = Pointer<Utf8> Function(Pointer<JsRuntime>);
 
-typedef QuickjsRuntimeResolveCallbackNative =
+typedef JsRuntimeResolveCallbackNative =
     Int32 Function(Pointer<JsRuntime>, Int64, Int32, Pointer<Utf8>);
-typedef QuickjsRuntimeResolveCallback =
+typedef JsRuntimeResolveCallback =
     int Function(Pointer<JsRuntime>, int, int, Pointer<Utf8>);
 
-typedef QuickjsHostStreamPullNative = Int64 Function(Int64 streamId);
-typedef QuickjsHostStreamPull = int Function(int streamId);
+typedef JsHostStreamPullNative = Int64 Function(Int64 streamId);
+typedef JsHostStreamPull = int Function(int streamId);
 
-typedef QuickjsHostStreamCancelNative = Void Function(Int64 streamId);
-typedef QuickjsHostStreamCancel = void Function(int streamId);
+typedef JsHostStreamCancelNative = Void Function(Int64 streamId);
+typedef JsHostStreamCancel = void Function(int streamId);
 
-typedef QuickjsHostSinkActionNative =
+typedef JsHostSinkActionNative =
     Int64 Function(
       Int64 sinkId,
       Pointer<Utf8> action,
       Pointer<Utf8> payloadJson,
     );
-typedef QuickjsHostSinkAction =
+typedef JsHostSinkAction =
     int Function(int sinkId, Pointer<Utf8> action, Pointer<Utf8> payloadJson);
 
-typedef QuickjsRuntimeSetStreamHandlersNative =
+typedef JsRuntimeSetStreamHandlersNative =
     Void Function(
       Pointer<JsRuntime>,
-      Pointer<NativeFunction<QuickjsHostStreamPullNative>>,
-      Pointer<NativeFunction<QuickjsHostStreamCancelNative>>,
-      Pointer<NativeFunction<QuickjsHostSinkActionNative>>,
+      Pointer<NativeFunction<JsHostStreamPullNative>>,
+      Pointer<NativeFunction<JsHostStreamCancelNative>>,
+      Pointer<NativeFunction<JsHostSinkActionNative>>,
     );
-typedef QuickjsRuntimeSetStreamHandlers =
+typedef JsRuntimeSetStreamHandlers =
     void Function(
       Pointer<JsRuntime>,
-      Pointer<NativeFunction<QuickjsHostStreamPullNative>>,
-      Pointer<NativeFunction<QuickjsHostStreamCancelNative>>,
-      Pointer<NativeFunction<QuickjsHostSinkActionNative>>,
+      Pointer<NativeFunction<JsHostStreamPullNative>>,
+      Pointer<NativeFunction<JsHostStreamCancelNative>>,
+      Pointer<NativeFunction<JsHostSinkActionNative>>,
     );
 
-typedef QuickjsRuntimeResolveStreamPullNative =
+typedef JsRuntimeResolveStreamPullNative =
     Int32 Function(Pointer<JsRuntime>, Int64, Int32, Pointer<Utf8>);
-typedef QuickjsRuntimeResolveStreamPull =
+typedef JsRuntimeResolveStreamPull =
     int Function(Pointer<JsRuntime>, int, int, Pointer<Utf8>);
 
-typedef QuickjsRuntimeResolveSinkActionNative =
+typedef JsRuntimeResolveSinkActionNative =
     Int32 Function(Pointer<JsRuntime>, Int64, Int32, Pointer<Utf8>);
-typedef QuickjsRuntimeResolveSinkAction =
+typedef JsRuntimeResolveSinkAction =
     int Function(Pointer<JsRuntime>, int, int, Pointer<Utf8>);
 
-typedef QuickjsRuntimeBindSinkNative =
+typedef JsRuntimeBindSinkNative =
     Int32 Function(Pointer<JsRuntime>, Int64, Pointer<Utf8>);
-typedef QuickjsRuntimeBindSink =
+typedef JsRuntimeBindSink =
     int Function(Pointer<JsRuntime>, int, Pointer<Utf8>);
 
 /// QuickJS native 动态库的 Dart FFI 绑定。
 ///
 /// 这里只声明 ABI 函数，不持有 runtime 状态；runtime 生命周期由 worker 管理。
-class QuickjsBindings {
-  QuickjsBindings(DynamicLibrary lib)
-    : version = lib.lookupFunction<QuickjsVersionNative, QuickjsVersion>(
+class JsBindings {
+  JsBindings(DynamicLibrary lib)
+    : version = lib.lookupFunction<JsVersionNative, JsVersion>(
         'quickjs_version',
       ),
-      runtimeNew = lib
-          .lookupFunction<QuickjsRuntimeNewNative, QuickjsRuntimeNew>(
-            'quickjs_runtime_new',
-          ),
-      runtimeFree = lib
-          .lookupFunction<QuickjsRuntimeFreeNative, QuickjsRuntimeFree>(
-            'quickjs_runtime_free',
-          ),
-      contextNew = lib
-          .lookupFunction<QuickjsContextNewNative, QuickjsContextNew>(
-            'quickjs_context_new',
-          ),
-      contextFree = lib
-          .lookupFunction<QuickjsContextFreeNative, QuickjsContextFree>(
-            'quickjs_context_free',
-          ),
+      runtimeNew = lib.lookupFunction<JsRuntimeNewNative, JsRuntimeNew>(
+        'quickjs_runtime_new',
+      ),
+      runtimeFree = lib.lookupFunction<JsRuntimeFreeNative, JsRuntimeFree>(
+        'quickjs_runtime_free',
+      ),
+      contextNew = lib.lookupFunction<JsContextNewNative, JsContextNew>(
+        'quickjs_context_new',
+      ),
+      contextFree = lib.lookupFunction<JsContextFreeNative, JsContextFree>(
+        'quickjs_context_free',
+      ),
       contextEvalTimeoutNamed = lib
           .lookupFunction<
-            QuickjsContextEvalTimeoutNamedNative,
-            QuickjsContextEvalTimeoutNamed
+            JsContextEvalTimeoutNamedNative,
+            JsContextEvalTimeoutNamed
           >('quickjs_context_eval_timeout_named'),
       contextEvalModule = lib
-          .lookupFunction<
-            QuickjsContextEvalModuleNative,
-            QuickjsContextEvalModule
-          >('quickjs_context_eval_module'),
+          .lookupFunction<JsContextEvalModuleNative, JsContextEvalModule>(
+            'quickjs_context_eval_module',
+          ),
       contextBindCallback = lib
-          .lookupFunction<
-            QuickjsContextBindCallbackNative,
-            QuickjsContextBindCallback
-          >('quickjs_context_bind_callback'),
+          .lookupFunction<JsContextBindCallbackNative, JsContextBindCallback>(
+            'quickjs_context_bind_callback',
+          ),
       contextEvalAsyncStartNamed = lib
           .lookupFunction<
-            QuickjsContextEvalAsyncStartNamedNative,
-            QuickjsContextEvalAsyncStartNamed
+            JsContextEvalAsyncStartNamedNative,
+            JsContextEvalAsyncStartNamed
           >('quickjs_context_eval_async_start_named'),
       contextEvalAsyncPoll = lib
-          .lookupFunction<
-            QuickjsContextEvalAsyncPollNative,
-            QuickjsContextEvalAsyncPoll
-          >('quickjs_context_eval_async_poll'),
+          .lookupFunction<JsContextEvalAsyncPollNative, JsContextEvalAsyncPoll>(
+            'quickjs_context_eval_async_poll',
+          ),
       contextPumpTimers = lib
-          .lookupFunction<
-            QuickjsContextPumpTimersNative,
-            QuickjsContextPumpTimers
-          >('quickjs_context_pump_timers'),
+          .lookupFunction<JsContextPumpTimersNative, JsContextPumpTimers>(
+            'quickjs_context_pump_timers',
+          ),
       contextBindSink = lib
-          .lookupFunction<QuickjsContextBindSinkNative, QuickjsContextBindSink>(
+          .lookupFunction<JsContextBindSinkNative, JsContextBindSink>(
             'quickjs_context_bind_sink',
           ),
       runtimeSetMemoryLimit = lib
           .lookupFunction<
-            QuickjsRuntimeSetMemoryLimitNative,
-            QuickjsRuntimeSetMemoryLimit
+            JsRuntimeSetMemoryLimitNative,
+            JsRuntimeSetMemoryLimit
           >('quickjs_runtime_set_memory_limit'),
       runtimeSetStackLimit = lib
-          .lookupFunction<
-            QuickjsRuntimeSetStackLimitNative,
-            QuickjsRuntimeSetStackLimit
-          >('quickjs_runtime_set_stack_limit'),
+          .lookupFunction<JsRuntimeSetStackLimitNative, JsRuntimeSetStackLimit>(
+            'quickjs_runtime_set_stack_limit',
+          ),
       runtimeSetCancelFlag = lib
-          .lookupFunction<
-            QuickjsRuntimeSetCancelFlagNative,
-            QuickjsRuntimeSetCancelFlag
-          >('quickjs_runtime_set_cancel_flag'),
+          .lookupFunction<JsRuntimeSetCancelFlagNative, JsRuntimeSetCancelFlag>(
+            'quickjs_runtime_set_cancel_flag',
+          ),
       runtimePumpTimers = lib
-          .lookupFunction<
-            QuickjsRuntimePumpTimersNative,
-            QuickjsRuntimePumpTimers
-          >('quickjs_runtime_pump_timers'),
-      evalTimeout = lib
-          .lookupFunction<QuickjsEvalTimeoutNative, QuickjsEvalTimeout>(
-            'quickjs_eval_timeout',
+          .lookupFunction<JsRuntimePumpTimersNative, JsRuntimePumpTimers>(
+            'quickjs_runtime_pump_timers',
           ),
+      evalTimeout = lib.lookupFunction<JsEvalTimeoutNative, JsEvalTimeout>(
+        'quickjs_eval_timeout',
+      ),
       evalTimeoutNamed = lib
-          .lookupFunction<
-            QuickjsEvalTimeoutNamedNative,
-            QuickjsEvalTimeoutNamed
-          >('quickjs_eval_timeout_named'),
-      evalModule = lib
-          .lookupFunction<QuickjsEvalModuleNative, QuickjsEvalModule>(
-            'quickjs_eval_module',
+          .lookupFunction<JsEvalTimeoutNamedNative, JsEvalTimeoutNamed>(
+            'quickjs_eval_timeout_named',
           ),
+      evalModule = lib.lookupFunction<JsEvalModuleNative, JsEvalModule>(
+        'quickjs_eval_module',
+      ),
       runtimeBindCallback = lib
-          .lookupFunction<
-            QuickjsRuntimeBindCallbackNative,
-            QuickjsRuntimeBindCallback
-          >('quickjs_runtime_bind_callback'),
+          .lookupFunction<JsRuntimeBindCallbackNative, JsRuntimeBindCallback>(
+            'quickjs_runtime_bind_callback',
+          ),
       evalAsyncStart = lib
-          .lookupFunction<QuickjsEvalAsyncStartNative, QuickjsEvalAsyncStart>(
+          .lookupFunction<JsEvalAsyncStartNative, JsEvalAsyncStart>(
             'quickjs_eval_async_start',
           ),
       evalAsyncStartNamed = lib
-          .lookupFunction<
-            QuickjsEvalAsyncStartNamedNative,
-            QuickjsEvalAsyncStartNamed
-          >('quickjs_eval_async_start_named'),
+          .lookupFunction<JsEvalAsyncStartNamedNative, JsEvalAsyncStartNamed>(
+            'quickjs_eval_async_start_named',
+          ),
       evalAsyncPoll = lib
-          .lookupFunction<QuickjsEvalAsyncPollNative, QuickjsEvalAsyncPoll>(
+          .lookupFunction<JsEvalAsyncPollNative, JsEvalAsyncPoll>(
             'quickjs_eval_async_poll',
           ),
       runtimeResolveCallback = lib
           .lookupFunction<
-            QuickjsRuntimeResolveCallbackNative,
-            QuickjsRuntimeResolveCallback
+            JsRuntimeResolveCallbackNative,
+            JsRuntimeResolveCallback
           >('quickjs_runtime_resolve_callback'),
       runtimeSetStreamHandlers = lib
           .lookupFunction<
-            QuickjsRuntimeSetStreamHandlersNative,
-            QuickjsRuntimeSetStreamHandlers
+            JsRuntimeSetStreamHandlersNative,
+            JsRuntimeSetStreamHandlers
           >('quickjs_runtime_set_stream_handlers'),
       runtimeResolveStreamPull = lib
           .lookupFunction<
-            QuickjsRuntimeResolveStreamPullNative,
-            QuickjsRuntimeResolveStreamPull
+            JsRuntimeResolveStreamPullNative,
+            JsRuntimeResolveStreamPull
           >('quickjs_runtime_resolve_stream_pull'),
       runtimeResolveSinkAction = lib
           .lookupFunction<
-            QuickjsRuntimeResolveSinkActionNative,
-            QuickjsRuntimeResolveSinkAction
+            JsRuntimeResolveSinkActionNative,
+            JsRuntimeResolveSinkAction
           >('quickjs_runtime_resolve_sink_action'),
       runtimeBindSink = lib
-          .lookupFunction<QuickjsRuntimeBindSinkNative, QuickjsRuntimeBindSink>(
+          .lookupFunction<JsRuntimeBindSinkNative, JsRuntimeBindSink>(
             'quickjs_runtime_bind_sink',
           ),
-      freeString = lib
-          .lookupFunction<QuickjsFreeStringNative, QuickjsFreeString>(
-            'quickjs_free_string',
-          );
+      freeString = lib.lookupFunction<JsFreeStringNative, JsFreeString>(
+        'quickjs_free_string',
+      );
 
-  final QuickjsVersion version;
-  final QuickjsRuntimeNew runtimeNew;
-  final QuickjsRuntimeFree runtimeFree;
-  final QuickjsContextNew contextNew;
-  final QuickjsContextFree contextFree;
-  final QuickjsContextEvalTimeoutNamed contextEvalTimeoutNamed;
-  final QuickjsContextEvalModule contextEvalModule;
-  final QuickjsContextBindCallback contextBindCallback;
-  final QuickjsContextEvalAsyncStartNamed contextEvalAsyncStartNamed;
-  final QuickjsContextEvalAsyncPoll contextEvalAsyncPoll;
-  final QuickjsContextPumpTimers contextPumpTimers;
-  final QuickjsContextBindSink contextBindSink;
-  final QuickjsRuntimeSetMemoryLimit runtimeSetMemoryLimit;
-  final QuickjsRuntimeSetStackLimit runtimeSetStackLimit;
-  final QuickjsRuntimeSetCancelFlag runtimeSetCancelFlag;
-  final QuickjsRuntimePumpTimers runtimePumpTimers;
-  final QuickjsEvalTimeout evalTimeout;
-  final QuickjsEvalTimeoutNamed evalTimeoutNamed;
-  final QuickjsEvalModule evalModule;
-  final QuickjsRuntimeBindCallback runtimeBindCallback;
-  final QuickjsEvalAsyncStart evalAsyncStart;
-  final QuickjsEvalAsyncStartNamed evalAsyncStartNamed;
-  final QuickjsEvalAsyncPoll evalAsyncPoll;
-  final QuickjsRuntimeResolveCallback runtimeResolveCallback;
-  final QuickjsRuntimeSetStreamHandlers runtimeSetStreamHandlers;
-  final QuickjsRuntimeResolveStreamPull runtimeResolveStreamPull;
-  final QuickjsRuntimeResolveSinkAction runtimeResolveSinkAction;
-  final QuickjsRuntimeBindSink runtimeBindSink;
-  final QuickjsFreeString freeString;
+  final JsVersion version;
+  final JsRuntimeNew runtimeNew;
+  final JsRuntimeFree runtimeFree;
+  final JsContextNew contextNew;
+  final JsContextFree contextFree;
+  final JsContextEvalTimeoutNamed contextEvalTimeoutNamed;
+  final JsContextEvalModule contextEvalModule;
+  final JsContextBindCallback contextBindCallback;
+  final JsContextEvalAsyncStartNamed contextEvalAsyncStartNamed;
+  final JsContextEvalAsyncPoll contextEvalAsyncPoll;
+  final JsContextPumpTimers contextPumpTimers;
+  final JsContextBindSink contextBindSink;
+  final JsRuntimeSetMemoryLimit runtimeSetMemoryLimit;
+  final JsRuntimeSetStackLimit runtimeSetStackLimit;
+  final JsRuntimeSetCancelFlag runtimeSetCancelFlag;
+  final JsRuntimePumpTimers runtimePumpTimers;
+  final JsEvalTimeout evalTimeout;
+  final JsEvalTimeoutNamed evalTimeoutNamed;
+  final JsEvalModule evalModule;
+  final JsRuntimeBindCallback runtimeBindCallback;
+  final JsEvalAsyncStart evalAsyncStart;
+  final JsEvalAsyncStartNamed evalAsyncStartNamed;
+  final JsEvalAsyncPoll evalAsyncPoll;
+  final JsRuntimeResolveCallback runtimeResolveCallback;
+  final JsRuntimeSetStreamHandlers runtimeSetStreamHandlers;
+  final JsRuntimeResolveStreamPull runtimeResolveStreamPull;
+  final JsRuntimeResolveSinkAction runtimeResolveSinkAction;
+  final JsRuntimeBindSink runtimeBindSink;
+  final JsFreeString freeString;
 
   static DynamicLibrary open() {
     if (Platform.isWindows) {
@@ -440,3 +419,4 @@ class QuickjsBindings {
     }
   }
 }
+// ignore_for_file: public_member_api_docs

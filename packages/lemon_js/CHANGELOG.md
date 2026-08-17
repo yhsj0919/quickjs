@@ -1,22 +1,54 @@
 # 更新日志 / Changelog
 
-## Unreleased
+## 0.2.0
 
 ### 中文
 
-- 增加 pub 包内的最小可运行示例，覆盖 Runtime 创建、结构化求值和资源释放。
+- **破坏性更新：** 本次重构系统性调整了公开 API、类型名、参数名和导入入口，且不提供
+  旧名称兼容别名。升级前必须按照
+  [破坏性 API 迁移指南](../../docs/breaking_api_migration.md) 修改调用代码。
+- 主入口改为 `JsEngine`；多 Context 的 `JsRuntime` / `JsContext` 移至
+  `package:lemon_js/lemon_js_context.dart`。
+- 执行 API 统一为 `eval/evalRaw`、`run/runRaw`、`runModule`、`runCommonJs` 和
+  `call/callRaw/callModule`。
+- Dart → JavaScript 统一使用 `inject*`，JavaScript → Dart 统一使用 `bind*`；删除
+  `JsFunctionHandle.cancel()`。
+- 原 Mount/Capabilities 模型统一为 `JsFeatures`、`features` 和 `loadFeatures()`；内置能力
+  统一使用 `*Features` 类型。
+- 插件、脚本、模块、资源路径、队列限制及 KV Store 的公开名称已统一；其中 KV 实现改为
+  `JsMemoryKvStore` 和 `JsSharedPreferencesKvStore`。
+- 平台插件壳统一为 `LemonJsPlugin` / `lemon_js_plugin`，Android namespace 改为
+  `xyz.yhsj.lemon_js`。
+- 修复 WebSocket host script 调用错误事件方法导致连接 Promise 永久等待的问题。
+- 增加 pub 包内的最小可运行示例，覆盖 Engine 创建、结构化求值和资源释放。
 
 ### English
 
-- Added a minimal runnable Pub example covering runtime creation, structured evaluation, and disposal.
+- **Breaking update:** This refactor systematically changes public APIs, type names, parameter names, and
+  import entry points. No compatibility aliases are provided. Update consumers using the
+  [breaking API migration guide](../../docs/breaking_api_migration.md) before upgrading.
+- Replaced the primary entry point with `JsEngine`; the multi-context `JsRuntime` / `JsContext` API now
+  lives in `package:lemon_js/lemon_js_context.dart`.
+- Standardized execution on `eval/evalRaw`, `run/runRaw`, `runModule`, `runCommonJs`, and
+  `call/callRaw/callModule`.
+- Standardized Dart-to-JavaScript interop on `inject*` and JavaScript-to-Dart interop on `bind*`, and
+  removed `JsFunctionHandle.cancel()`.
+- Replaced the Mount/Capabilities model with `JsFeatures`, `features`, and `loadFeatures()`; built-in
+  capabilities now use `*Features` types.
+- Standardized plugin, script, module, resource-path, queue-limit, and KV Store names, including
+  `JsMemoryKvStore` and `JsSharedPreferencesKvStore`.
+- Renamed platform plugin shells to `LemonJsPlugin` / `lemon_js_plugin` and changed the Android namespace
+  to `xyz.yhsj.lemon_js`.
+- Fixed a WebSocket host-script event dispatch error that left connection promises pending indefinitely.
+- Added a minimal runnable Pub example covering engine creation, structured evaluation, and disposal.
 
 ## 0.1.1
 
 ### 中文
 
 - 新增通用命名空间 KV 接口、SharedPreferencesAsync 默认实现和 `lemon_js/storage` 挂载。
-- 新增可复用 `QuickjsHttpSession`，供 Fetch、XHR 和 Axios 共享连接与网络配置。
-- 新增调用队列上限和稳定的 `QuickjsException.kind` 框架错误分类。
+- 新增可复用 `JsHttpSession`，供 Fetch、XHR 和 Axios 共享连接与网络配置。
+- 新增调用队列上限和稳定的 `JsException.kind` 框架错误分类。
 - 为 Dart/JS 双向值转换统一增加深度和容器数量预算，避免异常值图耗尽 Runtime 栈。
 - 重写 README，补充安装、基础执行、Dart/JS 互调、模块、宿主能力和插件最小示例，并修正
   GitHub 文档链接。
@@ -25,9 +57,9 @@
 
 - Added a general namespaced KV interface, a default SharedPreferencesAsync implementation, and the
   `lemon_js/storage` mount.
-- Added reusable `QuickjsHttpSession` support for sharing connections and network configuration across
+- Added reusable `JsHttpSession` support for sharing connections and network configuration across
   Fetch, XHR, and Axios.
-- Added bounded call queues and stable framework error categories through `QuickjsException.kind`.
+- Added bounded call queues and stable framework error categories through `JsException.kind`.
 - Added shared depth and container-count budgets for Dart/JS value conversion to prevent malformed value
   graphs from exhausting the runtime stack.
 - Reworked the README with installation, evaluation, Dart/JS interop, modules, host capabilities, and plugin

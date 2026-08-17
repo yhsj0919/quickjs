@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
-class QuickjsUiCanvasClockPage extends StatelessWidget {
-  const QuickjsUiCanvasClockPage({super.key});
+class JsUiCanvasClockPage extends StatelessWidget {
+  const JsUiCanvasClockPage({super.key});
 
   static const String path = 'assets/quickjs_ui/canvas_clock_page.mjs';
 
@@ -10,7 +10,7 @@ class QuickjsUiCanvasClockPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Canvas 模拟时钟')),
-      body: QuickjsUiView.asset(
+      body: JsUiView.asset(
         path: path,
         loadingBuilder: (_) => const Center(child: CircularProgressIndicator()),
         errorBuilder: (_, error) => Padding(

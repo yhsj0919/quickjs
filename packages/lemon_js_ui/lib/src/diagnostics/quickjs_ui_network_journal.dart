@@ -5,22 +5,25 @@ import '../resource/quickjs_ui_network_loader.dart';
 import 'quickjs_ui_network_record.dart';
 
 /// Collects bundle loader and host API network activity into structured records.
-final class QuickjsUiNetworkJournal {
+final class JsUiNetworkJournal {
+  /// Journal 保留的最大记录数，超出后移除最早记录。
   static const int maxRecords = 256;
 
-  final List<QuickjsUiNetworkRecord> _records = <QuickjsUiNetworkRecord>[];
-  final Map<String, QuickjsUiNetworkRecord> _pending =
-      <String, QuickjsUiNetworkRecord>{};
+  final List<JsUiNetworkRecord> _records = <JsUiNetworkRecord>[];
+  final Map<String, JsUiNetworkRecord> _pending = <String, JsUiNetworkRecord>{};
 
-  List<QuickjsUiNetworkRecord> get records =>
-      List<QuickjsUiNetworkRecord>.unmodifiable(_records);
+  /// 当前网络记录的不可变快照。
+  List<JsUiNetworkRecord> get records =>
+      List<JsUiNetworkRecord>.unmodifiable(_records);
 
+  /// 清空已完成和等待中的全部记录。
   void clear() {
     _records.clear();
     _pending.clear();
   }
 
-  void handleLogEvent(QuickjsUiNetworkLogEvent event) {
+  /// 将 Bundle Loader 的 [event] 合并进结构化记录。
+  void handleLogEvent(JsUiNetworkLogEvent event) {
     final id = event.id;
     if (id == null || id.isEmpty) {
       _appendLegacyLog(event);
@@ -28,14 +31,14 @@ final class QuickjsUiNetworkJournal {
     }
     switch (event.type) {
       case 'network.request':
-        final record = QuickjsUiNetworkRecord(
+        final record = JsUiNetworkRecord(
           id: id,
-          source: QuickjsUiNetworkSource.bundle,
+          source: JsUiNetworkSource.bundle,
           method: event.method ?? 'GET',
           uri: event.uri,
           startedAt: event.timestamp ?? DateTime.now(),
           etag: event.etag,
-          phase: QuickjsUiNetworkRecordPhase.pending,
+          phase: JsUiNetworkRecordPhase.pending,
         );
         _pending[id] = record;
         _appendRecord(record);
@@ -49,7 +52,7 @@ final class QuickjsUiNetworkJournal {
           bodyBytes: event.bodyBytes,
           etag: event.etag,
           fromCache: true,
-          phase: QuickjsUiNetworkRecordPhase.cacheHit,
+          phase: JsUiNetworkRecordPhase.cacheHit,
         );
       case 'network.cacheStore':
         _completeBundleRecord(
@@ -59,14 +62,14 @@ final class QuickjsUiNetworkJournal {
           bodyBytes: event.bodyBytes,
           etag: event.etag,
           fromCache: false,
-          phase: QuickjsUiNetworkRecordPhase.completed,
+          phase: JsUiNetworkRecordPhase.completed,
         );
       default:
         _appendLegacyLog(event);
     }
   }
 
-  void _updateBundleResponse(String id, QuickjsUiNetworkLogEvent event) {
+  void _updateBundleResponse(String id, JsUiNetworkLogEvent event) {
     final pending = _pending[id];
     if (pending == null) {
       return;
@@ -79,7 +82,7 @@ final class QuickjsUiNetworkJournal {
         bodyBytes: event.bodyBytes,
         etag: event.etag,
         fromCache: false,
-        phase: QuickjsUiNetworkRecordPhase.failed,
+        phase: JsUiNetworkRecordPhase.failed,
         error: event.error,
       );
       return;
@@ -103,12 +106,13 @@ final class QuickjsUiNetworkJournal {
         bodyBytes: event.bodyBytes,
         etag: event.etag,
         fromCache: false,
-        phase: QuickjsUiNetworkRecordPhase.failed,
+        phase: JsUiNetworkRecordPhase.failed,
         error: 'HTTP $statusCode',
       );
     }
   }
 
+  /// 执行宿主网络 [action]，同时记录请求、结果、耗时与错误。
   Future<Object?> traceHostRequest(
     Map<String, Object?> request,
     FutureOr<Object?> Function() action,
@@ -117,13 +121,13 @@ final class QuickjsUiNetworkJournal {
     final uri = _uriFromHostRequest(request);
     final method = _methodFromHostRequest(request);
     final startedAt = DateTime.now();
-    final pending = QuickjsUiNetworkRecord(
+    final pending = JsUiNetworkRecord(
       id: id,
-      source: QuickjsUiNetworkSource.host,
+      source: JsUiNetworkSource.host,
       method: method,
       uri: uri,
       startedAt: startedAt,
-      phase: QuickjsUiNetworkRecordPhase.pending,
+      phase: JsUiNetworkRecordPhase.pending,
     );
     _pending[id] = pending;
     _appendRecord(pending);
@@ -156,7 +160,7 @@ final class QuickjsUiNetworkJournal {
     int? bodyBytes,
     String? etag,
     required bool fromCache,
-    required QuickjsUiNetworkRecordPhase phase,
+    required JsUiNetworkRecordPhase phase,
     String? error,
   }) {
     final pending = _pending.remove(id);
@@ -176,7 +180,7 @@ final class QuickjsUiNetworkJournal {
         bodyBytes: bodyBytes ?? pending.bodyBytes,
         etag: etag ?? pending.etag,
         fromCache: fromCache,
-        phase: failed ? QuickjsUiNetworkRecordPhase.failed : phase,
+        phase: failed ? JsUiNetworkRecordPhase.failed : phase,
         error:
             error ??
             (failed ? 'HTTP ${statusCode ?? pending.statusCode}' : null),
@@ -202,8 +206,8 @@ final class QuickjsUiNetworkJournal {
         durationMs: durationMs,
         bodyBytes: bodyBytes,
         phase: failed
-            ? QuickjsUiNetworkRecordPhase.failed
-            : QuickjsUiNetworkRecordPhase.completed,
+            ? JsUiNetworkRecordPhase.failed
+            : JsUiNetworkRecordPhase.completed,
         error: failed ? 'HTTP $statusCode' : null,
       ),
     );
@@ -222,17 +226,17 @@ final class QuickjsUiNetworkJournal {
       pending.copyWith(
         completedAt: DateTime.now(),
         durationMs: durationMs,
-        phase: QuickjsUiNetworkRecordPhase.failed,
+        phase: JsUiNetworkRecordPhase.failed,
         error: error,
       ),
     );
   }
 
-  void _appendLegacyLog(QuickjsUiNetworkLogEvent event) {
+  void _appendLegacyLog(JsUiNetworkLogEvent event) {
     _appendRecord(
-      QuickjsUiNetworkRecord(
+      JsUiNetworkRecord(
         id: 'legacy-${_records.length + 1}',
-        source: QuickjsUiNetworkSource.bundle,
+        source: JsUiNetworkSource.bundle,
         method: event.method ?? 'GET',
         uri: event.uri,
         startedAt: event.timestamp ?? DateTime.now(),
@@ -243,18 +247,18 @@ final class QuickjsUiNetworkJournal {
         etag: event.etag,
         fromCache: event.fromCache,
         phase: event.fromCache
-            ? QuickjsUiNetworkRecordPhase.cacheHit
-            : QuickjsUiNetworkRecordPhase.completed,
+            ? JsUiNetworkRecordPhase.cacheHit
+            : JsUiNetworkRecordPhase.completed,
       ),
     );
   }
 
-  void _appendRecord(QuickjsUiNetworkRecord record) {
+  void _appendRecord(JsUiNetworkRecord record) {
     _records.add(record);
     _trimRecords();
   }
 
-  void _replaceRecord(QuickjsUiNetworkRecord record) {
+  void _replaceRecord(JsUiNetworkRecord record) {
     final index = _records.indexWhere((entry) => entry.id == record.id);
     if (index < 0) {
       _appendRecord(record);
@@ -310,15 +314,15 @@ final class QuickjsUiNetworkJournal {
 }
 
 /// Wraps [handlers.onNetworkRequest] so host HTTP calls appear in the journal.
-QuickjsUiHostApiHandlers instrumentHostNetworkLogging(
-  QuickjsUiHostApiHandlers handlers,
-  QuickjsUiNetworkJournal journal,
+JsUiHostApiHandlers instrumentHostNetworkLogging(
+  JsUiHostApiHandlers handlers,
+  JsUiNetworkJournal journal,
 ) {
   final onNetworkRequest = handlers.onNetworkRequest;
   if (onNetworkRequest == null) {
     return handlers;
   }
-  return QuickjsUiHostApiHandlers(
+  return JsUiHostApiHandlers(
     onToast: handlers.onToast,
     onConfirm: handlers.onConfirm,
     onDialog: handlers.onDialog,

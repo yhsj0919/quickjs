@@ -16,7 +16,7 @@ void main() {
           'strokeWidth': 1,
         },
     ];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 320,
       'height': 320,
@@ -46,7 +46,7 @@ void main() {
       ],
     });
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: (_) {}).build(node)),
     );
     await tester.pump();
 
@@ -81,14 +81,14 @@ void main() {
           'fill': '#2563eb',
         },
     ];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 320,
       'height': 320,
       'commands': commands,
     });
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: (_) {}).build(node)),
     );
     await tester.pump();
 

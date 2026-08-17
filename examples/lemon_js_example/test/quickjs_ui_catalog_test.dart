@@ -5,11 +5,11 @@ import 'package:lemon_js_example/quickjs_ui_example_pages.dart';
 void main() {
   test('quickjs_ui catalog has complete and unique category metadata', () {
     final groups = <ExampleCategory, List<ExamplePageSpec>>{
-      ExampleCategory.gettingStarted: quickjsUiGettingStartedExamplePages,
-      ExampleCategory.uiFoundation: quickjsUiFoundationExamplePages,
-      ExampleCategory.platform: quickjsUiPlatformExamplePages,
-      ExampleCategory.scenario: quickjsUiScenarioExamplePages,
-      ExampleCategory.lab: quickjsUiLabExamplePages,
+      ExampleCategory.gettingStarted: jsUiGettingStartedExamplePages,
+      ExampleCategory.uiFoundation: jsUiFoundationExamplePages,
+      ExampleCategory.platform: jsUiPlatformExamplePages,
+      ExampleCategory.scenario: jsUiScenarioExamplePages,
+      ExampleCategory.lab: jsUiLabExamplePages,
     };
     final groupedPages = groups.entries
         .expand((entry) {
@@ -22,14 +22,14 @@ void main() {
         })
         .toList(growable: false);
 
-    expect(groupedPages, quickjsUiExamplePages);
+    expect(groupedPages, jsUiExamplePages);
     expect(
       groupedPages.map((page) => page.title).toSet().length,
       groupedPages.length,
       reason: 'Every catalog title must be unique.',
     );
     expect(
-      quickjsUiLabExamplePages.every(
+      jsUiLabExamplePages.every(
         (page) =>
             page.kind == ExampleKind.benchmark &&
             page.status == ExampleStatus.experimental,

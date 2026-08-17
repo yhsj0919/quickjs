@@ -14,55 +14,76 @@ import 'quickjs_ui_overlay_layer.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_snapshot.dart';
 
-typedef QuickjsUiDiffStatsListener = void Function(QuickjsUiDiffStats stats);
+/// Callback contract for js ui diff stats listener.
+typedef JsUiDiffStatsListener = void Function(JsUiDiffStats stats);
 
-final class QuickjsUiRenderer {
+/// Public JSUI js ui renderer API.
+final class JsUiRenderer {
+  /// The max build depth value.
   static const int maxBuildDepth = 128;
 
-  QuickjsUiRenderer({
+  /// Creates a js ui renderer.
+  JsUiRenderer({
     required this.onEvent,
     this.onUiEvent,
     this.onDiffStats,
-    QuickjsUiComponentRegistry? registry,
-    QuickjsUiCanvasSceneRegistry? canvasSceneRegistry,
-    QuickjsUiPerformanceController? performanceController,
+    JsUiComponentRegistry? registry,
+    JsUiCanvasSceneRegistry? canvasSceneRegistry,
+    JsUiPerformanceController? performanceController,
     this.networkResourceBaseUri,
-  }) : registry = registry ?? QuickjsUiComponentRegistry.defaults(),
-       canvasSceneRegistry =
-           canvasSceneRegistry ?? QuickjsUiCanvasSceneRegistry(),
+  }) : registry = registry ?? JsUiComponentRegistry.defaults(),
+       canvasSceneRegistry = canvasSceneRegistry ?? JsUiCanvasSceneRegistry(),
        performanceController =
-           performanceController ?? QuickjsUiPerformanceController(),
+           performanceController ?? JsUiPerformanceController(),
        _ownsCanvasSceneRegistry = canvasSceneRegistry == null,
        _ownsPerformanceController = performanceController == null {
     this.performanceController.start();
   }
 
-  final QuickjsUiEventHandler onEvent;
-  final QuickjsUiEventEnvelopeHandler? onUiEvent;
-  final QuickjsUiDiffStatsListener? onDiffStats;
-  final QuickjsUiComponentRegistry registry;
-  final QuickjsUiPerformanceController performanceController;
+  /// The on event value.
+  final JsUiEventHandler onEvent;
+
+  /// The on ui event value.
+  final JsUiEventEnvelopeHandler? onUiEvent;
+
+  /// The on diff stats value.
+  final JsUiDiffStatsListener? onDiffStats;
+
+  /// The registry value.
+  final JsUiComponentRegistry registry;
+
+  /// The performance controller value.
+  final JsUiPerformanceController performanceController;
+
+  /// The network resource base uri value.
   final Uri? networkResourceBaseUri;
   final bool _ownsCanvasSceneRegistry;
   final bool _ownsPerformanceController;
-  final QuickjsUiSnapshotRegistry snapshotRegistry =
-      QuickjsUiSnapshotRegistry();
-  final QuickjsUiCanvasSceneRegistry canvasSceneRegistry;
-  final QuickjsUiFrameScheduler frameScheduler = QuickjsUiFrameScheduler();
-  late final QuickjsUiEventDispatcher _eventDispatcher =
-      QuickjsUiEventDispatcher(_dispatchEnvelope);
+
+  /// The snapshot registry value.
+  final JsUiSnapshotRegistry snapshotRegistry = JsUiSnapshotRegistry();
+
+  /// The canvas scene registry value.
+  final JsUiCanvasSceneRegistry canvasSceneRegistry;
+
+  /// The frame scheduler value.
+  final JsUiFrameScheduler frameScheduler = JsUiFrameScheduler();
+  late final JsUiEventDispatcher _eventDispatcher = JsUiEventDispatcher(
+    _dispatchEnvelope,
+  );
   final Map<String, _RenderedNode> _cache = <String, _RenderedNode>{};
   final Map<String, _LifecycleComponentEntry> _lifecycleComponents =
       <String, _LifecycleComponentEntry>{};
   bool _shown = false;
   bool _paused = false;
 
-  Widget build(QuickjsUiNode node, {BuildContext? buildContext}) {
+  /// Performs the build operation.
+  Widget build(JsUiNode node, {BuildContext? buildContext}) {
     if (buildContext == null && node.overlayNodes.isNotEmpty) {
       return Builder(builder: (context) => build(node, buildContext: context));
     }
     performanceController.beginRenderPass();
-    late final QuickjsUiRenderContext context;
+    late final JsUiRenderContext context;
     final nextCache = <String, _RenderedNode>{};
     final activeLifecycleKeys = <String>{};
     var rebuilt = 0;
@@ -76,7 +97,7 @@ final class QuickjsUiRenderer {
     final themeSignature = buildContext == null
         ? ''
         : '${Theme.of(buildContext).hashCode}';
-    Widget buildNode(QuickjsUiNode node, {String path = '0'}) {
+    Widget buildNode(JsUiNode node, {String path = '0'}) {
       if (buildDepth > maxBuildDepth) {
         throw const FormatException('quickjs_ui render tree is too deep');
       }
@@ -108,11 +129,10 @@ final class QuickjsUiRenderer {
       }
     }
 
-    context = QuickjsUiRenderContext(
+    context = JsUiRenderContext(
       buildNode: (node) => buildNode(node),
       buildNodeAtPath: (node, path) => buildNode(node, path: path),
       onUiEvent: _dispatchEnvelope,
-      onEvent: onEvent,
       eventDispatcher: _eventDispatcher,
       buildContext: buildContext,
       canvasSceneRegistry: canvasSceneRegistry,
@@ -132,7 +152,7 @@ final class QuickjsUiRenderer {
       ..addAll(nextCache);
     _disposeInactiveLifecycleComponents(activeLifecycleKeys);
     onDiffStats?.call(
-      QuickjsUiDiffStats(
+      JsUiDiffStats(
         rebuilt: rebuilt,
         reused: reused,
         unkeyed: unkeyed,
@@ -141,9 +161,9 @@ final class QuickjsUiRenderer {
       ),
     );
     if (buildContext != null) {
-      return QuickjsUiOverlayLayer(
+      return JsUiOverlayLayer(
         overlayContext: buildContext,
-        intents: collectQuickjsUiOverlayIntents(node, context),
+        intents: collectJsUiOverlayIntents(node, context),
         child: widget,
       );
     }
@@ -151,8 +171,8 @@ final class QuickjsUiRenderer {
   }
 
   Widget _buildNode(
-    QuickjsUiRenderContext context,
-    QuickjsUiNode node,
+    JsUiRenderContext context,
+    JsUiNode node,
     Map<String, _RenderedNode> nextCache,
     Set<String> activeLifecycleKeys,
     String themeSignature, {
@@ -191,6 +211,7 @@ final class QuickjsUiRenderer {
     return widget;
   }
 
+  /// Performs the show operation.
   void show() {
     if (_shown) {
       return;
@@ -201,6 +222,7 @@ final class QuickjsUiRenderer {
     }
   }
 
+  /// Performs the hide operation.
   void hide() {
     if (!_shown) {
       return;
@@ -211,6 +233,7 @@ final class QuickjsUiRenderer {
     }
   }
 
+  /// Performs the pause operation.
   void pause() {
     if (_paused) {
       return;
@@ -221,6 +244,7 @@ final class QuickjsUiRenderer {
     }
   }
 
+  /// Performs the resume operation.
   void resume() {
     if (!_paused) {
       return;
@@ -231,6 +255,7 @@ final class QuickjsUiRenderer {
     }
   }
 
+  /// Performs the dispose operation.
   void dispose() {
     for (final entry in _lifecycleComponents.values) {
       if (_shown) {
@@ -249,7 +274,7 @@ final class QuickjsUiRenderer {
     _paused = false;
   }
 
-  void _dispatchEnvelope(QuickjsUiEventEnvelope envelope) {
+  void _dispatchEnvelope(JsUiEventEnvelope envelope) {
     final handler = onUiEvent;
     if (handler != null) {
       handler(envelope);
@@ -258,8 +283,8 @@ final class QuickjsUiRenderer {
     onEvent(envelope.event);
   }
 
-  QuickjsUiComponentController? _controllerFor(
-    QuickjsUiNode node,
+  JsUiComponentController? _controllerFor(
+    JsUiNode node,
     Set<String> activeLifecycleKeys,
     String path,
   ) {
@@ -304,11 +329,11 @@ final class QuickjsUiRenderer {
     }
   }
 
-  void _validateChildKeys(QuickjsUiNode node, String path) {
+  void _validateChildKeys(JsUiNode node, String path) {
     if (node.duplicateSiblingKey == null) {
       return;
     }
-    // Duplicate detection is precomputed by QuickjsUiNode. Re-scan only the
+    // Duplicate detection is precomputed by JsUiNode. Re-scan only the
     // invalid branch to retain the precise diagnostic paths.
     final seen = <String, String>{};
     for (var index = 0; index < node.children.length; index += 1) {
@@ -329,27 +354,23 @@ final class QuickjsUiRenderer {
   }
 }
 
-Widget _decorateNode(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-  Widget child,
-) {
-  return withQuickjsUiEffects(
+Widget _decorateNode(JsUiRenderContext context, JsUiNode node, Widget child) {
+  return withJsUiEffects(
     context,
     node,
-    withQuickjsUiInput(context, node, _withAccessibility(node, child)),
+    withJsUiInput(context, node, _withAccessibility(node, child)),
   );
 }
 
-Widget _withAccessibility(QuickjsUiNode node, Widget child) {
-  final tooltip = QuickjsUiProps.string(node.props['tooltip']);
-  final label = QuickjsUiProps.string(
+Widget _withAccessibility(JsUiNode node, Widget child) {
+  final tooltip = JsUiProps.string(node.props['tooltip']);
+  final label = JsUiProps.string(
     node.props['semanticLabel'] ?? node.props['semanticsLabel'],
   );
-  final hint = QuickjsUiProps.string(node.props['semanticHint']);
-  final role = QuickjsUiProps.string(node.props['role']);
-  final enabled = QuickjsUiProps.boolValue(node.props['enabled']);
-  final focusOrder = QuickjsUiProps.doubleValue(node.props['focusOrder']);
+  final hint = JsUiProps.string(node.props['semanticHint']);
+  final role = JsUiProps.string(node.props['role']);
+  final enabled = JsUiProps.boolValue(node.props['enabled']);
+  final focusOrder = JsUiProps.doubleValue(node.props['focusOrder']);
   var result = child;
   if (tooltip != null && tooltip.isNotEmpty) {
     result = Tooltip(message: tooltip, child: result);
@@ -385,15 +406,15 @@ final class _RenderedNode {
 final class _LifecycleComponentEntry {
   _LifecycleComponentEntry({required this.node, required this.controller});
 
-  QuickjsUiNode node;
-  final QuickjsUiComponentController controller;
+  JsUiNode node;
+  final JsUiComponentController controller;
 }
 
-String? _nodeKey(QuickjsUiNode node) {
+String? _nodeKey(JsUiNode node) {
   return node.key;
 }
 
-String _lifecycleKey(QuickjsUiNode node, String path) {
+String _lifecycleKey(JsUiNode node, String path) {
   final key = _nodeKey(node);
   if (key == null) {
     throw FormatException(

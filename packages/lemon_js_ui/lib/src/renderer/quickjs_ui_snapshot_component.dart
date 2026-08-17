@@ -9,41 +9,35 @@ import 'quickjs_ui_component_types.dart';
 import 'quickjs_ui_render_context.dart';
 import 'quickjs_ui_snapshot.dart';
 
-final QuickjsUiComponentBuilderMap quickjsUiSnapshotComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{
-      'SnapshotBoundary': _buildSnapshotBoundary,
-    };
+/// The js ui snapshot component builders value.
+final JsUiComponentBuilderMap jsUiSnapshotComponentBuilders =
+    <String, JsUiComponentBuilder>{'SnapshotBoundary': _buildSnapshotBoundary};
 
-Widget _buildSnapshotBoundary(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final boundaryId =
-      QuickjsUiProps.string(node.props['snapshotKey']) ?? node.key;
+Widget _buildSnapshotBoundary(JsUiRenderContext context, JsUiNode node) {
+  final boundaryId = JsUiProps.string(node.props['snapshotKey']) ?? node.key;
   if (boundaryId == null || boundaryId.isEmpty) {
     throw const FormatException(
       'quickjs_ui SnapshotBoundary requires key or snapshotKey',
     );
   }
-  final onCaptured = QuickjsUiProps.event(node.props['onCaptured']);
-  final onCaptureError = QuickjsUiProps.event(node.props['onCaptureError']);
-  return QuickjsUiSnapshotBoundary(
+  final onCaptured = JsUiProps.event(node.props['onCaptured']);
+  final onCaptureError = JsUiProps.event(node.props['onCaptureError']);
+  return JsUiSnapshotBoundary(
     boundaryId: boundaryId,
     captureToken: node.props['captureToken'],
     pixelRatio:
-        QuickjsUiProps.doubleValue(node.props['pixelRatio'])?.clamp(0.25, 4) ??
-        1,
+        JsUiProps.doubleValue(node.props['pixelRatio'])?.clamp(0.25, 4) ?? 1,
     registry: context.snapshotRegistry,
     onCaptured: onCaptured == null
         ? null
-        : (snapshot) => context.dispatchEvent(
+        : (snapshot) => context.dispatch(
             onCaptured,
             payload: snapshot.toPayload(),
             defaultCoalesceKey: 'SnapshotBoundary:$boundaryId:onCaptured',
           ),
     onCaptureError: onCaptureError == null
         ? null
-        : (error) => context.dispatchEvent(
+        : (error) => context.dispatch(
             onCaptureError,
             payload: <String, Object?>{'message': '$error'},
             defaultCoalesceKey: 'SnapshotBoundary:$boundaryId:onCaptureError',
@@ -52,8 +46,10 @@ Widget _buildSnapshotBoundary(
   );
 }
 
-final class QuickjsUiSnapshotBoundary extends StatefulWidget {
-  const QuickjsUiSnapshotBoundary({
+/// Public JSUI js ui snapshot boundary API.
+final class JsUiSnapshotBoundary extends StatefulWidget {
+  /// Creates a js ui snapshot boundary.
+  const JsUiSnapshotBoundary({
     super.key,
     required this.boundaryId,
     required this.captureToken,
@@ -64,21 +60,32 @@ final class QuickjsUiSnapshotBoundary extends StatefulWidget {
     required this.child,
   });
 
+  /// The boundary id value.
   final String boundaryId;
+
+  /// The capture token value.
   final Object? captureToken;
+
+  /// The pixel ratio value.
   final double pixelRatio;
-  final QuickjsUiSnapshotRegistry registry;
-  final ValueChanged<QuickjsUiSnapshot>? onCaptured;
+
+  /// The registry value.
+  final JsUiSnapshotRegistry registry;
+
+  /// The on captured value.
+  final ValueChanged<JsUiSnapshot>? onCaptured;
+
+  /// The on capture error value.
   final ValueChanged<Object>? onCaptureError;
+
+  /// The child value.
   final Widget child;
 
   @override
-  State<QuickjsUiSnapshotBoundary> createState() =>
-      _QuickjsUiSnapshotBoundaryState();
+  State<JsUiSnapshotBoundary> createState() => _JsUiSnapshotBoundaryState();
 }
 
-final class _QuickjsUiSnapshotBoundaryState
-    extends State<QuickjsUiSnapshotBoundary> {
+final class _JsUiSnapshotBoundaryState extends State<JsUiSnapshotBoundary> {
   final GlobalKey _boundaryKey = GlobalKey();
   final Object _claimOwner = Object();
   int _captureGeneration = 0;
@@ -91,7 +98,7 @@ final class _QuickjsUiSnapshotBoundaryState
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiSnapshotBoundary oldWidget) {
+  void didUpdateWidget(covariant JsUiSnapshotBoundary oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.captureToken != widget.captureToken &&
         widget.captureToken != null) {

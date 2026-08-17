@@ -12,7 +12,7 @@ class QueueReentryPage extends StatefulWidget {
 }
 
 class _QueueReentryPageState extends State<QueueReentryPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -32,22 +32,22 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       if (previous != null) {
         await previous.dispose();
       }
 
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -61,8 +61,8 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
   }
 
   Future<void> _runHundredQueuedEvals() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -73,11 +73,11 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
     });
 
     try {
-      await quickjs.eval('globalThis.queue = ""');
+      await engine.eval('globalThis.queue = ""');
       final results = await Future.wait([
         // 100 个 eval 同时提交，期望底层严格按提交顺序串行执行。
         for (var i = 0; i < 100; i += 1)
-          quickjs.evalRaw(
+          engine.evalRaw(
             'globalThis.queue = (globalThis.queue || "") + "$i,"; globalThis.queue',
           ),
       ]);
@@ -115,8 +115,8 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
   }
 
   Future<void> _runDisposePriorityTest() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -126,7 +126,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
       _log.clear();
     });
 
-    final running = quickjs.eval('''
+    final running = engine.eval('''
       (() => {
         const start = Date.now();
         while (Date.now() - start < 300) {}
@@ -135,8 +135,8 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
     ''');
     final queued = [
       // 这些请求应被 dispose 取消，不能继续进入 runtime 修改 globalThis。
-      quickjs.eval('globalThis.disposeQueue = "A"'),
-      quickjs.eval('globalThis.disposeQueue = "B"'),
+      engine.eval('globalThis.disposeQueue = "A"'),
+      engine.eval('globalThis.disposeQueue = "B"'),
     ];
     final queuedResults = Future.wait([
       for (var i = 0; i < queued.length; i += 1)
@@ -146,7 +146,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
         ),
     ]);
 
-    final disposeFuture = quickjs.dispose();
+    final disposeFuture = engine.dispose();
     try {
       final runningResult = await running;
       final cancelled = await queuedResults;
@@ -156,7 +156,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
         return;
       }
       setState(() {
-        _quickjs = null;
+        _engine = null;
         _busy = false;
         _status = 'dispose 已完成，排队任务没有继续进入 runtime';
         _log
@@ -175,8 +175,8 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
   }
 
   Future<void> _runQueuedTimeoutTest() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -186,14 +186,14 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
       _log.clear();
     });
 
-    final running = quickjs.eval('''
+    final running = engine.eval('''
       (() => {
         const start = Date.now();
         while (Date.now() - start < 300) {}
         return "running finished";
       })();
     ''');
-    final queued = quickjs.eval(
+    final queued = engine.eval(
       // timeout 小于前一个任务耗时，因此它应在队列中被取消。
       'globalThis.queuedTimeout = "should not run"',
       timeout: const Duration(milliseconds: 30),
@@ -205,7 +205,7 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
         onError: (Object error) => '排队请求已 timeout：${error.runtimeType}',
       );
       final runningResult = await running;
-      final marker = await quickjs.eval('globalThis.queuedTimeout');
+      final marker = await engine.eval('globalThis.queuedTimeout');
 
       if (!mounted || _disposed) {
         return;
@@ -235,14 +235,14 @@ class _QueueReentryPageState extends State<QueueReentryPage> {
   void dispose() {
     _disposed = true;
     // 页面级 runtime 退出时必须释放，保持 example 页面之间互不污染。
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('执行队列与重入策略')),

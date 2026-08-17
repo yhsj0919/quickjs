@@ -13,13 +13,13 @@ void main() {
   testWidgets('fixed-size Svg defaults to retained raster rendering', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
         home: renderer.build(
-          QuickjsUiNode.fromMap(<String, Object?>{
+          JsUiNode.fromMap(<String, Object?>{
             'type': 'Svg',
             'data': _svg,
             'width': 36,
@@ -38,13 +38,13 @@ void main() {
   testWidgets('Svg keeps picture rendering for fluid size or explicit opt-in', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
         home: renderer.build(
-          QuickjsUiNode.fromMap(<String, Object?>{'type': 'Svg', 'data': _svg}),
+          JsUiNode.fromMap(<String, Object?>{'type': 'Svg', 'data': _svg}),
         ),
       ),
     );
@@ -56,7 +56,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: renderer.build(
-          QuickjsUiNode.fromMap(<String, Object?>{
+          JsUiNode.fromMap(<String, Object?>{
             'type': 'Svg',
             'data': _svg,
             'width': 36,

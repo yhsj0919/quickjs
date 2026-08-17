@@ -14,6 +14,7 @@ import '../renderer/quickjs_ui_renderer.dart';
 import '../resource/quickjs_ui_network_loader.dart';
 import '../resource/quickjs_ui_resource_cache.dart';
 import '../runtime/quickjs_ui_controller.dart';
+import '../runtime/quickjs_ui_lifecycle.dart';
 import '../runtime/quickjs_ui_plugin.dart';
 import '../runtime/quickjs_ui_runtime.dart';
 import 'quickjs_ui_error_overlay.dart';
@@ -21,58 +22,24 @@ import 'quickjs_ui_error_overlay.dart';
 /// 页面加载或渲染失败时构建错误 UI 的回调。
 ///
 /// [context] 为当前 BuildContext；[error] 为捕获到的异常对象。
-typedef QuickjsUiErrorBuilder =
-    Widget Function(BuildContext context, QuickjsUiError error);
+typedef JsUiErrorBuilder =
+    Widget Function(BuildContext context, JsUiError error);
 
 /// 页面 JS bundle 尚未就绪时构建加载中 UI 的回调。
-typedef QuickjsUiLoadingBuilder = Widget Function(BuildContext context);
+typedef JsUiLoadingBuilder = Widget Function(BuildContext context);
 
 /// 页面渲染结果为空时构建占位 UI 的回调。
-typedef QuickjsUiEmptyBuilder = Widget Function(BuildContext context);
+typedef JsUiEmptyBuilder = Widget Function(BuildContext context);
 
 /// QuickJS UI 页面容器 Widget。
 ///
-/// 负责创建并持有 [QuickjsUiController]、加载 JS 页面、将 schema 树渲染为
+/// 负责创建并持有 [JsUiController]、加载 JS 页面、将 schema 树渲染为
 /// Flutter Widget，并在页面销毁时释放 runtime。
 ///
 /// 能力注入分为两类：
 /// - [features]：业务 JS 能力（网络、宿主 API、polyfill 等）。
 /// - [uiPlugins]：第三方原生 UI 组件插件（同时包含 JS 模块与 Flutter 渲染注册）。
-final class QuickjsUiView extends StatefulWidget {
-  /// 通用构造：通过 [plugin] 或 [path] 二选一指定页面来源。
-  ///
-  /// 更推荐使用具名工厂 [QuickjsUiView.plugin]、[QuickjsUiView.asset] 等。
-  const QuickjsUiView({
-    super.key,
-    this.plugin,
-    String? path,
-    this.bundleRoot,
-    this.initialProps = const <String, Object?>{},
-    this.features = const <JsFeatures>[],
-    this.uiPlugins = const <QuickjsUiPlugin>[],
-    this.grantedPermissions = const <String>{},
-    this.permissionPolicy,
-    this.onConsole,
-    this.runtime,
-    this.controller,
-    this.placeholder,
-    this.loadingBuilder,
-    this.errorBuilder,
-    this.emptyBuilder,
-    this.onFirstRender,
-    this.resourceCache,
-    this.performanceController,
-  }) : _source = plugin != null
-           ? _QuickjsUiViewSource.plugin
-           : _QuickjsUiViewSource.asset,
-       _path = path,
-       networkUrl = null,
-       networkBundleRoot = null,
-       networkFetch = null,
-       onNetworkLog = null,
-       assert(plugin != null || path != null),
-       assert(runtime == null || controller == null);
-
+final class JsUiView extends StatefulWidget {
   /// 从已注册的 [JsPlugin] 加载页面。
   ///
   /// - [plugin]：QuickJS 插件描述对象，通常包含入口脚本与模块图。
@@ -88,29 +55,29 @@ final class QuickjsUiView extends StatefulWidget {
   /// - [errorBuilder]：错误状态 UI 构建器。
   /// - [emptyBuilder]：空内容状态 UI 构建器。
   /// - [onFirstRender]：首次成功渲染后的回调。
-  factory QuickjsUiView.plugin(
+  factory JsUiView.plugin(
     JsPlugin plugin, {
     Key? key,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
-    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
+    List<JsUiPlugin> uiPlugins = const <JsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiController? controller,
-    QuickjsUiRuntime? runtime,
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiController? controller,
+    JsUiRuntime? runtime,
     JsConsoleSink? onConsole,
     Widget? placeholder,
-    QuickjsUiLoadingBuilder? loadingBuilder,
-    QuickjsUiErrorBuilder? errorBuilder,
-    QuickjsUiEmptyBuilder? emptyBuilder,
+    JsUiLoadingBuilder? loadingBuilder,
+    JsUiErrorBuilder? errorBuilder,
+    JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
-    QuickjsUiResourceCache? resourceCache,
-    QuickjsUiPerformanceController? performanceController,
+    JsUiResourceCache? resourceCache,
+    JsUiPerformanceController? performanceController,
   }) {
-    return QuickjsUiView._(
+    return JsUiView._(
       key: key,
       plugin: plugin,
-      source: _QuickjsUiViewSource.plugin,
+      source: _JsUiViewSource.plugin,
       initialProps: initialProps,
       features: features,
       uiPlugins: uiPlugins,
@@ -133,32 +100,32 @@ final class QuickjsUiView extends StatefulWidget {
   ///
   /// - [path]：入口 `.mjs` 或其它脚本的 asset 路径（必填）。
   /// - [bundleRoot]：多文件 bundle 的根目录；为 `null` 时根据 [path] 自动推断。
-  /// 其余参数含义同 [QuickjsUiView.plugin]。
-  factory QuickjsUiView.asset({
+  /// 其余参数含义同 [JsUiView.plugin]。
+  factory JsUiView.asset({
     Key? key,
     required String path,
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
-    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
+    List<JsUiPlugin> uiPlugins = const <JsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiController? controller,
-    QuickjsUiRuntime? runtime,
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiController? controller,
+    JsUiRuntime? runtime,
     JsConsoleSink? onConsole,
     Widget? placeholder,
-    QuickjsUiLoadingBuilder? loadingBuilder,
-    QuickjsUiErrorBuilder? errorBuilder,
-    QuickjsUiEmptyBuilder? emptyBuilder,
+    JsUiLoadingBuilder? loadingBuilder,
+    JsUiErrorBuilder? errorBuilder,
+    JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
-    QuickjsUiResourceCache? resourceCache,
-    QuickjsUiPerformanceController? performanceController,
+    JsUiResourceCache? resourceCache,
+    JsUiPerformanceController? performanceController,
   }) {
-    return QuickjsUiView._(
+    return JsUiView._(
       key: key,
       path: path,
       bundleRoot: bundleRoot,
-      source: _QuickjsUiViewSource.asset,
+      source: _JsUiViewSource.asset,
       initialProps: initialProps,
       features: features,
       uiPlugins: uiPlugins,
@@ -181,32 +148,32 @@ final class QuickjsUiView extends StatefulWidget {
   ///
   /// - [path]：本地入口脚本绝对路径（必填）。
   /// - [bundleRoot]：本地 bundle 根目录。
-  /// 其余参数含义同 [QuickjsUiView.asset]。
-  factory QuickjsUiView.file({
+  /// 其余参数含义同 [JsUiView.asset]。
+  factory JsUiView.file({
     Key? key,
     required String path,
     String? bundleRoot,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
-    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
+    List<JsUiPlugin> uiPlugins = const <JsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiController? controller,
-    QuickjsUiRuntime? runtime,
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiController? controller,
+    JsUiRuntime? runtime,
     JsConsoleSink? onConsole,
     Widget? placeholder,
-    QuickjsUiLoadingBuilder? loadingBuilder,
-    QuickjsUiErrorBuilder? errorBuilder,
-    QuickjsUiEmptyBuilder? emptyBuilder,
+    JsUiLoadingBuilder? loadingBuilder,
+    JsUiErrorBuilder? errorBuilder,
+    JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
-    QuickjsUiResourceCache? resourceCache,
-    QuickjsUiPerformanceController? performanceController,
+    JsUiResourceCache? resourceCache,
+    JsUiPerformanceController? performanceController,
   }) {
-    return QuickjsUiView._(
+    return JsUiView._(
       key: key,
       path: path,
       bundleRoot: bundleRoot,
-      source: _QuickjsUiViewSource.file,
+      source: _JsUiViewSource.file,
       initialProps: initialProps,
       features: features,
       uiPlugins: uiPlugins,
@@ -231,37 +198,37 @@ final class QuickjsUiView extends StatefulWidget {
   /// - [bundleRoot]：远程 bundle 根 URL；为 `null` 时根据 [url] 自动推断。
   /// - [fetch]：自定义网络请求实现；为 `null` 时使用默认实现。
   /// - [onNetworkLog]：网络加载诊断日志回调。
-  /// 其余参数含义同 [QuickjsUiView.asset]。
-  factory QuickjsUiView.network({
+  /// 其余参数含义同 [JsUiView.asset]。
+  factory JsUiView.network({
     Key? key,
     required Uri url,
     Uri? bundleRoot,
-    QuickjsUiNetworkFetch? fetch,
-    QuickjsUiNetworkLogHandler? onNetworkLog,
+    JsUiNetworkFetch? fetch,
+    JsUiNetworkLogHandler? onNetworkLog,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
-    List<QuickjsUiPlugin> uiPlugins = const <QuickjsUiPlugin>[],
+    List<JsUiPlugin> uiPlugins = const <JsUiPlugin>[],
     Iterable<String> grantedPermissions = const <String>[],
-    QuickjsUiPermissionPolicy? permissionPolicy,
-    QuickjsUiController? controller,
-    QuickjsUiRuntime? runtime,
+    JsUiPermissionPolicy? permissionPolicy,
+    JsUiController? controller,
+    JsUiRuntime? runtime,
     JsConsoleSink? onConsole,
     Widget? placeholder,
-    QuickjsUiLoadingBuilder? loadingBuilder,
-    QuickjsUiErrorBuilder? errorBuilder,
-    QuickjsUiEmptyBuilder? emptyBuilder,
+    JsUiLoadingBuilder? loadingBuilder,
+    JsUiErrorBuilder? errorBuilder,
+    JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
-    QuickjsUiResourceCache? resourceCache,
-    QuickjsUiPerformanceController? performanceController,
+    JsUiResourceCache? resourceCache,
+    JsUiPerformanceController? performanceController,
   }) {
-    return QuickjsUiView._(
+    return JsUiView._(
       key: key,
       path: url.toString(),
       networkUrl: url,
       networkBundleRoot: bundleRoot,
       networkFetch: fetch,
       onNetworkLog: onNetworkLog,
-      source: _QuickjsUiViewSource.network,
+      source: _JsUiViewSource.network,
       initialProps: initialProps,
       features: features,
       uiPlugins: uiPlugins,
@@ -280,7 +247,7 @@ final class QuickjsUiView extends StatefulWidget {
     );
   }
 
-  const QuickjsUiView._({
+  const JsUiView._({
     super.key,
     this.plugin,
     this._path,
@@ -292,7 +259,7 @@ final class QuickjsUiView extends StatefulWidget {
     required this._source,
     this.initialProps = const <String, Object?>{},
     this.features = const <JsFeatures>[],
-    this.uiPlugins = const <QuickjsUiPlugin>[],
+    this.uiPlugins = const <JsUiPlugin>[],
     this.grantedPermissions = const <String>{},
     this.permissionPolicy,
     this.onConsole,
@@ -305,8 +272,10 @@ final class QuickjsUiView extends StatefulWidget {
     this.onFirstRender,
     this.resourceCache,
     this.performanceController,
-  }) : assert(runtime == null || controller == null);
+  }) : assert(runtime == null || controller == null),
+       assert(onConsole == null || controller == null);
 
+  /// Inline or packaged JavaScript plugin used as the page source.
   final JsPlugin? plugin;
   final String? _path;
 
@@ -320,108 +289,107 @@ final class QuickjsUiView extends StatefulWidget {
   final Uri? networkBundleRoot;
 
   /// 网络加载使用的自定义 fetch 实现。
-  final QuickjsUiNetworkFetch? networkFetch;
+  final JsUiNetworkFetch? networkFetch;
 
   /// 网络加载过程日志回调。
-  final QuickjsUiNetworkLogHandler? onNetworkLog;
+  final JsUiNetworkLogHandler? onNetworkLog;
 
   /// 传给 JS 页面根组件的初始 props。
   final Map<String, Object?> initialProps;
 
   /// 页面业务 JavaScript runtime 所需的宿主能力 features。
   ///
-  /// 例如 [AxiosFeatures]、[FetchFeatures]、自定义 provider features 等。
+  /// 例如 [AxiosFeatures]、[FetchFeatures] 或自定义 [JsFeatures]。
   final List<JsFeatures> features;
 
   /// 第三方原生 UI 组件插件列表。
   ///
   /// 每个插件同时提供 JS 模块 features 与 Flutter 组件注册，避免只配一半。
-  final List<QuickjsUiPlugin> uiPlugins;
+  final List<JsUiPlugin> uiPlugins;
 
   /// 页面已声明并授权的能力名称。
   final Iterable<String> grantedPermissions;
 
   /// 页面权限策略；控制未授权能力调用时的拦截行为。
-  final QuickjsUiPermissionPolicy? permissionPolicy;
+  final JsUiPermissionPolicy? permissionPolicy;
 
   /// JS `console.*` 输出接收器。
   final JsConsoleSink? onConsole;
 
   /// Shared owner of pre-initialized engines. Page [features] remain scoped to
   /// the leased engine configuration and are never merged into other pages.
-  final QuickjsUiRuntime? runtime;
+  final JsUiRuntime? runtime;
 
   /// 外部传入的 UI 控制器，用于热重载、快照、导航等高级操作。
-  final QuickjsUiController? controller;
+  final JsUiController? controller;
 
   /// 首帧渲染完成前的占位 Widget。
   final Widget? placeholder;
 
   /// 加载中 UI 构建器。
-  final QuickjsUiLoadingBuilder? loadingBuilder;
+  final JsUiLoadingBuilder? loadingBuilder;
 
   /// 错误 UI 构建器。
-  final QuickjsUiErrorBuilder? errorBuilder;
+  final JsUiErrorBuilder? errorBuilder;
 
   /// 空内容 UI 构建器。
-  final QuickjsUiEmptyBuilder? emptyBuilder;
+  final JsUiEmptyBuilder? emptyBuilder;
 
   /// 首次成功渲染 schema 后的回调。
   final VoidCallback? onFirstRender;
 
   /// Bounded cache for parsed UI resources. Resource constructors use the
-  /// process-wide [QuickjsUiResourceCache.shared] by default. Pass a dedicated
+  /// process-wide [JsUiResourceCache.shared] by default. Pass a dedicated
   /// cache for isolation, or one with `maxAge: Duration.zero` to disable it.
-  final QuickjsUiResourceCache? resourceCache;
-  final QuickjsUiPerformanceController? performanceController;
-  final _QuickjsUiViewSource _source;
+  final JsUiResourceCache? resourceCache;
+
+  /// Optional controller for adaptive rendering quality and metrics.
+  final JsUiPerformanceController? performanceController;
+  final _JsUiViewSource _source;
 
   @override
-  State<QuickjsUiView> createState() => _QuickjsUiViewState();
+  /// Creates the state that loads and renders the configured page source.
+  State<JsUiView> createState() => _JsUiViewState();
 }
 
-final class _QuickjsUiViewState extends State<QuickjsUiView>
-    with WidgetsBindingObserver {
-  late QuickjsUiController _controller;
+final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
+  late JsUiController _controller;
   late bool _ownsController;
-  late QuickjsUiRenderer _renderer;
-  late QuickjsUiEventIngress _eventIngress;
-  late QuickjsUiPerformanceController _performanceController;
+  late JsUiRenderer _renderer;
+  late JsUiEventIngress _eventIngress;
+  late JsUiPerformanceController _performanceController;
   late bool _ownsPerformanceController;
-  late final _QuickjsUiLoadCoordinator _loadCoordinator;
+  late final _JsUiLoadCoordinator _loadCoordinator;
   bool _reportedFirstRender = false;
   bool _reportedShow = false;
   late int _observedPageRevision;
   int _generation = 0;
-  _QuickjsUiAppLifecycleSignal? _lastAppLifecycleSignal;
+  _JsUiAppLifecycleSignal? _lastAppLifecycleSignal;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadCoordinator = _QuickjsUiLoadCoordinator();
+    _loadCoordinator = _JsUiLoadCoordinator();
     _controller =
         widget.controller ??
-        QuickjsUiController(
-          runtime: widget.runtime,
-          onConsole: widget.onConsole,
-        );
+        JsUiController(runtime: widget.runtime, onConsole: widget.onConsole);
     _ownsController = widget.controller == null;
     _performanceController =
         widget.performanceController ??
-        QuickjsUiPerformanceController(mode: QuickjsUiPerformanceMode.auto);
+        JsUiPerformanceController(mode: JsUiPerformanceMode.auto);
     _ownsPerformanceController = widget.performanceController == null;
     _performanceController.addListener(_recordPerformance);
     _controller.addListener(_handleControllerChanged);
     _observedPageRevision = _controller.pageRevision;
-    _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
+    _eventIngress = JsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
     _scheduleLoad(immediate: true);
   }
 
-  QuickjsUiRenderer _createRenderer() {
+  JsUiRenderer _createRenderer() {
     final devOptions = _controller.devOptions;
-    return QuickjsUiRenderer(
+    return JsUiRenderer(
       registry: _effectiveRegistry(),
       onEvent: _eventIngress.submit,
       onUiEvent: _eventIngress.submitEnvelope,
@@ -433,25 +401,25 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 
   Uri? _networkResourceBaseUri() {
-    if (widget._source != _QuickjsUiViewSource.network) return null;
+    if (widget._source != _JsUiViewSource.network) return null;
     final root = widget.networkBundleRoot;
     if (root == null) return widget.networkUrl!.resolve('.');
     final value = root.toString();
     return value.endsWith('/') ? root : Uri.parse('$value/');
   }
 
-  QuickjsUiComponentRegistry? _effectiveRegistry() {
+  JsUiComponentRegistry? _effectiveRegistry() {
     if (widget.uiPlugins.isEmpty) {
       return null;
     }
-    final registry = QuickjsUiComponentRegistry.defaults();
+    final registry = JsUiComponentRegistry.defaults();
     for (final plugin in widget.uiPlugins) {
       plugin.configure(registry);
     }
     return registry;
   }
 
-  List<JsFeatures> _effectiveMounts() {
+  List<JsFeatures> _effectiveFeatures() {
     if (widget.uiPlugins.isEmpty) {
       return widget.features;
     }
@@ -461,43 +429,41 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     ];
   }
 
-  QuickjsUiDevOptions get _devOptions => _controller.devOptions;
+  JsUiDevOptions get _devOptions => _controller.devOptions;
 
   void _recordPerformance() {
     _controller.inspector.recordPerformance(_performanceController.snapshot);
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiView oldWidget) {
+  void didUpdateWidget(covariant JsUiView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.performanceController != widget.performanceController) {
       _performanceController.removeListener(_recordPerformance);
       if (_ownsPerformanceController) _performanceController.dispose();
       _performanceController =
           widget.performanceController ??
-          QuickjsUiPerformanceController(mode: QuickjsUiPerformanceMode.auto);
+          JsUiPerformanceController(mode: JsUiPerformanceMode.auto);
       _ownsPerformanceController = widget.performanceController == null;
       _performanceController.addListener(_recordPerformance);
       _renderer.dispose();
       _renderer = _createRenderer();
     }
     if (oldWidget.controller != widget.controller ||
-        oldWidget.runtime != widget.runtime) {
+        oldWidget.runtime != widget.runtime ||
+        oldWidget.onConsole != widget.onConsole) {
       _controller.removeListener(_handleControllerChanged);
       if (_ownsController) {
         _controller.dispose();
       }
       _controller =
           widget.controller ??
-          QuickjsUiController(
-            runtime: widget.runtime,
-            onConsole: widget.onConsole,
-          );
+          JsUiController(runtime: widget.runtime, onConsole: widget.onConsole);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
       _observedPageRevision = _controller.pageRevision;
       _eventIngress.dispose();
-      _eventIngress = QuickjsUiEventIngress(_controller.dispatch);
+      _eventIngress = JsUiEventIngress(_controller.dispatch);
       _renderer.dispose();
       _renderer = _createRenderer();
       _advanceGeneration();
@@ -552,34 +518,34 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     }
     switch (state) {
       case AppLifecycleState.resumed:
-        _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal.resumed);
+        _sendAppLifecycleSignal(_JsUiAppLifecycleSignal.resumed);
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
-        _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal.paused);
+        _sendAppLifecycleSignal(_JsUiAppLifecycleSignal.paused);
       case AppLifecycleState.detached:
-        _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal.detached);
+        _sendAppLifecycleSignal(_JsUiAppLifecycleSignal.detached);
     }
   }
 
-  void _sendAppLifecycleSignal(_QuickjsUiAppLifecycleSignal signal) {
+  void _sendAppLifecycleSignal(_JsUiAppLifecycleSignal signal) {
     if (_lastAppLifecycleSignal == signal) {
       return;
     }
     _lastAppLifecycleSignal = signal;
     switch (signal) {
-      case _QuickjsUiAppLifecycleSignal.resumed:
+      case _JsUiAppLifecycleSignal.resumed:
         _controller.recordAppLifecycle('resume');
         _renderer.resume();
-        unawaited(_controller.lifecycle('resume'));
-      case _QuickjsUiAppLifecycleSignal.paused:
+        unawaited(_controller.lifecycle(JsUiLifecycle.resume));
+      case _JsUiAppLifecycleSignal.paused:
         _controller.recordAppLifecycle('pause');
         _renderer.pause();
-        unawaited(_controller.lifecycle('pause'));
-      case _QuickjsUiAppLifecycleSignal.detached:
+        unawaited(_controller.lifecycle(JsUiLifecycle.pause));
+      case _JsUiAppLifecycleSignal.detached:
         _controller.recordAppLifecycle('detach');
         _renderer.dispose();
-        unawaited(_controller.lifecycle('dispose', render: false));
+        unawaited(_controller.lifecycle(JsUiLifecycle.dispose, render: false));
     }
   }
 
@@ -594,7 +560,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_devOptions.showErrorOverlay) {
         return widget.placeholder ?? const SizedBox.shrink();
       }
-      return QuickjsUiErrorOverlay(error: error);
+      return JsUiErrorOverlay(error: error);
     }
 
     if ((_loadCoordinator.isPending || _controller.isLoading) &&
@@ -629,7 +595,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       final rendered = _renderer.build(node, buildContext: context);
       _controller.inspector.recordPerformance(_performanceController.snapshot);
       if (_devOptions.logSchema) {
-        QuickjsUiDiag.log('schema', node.toMap().toString());
+        JsUiDiag.log('schema', node.toMap().toString());
       }
       _reportFirstRender();
       return rendered;
@@ -649,9 +615,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     StackTrace? stackTrace,
     String? schemaPath,
   }) {
-    final unified = QuickjsUiError.wrap(
+    final unified = JsUiError.wrap(
       error,
-      kind: QuickjsUiErrorKind.render,
+      kind: JsUiErrorKind.render,
       stackTrace: stackTrace,
       context: _errorContext(schemaPath: schemaPath, operation: 'render'),
     );
@@ -663,11 +629,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     if (!_devOptions.showErrorOverlay) {
       return widget.placeholder ?? const SizedBox.shrink();
     }
-    return QuickjsUiErrorOverlay(error: unified);
+    return JsUiErrorOverlay(error: unified);
   }
 
-  QuickjsUiErrorContext _errorContext({String? schemaPath, String? operation}) {
-    return QuickjsUiErrorContext(
+  JsUiErrorContext _errorContext({String? schemaPath, String? operation}) {
+    return JsUiErrorContext(
       operation: operation,
       source: widget._source.name,
       resource: widget.networkUrl?.toString() ?? widget._path,
@@ -685,7 +651,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       if (!_isCurrentGeneration(generation)) {
         return;
       }
-      await _controller.lifecycle('features');
+      await _controller.lifecycle(JsUiLifecycle.mount);
       if (!_isCurrentGeneration(generation)) {
         return;
       }
@@ -705,7 +671,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       return;
     }
     _reportedShow = true;
-    await _controller.routeLifecycle('show');
+    await _controller.routeLifecycle(JsUiLifecycle.show);
     if (!_isCurrentGeneration(generation)) {
       return;
     }
@@ -723,7 +689,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
         await _controller.loadPlugin(
           plugin,
           initialProps: widget.initialProps,
-          features: _effectiveMounts(),
+          features: _effectiveFeatures(),
           grantedPermissions: widget.grantedPermissions,
           permissionPolicy: widget.permissionPolicy,
           errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
@@ -737,7 +703,7 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       await _controller.load(
         _loadPlugin,
         initialProps: widget.initialProps,
-        features: _effectiveMounts(),
+        features: _effectiveFeatures(),
         grantedPermissions: widget.grantedPermissions,
         permissionPolicy: widget.permissionPolicy,
         errorContext: _errorContext(operation: 'load', schemaPath: 'root'),
@@ -746,9 +712,9 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
     } catch (error, stackTrace) {
       if (_isCurrentGeneration(generation)) {
         _controller.reportError(
-          QuickjsUiError.wrap(
+          JsUiError.wrap(
             error,
-            kind: QuickjsUiErrorKind.load,
+            kind: JsUiErrorKind.load,
             stackTrace: stackTrace,
             context: _errorContext(operation: 'load', schemaPath: 'root'),
           ),
@@ -767,24 +733,24 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
       return plugin;
     }
     return switch (widget._source) {
-      _QuickjsUiViewSource.plugin => throw StateError(
-        'QuickjsUiView.plugin requires a plugin',
+      _JsUiViewSource.plugin => throw StateError(
+        'JsUiView.plugin requires a plugin',
       ),
-      _QuickjsUiViewSource.asset => _loadAssetPlugin(widget._path!),
-      _QuickjsUiViewSource.file => _loadFilePlugin(widget._path!),
-      _QuickjsUiViewSource.network => _loadNetworkPlugin(widget.networkUrl!),
+      _JsUiViewSource.asset => _loadAssetPlugin(widget._path!),
+      _JsUiViewSource.file => _loadFilePlugin(widget._path!),
+      _JsUiViewSource.network => _loadNetworkPlugin(widget.networkUrl!),
     };
   }
 
   Future<JsPlugin> _loadAssetPlugin(String path) async {
-    return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadAsset(
+    return (widget.resourceCache ?? JsUiResourceCache.shared).loadAsset(
       path: path,
       bundleRoot: widget.bundleRoot,
     );
   }
 
   Future<JsPlugin> _loadNetworkPlugin(Uri url) async {
-    return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadNetwork(
+    return (widget.resourceCache ?? JsUiResourceCache.shared).loadNetwork(
       url: url,
       bundleRoot: widget.networkBundleRoot,
       fetch: widget.networkFetch,
@@ -793,13 +759,13 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 
   Future<JsPlugin> _loadFilePlugin(String path) async {
-    return (widget.resourceCache ?? QuickjsUiResourceCache.shared).loadFile(
+    return (widget.resourceCache ?? JsUiResourceCache.shared).loadFile(
       path: path,
       bundleRoot: widget.bundleRoot,
     );
   }
 
-  void _handleNetworkLog(QuickjsUiNetworkLogEvent event) {
+  void _handleNetworkLog(JsUiNetworkLogEvent event) {
     widget.onNetworkLog?.call(event);
     _controller.recordNetworkLog(event);
   }
@@ -826,11 +792,11 @@ final class _QuickjsUiViewState extends State<QuickjsUiView>
   }
 }
 
-enum _QuickjsUiViewSource { plugin, asset, file, network }
+enum _JsUiViewSource { plugin, asset, file, network }
 
-enum _QuickjsUiAppLifecycleSignal { resumed, paused, detached }
+enum _JsUiAppLifecycleSignal { resumed, paused, detached }
 
-final class _QuickjsUiLoadCoordinator {
+final class _JsUiLoadCoordinator {
   int _requestId = 0;
   bool _disposed = false;
   bool _pending = false;

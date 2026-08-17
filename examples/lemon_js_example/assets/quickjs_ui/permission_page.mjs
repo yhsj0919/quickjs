@@ -33,7 +33,7 @@ export default Page({
             children: [
               Text('说明', { style: { fontWeight: 'w700' } }),
               Text('此页面只验证 manifest permissions 与宿主策略。'),
-              Text('权限不会自动授予能力；真实可调用能力仍由 mounts 决定。')
+              Text('权限不会自动授予能力；真实可调用能力仍由 features 决定。')
             ]
           })
         })
