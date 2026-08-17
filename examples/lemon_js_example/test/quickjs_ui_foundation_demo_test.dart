@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -21,12 +22,12 @@ void main() {
     final path = entry.key;
     test('$path builds as an independent foundation demo', () async {
       final source = await rootBundle.loadString(path);
-      final engine = await Quickjs.create();
-      final session = QuickjsUiSession(engine: engine);
+      final engine = await JsEngine.create();
+      final session = JsUiSession(engine: engine);
       addTearDown(session.dispose);
 
       await session.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: path.split('/').last.replaceAll('.mjs', ''),
           version: '1.0.0',
           source: source,
@@ -43,14 +44,14 @@ void main() {
         expect(animatedLists, hasLength(1));
         expect(
           animatedLists.single.children,
-          everyElement(predicate<QuickjsUiNode>((node) => node.key != null)),
+          everyElement(predicate<JsUiNode>((node) => node.key != null)),
         );
       }
     });
   }
 }
 
-Iterable<QuickjsUiNode> _nodes(QuickjsUiNode root) sync* {
+Iterable<JsUiNode> _nodes(JsUiNode root) sync* {
   yield root;
   for (final child in root.children) {
     yield* _nodes(child);

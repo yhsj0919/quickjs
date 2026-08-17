@@ -1,0 +1,329 @@
+import 'dart:async';
+import 'dart:collection';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lemon_js/lemon_js.dart';
+import 'package:lemon_js/src/backend/backend.dart';
+import 'package:lemon_js/src/runtime/engine.dart' show createTestJsEngine;
+import 'package:lemon_js/src/runtime/runtime_base.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'state transitions ready -> running -> ready for successful eval',
+    () async {
+      final runtime = _FakeRuntime();
+      final engine = createTestJsEngine(_FakeBackend(), runtime);
+
+      expect(engine.state, JsRuntimeState.ready);
+
+      final evalFuture = engine.evalRaw('hold');
+
+      expect(engine.state, JsRuntimeState.running);
+      expect(runtime.evaluations, ['hold']);
+
+      runtime.completeCurrent('done');
+
+      expect(await evalFuture, 'done');
+      await _flushMicrotasks();
+      expect(engine.state, JsRuntimeState.ready);
+    },
+  );
+
+  test(
+    'state stays running while queued eval waits for current eval',
+    () async {
+      final runtime = _FakeRuntime();
+      final engine = createTestJsEngine(_FakeBackend(), runtime);
+
+      final running = engine.evalRaw('hold');
+      final queued = engine.evalRaw('queued');
+
+      expect(engine.state, JsRuntimeState.running);
+      expect(runtime.evaluations, ['hold']);
+
+      runtime.completeCurrent('done');
+
+      expect(await running, 'done');
+      expect(await queued, 'queued');
+      await _flushMicrotasks();
+      expect(runtime.evaluations, ['hold', 'queued']);
+      expect(engine.state, JsRuntimeState.ready);
+    },
+  );
+
+  test('rejects new work when the configured queue is full', () async {
+    final runtime = _FakeRuntime();
+    final engine = createTestJsEngine(
+      _FakeBackend(),
+      runtime,
+      options: const JsOptions(maxPendingTasks: 1),
+    );
+
+    final running = engine.evalRaw('hold');
+    final queued = engine.evalRaw('queued');
+    await expectLater(
+      engine.evalRaw('overflow'),
+      throwsA(isA<JsQueueFullException>()),
+    );
+
+    runtime.completeCurrent('done');
+    expect(await running, 'done');
+    expect(await queued, 'queued');
+  });
+
+  test(
+    'restart moves running runtime through stopping back to ready',
+    () async {
+      final runtime = _FakeRuntime();
+      final replacement = _FakeRuntime();
+      final backend = _FakeBackend([replacement]);
+      final engine = createTestJsEngine(backend, runtime);
+
+      final running = engine.evalRaw('hold');
+      final queued = engine.evalRaw('queued');
+
+      final stopFuture = engine.restart();
+
+      expect(engine.state, JsRuntimeState.restarting);
+      await expectLater(queued, throwsA(isA<JsCancelledException>()));
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+      await stopFuture;
+      await _flushMicrotasks();
+
+      expect(backend.createCount, 1);
+      expect(engine.state, JsRuntimeState.ready);
+      expect(await engine.evalRaw('afterStop'), 'afterStop');
+      expect(replacement.evaluations, ['afterStop']);
+    },
+  );
+
+  test(
+    'eval queued during restarting runs after replacement runtime is ready',
+    () async {
+      final stopCompleter = Completer<void>();
+      final runtime = _FakeRuntime(stopFuture: stopCompleter.future);
+      final replacement = _FakeRuntime();
+      final backend = _FakeBackend([replacement]);
+      final engine = createTestJsEngine(backend, runtime);
+
+      final running = engine.evalRaw('hold');
+      final stopFuture = engine.restart();
+
+      expect(engine.state, JsRuntimeState.restarting);
+
+      final queuedDuringStop = engine.evalRaw('afterStop');
+      expect(replacement.evaluations, isEmpty);
+
+      stopCompleter.complete();
+
+      await expectLater(running, throwsA(isA<JsCancelledException>()));
+      await stopFuture;
+      expect(await queuedDuringStop, 'afterStop');
+      await _flushMicrotasks();
+
+      expect(engine.state, JsRuntimeState.ready);
+      expect(replacement.evaluations, ['afterStop']);
+    },
+  );
+
+  test(
+    'dispose moves runtime to closed immediately and keeps it closed',
+    () async {
+      final runtime = _FakeRuntime();
+      final engine = createTestJsEngine(_FakeBackend(), runtime);
+
+      final running = engine.evalRaw('hold');
+      final disposeFuture = engine.dispose();
+
+      expect(engine.state, JsRuntimeState.closed);
+      expect(
+        engine.evalRaw('afterDispose'),
+        throwsA(isA<JsRuntimeClosedException>()),
+      );
+
+      runtime.completeCurrent('done');
+
+      expect(await running, 'done');
+      await disposeFuture;
+      await _flushMicrotasks();
+
+      expect(runtime.disposed, isTrue);
+      expect(engine.state, JsRuntimeState.closed);
+    },
+  );
+
+  test('backend closed error moves wrapper to closed terminal state', () async {
+    final runtime = _FakeRuntime();
+    final engine = createTestJsEngine(_FakeBackend(), runtime);
+
+    await expectLater(
+      engine.evalRaw('closed'),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
+    await _flushMicrotasks();
+
+    expect(engine.state, JsRuntimeState.closed);
+    expect(
+      engine.evalRaw('afterClosed'),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
+    await expectLater(
+      engine.restart(),
+      throwsA(isA<JsRuntimeClosedException>()),
+    );
+  });
+
+  test('backend crash moves wrapper to failed terminal state', () async {
+    final runtime = _FakeRuntime();
+    final engine = createTestJsEngine(_FakeBackend(), runtime);
+
+    await expectLater(
+      engine.evalRaw('crash'),
+      throwsA(isA<JsRuntimeCrashException>()),
+    );
+    await _flushMicrotasks();
+
+    expect(engine.state, JsRuntimeState.failed);
+    expect(
+      engine.evalRaw('afterCrash'),
+      throwsA(isA<JsRuntimeCrashException>()),
+    );
+    await expectLater(
+      engine.restart(),
+      throwsA(isA<JsRuntimeCrashException>()),
+    );
+  });
+}
+
+Future<void> _flushMicrotasks() async {
+  await Future<void>.delayed(Duration.zero);
+}
+
+final class _FakeBackend implements JsBackend {
+  _FakeBackend([Iterable<_FakeRuntime> runtimes = const []])
+    : _runtimes = Queue<_FakeRuntime>.of(runtimes);
+
+  final Queue<_FakeRuntime> _runtimes;
+  int createCount = 0;
+
+  @override
+  String get engineVersion => 'test';
+
+  @override
+  Future<JsJsRuntimeBase> createRuntime(JsOptions options) async {
+    createCount += 1;
+    if (_runtimes.isNotEmpty) {
+      return _runtimes.removeFirst();
+    }
+    return _FakeRuntime();
+  }
+}
+
+final class _FakeRuntime implements JsJsRuntimeBase {
+  _FakeRuntime({this.stopFuture});
+
+  final Future<void>? stopFuture;
+  final List<String> evaluations = <String>[];
+  Completer<String>? _current;
+  bool disposed = false;
+
+  @override
+  Future<String> evaluate(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) {
+    final effectiveCode = _stripSourceUrl(code);
+    if (_isInternalConsoleInstall(effectiveCode) ||
+        _isInternalTextEncodingInstall(effectiveCode)) {
+      return Future<String>.value('undefined');
+    }
+    evaluations.add(effectiveCode);
+    return switch (effectiveCode) {
+      'hold' => _hold(),
+      'closed' => Future<String>.error(JsRuntimeClosedException()),
+      'crash' => Future<String>.error(JsRuntimeCrashException('worker crash')),
+      _ => Future<String>.value(effectiveCode),
+    };
+  }
+
+  @override
+  Future<String> evaluateAsync(
+    String code, {
+    Duration? timeout,
+    String name = '<run>',
+  }) {
+    return evaluate(code, timeout: timeout, name: name);
+  }
+
+  @override
+  Future<String> evaluateModule(
+    String source, {
+    required String name,
+    Map<String, String> modules = const {},
+    Duration? timeout,
+  }) {
+    return evaluate(source, timeout: timeout);
+  }
+
+  @override
+  Future<void> bindCallback(
+    int callbackId,
+    String name,
+    Future<Object?> Function(List<Object?> args) callback,
+  ) async {}
+
+  @override
+  Future<void> unbindCallback(int callbackId) async {}
+
+  @override
+  Future<Stream<Object?>> bindJsSink(String name) async {
+    return const Stream<Object?>.empty();
+  }
+
+  @override
+  Future<void> stop() {
+    _current?.completeError(JsCancelledException());
+    _current = null;
+    return stopFuture ?? Future<void>.value();
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+  }
+
+  void completeCurrent(String result) {
+    final current = _current;
+    if (current == null) {
+      throw StateError('No eval is currently held');
+    }
+    current.complete(result);
+    _current = null;
+  }
+
+  Future<String> _hold() {
+    if (_current != null) {
+      throw StateError('Fake runtime does not support concurrent hold calls');
+    }
+    final completer = Completer<String>();
+    _current = completer;
+    return completer.future;
+  }
+}
+
+String _stripSourceUrl(String code) {
+  return code.replaceFirst(RegExp(r'\n//# sourceURL=[^\r\n]+$'), '');
+}
+
+bool _isInternalConsoleInstall(String code) {
+  return code.contains('globalThis.console = globalThis.console || {}') ||
+      code.contains("Object.defineProperty(globalThis, 'console'");
+}
+
+bool _isInternalTextEncodingInstall(String code) {
+  return code.contains("Object.defineProperty(globalThis, 'TextEncoder'") ||
+      code.contains("Object.defineProperty(globalThis, 'TextDecoder'");
+}

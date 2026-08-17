@@ -12,7 +12,7 @@ class CallbackBridgePage extends StatefulWidget {
 }
 
 class _CallbackBridgePageState extends State<CallbackBridgePage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -32,21 +32,21 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
-      await _bindCallbacks(quickjs);
+      final engine = await JsEngine.create();
+      await _bindCallbacks(engine);
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -59,14 +59,14 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
     }
   }
 
-  Future<void> _bindCallbacks(Quickjs quickjs) async {
-    await quickjs.injectFunction('hostAdd', (args) {
+  Future<void> _bindCallbacks(JsEngine engine) async {
+    await engine.injectFunction('hostAdd', (args) {
       final left = args[0] as num;
       final right = args[1] as num;
       _appendLog('Dart hostAdd($left, $right)');
       return left + right;
     });
-    await quickjs.injectFunction('hostFail', (_) {
+    await engine.injectFunction('hostFail', (_) {
       _appendLog('Dart hostFail()');
       throw StateError('hostFail from Dart');
     });
@@ -114,12 +114,12 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   void _appendLog(String message) {
@@ -141,14 +141,14 @@ class _CallbackBridgePageState extends State<CallbackBridgePage> {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('回调桥接')),

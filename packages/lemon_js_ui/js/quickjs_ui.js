@@ -3,13 +3,13 @@ const MAX_RENDER_DEPTH = 64;
 // Keep this below the QuickJS native call-stack limit. Component recursion is
 // a protocol error and must be reported before the engine stack overflows.
 const MAX_COMPONENT_RENDER_DEPTH = 16;
-export const quickjsUiRuntimeProtocol = 'quickjs_ui.runtime.v1';
-export const quickjsUiSchemaVersion = 1;
-export const quickjsUiHelperVersion = 1;
+export const jsUiRuntimeProtocol = 'quickjs_ui.runtime.v1';
+export const jsUiSchemaVersion = 1;
+export const jsUiHelperVersion = 1;
 let pageRenderDepth = 0;
 let componentRenderDepth = 0;
 let activeListBuilderContext = null;
-const LIST_BUILDER_RANGE_METHOD = '__quickjsUiListBuilderRange';
+const LIST_BUILDER_RANGE_METHOD = '__jsUiListBuilderRange';
 
 export function Page(page) {
   if (page == null || typeof page !== 'object') {
@@ -39,11 +39,11 @@ export function Page(page) {
     metadata: page.metadata,
     capabilities() {
       return {
-        protocol: quickjsUiRuntimeProtocol,
-        schemaVersion: page.schemaVersion ?? quickjsUiSchemaVersion,
-        helperVersion: quickjsUiHelperVersion,
-        minimumQuickjsUiVersion:
-          page.minimumQuickjsUiVersion ?? page.minQuickjsUiVersion ?? 1,
+        protocol: jsUiRuntimeProtocol,
+        schemaVersion: page.schemaVersion ?? jsUiSchemaVersion,
+        helperVersion: jsUiHelperVersion,
+        minimumJsUiVersion:
+          page.minimumJsUiVersion ?? page.minJsUiVersion ?? 1,
         unknownProps: page.unknownProps ?? 'ignore',
         deprecatedProps: page.deprecatedProps ?? {},
         lifecycle: lifecycleHooks
@@ -128,8 +128,8 @@ export function Page(page) {
       dirty = false;
       listBuilderRanges.clear();
       listBuilderResetTokens.clear();
-      if (globalThis.__quickjsUiPageLifecycle === invokeLifecycle) {
-        delete globalThis.__quickjsUiPageLifecycle;
+      if (globalThis.__jsUiPageLifecycle === invokeLifecycle) {
+        delete globalThis.__jsUiPageLifecycle;
       }
       return true;
     }
@@ -141,7 +141,7 @@ export function Page(page) {
   // navigation facade run routeLeave/hide inside the current JS turn instead.
   const invokeLifecycle = (event, cancellation) =>
     runLifecycle(event, cancellation);
-  Object.defineProperty(globalThis, '__quickjsUiPageLifecycle', {
+  Object.defineProperty(globalThis, '__jsUiPageLifecycle', {
     value: invokeLifecycle,
     configurable: true,
     writable: false,
@@ -469,12 +469,6 @@ function method(name, payload) {
   return { method: name, payload };
 }
 
-export function action(name, payload) {
-  return method(name, payload);
-}
-
-export const event = action;
-
 export function Component(render) {
   if (typeof render !== 'function') {
     throw new TypeError('quickjs_ui Component render must be a function');
@@ -502,7 +496,6 @@ export function Component(render) {
   };
 }
 
-export const defineComponent = Component;
 
 function pageMethods(page) {
   const reserved = new Set([
@@ -510,8 +503,8 @@ function pageMethods(page) {
     'props',
     'metadata',
     'schemaVersion',
-    'minimumQuickjsUiVersion',
-    'minQuickjsUiVersion',
+    'minimumJsUiVersion',
+    'minJsUiVersion',
     'unknownProps',
     'deprecatedProps',
     'state',
@@ -1291,9 +1284,6 @@ export function Hero(props) {
 
 export const ui = {
   Component,
-  defineComponent,
-  action,
-  event,
   setState,
   eventField,
   Text,

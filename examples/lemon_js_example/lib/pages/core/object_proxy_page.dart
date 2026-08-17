@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// 对象代理 Demo：使用 [Quickjs.injectObject] 注册 Dart proxy，
+/// 对象代理 Demo：使用 [JsEngine.injectObject] 注册 Dart proxy，
 /// 暴露只读属性、Promise 方法与显式释放。
 class ObjectProxyPage extends StatefulWidget {
   const ObjectProxyPage({super.key});
@@ -13,7 +13,7 @@ class ObjectProxyPage extends StatefulWidget {
 }
 
 class _ObjectProxyPageState extends State<ObjectProxyPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   JsObjectHandle? _userHandle;
   bool _disposed = false;
   bool _busy = false;
@@ -35,13 +35,13 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
       var userName = 'Tom';
-      final quickjs = await Quickjs.create();
-      final userHandle = await quickjs.injectObject(
+      final engine = await JsEngine.create();
+      final userHandle = await engine.injectObject(
         'user',
         JsObject(
           target: Object(),
@@ -64,14 +64,14 @@ class _ObjectProxyPageState extends State<ObjectProxyPage> {
         ),
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _userHandle = userHandle;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -170,12 +170,12 @@ return greeting + ':' + saved;
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   void _appendLog(String message) {
@@ -190,15 +190,15 @@ return greeting + ':' + saved;
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     _userHandle = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null && _userHandle != null;
+    final hasRuntime = _engine != null && _userHandle != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('对象代理')),

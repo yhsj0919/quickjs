@@ -8,7 +8,7 @@ void main() {
   testWidgets('buttons resolve unified states and render named slots', (
     tester,
   ) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'ElevatedButton',
       'onPressed': <String, Object?>{'method': 'submit'},
       'leading': <String, Object?>{'type': 'Text', 'data': 'L'},
@@ -39,7 +39,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+        home: Scaffold(body: JsUiRenderer(onEvent: (_) {}).build(node)),
       ),
     );
 
@@ -89,7 +89,7 @@ void main() {
   testWidgets('Switch and Slider expose thumb, track and overlay styles', (
     tester,
   ) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Column',
       'children': <Object?>[
         <String, Object?>{
@@ -142,7 +142,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+        home: Scaffold(body: JsUiRenderer(onEvent: (_) {}).build(node)),
       ),
     );
 
@@ -202,7 +202,7 @@ void main() {
   testWidgets('TextField renders structural slots and state borders', (
     tester,
   ) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'TextField',
       'value': 'hello',
       'leading': <String, Object?>{'type': 'Text', 'data': 'Leading'},
@@ -231,7 +231,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+        home: Scaffold(body: JsUiRenderer(onEvent: (_) {}).build(node)),
       ),
     );
 
@@ -267,7 +267,7 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Slider',
       'key': 'first-drag',
       'value': 0.5,
@@ -284,9 +284,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: QuickjsUiRenderer(onEvent: events.add).build(node),
-        ),
+        home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
       ),
     );
 
@@ -317,7 +315,7 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'ElevatedButton',
       'onPressed': <String, Object?>{'method': 'press'},
       'stateTransition': <String, Object?>{'durationMs': 120},
@@ -330,9 +328,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: QuickjsUiRenderer(onEvent: events.add).build(node),
-        ),
+        home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
       ),
     );
 
@@ -358,8 +354,8 @@ void main() {
   ) async {
     var pressedCount = 0;
     late StateSetter rebuild;
-    late final QuickjsUiRenderer renderer;
-    renderer = QuickjsUiRenderer(
+    late final JsUiRenderer renderer;
+    renderer = JsUiRenderer(
       onEvent: (event) {
         if (event['method'] == 'press') {
           rebuild(() => pressedCount += 1);
@@ -368,7 +364,7 @@ void main() {
     );
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode node() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode node() => JsUiNode.fromMap(<String, Object?>{
       'type': 'ElevatedButton',
       'key': 'rebuilding-button',
       'onPressed': <String, Object?>{'method': 'press'},
@@ -434,7 +430,7 @@ void main() {
     'Button animates pressed scale back to an implicit normal scale',
     (tester) async {
       final events = <Map<String, Object?>>[];
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'ElevatedButton',
         'onPressed': <String, Object?>{'method': 'press'},
         'stateTransition': <String, Object?>{
@@ -449,9 +445,7 @@ void main() {
       });
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: QuickjsUiRenderer(onEvent: events.add).build(node),
-          ),
+          home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
         ),
       );
 
@@ -486,12 +480,10 @@ void main() {
   testWidgets('Button animates a bulk enabled to disabled state change', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode controls(
-      bool enabled,
-    ) => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode controls(bool enabled) => JsUiNode.fromMap(<String, Object?>{
       'type': 'SingleChildScrollView',
       'child': <String, Object?>{
         'type': 'Column',
@@ -555,13 +547,11 @@ void main() {
   ) async {
     var enabled = true;
     late StateSetter rebuild;
-    late final QuickjsUiRenderer renderer;
-    renderer = QuickjsUiRenderer(
-      onEvent: (_) => rebuild(() => enabled = false),
-    );
+    late final JsUiRenderer renderer;
+    renderer = JsUiRenderer(onEvent: (_) => rebuild(() => enabled = false));
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode button() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode button() => JsUiNode.fromMap(<String, Object?>{
       'type': 'ElevatedButton',
       'key': 'long-press-disable',
       if (enabled) 'onPressed': <String, Object?>{'method': 'disable'},
@@ -633,7 +623,7 @@ void main() {
   testWidgets('reduced motion resolves control states immediately', (
     tester,
   ) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'ElevatedButton',
       'onPressed': <String, Object?>{'method': 'submit'},
       'child': <String, Object?>{'type': 'Text', 'data': 'Motion'},
@@ -650,7 +640,7 @@ void main() {
       MaterialApp(
         home: MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
-          child: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+          child: Scaffold(body: JsUiRenderer(onEvent: (_) {}).build(node)),
         ),
       ),
     );

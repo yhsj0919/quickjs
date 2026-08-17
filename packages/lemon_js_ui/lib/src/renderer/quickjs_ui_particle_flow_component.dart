@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,12 +12,12 @@ import 'quickjs_ui_component_types.dart';
 import 'quickjs_ui_frame_scheduler.dart';
 import 'quickjs_ui_render_context.dart';
 
-final QuickjsUiComponentBuilderMap quickjsUiParticleFlowComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{'ParticleFlow': _buildParticleFlow};
+final JsUiComponentBuilderMap jsUiParticleFlowComponentBuilders =
+    <String, JsUiComponentBuilder>{'ParticleFlow': _buildParticleFlow};
 
-Widget _buildParticleFlow(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final width = QuickjsUiProps.doubleValue(node.props['width']);
-  final height = QuickjsUiProps.doubleValue(node.props['height']);
+Widget _buildParticleFlow(JsUiRenderContext context, JsUiNode node) {
+  final width = JsUiProps.doubleValue(node.props['width']);
+  final height = JsUiProps.doubleValue(node.props['height']);
   if (width == null || width <= 0 || height == null || height <= 0) {
     throw const FormatException(
       'quickjs_ui ParticleFlow requires positive width and height',
@@ -27,7 +30,7 @@ Widget _buildParticleFlow(QuickjsUiRenderContext context, QuickjsUiNode node) {
       'quickjs_ui ParticleFlow particles and children must have equal length',
     );
   }
-  final intervalMs = QuickjsUiProps.intValue(node.props['frameIntervalMs']);
+  final intervalMs = JsUiProps.intValue(node.props['frameIntervalMs']);
   if (intervalMs != null && (intervalMs < 4 || intervalMs > 1000)) {
     throw const FormatException(
       'quickjs_ui ParticleFlow frameIntervalMs must be between 4 and 1000',
@@ -59,7 +62,7 @@ List<_Particle> _particles(Object? value) {
       );
     }
     double number(String name, {double? fallback}) {
-      final resolved = QuickjsUiProps.doubleValue(item[name]) ?? fallback;
+      final resolved = JsUiProps.doubleValue(item[name]) ?? fallback;
       if (resolved == null || !resolved.isFinite) {
         throw FormatException(
           'quickjs_ui ParticleFlow particles[$index].$name must be a number',
@@ -109,7 +112,7 @@ class _ParticleFlow extends StatefulWidget {
   final int? frameIntervalMs;
   final bool paused;
   final Object? playToken;
-  final QuickjsUiFrameScheduler frameScheduler;
+  final JsUiFrameScheduler frameScheduler;
   final List<Widget> children;
 
   @override
@@ -121,7 +124,7 @@ class _ParticleFlowState extends State<_ParticleFlow>
   late final Ticker _ticker;
   final _ParticleRepaint _repaint = _ParticleRepaint();
   final Stopwatch _stopwatch = Stopwatch();
-  QuickjsUiFrameClock? _frameClock;
+  JsUiFrameClock? _frameClock;
   double _elapsedMs = 0;
   double _playbackOffsetMs = 0;
 

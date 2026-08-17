@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 页面互通 Demo：原生 Flutter 页面、JSUI 页面与原生设置页之间的参数和结果回传。
-class QuickjsUiNavigationPage extends StatefulWidget {
-  const QuickjsUiNavigationPage({super.key});
+class JsUiNavigationPage extends StatefulWidget {
+  const JsUiNavigationPage({super.key});
 
   /// 详情页 JS asset 路径。
   static const String detailPath =
@@ -13,11 +13,10 @@ class QuickjsUiNavigationPage extends StatefulWidget {
   static const String childPath = 'assets/quickjs_ui/navigation_child_page.mjs';
 
   @override
-  State<QuickjsUiNavigationPage> createState() =>
-      _QuickjsUiNavigationPageState();
+  State<JsUiNavigationPage> createState() => _JsUiNavigationPageState();
 }
 
-class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
+class _JsUiNavigationPageState extends State<JsUiNavigationPage> {
   String _result = '等待 JSUI 页面返回';
   String _policyLog = '等待 JSUI 内部跳转请求';
   final Set<String> _trustedJsuiPaths = <String>{};
@@ -76,12 +75,12 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
   }
 
   Future<void> _openDetail(BuildContext context) async {
-    final result = await QuickjsUiNavigator.pushAsset(
+    final result = await JsUiNavigator.push(
       context,
       title: 'JSUI 详情',
-      path: QuickjsUiNavigationPage.detailPath,
+      path: JsUiNavigationPage.detailPath,
       initialProps: const <String, Object?>{'itemId': 42, 'title': '来自原生列表页'},
-      transition: const QuickjsUiRouteTransition.fade(
+      transition: const JsUiRouteTransition.fade(
         duration: Duration(milliseconds: 180),
       ),
       onConsole: (event) {
@@ -99,20 +98,20 @@ class _QuickjsUiNavigationPageState extends State<QuickjsUiNavigationPage> {
     });
   }
 
-  QuickjsUiRouteRegistry _routeRegistry() {
-    return QuickjsUiRouteRegistry(
-      nativeRoutes: <String, QuickjsUiNativeRouteBuilder>{
+  JsUiRouteRegistry _routeRegistry() {
+    return JsUiRouteRegistry(
+      nativeRoutes: <String, JsUiNativeRouteBuilder>{
         'quickjs-ui.navigation.settings': (context, params) =>
             _NativeSettingsPage(params: params),
       },
-      jsRoutePolicy: QuickjsUiJsRoutePolicy(
-        allowedPaths: const <String>{QuickjsUiNavigationPage.childPath},
+      jsRoutePolicy: JsUiRoutePolicy(
+        allowedPaths: const <String>{JsUiNavigationPage.childPath},
         onRequest: _handleJsRouteRequest,
       ),
     );
   }
 
-  Future<bool> _handleJsRouteRequest(QuickjsUiJsRouteRequest request) async {
+  Future<bool> _handleJsRouteRequest(JsUiRouteRequest request) async {
     // 页面互通示例当前默认允许已在 allowedPaths 中声明的 JSUI 路由。
     // 下方保留原授权弹窗实现，后续需要演示逐次授权时可直接恢复。
     final message =

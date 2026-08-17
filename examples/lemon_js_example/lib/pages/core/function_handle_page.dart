@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// Function Handle Demo：通过 [Quickjs.bindFunction] 获取 JS 函数，
+/// Function Handle Demo：通过 [JsEngine.bindFunction] 获取 JS 函数，
 /// 并使用 `call` / `run` / `dispose` 管理生命周期。
 class FunctionHandlePage extends StatefulWidget {
   const FunctionHandlePage({super.key});
@@ -13,7 +13,7 @@ class FunctionHandlePage extends StatefulWidget {
 }
 
 class _FunctionHandlePageState extends State<FunctionHandlePage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   JsFunctionHandle? _add;
   JsFunctionHandle? _asyncAdd;
   bool _disposed = false;
@@ -37,33 +37,33 @@ class _FunctionHandlePageState extends State<FunctionHandlePage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create();
-      final add = await quickjs.bindFunction('''
+      final engine = await JsEngine.create();
+      final add = await engine.bindFunction('''
 function add(a, b) {
   return a + b;
 }
 add
 ''');
-      final asyncAdd = await quickjs.bindFunction('''
+      final asyncAdd = await engine.bindFunction('''
 async (a, b) => {
   await new Promise((resolve) => setTimeout(resolve, 1));
   return a + b;
 }
 ''');
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _add = add;
         _asyncAdd = asyncAdd;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -143,12 +143,12 @@ async (a, b) => {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   JsFunctionHandle _requireHandle() {
@@ -181,8 +181,8 @@ async (a, b) => {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     _add = null;
     _asyncAdd = null;
     super.dispose();
@@ -190,7 +190,7 @@ async (a, b) => {
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null && _add != null && _asyncAdd != null;
+    final hasRuntime = _engine != null && _add != null && _asyncAdd != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('函数句柄')),

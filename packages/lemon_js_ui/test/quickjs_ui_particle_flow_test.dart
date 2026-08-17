@@ -6,9 +6,9 @@ void main() {
   testWidgets('ParticleFlow paints retained children from one flow layer', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'ParticleFlow',
       'width': 200,
       'height': 300,
@@ -67,9 +67,9 @@ void main() {
   testWidgets('ParticleFlow validates particle and child counts', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'ParticleFlow',
       'width': 100,
       'height': 100,

@@ -1,20 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 多文件计数器 Demo：从入口 .mjs 加载多文件 bundle 并自动解析相对 import。
-class QuickjsUiBundleCounterPage extends StatefulWidget {
-  const QuickjsUiBundleCounterPage({super.key});
+class JsUiBundleCounterPage extends StatefulWidget {
+  const JsUiBundleCounterPage({super.key});
 
   /// 多文件 bundle 入口脚本的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/bundle_counter/pages/main.mjs';
 
   @override
-  State<QuickjsUiBundleCounterPage> createState() =>
-      _QuickjsUiBundleCounterPageState();
+  State<JsUiBundleCounterPage> createState() => _JsUiBundleCounterPageState();
 }
 
-class _QuickjsUiBundleCounterPageState
-    extends State<QuickjsUiBundleCounterPage> {
+class _JsUiBundleCounterPageState extends State<JsUiBundleCounterPage> {
   final Stopwatch _stopwatch = Stopwatch()..start();
   Duration? _firstRenderElapsed;
 
@@ -27,8 +27,8 @@ class _QuickjsUiBundleCounterPageState
           DecoratedBox(
             decoration: const BoxDecoration(color: Color(0xffeef3f7)),
             child: SizedBox.expand(
-              child: QuickjsUiView.asset(
-                path: QuickjsUiBundleCounterPage.path,
+              child: JsUiView.asset(
+                path: JsUiBundleCounterPage.path,
                 initialProps: const <String, Object?>{
                   'title': 'Multi-file QuickJS UI',
                   'initialCount': 3,
@@ -58,7 +58,7 @@ class _QuickjsUiBundleCounterPageState
     final elapsed = _stopwatch.elapsed;
     debugPrint(
       'QuickJS UI bundle first render: ${elapsed.inMilliseconds}ms '
-      '(${QuickjsUiBundleCounterPage.path})',
+      '(${JsUiBundleCounterPage.path})',
     );
     setState(() {
       _firstRenderElapsed = elapsed;
@@ -76,17 +76,24 @@ class _DelayedLoadingIndicator extends StatefulWidget {
 
 class _DelayedLoadingIndicatorState extends State<_DelayedLoadingIndicator> {
   bool _visible = false;
+  Timer? _showTimer;
 
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(milliseconds: 180), () {
+    _showTimer = Timer(const Duration(milliseconds: 180), () {
       if (mounted) {
         setState(() {
           _visible = true;
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _showTimer?.cancel();
+    super.dispose();
   }
 
   @override

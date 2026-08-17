@@ -14,100 +14,130 @@ import 'quickjs_ui_snapshot.dart';
 // Keep the public constructor parameter named `buildNode`.
 // ignore_for_file: prefer_initializing_formals
 
-typedef QuickjsUiEventHandler = void Function(Map<String, Object?> event);
-typedef QuickjsUiEventEnvelopeHandler =
-    void Function(QuickjsUiEventEnvelope event);
-typedef QuickjsUiNodeBuilder = Widget Function(QuickjsUiNode node);
-typedef QuickjsUiPathNodeBuilder =
-    Widget Function(QuickjsUiNode node, String path);
+/// Handles a raw component event map.
+typedef JsUiEventHandler = void Function(Map<String, Object?> event);
 
-enum QuickjsUiEventKind { command, sample }
+/// Handles an event with loss and coalescing semantics.
+typedef JsUiEventEnvelopeHandler = void Function(JsUiEventEnvelope event);
 
-final class QuickjsUiEventEnvelope {
-  QuickjsUiEventEnvelope({
+/// Builds a Flutter widget for a schema node.
+typedef JsUiNodeBuilder = Widget Function(JsUiNode node);
+
+/// Builds a node at its stable structural [path].
+typedef JsUiPathNodeBuilder = Widget Function(JsUiNode node, String path);
+
+/// UI 事件的调度类型。
+///
+/// [command] 表示不可丢失的离散操作，例如点击；[sample] 表示可按
+/// [JsUiEventEnvelope.coalesceKey] 合并的连续采样，例如滚动位置。
+enum JsUiEventKind {
+  /// A discrete event that must not be discarded.
+  command,
+
+  /// A continuous value that may replace an older sample with the same key.
+  sample,
+}
+
+/// 从 Flutter 渲染层发送到 JavaScript 页面的事件。
+final class JsUiEventEnvelope {
+  /// Creates an event envelope with explicit delivery semantics.
+  JsUiEventEnvelope({
     required Map<String, Object?> event,
     required this.kind,
     this.coalesceKey,
   }) : event = Map<String, Object?>.unmodifiable(event);
 
-  factory QuickjsUiEventEnvelope.command(Map<String, Object?> event) {
-    return QuickjsUiEventEnvelope(
-      event: event,
-      kind: QuickjsUiEventKind.command,
-    );
+  /// Creates a non-droppable command event.
+  factory JsUiEventEnvelope.command(Map<String, Object?> event) {
+    return JsUiEventEnvelope(event: event, kind: JsUiEventKind.command);
   }
 
-  factory QuickjsUiEventEnvelope.sample(
+  /// Creates a coalescible sample event.
+  factory JsUiEventEnvelope.sample(
     Map<String, Object?> event, {
     required String coalesceKey,
   }) {
-    return QuickjsUiEventEnvelope(
+    return JsUiEventEnvelope(
       event: event,
-      kind: QuickjsUiEventKind.sample,
+      kind: JsUiEventKind.sample,
       coalesceKey: coalesceKey,
     );
   }
 
+  /// Immutable event payload sent to JavaScript.
   final Map<String, Object?> event;
-  final QuickjsUiEventKind kind;
+
+  /// Delivery semantics for this event.
+  final JsUiEventKind kind;
+
+  /// 同一帧内可合并采样事件的稳定键；命令事件不使用该字段。
   final String? coalesceKey;
 
-  QuickjsUiEventEnvelope asCommand() {
-    if (kind == QuickjsUiEventKind.command) {
+  /// Returns this payload with non-droppable command semantics.
+  JsUiEventEnvelope asCommand() {
+    if (kind == JsUiEventKind.command) {
       return this;
     }
-    return QuickjsUiEventEnvelope.command(event);
+    return JsUiEventEnvelope.command(event);
   }
 }
 
-final class QuickjsUiRenderContext {
-  QuickjsUiRenderContext({
-    required QuickjsUiNodeBuilder buildNode,
-    required QuickjsUiEventEnvelopeHandler onUiEvent,
-    QuickjsUiEventHandler? onEvent,
-    QuickjsUiEventDispatcher? eventDispatcher,
-    QuickjsUiPathNodeBuilder? buildNodeAtPath,
+/// Rendering services and protocol converters available to components.
+final class JsUiRenderContext {
+  /// Creates a render context for one structural node path.
+  JsUiRenderContext({
+    required JsUiNodeBuilder buildNode,
+    required JsUiEventEnvelopeHandler onUiEvent,
+    JsUiEventDispatcher? eventDispatcher,
+    JsUiPathNodeBuilder? buildNodeAtPath,
     String path = '0',
     this.buildContext,
-    QuickjsUiCanvasSceneRegistry? canvasSceneRegistry,
-    QuickjsUiSnapshotRegistry? snapshotRegistry,
-    QuickjsUiPerformanceController? performanceController,
-    QuickjsUiFrameScheduler? frameScheduler,
+    JsUiCanvasSceneRegistry? canvasSceneRegistry,
+    JsUiSnapshotRegistry? snapshotRegistry,
+    JsUiPerformanceController? performanceController,
+    JsUiFrameScheduler? frameScheduler,
     this.networkResourceBaseUri,
   }) : _buildNode = buildNode,
        _buildNodeAtPath = buildNodeAtPath,
        _onUiEvent = onUiEvent,
-       canvasSceneRegistry =
-           canvasSceneRegistry ?? QuickjsUiCanvasSceneRegistry(),
-       snapshotRegistry = snapshotRegistry ?? QuickjsUiSnapshotRegistry(),
+       canvasSceneRegistry = canvasSceneRegistry ?? JsUiCanvasSceneRegistry(),
+       snapshotRegistry = snapshotRegistry ?? JsUiSnapshotRegistry(),
        performanceController =
-           performanceController ?? QuickjsUiPerformanceController(),
-       frameScheduler = frameScheduler ?? QuickjsUiFrameScheduler(),
-       onEvent =
-           onEvent ??
-           ((event) => onUiEvent(QuickjsUiEventEnvelope.command(event))),
+           performanceController ?? JsUiPerformanceController(),
+       frameScheduler = frameScheduler ?? JsUiFrameScheduler(),
        _eventDispatcher = eventDispatcher,
        _path = path;
 
-  final QuickjsUiNodeBuilder _buildNode;
-  final QuickjsUiPathNodeBuilder? _buildNodeAtPath;
-  final QuickjsUiEventEnvelopeHandler _onUiEvent;
-  final QuickjsUiEventHandler onEvent;
-  final QuickjsUiEventDispatcher? _eventDispatcher;
+  final JsUiNodeBuilder _buildNode;
+  final JsUiPathNodeBuilder? _buildNodeAtPath;
+  final JsUiEventEnvelopeHandler _onUiEvent;
+  final JsUiEventDispatcher? _eventDispatcher;
   final String _path;
+
+  /// Flutter build context used to resolve theme tokens.
   final BuildContext? buildContext;
-  final QuickjsUiCanvasSceneRegistry canvasSceneRegistry;
-  final QuickjsUiSnapshotRegistry snapshotRegistry;
-  final QuickjsUiPerformanceController performanceController;
-  final QuickjsUiFrameScheduler frameScheduler;
+
+  /// Registry for retained canvas scenes.
+  final JsUiCanvasSceneRegistry canvasSceneRegistry;
+
+  /// Registry for widgets addressable by snapshot components.
+  final JsUiSnapshotRegistry snapshotRegistry;
+
+  /// Adaptive quality and performance state.
+  final JsUiPerformanceController performanceController;
+
+  /// Scheduler shared by frame-driven components.
+  final JsUiFrameScheduler frameScheduler;
+
+  /// Base URL used to resolve package-relative network resources.
   final Uri? networkResourceBaseUri;
 
-  QuickjsUiRenderContext withPath(String path) {
-    return QuickjsUiRenderContext(
+  /// Returns a context sharing services but using a different structural [path].
+  JsUiRenderContext withPath(String path) {
+    return JsUiRenderContext(
       buildNode: _buildNode,
       buildNodeAtPath: _buildNodeAtPath,
       onUiEvent: _onUiEvent,
-      onEvent: onEvent,
       eventDispatcher: _eventDispatcher,
       buildContext: buildContext,
       canvasSceneRegistry: canvasSceneRegistry,
@@ -119,12 +149,14 @@ final class QuickjsUiRenderContext {
     );
   }
 
+  /// Resolves a literal or themed color property.
   Color? color(Object? value) {
-    return QuickjsUiProps.color(value, resolveColor: _themeColor);
+    return JsUiProps.color(value, resolveColor: _themeColor);
   }
 
+  /// Resolves a literal or themed text style property.
   TextStyle? textStyle(Object? value) {
-    return QuickjsUiProps.textStyle(
+    return JsUiProps.textStyle(
       value,
       resolveColor: _themeColor,
       resolveTextStyle: _themeTextStyle,
@@ -132,8 +164,9 @@ final class QuickjsUiRenderContext {
     );
   }
 
+  /// Resolves a container decoration and its design tokens.
   BoxDecoration? boxDecoration(Map<String, Object?> props) {
-    return QuickjsUiProps.boxDecoration(
+    return JsUiProps.boxDecoration(
       props,
       resolveColor: _themeColor,
       resolveRadius: _radiusToken,
@@ -141,50 +174,41 @@ final class QuickjsUiRenderContext {
     );
   }
 
+  /// Resolves edge insets and spacing tokens.
   EdgeInsetsGeometry? edgeInsets(Object? value) {
-    return QuickjsUiProps.edgeInsets(value, resolveNumber: _spacingToken);
+    return JsUiProps.edgeInsets(value, resolveNumber: _spacingToken);
   }
 
+  /// Resolves border radii and radius tokens.
   BorderRadiusGeometry? borderRadius(Object? value) {
-    return QuickjsUiProps.borderRadius(value, resolveNumber: _radiusToken);
+    return JsUiProps.borderRadius(value, resolveNumber: _radiusToken);
   }
 
+  /// Resolves a literal value or spacing token.
   double? spacing(Object? value, {String name = 'spacing'}) {
-    return QuickjsUiProps.number(
-      value,
-      name: name,
-      resolveNumber: _spacingToken,
-    );
+    return JsUiProps.number(value, name: name, resolveNumber: _spacingToken);
   }
 
+  /// Resolves a literal value or radius token.
   double? radius(Object? value, {String name = 'radius'}) {
-    return QuickjsUiProps.number(
-      value,
-      name: name,
-      resolveNumber: _radiusToken,
-    );
+    return JsUiProps.number(value, name: name, resolveNumber: _radiusToken);
   }
 
+  /// Resolves a literal value or elevation token.
   double? elevation(Object? value, {String name = 'elevation'}) {
-    return QuickjsUiProps.number(
-      value,
-      name: name,
-      resolveNumber: _elevationToken,
-    );
+    return JsUiProps.number(value, name: name, resolveNumber: _elevationToken);
   }
 
-  QuickjsUiResourceReference resource(
-    Object? value, {
-    String name = 'resource',
-  }) {
-    final resource = QuickjsUiResourceReference.parse(value, name: name);
+  /// Parses a resource and resolves relative network package paths.
+  JsUiResourceReference resource(Object? value, {String name = 'resource'}) {
+    final resource = JsUiResourceReference.parse(value, name: name);
     final baseUri = networkResourceBaseUri;
-    if (baseUri == null || resource.kind != QuickjsUiResourceKind.asset) {
+    if (baseUri == null || resource.kind != JsUiResourceKind.asset) {
       return resource;
     }
-    return QuickjsUiResourceReference(
-      location: baseUri.resolve(resource.location).toString(),
-      kind: QuickjsUiResourceKind.network,
+    return JsUiResourceReference(
+      uri: baseUri.resolve(resource.uri).toString(),
+      kind: JsUiResourceKind.network,
       mimeType: resource.mimeType,
       sha256: resource.sha256,
       cacheKey: resource.cacheKey,
@@ -192,11 +216,13 @@ final class QuickjsUiRenderContext {
     );
   }
 
-  Widget build(QuickjsUiNode node) {
+  /// Builds [node] through the owning renderer.
+  Widget build(JsUiNode node) {
     return _buildNode(node);
   }
 
-  Widget? child(QuickjsUiNode node) {
+  /// Builds the sole child of [node], or returns `null` when absent.
+  Widget? child(JsUiNode node) {
     if (node.children.isEmpty) {
       return null;
     }
@@ -206,7 +232,8 @@ final class QuickjsUiRenderContext {
     return _buildChild(node, 0);
   }
 
-  List<Widget> children(QuickjsUiNode node) {
+  /// Builds all direct children while preserving their structural paths.
+  List<Widget> children(JsUiNode node) {
     return <Widget>[
       for (var index = 0; index < node.children.length; index += 1)
         _buildChild(node, index),
@@ -217,14 +244,12 @@ final class QuickjsUiRenderContext {
   ///
   /// Slots use the same JSON node shape as `child`, while keeping independent
   /// structural paths so retained rendering and keyed state continue to work.
-  Widget? slot(QuickjsUiNode node, String name) {
+  Widget? slot(JsUiNode node, String name) {
     final value = node.props[name];
     if (value == null) {
       return null;
     }
-    final slotNode = QuickjsUiNode.fromMap(
-      QuickjsUiProps.map(value, name: '$name slot'),
-    );
+    final slotNode = JsUiNode.fromMap(JsUiProps.map(value, name: '$name slot'));
     final builder = _buildNodeAtPath;
     if (builder == null) {
       return build(slotNode);
@@ -236,12 +261,12 @@ final class QuickjsUiRenderContext {
   ///
   /// Scrollable components use this from their item builders so nodes outside
   /// the viewport do not need to be converted to widgets eagerly.
-  Widget childAt(QuickjsUiNode node, int index) {
+  Widget childAt(JsUiNode node, int index) {
     RangeError.checkValidIndex(index, node.children, 'index');
     return _buildChild(node, index);
   }
 
-  Widget _buildChild(QuickjsUiNode node, int index) {
+  Widget _buildChild(JsUiNode node, int index) {
     final child = node.children[index];
     final builder = _buildNodeAtPath;
     if (builder == null) {
@@ -250,15 +275,16 @@ final class QuickjsUiRenderContext {
     return builder(child, '$_path/$index');
   }
 
-  void dispatch(Map<String, Object?> event) {
-    _onUiEvent(QuickjsUiEventEnvelope.command(event));
-  }
-
-  void dispatchEvent(
+  /// 将组件事件发送给页面。
+  ///
+  /// [event] 通常包含目标 `method`；[payload] 会覆盖其中的同名字段。
+  /// 连续变化事件应传入 [kind] 为 [JsUiEventKind.sample]，并提供稳定的
+  /// [defaultCoalesceKey]，使渲染层可以只保留同组中的最新采样值。
+  void dispatch(
     Map<String, Object?> event, {
     Map<String, Object?>? payload,
     String? defaultCoalesceKey,
-    QuickjsUiEventKind kind = QuickjsUiEventKind.command,
+    JsUiEventKind kind = JsUiEventKind.command,
   }) {
     final dispatcher = _eventDispatcher;
     final merged = payload == null
@@ -279,25 +305,35 @@ final class QuickjsUiRenderContext {
   }
 }
 
-final class QuickjsUiEventDispatcher {
-  QuickjsUiEventDispatcher(this.onEvent, {this.maxPendingEvents = 64})
+/// Applies throttling, debouncing, dropping, and sample coalescing to events.
+final class JsUiEventDispatcher {
+  /// 创建带节流、去抖和采样合并能力的事件调度器。
+  ///
+  /// [maxPendingEvents] 只限制正在等待定时发送的不同合并键数量；立即发送的
+  /// 命令不占用该数量。达到限制时会取消并移除最早的等待事件。
+  JsUiEventDispatcher(this.onEvent, {this.maxPendingEvents = 64})
     : assert(maxPendingEvents > 0, 'maxPendingEvents must be > 0');
 
-  final QuickjsUiEventEnvelopeHandler onEvent;
+  /// Receives events after their timing policy is applied.
+  final JsUiEventEnvelopeHandler onEvent;
+
+  /// 最多同时等待发送的合并事件数量。
   final int maxPendingEvents;
   final Map<String, _PendingUiEvent> _pendingEvents =
       <String, _PendingUiEvent>{};
   final Map<String, DateTime> _lastDispatchAt = <String, DateTime>{};
+
+  /// Dispatches an event according to its embedded timing policy.
   void dispatch(
     Map<String, Object?> event, {
     Map<String, Object?>? payload,
     String? defaultCoalesceKey,
-    QuickjsUiEventKind kind = QuickjsUiEventKind.command,
+    JsUiEventKind kind = JsUiEventKind.command,
   }) {
     final merged = payload == null
         ? event
         : <String, Object?>{...event, ...payload};
-    final policy = _QuickjsUiEventPolicy.from(merged, defaultCoalesceKey);
+    final policy = _JsUiEventPolicy.from(merged, defaultCoalesceKey);
     final key = policy.coalesceKey;
     final envelope = _eventEnvelope(merged, kind: kind, coalesceKey: key);
     if (key == null || (!policy.hasTiming && payload == null)) {
@@ -334,6 +370,7 @@ final class QuickjsUiEventDispatcher {
     onEvent(envelope);
   }
 
+  /// Cancels every pending event and releases scheduler state.
   void dispose() {
     for (final pending in _pendingEvents.values) {
       pending.timer.cancel();
@@ -342,11 +379,7 @@ final class QuickjsUiEventDispatcher {
     _lastDispatchAt.clear();
   }
 
-  void _schedulePending(
-    String key,
-    QuickjsUiEventEnvelope event,
-    Duration delay,
-  ) {
+  void _schedulePending(String key, JsUiEventEnvelope event, Duration delay) {
     _pendingEvents.remove(key)?.timer.cancel();
     if (_pendingEvents.length >= maxPendingEvents) {
       final oldestKey = _pendingEvents.keys.first;
@@ -366,13 +399,13 @@ final class QuickjsUiEventDispatcher {
   }
 }
 
-extension on QuickjsUiRenderContext {
+extension on JsUiRenderContext {
   Color? _themeColor(Object? value) {
     final context = buildContext;
     if (context == null || value is! String || !value.startsWith(r'$')) {
       return null;
     }
-    final extension = Theme.of(context).extension<QuickjsUiDesignTokens>();
+    final extension = Theme.of(context).extension<JsUiDesignTokens>();
     final custom = extension?.color(value);
     if (custom != null) {
       return custom;
@@ -437,7 +470,7 @@ extension on QuickjsUiRenderContext {
     if (context == null || value is! String || !value.startsWith(r'$')) {
       return null;
     }
-    final extension = Theme.of(context).extension<QuickjsUiDesignTokens>();
+    final extension = Theme.of(context).extension<JsUiDesignTokens>();
     final custom = extension?.textStyle(value);
     if (custom != null) {
       return custom;
@@ -464,55 +497,53 @@ extension on QuickjsUiRenderContext {
   }
 
   double? _spacingToken(Object? value) {
-    return _designNumber(value, QuickjsUiTokenCategory.spacing);
+    return _designNumber(value, JsUiTokenCategory.spacing);
   }
 
   double? _radiusToken(Object? value) {
-    return _designNumber(value, QuickjsUiTokenCategory.radius);
+    return _designNumber(value, JsUiTokenCategory.radius);
   }
 
   double? _elevationToken(Object? value) {
-    return _designNumber(value, QuickjsUiTokenCategory.elevation);
+    return _designNumber(value, JsUiTokenCategory.elevation);
   }
 
   double? _fontToken(Object? value) {
-    return _designNumber(value, QuickjsUiTokenCategory.fontSize);
+    return _designNumber(value, JsUiTokenCategory.fontSize);
   }
 
-  double? _designNumber(Object? value, QuickjsUiTokenCategory category) {
+  double? _designNumber(Object? value, JsUiTokenCategory category) {
     if (value is! String || !value.startsWith(r'$')) {
       return null;
     }
     final context = buildContext;
     final extension = context == null
         ? null
-        : Theme.of(context).extension<QuickjsUiDesignTokens>();
+        : Theme.of(context).extension<JsUiDesignTokens>();
     return extension?.number(value, category) ??
-        QuickjsUiDesignTokens().number(value, category);
+        JsUiDesignTokens().number(value, category);
   }
 }
 
-final class _QuickjsUiEventPolicy {
-  const _QuickjsUiEventPolicy({
+final class _JsUiEventPolicy {
+  const _JsUiEventPolicy({
     required this.throttleMs,
     required this.debounceMs,
     required this.dropMs,
     required this.coalesceKey,
   });
 
-  factory _QuickjsUiEventPolicy.from(
+  factory _JsUiEventPolicy.from(
     Map<String, Object?> event,
     String? defaultCoalesceKey,
   ) {
-    final policy = QuickjsUiProps.map(event['policy'], name: 'event policy');
-    return _QuickjsUiEventPolicy(
+    final policy = JsUiProps.map(event['policy'], name: 'event policy');
+    return _JsUiEventPolicy(
       throttleMs: _durationMs(event['throttleMs'] ?? policy['throttleMs']),
       debounceMs: _durationMs(event['debounceMs'] ?? policy['debounceMs']),
       dropMs: _durationMs(event['dropMs'] ?? policy['dropMs']),
       coalesceKey:
-          QuickjsUiProps.string(
-            event['coalesceKey'] ?? policy['coalesceKey'],
-          ) ??
+          JsUiProps.string(event['coalesceKey'] ?? policy['coalesceKey']) ??
           defaultCoalesceKey,
     );
   }
@@ -535,10 +566,7 @@ final class _QuickjsUiEventPolicy {
     if (value == null) {
       return null;
     }
-    final number = QuickjsUiProps.intValue(
-      value,
-      name: 'event policy duration',
-    );
+    final number = JsUiProps.intValue(value, name: 'event policy duration');
     if (number == null || number < 0) {
       throw const FormatException(
         'quickjs_ui event policy duration must be >= 0',
@@ -551,21 +579,21 @@ final class _QuickjsUiEventPolicy {
 final class _PendingUiEvent {
   const _PendingUiEvent({required this.event, required this.timer});
 
-  final QuickjsUiEventEnvelope event;
+  final JsUiEventEnvelope event;
   final Timer timer;
 }
 
-QuickjsUiEventEnvelope _eventEnvelope(
+JsUiEventEnvelope _eventEnvelope(
   Map<String, Object?> event, {
-  required QuickjsUiEventKind kind,
+  required JsUiEventKind kind,
   String? coalesceKey,
 }) {
   final key = _coalesceKey(event) ?? coalesceKey;
   final payload = _eventPayload(event);
-  if (kind == QuickjsUiEventKind.sample && key != null) {
-    return QuickjsUiEventEnvelope.sample(payload, coalesceKey: key);
+  if (kind == JsUiEventKind.sample && key != null) {
+    return JsUiEventEnvelope.sample(payload, coalesceKey: key);
   }
-  return QuickjsUiEventEnvelope.command(payload);
+  return JsUiEventEnvelope.command(payload);
 }
 
 String? _coalesceKey(Map<String, Object?> event) {
@@ -595,7 +623,7 @@ Map<String, Object?> _eventPayload(Map<String, Object?> event) {
 }
 
 String _normalizeToken(String value) {
-  var token = QuickjsUiDesignTokens.normalizeToken(value);
+  var token = JsUiDesignTokens.normalizeToken(value);
   for (final prefix in <String>[
     'texttheme',
     'theme',

@@ -3,17 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 void main() {
-  _benchmarkQuality(QuickjsUiPerformanceMode.high, budgetMs: 16.667);
-  _benchmarkQuality(QuickjsUiPerformanceMode.low, budgetMs: 8.333);
+  _benchmarkQuality(JsUiPerformanceMode.high, budgetMs: 16.667);
+  _benchmarkQuality(JsUiPerformanceMode.low, budgetMs: 8.333);
 }
 
-void _benchmarkQuality(
-  QuickjsUiPerformanceMode mode, {
-  required double budgetMs,
-}) {
+void _benchmarkQuality(JsUiPerformanceMode mode, {required double budgetMs}) {
   testWidgets('40 expensive effects in ${mode.name} quality', (tester) async {
-    final performance = QuickjsUiPerformanceController(mode: mode);
-    final renderer = QuickjsUiRenderer(
+    final performance = JsUiPerformanceController(mode: mode);
+    final renderer = JsUiRenderer(
       onEvent: (_) {},
       performanceController: performance,
     );
@@ -44,7 +41,7 @@ void _benchmarkQuality(
   });
 }
 
-QuickjsUiNode _effectGrid() => QuickjsUiNode.fromMap(<String, Object?>{
+JsUiNode _effectGrid() => JsUiNode.fromMap(<String, Object?>{
   'type': 'Wrap',
   'children': <Object?>[
     for (var index = 0; index < 40; index += 1)

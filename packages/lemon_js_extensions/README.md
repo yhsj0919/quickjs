@@ -8,7 +8,7 @@
 
 ```yaml
 dependencies:
-  lemon_js_extensions: ^0.1.0
+  lemon_js_extensions: ^0.2.0
 ```
 
 ```dart
@@ -109,29 +109,27 @@ JSUI 只能调用同一 Session 中 manifest 声明的 `uiExports`，不接收�
 ## 创建 Manager
 
 ```dart
-final manager = QuickjsExtensionManager(
-  compatibilityRegistry: QuickjsExtensionCompatibilityRegistry(
-    <QuickjsExtensionCompatibilityPolicy>[
-      QuickjsExtensionCompatibilityPolicy(
-        compatibilityCode: 'content-source-v1',
-        requiredPublicExports: const <String>{'getHome'},
-        optionalPublicExports: const <String>{'search', 'getDetail'},
-      ),
-    ],
-  ),
+final manager = JsExtensionManager(
+  constraints: <JsExtensionConstraint>[
+    JsExtensionConstraint(
+      compatibilityCode: 'content-source-v1',
+      requiredPublicExports: const <String>{'getHome'},
+      optionalPublicExports: const <String>{'search', 'getDetail'},
+    ),
+  ],
 );
 
 await manager.restore();
 ```
 
 `store` 可以省略：原生平台默认保存到应用支持目录，Web 默认使用 SharedPreferences Web
-后端。宿主可传入自定义 `QuickjsExtensionStore`。插件 KV 默认使用
-`SharedPreferencesJsKvStore`，并按插件 ID 隔离。
+后端。宿主可传入自定义 `JsExtensionStore`。插件 KV 默认使用
+`JsSharedPreferencesKvStore`，并按插件 ID 隔离。
 
 ## 加载、安装和调用
 
 ```dart
-final package = await QuickjsExtensionPackage.asset(
+final package = await JsExtensionPackage.asset(
   manifestAsset: 'assets/extensions/site_plugin/manifest.json',
 );
 
@@ -143,22 +141,23 @@ await manager.install(
 final home = await manager.call('site.example', 'getHome');
 ```
 
-还支持 `file`、`network`、`assetZip`、`fileZip`、`networkZip` 和 `zipBytes`。不同来源最终
-都会归一化为 `QuickjsExtensionPackage`。
+还支持 `file`、`network`、`assetZip`、`fileZip`、`networkZip` 和 `zipBytes`。裸 Core/JSUI
+模块统一使用 `moduleAsset`、`moduleFile` 或 `moduleNetwork`，并通过 `adapter` 指定模块类型。不同来源最终
+都会归一化为 `JsExtensionPackage`。
 
 打开插件页面：
 
 ```dart
 final installed = manager.find('site.example')!.installed!;
 
-QuickjsExtensionView.route(
+JsExtensionView.route(
   session: installed.session,
   route: 'login',
   initialProps: const <String, Object?>{},
 )
 ```
 
-第三方 `QuickjsUiPlugin` 不能序列化，应通过 Manager 的 `uiPluginsResolver` 在恢复时按
+第三方 `JsUiPlugin` 不能序列化，应通过 Manager 的 `uiPluginsResolver` 在恢复时按
 插件 ID 重新注入。
 
 ## 更新与数据迁移
@@ -189,10 +188,10 @@ export async function migrateStorage(fromVersion, toVersion) {
 
 目录、asset 和网络插件通过 manifest 的 `resources` 列出需要持久化的非 JS 文件；ZIP
 中的非 JS 文件会自动收集。必需宿主能力缺失时安装会抛出包含完整检查结果的
-`QuickjsExtensionCapabilityException`；可选能力缺失只报告，不阻止安装。
+`JsExtensionCapabilityException`；可选能力缺失只报告，不阻止安装。
 
 Manager 默认提供隔离 KV、网络/Axios 和 Web Crypto。宿主可通过
-`QuickjsExtensionOptionalCapabilities` 替换或关闭。
+`JsExtensionFeatures` 替换或关闭。
 
 ## 管理 API
 

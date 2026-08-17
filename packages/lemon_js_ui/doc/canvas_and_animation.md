@@ -95,10 +95,10 @@ JavaScript 只提供一次可序列化轨迹和保留子 Widget；Flutter 用一
 宿主可以保留完整质量，也可启用由帧耗时驱动的本地降级，且无需重建 JavaScript 页面：
 
 ```dart
-final performance = QuickjsUiPerformanceController(
-  mode: QuickjsUiPerformanceMode.auto,
+final performance = JsUiPerformanceController(
+  mode: JsUiPerformanceMode.auto,
 );
-final renderer = QuickjsUiRenderer(
+final renderer = JsUiRenderer(
   onEvent: handleEvent,
   performanceController: performance,
 );
@@ -108,10 +108,10 @@ renderer.dispose();
 performance.dispose();
 ```
 
-`QuickjsUiView` 默认创建 auto 控制器，读取 `View.of(context).display.refreshRate`，
+`JsUiView` 默认创建 auto 控制器，读取 `View.of(context).display.refreshRate`，
 并以一个刷新周期作为预算（120 Hz 为 8.33 ms、90 Hz 为 11.11 ms、60 Hz 为
 16.67 ms）。显式传入 `targetFrameBudget` 可覆盖该推导。直接使用
-`QuickjsUiRenderer` 时为兼容性默认采用 `high`；注入控制器可启用自动采样。
+`JsUiRenderer` 时为兼容性默认采用 `high`；注入控制器可启用自动采样。
 
 默认模式为 `high`，用于保持兼容且不进行全局帧采样。`auto` 从 `high` 开始，连续
 24 个慢帧后降级，连续 240 个稳定帧后才升级；非对称窗口用于避免质量振荡。宿主也可

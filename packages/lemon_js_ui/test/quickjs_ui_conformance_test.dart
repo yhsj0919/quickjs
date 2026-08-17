@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
 import 'package:lemon_js_ui/src/renderer/quickjs_ui_event_ingress.dart';
 
-final class _ProbeComponentController extends QuickjsUiComponentController {
+final class _ProbeComponentController extends JsUiComponentController {
   _ProbeComponentController(this.events);
 
   final List<String> events;
 
   @override
-  void mount(QuickjsUiNode node) {
+  void mount(JsUiNode node) {
     events.add('mount:${node.props['label']}');
   }
 
   @override
-  void update(QuickjsUiNode previous, QuickjsUiNode next) {
+  void update(JsUiNode previous, JsUiNode next) {
     events.add('update:${previous.props['label']}->${next.props['label']}');
   }
 
@@ -49,12 +50,12 @@ void main() {
   group('quickjs_ui 0.4.1 cross-cutting', () {
     group('schema versioning / compatibility', () {
       test('accepts current quickjs_ui compatibility metadata', () async {
-        final engine = await Quickjs.create();
-        final session = QuickjsUiSession(engine: engine);
+        final engine = await JsEngine.create();
+        final session = JsUiSession(engine: engine);
         addTearDown(session.dispose);
 
         await session.loadPlugin(
-          QuickjsUiPagePlugin.singleFile(
+          JsUiPagePlugin.source(
             id: 'quickjs_ui_compatibility_accept',
             version: '0.4.1',
             source: '''
@@ -62,7 +63,7 @@ import { Page, Text } from 'quickjs_ui';
 
 export default Page({
   schemaVersion: 1,
-  minimumQuickjsUiVersion: 1,
+  minimumJsUiVersion: 1,
   unknownProps: 'warn',
   deprecatedProps: {
     oldText: 'Use data instead.'
@@ -82,13 +83,13 @@ export default Page({
       });
 
       test('rejects unsupported quickjs_ui schema version', () async {
-        final engine = await Quickjs.create();
-        final session = QuickjsUiSession(engine: engine);
+        final engine = await JsEngine.create();
+        final session = JsUiSession(engine: engine);
         addTearDown(session.dispose);
 
         await expectLater(
           session.loadPlugin(
-            QuickjsUiPagePlugin.singleFile(
+            JsUiPagePlugin.source(
               id: 'quickjs_ui_compatibility_schema_reject',
               version: '0.4.1',
               source: '''
@@ -114,20 +115,20 @@ export default Page({
       });
 
       test('rejects pages requiring newer quickjs_ui runtime', () async {
-        final engine = await Quickjs.create();
-        final session = QuickjsUiSession(engine: engine);
+        final engine = await JsEngine.create();
+        final session = JsUiSession(engine: engine);
         addTearDown(session.dispose);
 
         await expectLater(
           session.loadPlugin(
-            QuickjsUiPagePlugin.singleFile(
+            JsUiPagePlugin.source(
               id: 'quickjs_ui_compatibility_runtime_reject',
               version: '0.4.1',
               source: '''
 import { Page, Text } from 'quickjs_ui';
 
 export default Page({
-  minimumQuickjsUiVersion: 2,
+  minimumJsUiVersion: 2,
   build() {
     return Text('future runtime');
   }
@@ -160,7 +161,7 @@ export default Page({
         ],
       };
 
-      final node = QuickjsUiNode.fromMap(fixture);
+      final node = JsUiNode.fromMap(fixture);
 
       expect(node.toMap(), <String, Object?>{
         'type': 'Column',
@@ -183,7 +184,7 @@ export default Page({
       tester,
     ) async {
       final events = <Map<String, Object?>>[];
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'Column',
         'children': <Object?>[
           <String, Object?>{'type': 'Text', 'data': 'Counter'},
@@ -197,9 +198,7 @@ export default Page({
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: QuickjsUiRenderer(onEvent: events.add).build(node),
-          ),
+          home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
         ),
       );
       await tester.tap(find.text('Add'));
@@ -215,7 +214,7 @@ export default Page({
     testWidgets('accessibility props map to semantics and tooltip', (
       tester,
     ) async {
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'ElevatedButton',
         'semanticLabel': 'Save changes',
         'semanticHint': 'Stores the current form',
@@ -228,7 +227,7 @@ export default Page({
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+          home: Scaffold(body: JsUiRenderer(onEvent: (_) {}).build(node)),
         ),
       );
 
@@ -241,7 +240,7 @@ export default Page({
       (tester) async {
         const brand = Color(0xff123456);
         const titleStyle = TextStyle(fontSize: 21, fontWeight: FontWeight.w700);
-        final node = QuickjsUiNode.fromMap(<String, Object?>{
+        final node = JsUiNode.fromMap(<String, Object?>{
           'type': 'Container',
           'color': r'$brand.primary',
           'padding': <String, Object?>{
@@ -270,7 +269,7 @@ export default Page({
           MaterialApp(
             theme: ThemeData(
               extensions: <ThemeExtension<dynamic>>[
-                QuickjsUiDesignTokens(
+                JsUiDesignTokens(
                   colors: const <String, Color>{'brand.primary': brand},
                   textStyles: const <String, TextStyle>{
                     'display.card': titleStyle,
@@ -283,7 +282,7 @@ export default Page({
             ),
             home: Builder(
               builder: (context) {
-                return QuickjsUiRenderer(
+                return JsUiRenderer(
                   onEvent: (_) {},
                 ).build(node, buildContext: context);
               },
@@ -318,7 +317,7 @@ export default Page({
       tester,
     ) async {
       final events = <Map<String, Object?>>[];
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'Column',
         'children': <Object?>[
           <String, Object?>{
@@ -344,9 +343,7 @@ export default Page({
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: QuickjsUiRenderer(onEvent: events.add).build(node),
-          ),
+          home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
         ),
       );
 
@@ -387,14 +384,14 @@ export default Page({
     testWidgets('text field preserves default editing completion behavior', (
       tester,
     ) async {
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'TextField',
         'value': 'Ada',
       });
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+          home: Scaffold(body: JsUiRenderer(onEvent: (_) {}).build(node)),
         ),
       );
 
@@ -408,13 +405,10 @@ export default Page({
       tester,
     ) async {
       final events = <Map<String, Object?>>[];
-      final renderer = QuickjsUiRenderer(onEvent: events.add);
+      final renderer = JsUiRenderer(onEvent: events.add);
 
-      QuickjsUiNode field({
-        required bool requestFocus,
-        required bool clearFocus,
-      }) {
-        return QuickjsUiNode.fromMap(<String, Object?>{
+      JsUiNode field({required bool requestFocus, required bool clearFocus}) {
+        return JsUiNode.fromMap(<String, Object?>{
           'type': 'TextField',
           'key': 'controlled',
           'focusId': 'controlled',
@@ -460,7 +454,7 @@ export default Page({
 
     test('custom renderer lifecycle owns keyed component controllers', () {
       final events = <String>[];
-      final registry = QuickjsUiComponentRegistry.defaults()
+      final registry = JsUiComponentRegistry.defaults()
         ..registerLifecycle<_ProbeComponentController>(
           'Probe',
           createController: (node) => _ProbeComponentController(events),
@@ -469,10 +463,10 @@ export default Page({
             return Text('${node.props['label']}');
           },
         );
-      final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
+      final renderer = JsUiRenderer(registry: registry, onEvent: (_) {});
 
-      QuickjsUiNode probe(String label) {
-        return QuickjsUiNode.fromMap(<String, Object?>{
+      JsUiNode probe(String label) {
+        return JsUiNode.fromMap(<String, Object?>{
           'type': 'Probe',
           'key': 'main',
           'label': label,
@@ -486,7 +480,7 @@ export default Page({
       renderer.build(probe('two'));
       renderer.hide();
       renderer.build(
-        QuickjsUiNode.fromMap(<String, Object?>{
+        JsUiNode.fromMap(<String, Object?>{
           'type': 'Column',
           'children': const <Object?>[],
         }),
@@ -507,7 +501,7 @@ export default Page({
 
     test('lifecycle controllers are scoped by tree path and key', () {
       final events = <String>[];
-      final registry = QuickjsUiComponentRegistry.defaults()
+      final registry = JsUiComponentRegistry.defaults()
         ..registerLifecycle<_ProbeComponentController>(
           'Probe',
           createController: (node) => _ProbeComponentController(events),
@@ -516,10 +510,10 @@ export default Page({
             return Text('${node.props['label']}');
           },
         );
-      final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
+      final renderer = JsUiRenderer(registry: registry, onEvent: (_) {});
 
-      QuickjsUiNode tree(String left, String right) {
-        return QuickjsUiNode.fromMap(<String, Object?>{
+      JsUiNode tree(String left, String right) {
+        return JsUiNode.fromMap(<String, Object?>{
           'type': 'Column',
           'children': <Object?>[
             <String, Object?>{
@@ -560,14 +554,14 @@ export default Page({
     });
 
     test('duplicate sibling keys are rejected', () {
-      final registry = QuickjsUiComponentRegistry.defaults()
+      final registry = JsUiComponentRegistry.defaults()
         ..registerLifecycle<_ProbeComponentController>(
           'Probe',
           createController: (node) => _ProbeComponentController(<String>[]),
           build: (context, node, controller) => const SizedBox.shrink(),
         );
-      final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final renderer = JsUiRenderer(registry: registry, onEvent: (_) {});
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'Column',
         'children': <Object?>[
           <String, Object?>{'type': 'Text', 'key': 'duplicate', 'data': 'A'},
@@ -588,14 +582,14 @@ export default Page({
     });
 
     test('custom renderer lifecycle components require stable keys', () {
-      final registry = QuickjsUiComponentRegistry.defaults()
+      final registry = JsUiComponentRegistry.defaults()
         ..registerLifecycle<_ProbeComponentController>(
           'Probe',
           createController: (node) => _ProbeComponentController(<String>[]),
           build: (context, node, controller) => const SizedBox.shrink(),
         );
-      final renderer = QuickjsUiRenderer(registry: registry, onEvent: (_) {});
-      final node = QuickjsUiNode.fromMap(<String, Object?>{'type': 'Probe'});
+      final renderer = JsUiRenderer(registry: registry, onEvent: (_) {});
+      final node = JsUiNode.fromMap(<String, Object?>{'type': 'Probe'});
 
       expect(
         () => renderer.build(node),
@@ -610,12 +604,12 @@ export default Page({
     });
 
     test('lifecycle sequence is applied through the session queue', () async {
-      final engine = await Quickjs.create();
-      final session = QuickjsUiSession(engine: engine);
+      final engine = await JsEngine.create();
+      final session = JsUiSession(engine: engine);
       addTearDown(session.dispose);
 
       await session.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: 'quickjs_ui_conformance_lifecycle',
           version: '0.4.1',
           source: '''
@@ -661,21 +655,21 @@ export default Page({
         ),
       );
 
-      await session.lifecycle('mount');
-      await session.lifecycle('show');
-      await session.lifecycle('hide');
-      await session.lifecycle('pause');
-      await session.lifecycle('resume');
+      await session.lifecycle(JsUiLifecycle.mount);
+      await session.lifecycle(JsUiLifecycle.show);
+      await session.lifecycle(JsUiLifecycle.hide);
+      await session.lifecycle(JsUiLifecycle.pause);
+      await session.lifecycle(JsUiLifecycle.resume);
       await session.lifecycle(
-        'routeEnter',
+        JsUiLifecycle.routeEnter,
         payload: const <String, Object?>{'route': 'detail'},
       );
       await session.lifecycle(
-        'routeLeave',
+        JsUiLifecycle.routeLeave,
         payload: const <String, Object?>{'to': 'child'},
       );
       await session.lifecycle(
-        'routeResult',
+        JsUiLifecycle.routeResult,
         payload: const <String, Object?>{
           'from': 'child',
           'result': <String, Object?>{'value': 'ok'},
@@ -699,12 +693,12 @@ export default Page({
     });
 
     test('dispatch and route lifecycle share one ordered state lane', () async {
-      final engine = await Quickjs.create();
-      final session = QuickjsUiSession(engine: engine);
+      final engine = await JsEngine.create();
+      final session = JsUiSession(engine: engine);
       addTearDown(session.dispose);
 
       await session.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: 'quickjs_ui_single_state_lane',
           version: '0.6.0',
           source: '''
@@ -723,8 +717,8 @@ export default Page({
 
       final operations = <Future<void>>[
         session.dispatch(<String, Object?>{'method': 'first'}),
-        session.routeLifecycle('show'),
-        session.lifecycle('pause'),
+        session.routeLifecycle(JsUiLifecycle.show),
+        session.lifecycle(JsUiLifecycle.pause),
       ];
       await Future.wait(operations);
 
@@ -736,8 +730,8 @@ export default Page({
       'event backpressure coalesces samples and defers reentrant work',
       (tester) async {
         final events = <Map<String, Object?>>[];
-        late final QuickjsUiEventIngress ingress;
-        ingress = QuickjsUiEventIngress((event) async {
+        late final JsUiEventIngress ingress;
+        ingress = JsUiEventIngress((event) async {
           events.add(event);
           if (event['method'] == 'toggle') {
             ingress.submit(<String, Object?>{'method': 'afterToggle'});
@@ -747,13 +741,13 @@ export default Page({
 
         await tester.pumpWidget(const SizedBox.shrink());
         ingress.submitEnvelope(
-          QuickjsUiEventEnvelope.sample(<String, Object?>{
+          JsUiEventEnvelope.sample(<String, Object?>{
             'method': 'scrub',
             'value': 1,
           }, coalesceKey: 'Slider:main:onChanged'),
         );
         ingress.submitEnvelope(
-          QuickjsUiEventEnvelope.sample(<String, Object?>{
+          JsUiEventEnvelope.sample(<String, Object?>{
             'method': 'scrub',
             'value': 2,
           }, coalesceKey: 'Slider:main:onChanged'),
@@ -780,25 +774,23 @@ export default Page({
 
     test('navigation sequence returns host result to JS state', () async {
       final intents = <Map<String, Object?>>[];
-      final capabilities = QuickjsUiCapabilityGroup.system(
-        options: const QuickjsUiHostCapabilityOptions(
-          enabled: <QuickjsUiHostCapability>{
-            QuickjsUiHostCapability.navigation,
-          },
+      final capabilities = JsUiCapabilityGroup.system(
+        options: const JsUiHostCapabilityOptions(
+          enabled: <JsUiHostCapability>{JsUiHostCapability.navigation},
         ),
-        handlers: QuickjsUiHostApiHandlers(
+        handlers: JsUiHostApiHandlers(
           onNavigationIntent: (intent) {
             intents.add(intent);
             return <String, Object?>{'value': 'native-result'};
           },
         ),
       );
-      final engine = await Quickjs.create(features: capabilities.features);
-      final session = QuickjsUiSession(engine: engine);
+      final engine = await JsEngine.create(features: capabilities.features);
+      final session = JsUiSession(engine: engine);
       addTearDown(session.dispose);
 
       await session.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: 'quickjs_ui_conformance_navigation',
           version: '0.4.1',
           source: '''
@@ -812,7 +804,7 @@ export default Page({
     return Text(state.result);
   },
   async openNative() {
-    const result = await quickjsUiHost.navigationIntent({
+    const result = await jsUiHost.navigationIntent({
       route: 'native.detail',
       params: { id: 7 }
     });
@@ -837,18 +829,18 @@ export default Page({
 
     group('resource / media model', () {
       test('resource references classify schemes and validate metadata', () {
-        final asset = QuickjsUiResourceReference.parse('assets/avatar.png');
-        expect(asset.kind, QuickjsUiResourceKind.asset);
-        expect(asset.location, 'assets/avatar.png');
+        final asset = JsUiResourceReference.parse('assets/avatar.png');
+        expect(asset.kind, JsUiResourceKind.asset);
+        expect(asset.uri, 'assets/avatar.png');
 
-        final network = QuickjsUiResourceReference.parse(<String, Object?>{
+        final network = JsUiResourceReference.parse(<String, Object?>{
           'url': 'https://example.com/avatar.png',
           'mimeType': 'image/png',
           'sha256':
               'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           'headers': <String, Object?>{'Authorization': 'Bearer token'},
         });
-        expect(network.kind, QuickjsUiResourceKind.network);
+        expect(network.kind, JsUiResourceKind.network);
         expect(network.mimeType, 'image/png');
         expect(network.headers, <String, String>{
           'Authorization': 'Bearer token',
@@ -856,11 +848,11 @@ export default Page({
         expect(network.isCacheable, isTrue);
 
         expect(
-          () => QuickjsUiResourceReference.parse('ftp://example.com/file.png'),
+          () => JsUiResourceReference.parse('ftp://example.com/file.png'),
           throwsA(isA<FormatException>()),
         );
         expect(
-          () => QuickjsUiResourceReference.parse(<String, Object?>{
+          () => JsUiResourceReference.parse(<String, Object?>{
             'uri': 'https://example.com/file.png',
             'sha256': 'not-a-checksum',
           }),
@@ -869,16 +861,15 @@ export default Page({
       });
 
       test('Image accepts resource objects and data resources', () {
-        final registry = QuickjsUiComponentRegistry.defaults();
-        final context = QuickjsUiRenderContext(
+        final registry = JsUiComponentRegistry.defaults();
+        final context = JsUiRenderContext(
           buildNode: (_) => const SizedBox.shrink(),
           onUiEvent: (_) {},
-          onEvent: (_) {},
         );
         final networkImage =
             registry.build(
                   context,
-                  QuickjsUiNode.fromMap(<String, Object?>{
+                  JsUiNode.fromMap(<String, Object?>{
                     'type': 'Image',
                     'src': <String, Object?>{
                       'url': 'https://example.com/avatar.png',
@@ -896,7 +887,7 @@ export default Page({
         final dataImage =
             registry.build(
                   context,
-                  QuickjsUiNode.fromMap(<String, Object?>{
+                  JsUiNode.fromMap(<String, Object?>{
                     'type': 'Image',
                     'src': 'data:image/png;base64,AA==',
                   }),
@@ -906,7 +897,7 @@ export default Page({
       });
 
       test('bundle manifest resources stay metadata-only', () async {
-        final bundle = await QuickjsUiBundle.fromManifestSource(
+        final bundle = await JsUiBundle.loadManifest(
           '''
 {
   "id": "quickjs_ui_conformance_resources",
@@ -924,7 +915,7 @@ export default Page({
   ]
 }
 ''',
-          resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+          resolver: JsUiResourceResolver.memory(const <String, String>{
             'pages/main.mjs': '''
 import { Page, Text } from 'quickjs_ui';
 
@@ -948,7 +939,7 @@ export default Page({
     });
 
     test('bundle compatibility loads a multi-module page', () async {
-      final bundle = await QuickjsUiBundle.fromManifestSource(
+      final bundle = await JsUiBundle.loadManifest(
         '''
 {
   "id": "quickjs_ui_conformance_bundle",
@@ -966,7 +957,7 @@ export default Page({
   ]
 }
 ''',
-        resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+        resolver: JsUiResourceResolver.memory(const <String, String>{
           'pages/main.mjs': '''
 import { Page } from 'quickjs_ui';
 import { title } from '../components/title.mjs';
@@ -986,8 +977,8 @@ export function title(value) {
 ''',
         }),
       );
-      final engine = await Quickjs.create();
-      final session = QuickjsUiSession(engine: engine);
+      final engine = await JsEngine.create();
+      final session = JsUiSession(engine: engine);
       addTearDown(session.dispose);
 
       await session.loadPlugin(bundle.toPlugin());

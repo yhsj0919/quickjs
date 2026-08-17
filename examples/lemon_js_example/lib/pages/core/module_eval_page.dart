@@ -13,7 +13,7 @@ class ModuleEvalPage extends StatefulWidget {
 }
 
 class _ModuleEvalPageState extends State<ModuleEvalPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -34,12 +34,12 @@ class _ModuleEvalPageState extends State<ModuleEvalPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       _moduleRunCount = 0;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         moduleLoader: (name) => switch (name) {
           'example/dep.mjs' => 'export const value = 40;',
           'shared/add.mjs' => 'export function add(a, b) { return a + b; }',
@@ -56,13 +56,13 @@ class _ModuleEvalPageState extends State<ModuleEvalPage> {
         },
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -76,21 +76,21 @@ class _ModuleEvalPageState extends State<ModuleEvalPage> {
   }
 
   Future<void> _runModule() async {
-    await _capture('evalModule', () async {
+    await _capture('runModule', () async {
       final moduleName = 'example-module-${++_moduleRunCount}.mjs';
-      final result = await _requireRuntime().evalModule('''
+      final result = await _requireRuntime().runModule('''
 export const answer = 42;
 globalThis.moduleAnswer = answer;
 ''', name: moduleName);
       final value = await _requireRuntime().eval('globalThis.moduleAnswer');
-      _appendLog('evalModule($moduleName) => $result, moduleAnswer => $value');
+      _appendLog('runModule($moduleName) => $result, moduleAnswer => $value');
     });
   }
 
   Future<void> _runModuleError() async {
     await _capture('module error', () async {
       final moduleName = 'module-error-${++_moduleRunCount}.mjs';
-      await _requireRuntime().evalModule(
+      await _requireRuntime().runModule(
         'throw new Error("module failed");',
         name: moduleName,
       );
@@ -99,14 +99,14 @@ globalThis.moduleAnswer = answer;
 
   Future<void> _runModuleImport() async {
     await _capture('module import/cache', () async {
-      await _requireRuntime().evalModule('''
+      await _requireRuntime().runModule('''
 import { value } from './dep.mjs';
 import { add } from '../shared/add.mjs';
 import { count } from '../shared/counter.mjs';
 globalThis.moduleImportResult = add(value, 2);
 globalThis.moduleImportFirstCount = count;
 ''', name: 'example/main-${++_moduleRunCount}.mjs');
-      await _requireRuntime().evalModule('''
+      await _requireRuntime().runModule('''
 import { count } from './counter.mjs';
 globalThis.moduleImportSecondCount = count;
 ''', name: 'shared/second-${++_moduleRunCount}.mjs');
@@ -121,7 +121,7 @@ globalThis.moduleImportSecondCount = count;
 
   Future<void> _runCommonJs() async {
     await _capture('CommonJS require/cache', () async {
-      await _requireRuntime().evalCommonJs('''
+      await _requireRuntime().runCommonJs('''
 const dep = require('./dep.js');
 const add = require('../shared/add.js');
 const counter = require('../shared/counter.js');
@@ -129,7 +129,7 @@ globalThis.commonJsResult = add(dep.value, 2);
 globalThis.commonJsFirstCount = counter.count;
 exports.value = globalThis.commonJsResult;
 ''', name: 'common/main-${++_moduleRunCount}.js');
-      await _requireRuntime().evalCommonJs('''
+      await _requireRuntime().runCommonJs('''
 const counter = require('./counter.js');
 globalThis.commonJsSecondCount = counter.count;
 ''', name: 'shared/second-${++_moduleRunCount}.js');
@@ -169,12 +169,12 @@ globalThis.commonJsSecondCount = counter.count;
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   void _appendLog(String message) {
@@ -202,14 +202,14 @@ globalThis.commonJsSecondCount = counter.count;
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('模块加载')),
@@ -228,7 +228,7 @@ globalThis.commonJsSecondCount = counter.count;
               children: [
                 FilledButton(
                   onPressed: _busy || !hasRuntime ? null : _runModule,
-                  child: const Text('运行 evalModule'),
+                  child: const Text('运行 runModule'),
                 ),
                 OutlinedButton(
                   onPressed: _busy || !hasRuntime ? null : _runModuleError,

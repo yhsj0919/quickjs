@@ -3,7 +3,7 @@ import 'package:lemon_js_example/quickjs_ui_example_pages.dart';
 
 void main() {
   test('Lab catalog exposes every particle demo', () {
-    final titles = quickjsUiLabExamplePages.map((page) => page.title).toSet();
+    final titles = jsUiLabExamplePages.map((page) => page.title).toSet();
 
     expect(
       titles,

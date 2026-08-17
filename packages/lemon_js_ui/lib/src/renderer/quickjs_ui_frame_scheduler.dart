@@ -1,12 +1,15 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
-final class QuickjsUiFrameScheduler {
-  final Map<int, QuickjsUiFrameClock> _clocks = <int, QuickjsUiFrameClock>{};
+final class JsUiFrameScheduler {
+  final Map<int, JsUiFrameClock> _clocks = <int, JsUiFrameClock>{};
 
-  QuickjsUiFrameClock clockFor(int intervalMs) => _clocks.putIfAbsent(
+  JsUiFrameClock clockFor(int intervalMs) => _clocks.putIfAbsent(
     intervalMs,
-    () => QuickjsUiFrameClock(Duration(milliseconds: intervalMs)),
+    () => JsUiFrameClock(Duration(milliseconds: intervalMs)),
   );
 
   void dispose() {
@@ -17,8 +20,8 @@ final class QuickjsUiFrameScheduler {
   }
 }
 
-final class QuickjsUiFrameClock implements Listenable {
-  QuickjsUiFrameClock(this.interval);
+final class JsUiFrameClock implements Listenable {
+  JsUiFrameClock(this.interval);
 
   final Duration interval;
   final Set<VoidCallback> _listeners = <VoidCallback>{};

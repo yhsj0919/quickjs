@@ -5,7 +5,7 @@ import 'package:lemon_js_ui/lemon_js_ui.dart';
 void main() {
   group('quickjs_ui package format', () {
     test('parses manifest metadata and permissions', () {
-      final manifest = QuickjsUiManifest.parse('''
+      final manifest = JsUiManifest.parse('''
 {
   "schemaVersion": 1,
   "id": "quickjs_ui.test.package",
@@ -14,7 +14,7 @@ void main() {
   "entry": "main.mjs",
   "modules": {
     "main.mjs": {
-      "sha256": "${quickjsUiSha256Hex('export default 1;')}"
+      "sha256": "${jsUiSha256Hex('export default 1;')}"
     }
   },
   "permissions": [
@@ -61,9 +61,9 @@ void main() {
 ''';
 
       expect(
-        () => QuickjsUiBundle.fromManifestSource(
+        () => JsUiBundle.loadManifest(
           manifest,
-          resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+          resolver: JsUiResourceResolver.memory(const <String, String>{
             'main.mjs': source,
           }),
           validatePackageRoot: true,
@@ -83,16 +83,16 @@ void main() {
   "entry": "main.mjs",
   "modules": {
     "main.mjs": {
-      "sha256": "${quickjsUiSha256Hex(source)}"
+      "sha256": "${jsUiSha256Hex(source)}"
     }
   }
 }
 ''';
 
       expect(
-        () => QuickjsUiBundle.fromManifestSource(
+        () => JsUiBundle.loadManifest(
           manifest,
-          resolver: QuickjsUiResourceResolver.memory(const <String, String>{
+          resolver: JsUiResourceResolver.memory(const <String, String>{
             'main.mjs': source,
           }),
           validatePackageRoot: true,
@@ -114,10 +114,10 @@ void main() {
   "entry": "main.mjs",
   "modules": {
     "main.mjs": {
-      "sha256": "${quickjsUiSha256Hex(mainSource)}"
+      "sha256": "${jsUiSha256Hex(mainSource)}"
     },
     "feature.mjs": {
-      "sha256": "${quickjsUiSha256Hex(featureSource)}"
+      "sha256": "${jsUiSha256Hex(featureSource)}"
     }
   },
   "permissions": [
@@ -131,7 +131,7 @@ void main() {
         ..addFile(ArchiveFile.string('feature.mjs', featureSource));
       final bytes = ZipEncoder().encode(archive);
 
-      final bundle = await QuickjsUiBundle.zipPackageBytes(bytes);
+      final bundle = await JsUiBundle.archiveBytes(bytes);
 
       expect(bundle.id, 'quickjs_ui.test.zip');
       expect(
@@ -154,10 +154,10 @@ void main() {
   "entry": "main.mjs",
   "modules": {
     "main.mjs": {
-      "sha256": "${quickjsUiSha256Hex(mainSource)}"
+      "sha256": "${jsUiSha256Hex(mainSource)}"
     },
     "feature.mjs": {
-      "sha256": "${quickjsUiSha256Hex(featureSource)}"
+      "sha256": "${jsUiSha256Hex(featureSource)}"
     }
   },
   "permissions": [
@@ -166,7 +166,7 @@ void main() {
 }
 ''';
 
-      final bundle = QuickjsUiBundle.compiledPackage(
+      final bundle = JsUiBundle.fromManifest(
         manifestSource: manifest,
         modules: const <String, String>{
           'main.mjs': mainSource,
@@ -184,21 +184,21 @@ void main() {
     });
 
     test('creates page plugins from inline sources', () {
-      final plugin = QuickjsUiPagePlugin.singleFile(
+      final plugin = JsUiPagePlugin.source(
         id: 'quickjs_ui_test_source_page',
         version: '0.1.0',
         source: 'export default { mount() { return { type: "text" }; } };',
       );
 
       expect(plugin.manifest.id, 'quickjs_ui_test_source_page');
-      expect(plugin.modules.map((module) => module.specifier), <String>[
+      expect(plugin.modules.map((module) => module.name), <String>[
         'quickjs_ui_test_source_page/page',
         'quickjs_ui_test_source_page/main',
       ]);
     });
 
     test('bundle permissions are passed to plugin manifest', () {
-      final bundle = QuickjsUiBundle(
+      final bundle = JsUiBundle(
         id: 'quickjs_ui.test.permissions',
         version: '1.0.0',
         entry: 'main.mjs',

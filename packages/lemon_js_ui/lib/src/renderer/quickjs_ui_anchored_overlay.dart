@@ -1,7 +1,10 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 
-final class QuickjsUiAnchoredOverlay extends StatefulWidget {
-  const QuickjsUiAnchoredOverlay({
+final class JsUiAnchoredOverlay extends StatefulWidget {
+  const JsUiAnchoredOverlay({
     super.key,
     required this.visible,
     required this.anchor,
@@ -33,12 +36,10 @@ final class QuickjsUiAnchoredOverlay extends StatefulWidget {
   final VoidCallback? onDismissed;
 
   @override
-  State<QuickjsUiAnchoredOverlay> createState() =>
-      _QuickjsUiAnchoredOverlayState();
+  State<JsUiAnchoredOverlay> createState() => _JsUiAnchoredOverlayState();
 }
 
-final class _QuickjsUiAnchoredOverlayState
-    extends State<QuickjsUiAnchoredOverlay> {
+final class _JsUiAnchoredOverlayState extends State<JsUiAnchoredOverlay> {
   final OverlayPortalController _controller = OverlayPortalController();
   final Object _tapRegionGroup = Object();
 
@@ -49,7 +50,7 @@ final class _QuickjsUiAnchoredOverlayState
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiAnchoredOverlay oldWidget) {
+  void didUpdateWidget(covariant JsUiAnchoredOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.visible != widget.visible ||
         oldWidget.placement != widget.placement ||

@@ -10,9 +10,7 @@ import 'package:lemon_js/lemon_js.dart';
 final class _FileAssetBundle extends CachingAssetBundle {
   @override
   Future<ByteData> load(String key) async {
-    final path = key.startsWith('packages/lemon_js_extensions/')
-        ? '../../$key'
-        : key;
+    final path = key.startsWith('packages/') ? '../../$key' : key;
     return ByteData.sublistView(await File(path).readAsBytes());
   }
 }
@@ -30,26 +28,25 @@ void main() {
     final pluginSource = await File(
       'assets/js/js_call_dart_plugin.mjs',
     ).readAsString();
-    final plugin = JsPlugin.singleFile(
+    final plugin = JsPlugin.source(
       id: 'assetApi',
       version: '1.0.0',
       source: pluginSource,
       exports: const <String>['axiosGet'],
     );
-    final engine = await Quickjs.create(
+    final engine = await JsEngine.create(
       features: <JsFeatures>[
         AxiosFeatures(
-          assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
           bundle: _FileAssetBundle(),
           allowedOrigins: <String>{origin},
           scriptName: 'example:axios.js',
         ),
-        plugin.asFeatures(),
       ],
+      plugins: <JsPlugin>[plugin],
     );
     addTearDown(engine.dispose);
 
-    final result = await engine.invokePlugin('axiosGet', <Object?>[
+    final result = await engine.callPlugin('axiosGet', <Object?>[
       '$origin/page',
     ]);
 

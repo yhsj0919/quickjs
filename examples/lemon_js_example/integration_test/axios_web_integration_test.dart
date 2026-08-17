@@ -10,10 +10,9 @@ void main() {
     tester,
   ) async {
     expect(kIsWeb, isTrue, reason: 'Run this test with -d chrome');
-    final engine = await Quickjs.create(
+    final engine = await JsEngine.create(
       features: <JsFeatures>[
         AxiosFeatures(
-          assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
           scriptName: 'test:axios.js',
           allowedOrigins: const <String>{'https://httpbingo.org'},
           timeout: const Duration(seconds: 15),

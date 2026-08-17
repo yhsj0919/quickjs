@@ -17,7 +17,7 @@ void _benchmark({
   testWidgets('$count active controls stay within ${targetHz}Hz budget', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
     await tester.pumpWidget(
@@ -56,7 +56,7 @@ void _mixedControlBenchmark() {
   testWidgets('40 mixed controls stay within the 60Hz frame budget', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
     await tester.pumpWidget(
@@ -88,8 +88,8 @@ void _mixedControlBenchmark() {
   });
 }
 
-QuickjsUiNode _buttonList({required bool enabled, required int count}) {
-  return QuickjsUiNode.fromMap(<String, Object?>{
+JsUiNode _buttonList({required bool enabled, required int count}) {
+  return JsUiNode.fromMap(<String, Object?>{
     'type': 'SingleChildScrollView',
     'child': <String, Object?>{
       'type': 'Column',
@@ -137,7 +137,7 @@ QuickjsUiNode _buttonList({required bool enabled, required int count}) {
   });
 }
 
-QuickjsUiNode _mixedControlList({required bool enabled}) {
+JsUiNode _mixedControlList({required bool enabled}) {
   const transition = <String, Object?>{
     'durationMs': 160,
     'curve': 'easeOutCubic',
@@ -146,7 +146,7 @@ QuickjsUiNode _mixedControlList({required bool enabled}) {
     'normal': <String, Object?>{'opacity': 1, 'scale': 1},
     'disabled': <String, Object?>{'opacity': 0.6, 'scale': 0.96},
   };
-  return QuickjsUiNode.fromMap(<String, Object?>{
+  return JsUiNode.fromMap(<String, Object?>{
     'type': 'SingleChildScrollView',
     'child': <String, Object?>{
       'type': 'Column',

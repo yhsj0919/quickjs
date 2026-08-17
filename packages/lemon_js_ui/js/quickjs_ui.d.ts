@@ -6,11 +6,11 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export declare const quickjsUiRuntimeProtocol: 'quickjs_ui.runtime.v1';
-export declare const quickjsUiSchemaVersion: 1;
-export declare const quickjsUiHelperVersion: 1;
+export declare const jsUiRuntimeProtocol: 'quickjs_ui.runtime.v1';
+export declare const jsUiSchemaVersion: 1;
+export declare const jsUiHelperVersion: 1;
 
-export type QuickjsUiEvent = {
+export type JsUiEvent = {
   action?: string;
   method?: string;
   payload?: JsonValue;
@@ -18,26 +18,26 @@ export type QuickjsUiEvent = {
   timestamp?: number;
 };
 
-export type QuickjsUiMethodActions = Record<
+export type JsUiMethodActions = Record<
   string,
-  (payload?: JsonValue) => QuickjsUiEvent
+  (payload?: JsonValue) => JsUiEvent
 >;
 
-export type QuickjsUiNode = {
+export type JsUiNode = {
   type: string;
   key?: string;
-  child?: QuickjsUiNode;
-  children?: QuickjsUiNode[];
-  [key: string]: JsonValue | QuickjsUiNode | QuickjsUiNode[] | undefined;
+  child?: JsUiNode;
+  children?: JsUiNode[];
+  [key: string]: JsonValue | JsUiNode | JsUiNode[] | undefined;
 };
 
-export type QuickjsUiReservedPageKeys =
+export type JsUiReservedPageKeys =
   | 'name'
   | 'props'
   | 'metadata'
   | 'schemaVersion'
-  | 'minimumQuickjsUiVersion'
-  | 'minQuickjsUiVersion'
+  | 'minimumJsUiVersion'
+  | 'minJsUiVersion'
   | 'unknownProps'
   | 'deprecatedProps'
   | 'createState'
@@ -66,14 +66,14 @@ export type QuickjsUiReservedPageKeys =
   | 'onDispose'
   | 'methods';
 
-export type QuickjsUiPageMethod<State, Props> = (
+export type JsUiPageMethod<State, Props> = (
   state: State,
   payload?: JsonValue,
   props?: Props,
-  event?: QuickjsUiEvent
+  event?: JsUiEvent
 ) => Partial<State> | undefined | null | Promise<Partial<State> | undefined | null>;
 
-export type QuickjsUiLifecycleType =
+export type JsUiLifecycleType =
   | 'mount'
   | 'show'
   | 'hide'
@@ -84,37 +84,37 @@ export type QuickjsUiLifecycleType =
   | 'routeResult'
   | 'dispose';
 
-export type QuickjsUiLifecycleEvent = {
-  type: QuickjsUiLifecycleType;
+export type JsUiLifecycleEvent = {
+  type: JsUiLifecycleType;
   payload?: JsonValue;
 };
 
-export type QuickjsUiLifecycleHook<State, Props> = (
+export type JsUiLifecycleHook<State, Props> = (
   state: State,
   payload?: JsonValue,
   props?: Props,
-  event?: QuickjsUiLifecycleEvent
+  event?: JsUiLifecycleEvent
 ) =>
   | Partial<State>
   | undefined
   | null
   | Promise<Partial<State> | undefined | null>;
 
-export type QuickjsUiPageActions<Page> = {
-  [Key in keyof Page as Key extends QuickjsUiReservedPageKeys
+export type JsUiPageActions<Page> = {
+  [Key in keyof Page as Key extends JsUiReservedPageKeys
     ? never
     : Page[Key] extends (...args: any[]) => any
       ? Key
-      : never]: (payload?: JsonValue) => QuickjsUiEvent;
+      : never]: (payload?: JsonValue) => JsUiEvent;
 };
 
-export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> = {
+export type JsUiPage<State = JsonValue, Props = Record<string, JsonValue>> = {
   name?: string;
   props?: Record<string, string>;
   metadata?: Record<string, JsonValue>;
   schemaVersion?: number;
-  minimumQuickjsUiVersion?: number;
-  minQuickjsUiVersion?: number;
+  minimumJsUiVersion?: number;
+  minJsUiVersion?: number;
   unknownProps?: 'ignore' | 'warn' | 'error';
   deprecatedProps?: Record<string, string>;
   createState?: (props: Props) => State;
@@ -122,21 +122,21 @@ export type QuickjsUiPage<State = JsonValue, Props = Record<string, JsonValue>> 
   build?: (
     state: State,
     props: Props,
-    actions: QuickjsUiMethodActions
-  ) => QuickjsUiNode;
-  onMount?: QuickjsUiLifecycleHook<State, Props>;
-  onShow?: QuickjsUiLifecycleHook<State, Props>;
-  onHide?: QuickjsUiLifecycleHook<State, Props>;
-  onPause?: QuickjsUiLifecycleHook<State, Props>;
-  onResume?: QuickjsUiLifecycleHook<State, Props>;
-  onRouteEnter?: QuickjsUiLifecycleHook<State, Props>;
-  onRouteLeave?: QuickjsUiLifecycleHook<State, Props>;
-  onRouteResult?: QuickjsUiLifecycleHook<State, Props>;
-  onDispose?: QuickjsUiLifecycleHook<State, Props>;
+    actions: JsUiMethodActions
+  ) => JsUiNode;
+  onMount?: JsUiLifecycleHook<State, Props>;
+  onShow?: JsUiLifecycleHook<State, Props>;
+  onHide?: JsUiLifecycleHook<State, Props>;
+  onPause?: JsUiLifecycleHook<State, Props>;
+  onResume?: JsUiLifecycleHook<State, Props>;
+  onRouteEnter?: JsUiLifecycleHook<State, Props>;
+  onRouteLeave?: JsUiLifecycleHook<State, Props>;
+  onRouteResult?: JsUiLifecycleHook<State, Props>;
+  onDispose?: JsUiLifecycleHook<State, Props>;
   [key: string]: unknown;
 };
 
-export type QuickjsUiPageProtocol<
+export type JsUiPageProtocol<
   State = JsonValue,
   Props = Record<string, JsonValue>
 > = {
@@ -146,23 +146,23 @@ export type QuickjsUiPageProtocol<
     protocol: 'quickjs_ui.runtime.v1';
     schemaVersion: number;
     helperVersion: number;
-    minimumQuickjsUiVersion: number;
+    minimumJsUiVersion: number;
     unknownProps: 'ignore' | 'warn' | 'error';
     deprecatedProps: Record<string, string>;
-    lifecycle: QuickjsUiLifecycleType[];
+    lifecycle: JsUiLifecycleType[];
   };
   mount: (props: Props) => Promise<{ version: number; state: State }>;
   handleEvent: (
-    event: QuickjsUiEvent
+    event: JsUiEvent
   ) =>
     | { changed: boolean; version: number }
     | Promise<{ changed: boolean; version: number }>;
   commit: () =>
     | { changed: false; version: number }
-    | { changed: true; version: number; node: QuickjsUiNode };
+    | { changed: true; version: number; node: JsUiNode };
   setState: (patch: Partial<State>) => { changed: boolean; version: number };
   lifecycle: (
-    event: QuickjsUiLifecycleEvent
+    event: JsUiLifecycleEvent
   ) => Promise<{ changed: boolean; version: number }>;
   snapshot: () => { version: number; state: State };
   dispose: () => boolean;
@@ -171,16 +171,23 @@ export type QuickjsUiPageProtocol<
 export declare function Page<
   State,
   Props = Record<string, JsonValue>,
-  Definition extends QuickjsUiPage<State, Props> = QuickjsUiPage<State, Props>
+  Definition extends JsUiPage<State, Props> = JsUiPage<State, Props>
 >(
   page: Definition & {
     build?: (
       state: State,
       props: Props,
-      actions: QuickjsUiPageActions<Definition>
-    ) => QuickjsUiNode;
+      actions: JsUiPageActions<Definition>
+    ) => JsUiNode;
   }
-): QuickjsUiPageProtocol<State, Props>;
+): JsUiPageProtocol<State, Props>;
+
+export declare function Component<
+  Props extends Record<string, JsonValue> = Record<string, JsonValue>,
+  Actions extends JsUiMethodActions = JsUiMethodActions,
+>(
+  render: (props: Props, actions: Actions) => JsUiNode,
+): (props?: Props, actions?: Actions) => JsUiNode;
 
 export declare function setState<State extends Record<string, JsonValue>>(
   state: State,
@@ -188,7 +195,7 @@ export declare function setState<State extends Record<string, JsonValue>>(
 ): State;
 
 export declare function eventField(
-  event: QuickjsUiEvent | undefined,
+  event: JsUiEvent | undefined,
   name: string,
   fallback?: JsonValue
 ): JsonValue | undefined;
@@ -366,7 +373,7 @@ export type SpaceValue = number | ThemeSpaceToken | string;
 export type RadiusValue = number | ThemeRadiusToken | string;
 export type ElevationValue = number | ThemeElevationToken | string;
 
-export type QuickjsUiResourceKind =
+export type JsUiResourceKind =
   | 'asset'
   | 'file'
   | 'network'
@@ -375,7 +382,7 @@ export type QuickjsUiResourceKind =
   | 'data'
   | 'custom';
 
-export type QuickjsUiResourceReference =
+export type JsUiResourceReference =
   | string
   | {
       uri?: string;
@@ -383,8 +390,8 @@ export type QuickjsUiResourceReference =
       src?: string;
       source?: string;
       path?: string;
-      kind?: QuickjsUiResourceKind;
-      type?: QuickjsUiResourceKind;
+      kind?: JsUiResourceKind;
+      type?: JsUiResourceKind;
       mimeType?: string;
       mime?: string;
       sha256?: string;
@@ -478,7 +485,7 @@ export type NodeEffectProps = {
   reverse?: boolean;
   /** Overrides the renderer frame interval for this animated node. */
   animationFrameIntervalMs?: number;
-  onAnimationEnd?: QuickjsUiEvent;
+  onAnimationEnd?: JsUiEvent;
 };
 
 export type MouseCursor = 'defer' | 'default' | 'basic' | 'click' | 'pointer' | 'text' | 'move' | 'grab' | 'grabbing' | 'forbidden' | 'notAllowed' | 'wait' | 'progress' | 'resizeLeftRight' | 'resizeUpDown' | 'resizeUpLeftDownRight' | 'resizeUpRightDownLeft' | 'resizeColumn' | 'resizeRow';
@@ -495,26 +502,26 @@ export type AccessibilityProps = NodeEffectProps & {
   absorbPointer?: boolean;
   autofocus?: boolean;
   canRequestFocus?: boolean;
-  onFocus?: QuickjsUiEvent;
-  onBlur?: QuickjsUiEvent;
-  onKeyDown?: QuickjsUiEvent;
-  onKeyUp?: QuickjsUiEvent;
+  onFocus?: JsUiEvent;
+  onBlur?: JsUiEvent;
+  onKeyDown?: JsUiEvent;
+  onKeyUp?: JsUiEvent;
   focusOrder?: number;
-  onTap?: QuickjsUiEvent;
-  onLongPress?: QuickjsUiEvent;
-  onDoubleTap?: QuickjsUiEvent;
-  onDragStart?: QuickjsUiEvent;
-  onDragUpdate?: QuickjsUiEvent;
-  onDragEnd?: QuickjsUiEvent;
-  onSwipe?: QuickjsUiEvent;
-  onMouseEnter?: QuickjsUiEvent;
-  onMouseExit?: QuickjsUiEvent;
-  onMouseHover?: QuickjsUiEvent;
-  onMouseScroll?: QuickjsUiEvent;
-  onPointerDown?: QuickjsUiEvent;
-  onPointerMove?: QuickjsUiEvent;
-  onPointerUp?: QuickjsUiEvent;
-  onPointerCancel?: QuickjsUiEvent;
+  onTap?: JsUiEvent;
+  onLongPress?: JsUiEvent;
+  onDoubleTap?: JsUiEvent;
+  onDragStart?: JsUiEvent;
+  onDragUpdate?: JsUiEvent;
+  onDragEnd?: JsUiEvent;
+  onSwipe?: JsUiEvent;
+  onMouseEnter?: JsUiEvent;
+  onMouseExit?: JsUiEvent;
+  onMouseHover?: JsUiEvent;
+  onMouseScroll?: JsUiEvent;
+  onPointerDown?: JsUiEvent;
+  onPointerMove?: JsUiEvent;
+  onPointerUp?: JsUiEvent;
+  onPointerCancel?: JsUiEvent;
   mouseCursor?: MouseCursor;
   cursor?: MouseCursor;
 };
@@ -527,7 +534,7 @@ export type ScrollableProps = {
   scrollToToken?: number;
   scrollDurationMs?: number;
   scrollCurve?: Curve;
-  onScroll?: QuickjsUiEvent;
+  onScroll?: JsUiEvent;
   physics?: 'platform' | 'always' | 'alwaysScrollable' | 'bouncing' | 'clamping' | 'never' | 'neverScrollable';
   scrollbar?: boolean;
 };
@@ -545,7 +552,7 @@ export type TextProps = AccessibilityProps & {
 export type AutoRefreshProps = AccessibilityProps & {
   intervalMs: number;
   paused?: boolean;
-  child: QuickjsUiNode;
+  child: JsUiNode;
 };
 
 export type DateTimeTextProps = Omit<TextProps, 'data' | 'text'> & {
@@ -603,34 +610,34 @@ export type ControlPartStyle = {
 };
 
 export type ButtonProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
-  content?: QuickjsUiNode;
-  leading?: QuickjsUiNode;
-  trailing?: QuickjsUiNode;
+  child?: JsUiNode;
+  content?: JsUiNode;
+  leading?: JsUiNode;
+  trailing?: JsUiNode;
   label?: string;
   gap?: SpaceValue;
   stateStyles?: ControlStateStyles;
   stateTransition?: ControlStateTransition;
-  onPressed?: QuickjsUiEvent;
+  onPressed?: JsUiEvent;
 };
 
 export type IconButtonProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   icon?: string;
   iconSize?: number;
   color?: ColorValue;
-  onPressed?: QuickjsUiEvent;
+  onPressed?: JsUiEvent;
 };
 
 export type FlexProps = AccessibilityProps & {
   mainAxisAlignment?: MainAxisAlignment;
   crossAxisAlignment?: CrossAxisAlignment;
   gap?: SpaceValue;
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
 };
 
 export type PositionedProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   left?: number;
   top?: number;
   right?: number;
@@ -640,13 +647,13 @@ export type PositionedProps = AccessibilityProps & {
 };
 
 export type FlexChildProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   flex?: number;
   fit?: 'tight' | 'loose';
 };
 
 export type WrapProps = AccessibilityProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
   direction?: Axis;
   alignment?:
     | 'start'
@@ -662,12 +669,12 @@ export type WrapProps = AccessibilityProps & {
 };
 
 export type AspectRatioProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   aspectRatio: number;
 };
 
 export type ConstrainedBoxProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   minWidth?: number;
   maxWidth?: number;
   minHeight?: number;
@@ -675,7 +682,7 @@ export type ConstrainedBoxProps = AccessibilityProps & {
 };
 
 export type SafeAreaProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   left?: boolean;
   top?: boolean;
   right?: boolean;
@@ -684,7 +691,7 @@ export type SafeAreaProps = AccessibilityProps & {
 };
 
 export type ContainerProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   width?: number;
   height?: number;
   minWidth?: number;
@@ -706,11 +713,11 @@ export type ContainerProps = AccessibilityProps & {
 };
 
 export type ImageProps = AccessibilityProps & {
-  src?: QuickjsUiResourceReference;
-  source?: QuickjsUiResourceReference;
-  uri?: QuickjsUiResourceReference;
-  url?: QuickjsUiResourceReference;
-  path?: QuickjsUiResourceReference;
+  src?: JsUiResourceReference;
+  source?: JsUiResourceReference;
+  uri?: JsUiResourceReference;
+  url?: JsUiResourceReference;
+  path?: JsUiResourceReference;
   width?: number;
   height?: number;
   fit?: BoxFit;
@@ -726,11 +733,11 @@ export type ImageProps = AccessibilityProps & {
 };
 
 export type SvgProps = AccessibilityProps & {
-  src?: QuickjsUiResourceReference;
-  source?: QuickjsUiResourceReference;
-  uri?: QuickjsUiResourceReference;
-  url?: QuickjsUiResourceReference;
-  path?: QuickjsUiResourceReference;
+  src?: JsUiResourceReference;
+  source?: JsUiResourceReference;
+  uri?: JsUiResourceReference;
+  url?: JsUiResourceReference;
+  path?: JsUiResourceReference;
   data?: string;
   string?: string;
   svg?: string;
@@ -763,7 +770,7 @@ export type ParticleFlowProps = AccessibilityProps & {
   width: number;
   height: number;
   particles: ParticleFlowParticle[];
-  children: QuickjsUiNode[];
+  children: JsUiNode[];
   frameIntervalMs?: number;
   paused?: boolean;
   playToken?: JsonValue;
@@ -1074,17 +1081,17 @@ export type CanvasProps = AccessibilityProps & {
   animationFrameIntervalMs?: number;
   willChange?: boolean;
   /** Requests sampled frame events. Minimum interval is 16ms. */
-  onFrame?: QuickjsUiEvent;
+  onFrame?: JsUiEvent;
   /** Dispatched after the final frame of all finite local animations paints. */
-  onAnimationEnd?: QuickjsUiEvent;
+  onAnimationEnd?: JsUiEvent;
   frameIntervalMs?: number;
-  onTap?: QuickjsUiEvent;
-  onDoubleTap?: QuickjsUiEvent;
-  onLongPress?: QuickjsUiEvent;
-  onPointerDown?: QuickjsUiEvent;
-  onPointerMove?: QuickjsUiEvent;
-  onPointerUp?: QuickjsUiEvent;
-  onPointerCancel?: QuickjsUiEvent;
+  onTap?: JsUiEvent;
+  onDoubleTap?: JsUiEvent;
+  onLongPress?: JsUiEvent;
+  onPointerDown?: JsUiEvent;
+  onPointerMove?: JsUiEvent;
+  onPointerUp?: JsUiEvent;
+  onPointerCancel?: JsUiEvent;
 };
 
 export type SnapshotReference = {
@@ -1108,13 +1115,13 @@ export type SnapshotBoundaryProps = AccessibilityProps & {
   snapshotKey?: string;
   captureToken?: JsonValue;
   pixelRatio?: number;
-  onCaptured?: QuickjsUiEvent;
-  onCaptureError?: QuickjsUiEvent;
-  child?: QuickjsUiNode;
+  onCaptured?: JsUiEvent;
+  onCaptureError?: JsUiEvent;
+  child?: JsUiNode;
 };
 
 export type ListViewProps = AccessibilityProps & ScrollableProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
   scrollDirection?: Axis;
   shrinkWrap?: boolean;
   padding?: EdgeInsets;
@@ -1131,7 +1138,7 @@ export type ListViewProps = AccessibilityProps & ScrollableProps & {
 export type ListViewBuilderProps = Omit<ListViewProps, 'children' | 'animateItems'> & {
   key: string;
   itemCount: number;
-  itemBuilder: (index: number) => QuickjsUiNode;
+  itemBuilder: (index: number) => JsUiNode;
   itemKey?: (index: number) => string;
   prefetchItemCount?: number;
   estimatedItemExtent?: number;
@@ -1139,12 +1146,12 @@ export type ListViewBuilderProps = Omit<ListViewProps, 'children' | 'animateItem
   loading?: boolean;
   loadMoreThreshold?: number;
   loadingText?: string;
-  onLoadMore?: QuickjsUiEvent;
+  onLoadMore?: JsUiEvent;
   resetToken?: string | number;
 };
 
 export type GridViewProps = AccessibilityProps & ScrollableProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
   scrollDirection?: Axis;
   shrinkWrap?: boolean;
   padding?: EdgeInsets;
@@ -1155,28 +1162,28 @@ export type GridViewProps = AccessibilityProps & ScrollableProps & {
 };
 
 export type PageViewProps = AccessibilityProps & ScrollableProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
   scrollDirection?: Axis;
   pageSnapping?: boolean;
-  onPageChanged?: QuickjsUiEvent;
+  onPageChanged?: JsUiEvent;
 };
 
 export type RefreshIndicatorProps = AccessibilityProps & {
-  child: QuickjsUiNode;
-  onRefresh?: QuickjsUiEvent;
+  child: JsUiNode;
+  onRefresh?: JsUiEvent;
 };
 
 export type SingleChildScrollViewProps = AccessibilityProps & ScrollableProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
   padding?: EdgeInsets;
   gap?: SpaceValue;
 };
 
 export type TextFieldProps = AccessibilityProps & {
-  leading?: QuickjsUiNode;
-  prefix?: QuickjsUiNode;
-  suffix?: QuickjsUiNode;
-  trailing?: QuickjsUiNode;
+  leading?: JsUiNode;
+  prefix?: JsUiNode;
+  suffix?: JsUiNode;
+  trailing?: JsUiNode;
   focusId?: string;
   value?: string;
   initialValue?: string;
@@ -1197,16 +1204,16 @@ export type TextFieldProps = AccessibilityProps & {
   style?: TextStyle | ThemeTextStyleToken;
   stateStyles?: ControlStateStyles;
   stateTransition?: ControlStateTransition;
-  onChanged?: QuickjsUiEvent;
-  onSubmitted?: QuickjsUiEvent;
-  onEditingComplete?: QuickjsUiEvent;
-  onFocus?: QuickjsUiEvent;
-  onBlur?: QuickjsUiEvent;
-  onSelectionChanged?: QuickjsUiEvent;
+  onChanged?: JsUiEvent;
+  onSubmitted?: JsUiEvent;
+  onEditingComplete?: JsUiEvent;
+  onFocus?: JsUiEvent;
+  onBlur?: JsUiEvent;
+  onSelectionChanged?: JsUiEvent;
 };
 
 export type StackProps = AccessibilityProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
   alignment?: Alignment;
   fit?: StackFit;
   clipBehavior?: ClipBehavior;
@@ -1214,18 +1221,18 @@ export type StackProps = AccessibilityProps & {
 
 export type PaddingProps = AccessibilityProps & {
   padding?: EdgeInsets;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
 };
 
 export type MarginProps = AccessibilityProps & {
   margin?: EdgeInsets;
   padding?: EdgeInsets;
   value?: EdgeInsets;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
 };
 
 export type CenterProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   widthFactor?: number;
   heightFactor?: number;
 };
@@ -1235,22 +1242,22 @@ export type AlignProps = CenterProps & {
 };
 
 export type SizedBoxProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   width?: number;
   height?: number;
 };
 
 export type FormProps = {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   autovalidateMode?: string;
-  [key: string]: JsonValue | QuickjsUiNode | undefined;
+  [key: string]: JsonValue | JsUiNode | undefined;
 };
 
 export type CheckboxProps = {
   value?: boolean;
   tristate?: boolean;
-  onChanged?: QuickjsUiEvent;
-  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+  onChanged?: JsUiEvent;
+  [key: string]: JsonValue | JsUiEvent | undefined;
 };
 
 export type SwitchProps = AccessibilityProps & {
@@ -1260,10 +1267,10 @@ export type SwitchProps = AccessibilityProps & {
   thumbStyle?: ControlPartStyle;
   trackStyle?: ControlPartStyle;
   overlayStyle?: ControlPartStyle;
-  onChanged?: QuickjsUiEvent;
+  onChanged?: JsUiEvent;
   [key: string]:
     | JsonValue
-    | QuickjsUiEvent
+    | JsUiEvent
     | ControlStateStyles
     | ControlStateTransition
     | ControlPartStyle
@@ -1275,11 +1282,11 @@ export type ResponsiveViewportProps = AccessibilityProps & {
   designHeight: number;
   fit?: BoxFit;
   alignment?: Alignment;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
 };
 
 export type RepaintBoundaryProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
 };
 
 export type SliderProps = AccessibilityProps & {
@@ -1293,12 +1300,12 @@ export type SliderProps = AccessibilityProps & {
   thumbStyle?: ControlPartStyle;
   trackStyle?: ControlPartStyle;
   overlayStyle?: ControlPartStyle;
-  onChanged?: QuickjsUiEvent;
-  onChangeStart?: QuickjsUiEvent;
-  onChangeEnd?: QuickjsUiEvent;
+  onChanged?: JsUiEvent;
+  onChangeStart?: JsUiEvent;
+  onChangeEnd?: JsUiEvent;
   [key: string]:
     | JsonValue
-    | QuickjsUiEvent
+    | JsUiEvent
     | ControlStateStyles
     | ControlStateTransition
     | ControlPartStyle
@@ -1308,16 +1315,16 @@ export type SliderProps = AccessibilityProps & {
 export type RadioProps = {
   value?: JsonValue;
   groupValue?: JsonValue;
-  onChanged?: QuickjsUiEvent;
-  [key: string]: JsonValue | QuickjsUiEvent | undefined;
+  onChanged?: JsUiEvent;
+  [key: string]: JsonValue | JsUiEvent | undefined;
 };
 
 export type DropdownButtonProps = {
   value?: JsonValue;
   items?: JsonValue[];
-  onChanged?: QuickjsUiEvent;
-  hint?: QuickjsUiNode;
-  [key: string]: JsonValue | QuickjsUiEvent | QuickjsUiNode | undefined;
+  onChanged?: JsUiEvent;
+  hint?: JsUiNode;
+  [key: string]: JsonValue | JsUiEvent | JsUiNode | undefined;
 };
 
 export type IconProps = AccessibilityProps & {
@@ -1343,25 +1350,25 @@ export type PlaceholderProps = AccessibilityProps & {
 };
 
 export type GestureDetectorProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
-  onTap?: QuickjsUiEvent;
-  onDoubleTap?: QuickjsUiEvent;
-  onLongPress?: QuickjsUiEvent;
-  onDragStart?: QuickjsUiEvent;
-  onDragUpdate?: QuickjsUiEvent;
-  onDragEnd?: QuickjsUiEvent;
-  onSwipe?: QuickjsUiEvent;
+  child?: JsUiNode;
+  onTap?: JsUiEvent;
+  onDoubleTap?: JsUiEvent;
+  onLongPress?: JsUiEvent;
+  onDragStart?: JsUiEvent;
+  onDragUpdate?: JsUiEvent;
+  onDragEnd?: JsUiEvent;
+  onSwipe?: JsUiEvent;
 };
 
 export type TooltipProps = AccessibilityProps & {
   message: string;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   waitDurationMs?: number;
   showDurationMs?: number;
 };
 
 export type CardProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   color?: ColorValue;
   elevation?: ElevationValue;
   margin?: EdgeInsets;
@@ -1369,7 +1376,7 @@ export type CardProps = AccessibilityProps & {
 };
 
 export type DecoratedBoxProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   position?: 'background' | 'foreground';
   color?: ColorValue;
   backgroundColor?: ColorValue;
@@ -1380,7 +1387,7 @@ export type DecoratedBoxProps = AccessibilityProps & {
 };
 
 export type ClipRRectProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   borderRadius?: BorderRadius;
   clipBehavior?: ClipBehavior;
 };
@@ -1397,23 +1404,23 @@ export type RichTextProps = AccessibilityProps & {
 };
 
 export type ScaffoldProps = AccessibilityProps & {
-  body?: QuickjsUiNode;
-  child?: QuickjsUiNode;
-  appBar?: QuickjsUiNode;
-  drawer?: QuickjsUiNode;
-  bottomNavigationBar?: QuickjsUiNode;
-  floatingActionButton?: QuickjsUiNode;
+  body?: JsUiNode;
+  child?: JsUiNode;
+  appBar?: JsUiNode;
+  drawer?: JsUiNode;
+  bottomNavigationBar?: JsUiNode;
+  floatingActionButton?: JsUiNode;
   backgroundColor?: ColorValue;
   tabLength?: number;
   initialTabIndex?: number;
 };
 
 export type AppBarProps = AccessibilityProps & {
-  title?: QuickjsUiNode;
+  title?: JsUiNode;
   titleText?: string;
-  leading?: QuickjsUiNode;
-  actions?: QuickjsUiNode[];
-  bottom?: QuickjsUiNode;
+  leading?: JsUiNode;
+  actions?: JsUiNode[];
+  bottom?: JsUiNode;
   backgroundColor?: ColorValue;
   foregroundColor?: ColorValue;
   centerTitle?: boolean;
@@ -1422,9 +1429,9 @@ export type AppBarProps = AccessibilityProps & {
 
 export type BottomNavigationBarItemProps = {
   label: string;
-  icon?: QuickjsUiNode;
+  icon?: JsUiNode;
   iconName?: string;
-  activeIcon?: QuickjsUiNode;
+  activeIcon?: JsUiNode;
   tooltip?: string;
 };
 
@@ -1432,25 +1439,25 @@ export type BottomNavigationBarProps = AccessibilityProps & {
   currentIndex?: number;
   typeMode?: 'fixed' | 'shifting';
   items: BottomNavigationBarItemProps[];
-  onTap?: QuickjsUiEvent;
+  onTap?: JsUiEvent;
 };
 
 export type TabValue =
   | string
-  | { text?: string; label?: string; icon?: QuickjsUiNode; child?: QuickjsUiNode };
+  | { text?: string; label?: string; icon?: JsUiNode; child?: JsUiNode };
 
 export type TabBarProps = AccessibilityProps & {
   tabs: TabValue[];
   isScrollable?: boolean;
-  onTap?: QuickjsUiEvent;
+  onTap?: JsUiEvent;
 };
 
 export type TabBarViewProps = AccessibilityProps & {
-  children?: QuickjsUiNode[];
+  children?: JsUiNode[];
 };
 
 export type DrawerProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
 };
 
 export type ProgressIndicatorProps = AccessibilityProps & {
@@ -1462,7 +1469,7 @@ export type ProgressIndicatorProps = AccessibilityProps & {
 };
 
 export type SnackBarProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   content?: string;
   text?: string;
   visible?: boolean;
@@ -1472,7 +1479,7 @@ export type SnackBarProps = AccessibilityProps & {
 
 export type OverlayProps = AccessibilityProps & {
   visible?: boolean;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   alignment?: Alignment;
   padding?: EdgeInsetsValue;
   barrierDismissible?: boolean;
@@ -1480,15 +1487,15 @@ export type OverlayProps = AccessibilityProps & {
   transition?: "fade" | "scale" | "fadeScale" | "slideDown" | "slideUp" | "none";
   durationMs?: number;
   curve?: Curve;
-  onDismissed?: QuickjsUiEvent;
-  onClosing?: QuickjsUiEvent;
+  onDismissed?: JsUiEvent;
+  onClosing?: JsUiEvent;
 };
 
 export type AnchoredOverlayProps = AccessibilityProps & {
   visible?: boolean;
-  anchor: QuickjsUiNode;
-  overlay: QuickjsUiNode;
-  content?: QuickjsUiNode;
+  anchor: JsUiNode;
+  overlay: JsUiNode;
+  content?: JsUiNode;
   placement?: 'auto' | 'topStart' | 'top' | 'topCenter' | 'topEnd' | 'bottomStart' | 'bottom' | 'bottomCenter' | 'bottomEnd' | 'left' | 'centerLeft' | 'right' | 'centerRight' | 'center';
   offset?: { x?: number; y?: number };
   gap?: number;
@@ -1498,23 +1505,23 @@ export type AnchoredOverlayProps = AccessibilityProps & {
   useRootOverlay?: boolean;
   animated?: boolean;
   matchAnchorWidth?: boolean;
-  onDismissed?: QuickjsUiEvent;
+  onDismissed?: JsUiEvent;
 };
 
 export type AlertDialogProps = AccessibilityProps & {
   visible?: boolean;
-  title?: QuickjsUiNode;
+  title?: JsUiNode;
   titleText?: string;
-  content?: QuickjsUiNode;
+  content?: JsUiNode;
   contentText?: string;
-  actions?: QuickjsUiNode[];
+  actions?: JsUiNode[];
   backgroundColor?: ColorValue;
 };
 
 export type BottomSheetProps = AccessibilityProps & {
   visible?: boolean;
-  child?: QuickjsUiNode;
-  onClosing?: QuickjsUiEvent;
+  child?: JsUiNode;
+  onClosing?: JsUiEvent;
   backgroundColor?: ColorValue;
 };
 
@@ -1532,7 +1539,7 @@ export type AnimatedContainerProps = ContainerProps & {
 
 export type AnimatedOpacityProps = AccessibilityProps & {
   opacity: number;
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   durationMs?: number;
   animationDurationMs?: number;
   animationCurve?: Curve;
@@ -1546,12 +1553,12 @@ export type AnimatedPaddingProps = PaddingProps & {
 
 export type HeroProps = AccessibilityProps & {
   tag: string | number | boolean;
-  child: QuickjsUiNode;
+  child: JsUiNode;
   transitionOnUserGestures?: boolean;
 };
 
 export type AnimatedSwitcherProps = AccessibilityProps & {
-  child?: QuickjsUiNode;
+  child?: JsUiNode;
   durationMs?: number;
   animationDurationMs?: number;
   reverseDurationMs?: number;
@@ -1562,191 +1569,191 @@ export type AnimatedSwitcherProps = AccessibilityProps & {
 export declare function Text(
   data: string,
   props?: Omit<TextProps, 'data'>
-): QuickjsUiNode;
-export declare function Text(props: TextProps): QuickjsUiNode;
-export declare function AutoRefresh(props: AutoRefreshProps): QuickjsUiNode;
-export declare function DateTimeText(props: DateTimeTextProps): QuickjsUiNode;
-export declare function ElevatedButton(props: ButtonProps): QuickjsUiNode;
-export declare function TextButton(props: ButtonProps): QuickjsUiNode;
-export declare function OutlinedButton(props: ButtonProps): QuickjsUiNode;
-export declare function IconButton(props: IconButtonProps): QuickjsUiNode;
-export declare function InkWell(props: AccessibilityProps & { child?: QuickjsUiNode }): QuickjsUiNode;
-export declare function FloatingActionButton(props: IconButtonProps): QuickjsUiNode;
-export declare function Row(props: FlexProps): QuickjsUiNode;
-export declare function Column(props: FlexProps): QuickjsUiNode;
-export declare function Container(props: ContainerProps): QuickjsUiNode;
-export declare function Image(props: ImageProps): QuickjsUiNode;
-export declare function Svg(props: SvgProps): QuickjsUiNode;
-export declare function ParticleFlow(props: ParticleFlowProps): QuickjsUiNode;
-export declare function Canvas(props: CanvasProps): QuickjsUiNode;
+): JsUiNode;
+export declare function Text(props: TextProps): JsUiNode;
+export declare function AutoRefresh(props: AutoRefreshProps): JsUiNode;
+export declare function DateTimeText(props: DateTimeTextProps): JsUiNode;
+export declare function ElevatedButton(props: ButtonProps): JsUiNode;
+export declare function TextButton(props: ButtonProps): JsUiNode;
+export declare function OutlinedButton(props: ButtonProps): JsUiNode;
+export declare function IconButton(props: IconButtonProps): JsUiNode;
+export declare function InkWell(props: AccessibilityProps & { child?: JsUiNode }): JsUiNode;
+export declare function FloatingActionButton(props: IconButtonProps): JsUiNode;
+export declare function Row(props: FlexProps): JsUiNode;
+export declare function Column(props: FlexProps): JsUiNode;
+export declare function Container(props: ContainerProps): JsUiNode;
+export declare function Image(props: ImageProps): JsUiNode;
+export declare function Svg(props: SvgProps): JsUiNode;
+export declare function ParticleFlow(props: ParticleFlowProps): JsUiNode;
+export declare function Canvas(props: CanvasProps): JsUiNode;
 export declare function SnapshotBoundary(
   props: SnapshotBoundaryProps
-): QuickjsUiNode;
-export declare function ListView(props: ListViewProps): QuickjsUiNode;
+): JsUiNode;
+export declare function ListView(props: ListViewProps): JsUiNode;
 export declare namespace ListView {
-  function builder(props: ListViewBuilderProps): QuickjsUiNode;
+  function builder(props: ListViewBuilderProps): JsUiNode;
 }
 export declare function SingleChildScrollView(
   props: SingleChildScrollViewProps
-): QuickjsUiNode;
-export declare function GridView(props: GridViewProps): QuickjsUiNode;
-export declare function PageView(props: PageViewProps): QuickjsUiNode;
+): JsUiNode;
+export declare function GridView(props: GridViewProps): JsUiNode;
+export declare function PageView(props: PageViewProps): JsUiNode;
 export declare function RefreshIndicator(
   props: RefreshIndicatorProps
-): QuickjsUiNode;
-export declare function TextField(props: TextFieldProps): QuickjsUiNode;
-export declare function TextFormField(props: TextFieldProps): QuickjsUiNode;
-export declare function GestureDetector(props: GestureDetectorProps): QuickjsUiNode;
-export declare function Stack(props: StackProps): QuickjsUiNode;
-export declare function Positioned(props: PositionedProps): QuickjsUiNode;
-export declare function Padding(props: PaddingProps): QuickjsUiNode;
-export declare function Margin(props: MarginProps): QuickjsUiNode;
-export declare function Align(props: AlignProps): QuickjsUiNode;
-export declare function Center(props: CenterProps): QuickjsUiNode;
-export declare function SizedBox(props: SizedBoxProps): QuickjsUiNode;
+): JsUiNode;
+export declare function TextField(props: TextFieldProps): JsUiNode;
+export declare function TextFormField(props: TextFieldProps): JsUiNode;
+export declare function GestureDetector(props: GestureDetectorProps): JsUiNode;
+export declare function Stack(props: StackProps): JsUiNode;
+export declare function Positioned(props: PositionedProps): JsUiNode;
+export declare function Padding(props: PaddingProps): JsUiNode;
+export declare function Margin(props: MarginProps): JsUiNode;
+export declare function Align(props: AlignProps): JsUiNode;
+export declare function Center(props: CenterProps): JsUiNode;
+export declare function SizedBox(props: SizedBoxProps): JsUiNode;
 export declare function ResponsiveViewport(
   props: ResponsiveViewportProps
-): QuickjsUiNode;
+): JsUiNode;
 export declare function RepaintBoundary(
   props: RepaintBoundaryProps
-): QuickjsUiNode;
-export declare function Expanded(props: FlexChildProps): QuickjsUiNode;
-export declare function Flexible(props: FlexChildProps): QuickjsUiNode;
-export declare function Spacer(props?: { flex?: number }): QuickjsUiNode;
-export declare function Wrap(props: WrapProps): QuickjsUiNode;
-export declare function AspectRatio(props: AspectRatioProps): QuickjsUiNode;
+): JsUiNode;
+export declare function Expanded(props: FlexChildProps): JsUiNode;
+export declare function Flexible(props: FlexChildProps): JsUiNode;
+export declare function Spacer(props?: { flex?: number }): JsUiNode;
+export declare function Wrap(props: WrapProps): JsUiNode;
+export declare function AspectRatio(props: AspectRatioProps): JsUiNode;
 export declare function ConstrainedBox(
   props: ConstrainedBoxProps
-): QuickjsUiNode;
-export declare function SafeArea(props: SafeAreaProps): QuickjsUiNode;
-export declare function Form(props: FormProps): QuickjsUiNode;
-export declare function Checkbox(props: CheckboxProps): QuickjsUiNode;
-export declare function Switch(props: SwitchProps): QuickjsUiNode;
-export declare function Slider(props: SliderProps): QuickjsUiNode;
-export declare function Radio(props: RadioProps): QuickjsUiNode;
+): JsUiNode;
+export declare function SafeArea(props: SafeAreaProps): JsUiNode;
+export declare function Form(props: FormProps): JsUiNode;
+export declare function Checkbox(props: CheckboxProps): JsUiNode;
+export declare function Switch(props: SwitchProps): JsUiNode;
+export declare function Slider(props: SliderProps): JsUiNode;
+export declare function Radio(props: RadioProps): JsUiNode;
 export declare function DropdownButton(
   props: DropdownButtonProps
-): QuickjsUiNode;
-export declare function Icon(props: IconProps): QuickjsUiNode;
-export declare function Divider(props?: DividerProps): QuickjsUiNode;
-export declare function VerticalDivider(props?: DividerProps): QuickjsUiNode;
-export declare function Placeholder(props?: PlaceholderProps): QuickjsUiNode;
-export declare function Tooltip(props: TooltipProps): QuickjsUiNode;
-export declare function Card(props: CardProps): QuickjsUiNode;
-export declare function ClipRRect(props: ClipRRectProps): QuickjsUiNode;
-export declare function DecoratedBox(props: DecoratedBoxProps): QuickjsUiNode;
-export declare function RichText(props: RichTextProps): QuickjsUiNode;
-export declare function Scaffold(props: ScaffoldProps): QuickjsUiNode;
-export declare function AppBar(props: AppBarProps): QuickjsUiNode;
+): JsUiNode;
+export declare function Icon(props: IconProps): JsUiNode;
+export declare function Divider(props?: DividerProps): JsUiNode;
+export declare function VerticalDivider(props?: DividerProps): JsUiNode;
+export declare function Placeholder(props?: PlaceholderProps): JsUiNode;
+export declare function Tooltip(props: TooltipProps): JsUiNode;
+export declare function Card(props: CardProps): JsUiNode;
+export declare function ClipRRect(props: ClipRRectProps): JsUiNode;
+export declare function DecoratedBox(props: DecoratedBoxProps): JsUiNode;
+export declare function RichText(props: RichTextProps): JsUiNode;
+export declare function Scaffold(props: ScaffoldProps): JsUiNode;
+export declare function AppBar(props: AppBarProps): JsUiNode;
 export declare function BottomNavigationBar(
   props: BottomNavigationBarProps
-): QuickjsUiNode;
-export declare function TabBar(props: TabBarProps): QuickjsUiNode;
-export declare function TabBarView(props: TabBarViewProps): QuickjsUiNode;
-export declare function Drawer(props: DrawerProps): QuickjsUiNode;
+): JsUiNode;
+export declare function TabBar(props: TabBarProps): JsUiNode;
+export declare function TabBarView(props: TabBarViewProps): JsUiNode;
+export declare function Drawer(props: DrawerProps): JsUiNode;
 export declare function CircularProgressIndicator(
   props?: ProgressIndicatorProps
-): QuickjsUiNode;
+): JsUiNode;
 export declare function LinearProgressIndicator(
   props?: ProgressIndicatorProps
-): QuickjsUiNode;
-export declare function SnackBar(props: SnackBarProps): QuickjsUiNode;
-export declare function Overlay(props: OverlayProps): QuickjsUiNode;
-export declare function AnchoredOverlay(props: AnchoredOverlayProps): QuickjsUiNode;
-export declare function AlertDialog(props: AlertDialogProps): QuickjsUiNode;
-export declare function BottomSheet(props: BottomSheetProps): QuickjsUiNode;
-export declare function AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
-export declare function AnimatedContainer(props: AnimatedContainerProps): QuickjsUiNode;
-export declare function AnimatedOpacity(props: AnimatedOpacityProps): QuickjsUiNode;
-export declare function AnimatedPadding(props: AnimatedPaddingProps): QuickjsUiNode;
+): JsUiNode;
+export declare function SnackBar(props: SnackBarProps): JsUiNode;
+export declare function Overlay(props: OverlayProps): JsUiNode;
+export declare function AnchoredOverlay(props: AnchoredOverlayProps): JsUiNode;
+export declare function AlertDialog(props: AlertDialogProps): JsUiNode;
+export declare function BottomSheet(props: BottomSheetProps): JsUiNode;
+export declare function AnimatedAlign(props: AnimatedAlignProps): JsUiNode;
+export declare function AnimatedContainer(props: AnimatedContainerProps): JsUiNode;
+export declare function AnimatedOpacity(props: AnimatedOpacityProps): JsUiNode;
+export declare function AnimatedPadding(props: AnimatedPaddingProps): JsUiNode;
 export declare function AnimatedSwitcher(
   props: AnimatedSwitcherProps
-): QuickjsUiNode;
-export declare function Hero(props: HeroProps): QuickjsUiNode;
+): JsUiNode;
+export declare function Hero(props: HeroProps): JsUiNode;
 
 export declare const ui: {
-  Text(data: string, props?: Omit<TextProps, 'data'>): QuickjsUiNode;
-  Text(props: TextProps): QuickjsUiNode;
-  AutoRefresh(props: AutoRefreshProps): QuickjsUiNode;
-  DateTimeText(props: DateTimeTextProps): QuickjsUiNode;
-  ElevatedButton(props: ButtonProps): QuickjsUiNode;
-  TextButton(props: ButtonProps): QuickjsUiNode;
-  OutlinedButton(props: ButtonProps): QuickjsUiNode;
-  IconButton(props: IconButtonProps): QuickjsUiNode;
-  InkWell(props: AccessibilityProps & { child?: QuickjsUiNode }): QuickjsUiNode;
-  FloatingActionButton(props: IconButtonProps): QuickjsUiNode;
-  Row(props: FlexProps): QuickjsUiNode;
-  Column(props: FlexProps): QuickjsUiNode;
-  Container(props: ContainerProps): QuickjsUiNode;
-  Image(props: ImageProps): QuickjsUiNode;
-  Svg(props: SvgProps): QuickjsUiNode;
-  ParticleFlow(props: ParticleFlowProps): QuickjsUiNode;
-  Canvas(props: CanvasProps): QuickjsUiNode;
-  SnapshotBoundary(props: SnapshotBoundaryProps): QuickjsUiNode;
+  Text(data: string, props?: Omit<TextProps, 'data'>): JsUiNode;
+  Text(props: TextProps): JsUiNode;
+  AutoRefresh(props: AutoRefreshProps): JsUiNode;
+  DateTimeText(props: DateTimeTextProps): JsUiNode;
+  ElevatedButton(props: ButtonProps): JsUiNode;
+  TextButton(props: ButtonProps): JsUiNode;
+  OutlinedButton(props: ButtonProps): JsUiNode;
+  IconButton(props: IconButtonProps): JsUiNode;
+  InkWell(props: AccessibilityProps & { child?: JsUiNode }): JsUiNode;
+  FloatingActionButton(props: IconButtonProps): JsUiNode;
+  Row(props: FlexProps): JsUiNode;
+  Column(props: FlexProps): JsUiNode;
+  Container(props: ContainerProps): JsUiNode;
+  Image(props: ImageProps): JsUiNode;
+  Svg(props: SvgProps): JsUiNode;
+  ParticleFlow(props: ParticleFlowProps): JsUiNode;
+  Canvas(props: CanvasProps): JsUiNode;
+  SnapshotBoundary(props: SnapshotBoundaryProps): JsUiNode;
   animate: typeof animate;
   canvasCommands: typeof canvasCommands;
   Canvas2DContext: typeof Canvas2DContext;
-  ListView(props: ListViewProps): QuickjsUiNode;
-  SingleChildScrollView(props: SingleChildScrollViewProps): QuickjsUiNode;
-  GridView(props: GridViewProps): QuickjsUiNode;
-  PageView(props: PageViewProps): QuickjsUiNode;
-  RefreshIndicator(props: RefreshIndicatorProps): QuickjsUiNode;
-  TextField(props: TextFieldProps): QuickjsUiNode;
-  TextFormField(props: TextFieldProps): QuickjsUiNode;
-  GestureDetector(props: GestureDetectorProps): QuickjsUiNode;
-  Stack(props: StackProps): QuickjsUiNode;
-  Positioned(props: PositionedProps): QuickjsUiNode;
-  Padding(props: PaddingProps): QuickjsUiNode;
-  Margin(props: MarginProps): QuickjsUiNode;
-  Align(props: AlignProps): QuickjsUiNode;
-  Center(props: CenterProps): QuickjsUiNode;
-  SizedBox(props: SizedBoxProps): QuickjsUiNode;
-  ResponsiveViewport(props: ResponsiveViewportProps): QuickjsUiNode;
-  RepaintBoundary(props: RepaintBoundaryProps): QuickjsUiNode;
-  Expanded(props: FlexChildProps): QuickjsUiNode;
-  Flexible(props: FlexChildProps): QuickjsUiNode;
-  Spacer(props?: { flex?: number }): QuickjsUiNode;
-  Wrap(props: WrapProps): QuickjsUiNode;
-  AspectRatio(props: AspectRatioProps): QuickjsUiNode;
-  ConstrainedBox(props: ConstrainedBoxProps): QuickjsUiNode;
-  SafeArea(props: SafeAreaProps): QuickjsUiNode;
-  Form(props: FormProps): QuickjsUiNode;
-  Checkbox(props: CheckboxProps): QuickjsUiNode;
-  Switch(props: SwitchProps): QuickjsUiNode;
-  Slider(props: SliderProps): QuickjsUiNode;
-  Radio(props: RadioProps): QuickjsUiNode;
-  DropdownButton(props: DropdownButtonProps): QuickjsUiNode;
-  Icon(props: IconProps): QuickjsUiNode;
-  Divider(props?: DividerProps): QuickjsUiNode;
-  VerticalDivider(props?: DividerProps): QuickjsUiNode;
-  Placeholder(props?: PlaceholderProps): QuickjsUiNode;
-  Tooltip(props: TooltipProps): QuickjsUiNode;
-  Card(props: CardProps): QuickjsUiNode;
-  ClipRRect(props: ClipRRectProps): QuickjsUiNode;
-  DecoratedBox(props: DecoratedBoxProps): QuickjsUiNode;
-  RichText(props: RichTextProps): QuickjsUiNode;
-  Scaffold(props: ScaffoldProps): QuickjsUiNode;
-  AppBar(props: AppBarProps): QuickjsUiNode;
-  BottomNavigationBar(props: BottomNavigationBarProps): QuickjsUiNode;
-  TabBar(props: TabBarProps): QuickjsUiNode;
-  TabBarView(props: TabBarViewProps): QuickjsUiNode;
-  Drawer(props: DrawerProps): QuickjsUiNode;
-  CircularProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
-  LinearProgressIndicator(props?: ProgressIndicatorProps): QuickjsUiNode;
-  SnackBar(props: SnackBarProps): QuickjsUiNode;
-  Overlay(props: OverlayProps): QuickjsUiNode;
-  AnchoredOverlay(props: AnchoredOverlayProps): QuickjsUiNode;
-  AlertDialog(props: AlertDialogProps): QuickjsUiNode;
-  BottomSheet(props: BottomSheetProps): QuickjsUiNode;
-  AnimatedAlign(props: AnimatedAlignProps): QuickjsUiNode;
-  AnimatedContainer(props: AnimatedContainerProps): QuickjsUiNode;
-  AnimatedOpacity(props: AnimatedOpacityProps): QuickjsUiNode;
-  AnimatedPadding(props: AnimatedPaddingProps): QuickjsUiNode;
-  AnimatedSwitcher(props: AnimatedSwitcherProps): QuickjsUiNode;
-  Hero(props: HeroProps): QuickjsUiNode;
+  ListView(props: ListViewProps): JsUiNode;
+  SingleChildScrollView(props: SingleChildScrollViewProps): JsUiNode;
+  GridView(props: GridViewProps): JsUiNode;
+  PageView(props: PageViewProps): JsUiNode;
+  RefreshIndicator(props: RefreshIndicatorProps): JsUiNode;
+  TextField(props: TextFieldProps): JsUiNode;
+  TextFormField(props: TextFieldProps): JsUiNode;
+  GestureDetector(props: GestureDetectorProps): JsUiNode;
+  Stack(props: StackProps): JsUiNode;
+  Positioned(props: PositionedProps): JsUiNode;
+  Padding(props: PaddingProps): JsUiNode;
+  Margin(props: MarginProps): JsUiNode;
+  Align(props: AlignProps): JsUiNode;
+  Center(props: CenterProps): JsUiNode;
+  SizedBox(props: SizedBoxProps): JsUiNode;
+  ResponsiveViewport(props: ResponsiveViewportProps): JsUiNode;
+  RepaintBoundary(props: RepaintBoundaryProps): JsUiNode;
+  Expanded(props: FlexChildProps): JsUiNode;
+  Flexible(props: FlexChildProps): JsUiNode;
+  Spacer(props?: { flex?: number }): JsUiNode;
+  Wrap(props: WrapProps): JsUiNode;
+  AspectRatio(props: AspectRatioProps): JsUiNode;
+  ConstrainedBox(props: ConstrainedBoxProps): JsUiNode;
+  SafeArea(props: SafeAreaProps): JsUiNode;
+  Form(props: FormProps): JsUiNode;
+  Checkbox(props: CheckboxProps): JsUiNode;
+  Switch(props: SwitchProps): JsUiNode;
+  Slider(props: SliderProps): JsUiNode;
+  Radio(props: RadioProps): JsUiNode;
+  DropdownButton(props: DropdownButtonProps): JsUiNode;
+  Icon(props: IconProps): JsUiNode;
+  Divider(props?: DividerProps): JsUiNode;
+  VerticalDivider(props?: DividerProps): JsUiNode;
+  Placeholder(props?: PlaceholderProps): JsUiNode;
+  Tooltip(props: TooltipProps): JsUiNode;
+  Card(props: CardProps): JsUiNode;
+  ClipRRect(props: ClipRRectProps): JsUiNode;
+  DecoratedBox(props: DecoratedBoxProps): JsUiNode;
+  RichText(props: RichTextProps): JsUiNode;
+  Scaffold(props: ScaffoldProps): JsUiNode;
+  AppBar(props: AppBarProps): JsUiNode;
+  BottomNavigationBar(props: BottomNavigationBarProps): JsUiNode;
+  TabBar(props: TabBarProps): JsUiNode;
+  TabBarView(props: TabBarViewProps): JsUiNode;
+  Drawer(props: DrawerProps): JsUiNode;
+  CircularProgressIndicator(props?: ProgressIndicatorProps): JsUiNode;
+  LinearProgressIndicator(props?: ProgressIndicatorProps): JsUiNode;
+  SnackBar(props: SnackBarProps): JsUiNode;
+  Overlay(props: OverlayProps): JsUiNode;
+  AnchoredOverlay(props: AnchoredOverlayProps): JsUiNode;
+  AlertDialog(props: AlertDialogProps): JsUiNode;
+  BottomSheet(props: BottomSheetProps): JsUiNode;
+  AnimatedAlign(props: AnimatedAlignProps): JsUiNode;
+  AnimatedContainer(props: AnimatedContainerProps): JsUiNode;
+  AnimatedOpacity(props: AnimatedOpacityProps): JsUiNode;
+  AnimatedPadding(props: AnimatedPaddingProps): JsUiNode;
+  AnimatedSwitcher(props: AnimatedSwitcherProps): JsUiNode;
+  Hero(props: HeroProps): JsUiNode;
 };
 
-export type QuickjsUiHostApi = {
+export type JsUiHostApi = {
   toast?: (
     message: string,
     options?: Record<string, JsonValue>
@@ -1758,9 +1765,9 @@ export type QuickjsUiHostApi = {
   dialog?: (payload: {
     title?: string;
     message?: string;
-    content?: QuickjsUiNode;
+    content?: JsUiNode;
     actions?: JsonValue[];
-    [key: string]: JsonValue | QuickjsUiNode | undefined;
+    [key: string]: JsonValue | JsUiNode | undefined;
   }) => Promise<JsonValue>;
   snackbar?: (payload: {
     message: string;
@@ -1769,8 +1776,8 @@ export type QuickjsUiHostApi = {
   bottomSheet?: (payload: {
     title?: string;
     message?: string;
-    content?: QuickjsUiNode;
-    [key: string]: JsonValue | QuickjsUiNode | undefined;
+    content?: JsUiNode;
+    [key: string]: JsonValue | JsUiNode | undefined;
   }) => Promise<JsonValue>;
   navigationIntent?: (
     intent: Record<string, JsonValue>
@@ -1789,7 +1796,7 @@ export type QuickjsUiHostApi = {
   nativeCall?: (method: string, payload?: JsonValue) => Promise<JsonValue>;
 };
 
-export type QuickjsUiNavigationTarget =
+export type JsUiNavigationTarget =
   | string
   | {
       route?: string;
@@ -1798,19 +1805,19 @@ export type QuickjsUiNavigationTarget =
       [key: string]: JsonValue | undefined;
     };
 
-export type QuickjsUiNavigationApi = {
+export type JsUiNavigationApi = {
   push?: (
-    target: QuickjsUiNavigationTarget,
+    target: JsUiNavigationTarget,
     params?: Record<string, JsonValue>
   ) => Promise<JsonValue>;
   replace?: (
-    target: QuickjsUiNavigationTarget,
+    target: JsUiNavigationTarget,
     params?: Record<string, JsonValue>
   ) => Promise<boolean>;
   pop?: (result?: JsonValue) => boolean;
 };
 
 declare global {
-  var quickjsUiHost: QuickjsUiHostApi | undefined;
-  var quickjsUiNavigation: QuickjsUiNavigationApi | undefined;
+  var jsUiHost: JsUiHostApi | undefined;
+  var jsUiNavigation: JsUiNavigationApi | undefined;
 }

@@ -12,7 +12,7 @@ class NativeWorkerPage extends StatefulWidget {
 }
 
 class _NativeWorkerPageState extends State<NativeWorkerPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   Timer? _ticker;
   bool _disposed = false;
   bool _running = false;
@@ -36,35 +36,35 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
 
   Future<void> _createRuntime() async {
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       if (previous != null) {
         await previous.dispose();
       }
 
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _engine = engine;
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
         return;
       }
       setState(() {
-        _quickjs = null;
+        _engine = null;
         _status = '创建失败：$error';
       });
     }
   }
 
   Future<void> _runBusyLoop() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -77,7 +77,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     final beforeTicks = _ticks;
     final stopwatch = Stopwatch()..start();
     try {
-      final result = await quickjs.eval('''
+      final result = await engine.eval('''
         (() => {
           const start = Date.now();
           while (Date.now() - start < 3000) {}
@@ -109,8 +109,8 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
   }
 
   Future<void> _runTimeoutLoop() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -123,7 +123,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     final beforeTicks = _ticks;
     final stopwatch = Stopwatch()..start();
     try {
-      await quickjs.eval(
+      await engine.eval(
         'while (true) {}',
         timeout: const Duration(milliseconds: 100),
       );
@@ -139,8 +139,8 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
         return;
       }
       final recoveryResult = error is JsTimeoutException
-          // timeout 后同一个 Quickjs 实例应可继续执行。
-          ? await quickjs.eval('40 + 2')
+          // timeout 后同一个 JsEngine 实例应可继续执行。
+          ? await engine.eval('40 + 2')
           : null;
       if (!mounted || _disposed) {
         return;
@@ -162,8 +162,8 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
   }
 
   Future<void> _runStopLoop() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -175,11 +175,11 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
 
     final beforeTicks = _ticks;
     final stopwatch = Stopwatch()..start();
-    final evalFuture = quickjs.eval('while (true) {}');
+    final evalFuture = engine.eval('while (true) {}');
     // 稍后触发 stop，模拟用户主动取消正在执行的 JS。
     final stopFuture = Future<void>.delayed(
       const Duration(milliseconds: 100),
-      quickjs.restart,
+      engine.restart,
     );
 
     try {
@@ -197,8 +197,8 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
         return;
       }
       final recoveryResult = error is JsCancelledException
-          // stop 后同一个 Quickjs 实例应可继续执行。
-          ? await quickjs.eval('6 * 7')
+          // stop 后同一个 JsEngine 实例应可继续执行。
+          ? await engine.eval('6 * 7')
           : null;
       if (!mounted || _disposed) {
         return;
@@ -220,8 +220,8 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
   }
 
   Future<void> _startInfiniteLoop() async {
-    final quickjs = _quickjs;
-    if (quickjs == null || _running) {
+    final engine = _engine;
+    if (engine == null || _running) {
       return;
     }
 
@@ -234,7 +234,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     final beforeTicks = _ticks;
     final stopwatch = Stopwatch()..start();
     try {
-      await quickjs.eval('while (true) {}');
+      await engine.eval('while (true) {}');
       if (!mounted || _disposed) {
         return;
       }
@@ -247,7 +247,7 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
         return;
       }
       final recoveryResult = error is JsCancelledException
-          ? await quickjs.eval('6 * 7')
+          ? await engine.eval('6 * 7')
           : null;
       if (!mounted || _disposed) {
         return;
@@ -269,12 +269,12 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
   }
 
   Future<void> _stopCurrentEval() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
     try {
-      await quickjs.restart();
+      await engine.restart();
     } catch (error) {
       if (!mounted || _disposed) {
         return;
@@ -290,14 +290,14 @@ class _NativeWorkerPageState extends State<NativeWorkerPage> {
     _disposed = true;
     _ticker?.cancel();
     // 页面退出时释放 runtime，避免 worker 留在后台。
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final ready = _quickjs != null;
+    final ready = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('运行时后台 Worker')),

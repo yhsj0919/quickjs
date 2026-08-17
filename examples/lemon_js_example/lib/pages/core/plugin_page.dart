@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-final _singleFilePlugin = JsPlugin.singleFile(
+final _singleFilePlugin = JsPlugin.source(
   id: 'api1',
   version: '1.0.0',
   exports: const <String>['hello', 'bytes'],
@@ -32,7 +32,7 @@ final _packagePlugin = JsPlugin(
   ),
   modules: const <JsPluginModule>[
     JsPluginModule(
-      specifier: 'api2/main',
+      name: 'api2/main',
       source: '''
 import { suffix } from './modules/helper';
 
@@ -42,20 +42,20 @@ export function hello(name) {
 ''',
     ),
     JsPluginModule(
-      specifier: 'api2/modules/helper',
+      name: 'api2/modules/helper',
       source: "export const suffix = ' from package module';",
     ),
   ],
 );
 
-final _invalidPlugin = JsPlugin.singleFile(
+final _invalidPlugin = JsPlugin.source(
   id: 'api3',
   version: '1.0.0',
   exports: const <String>['hello'],
   source: 'export const hello = 1;',
 );
 
-final _missingDependencyPlugin = JsPlugin.singleFile(
+final _missingDependencyPlugin = JsPlugin.source(
   id: 'api4',
   version: '1.0.0',
   exports: const <String>['hello'],
@@ -78,7 +78,7 @@ class PluginPage extends StatefulWidget {
 }
 
 class _PluginPageState extends State<PluginPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建启用 JS 插件的 runtime...';
@@ -98,22 +98,22 @@ class _PluginPageState extends State<PluginPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
-      final assetPlugin = JsPlugin.singleFileAsset(
+      final assetPlugin = JsPlugin.asset(
         id: 'assetApi',
         version: '1.0.0',
-        assetKey: 'assets/js/js_call_dart_plugin.mjs',
+        path: 'assets/js/js_call_dart_plugin.mjs',
         exports: const <String>['test', 'test2'],
       );
-      final quickjs = await Quickjs.create(
-        features: <JsFeatures>[
-          _singleFilePlugin.asFeatures(),
-          _packagePlugin.asFeatures(),
-          _invalidPlugin.asFeatures(),
-          _missingDependencyPlugin.asFeatures(),
-          assetPlugin.asFeatures(),
+      final engine = await JsEngine.create(
+        plugins: <JsPlugin>[
+          _singleFilePlugin,
+          _packagePlugin,
+          _invalidPlugin,
+          _missingDependencyPlugin,
+          assetPlugin,
         ],
         onConsole: (event) {
           if (!mounted || _disposed) {
@@ -124,14 +124,14 @@ class _PluginPageState extends State<PluginPage> {
           });
         },
       );
-      await _bindDartMethods(quickjs);
+      await _bindDartMethods(engine);
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'runtime 已就绪：asset 插件和 4 个内置插件已注册';
       });
@@ -146,8 +146,8 @@ class _PluginPageState extends State<PluginPage> {
     }
   }
 
-  Future<void> _bindDartMethods(Quickjs quickjs) async {
-    await quickjs.injectFunction('alert', (args) async {
+  Future<void> _bindDartMethods(JsEngine engine) async {
+    await engine.injectFunction('alert', (args) async {
       final output = args.join(' ');
       if (!mounted || _disposed) {
         return null;
@@ -173,15 +173,15 @@ class _PluginPageState extends State<PluginPage> {
       );
       return null;
     });
-    await quickjs.injectFunction('getDataAsync', (args) {
+    await engine.injectFunction('getDataAsync', (args) {
       _log.insert(0, 'getDataAsync() <= $args');
       return '来自 Dart 的消息';
     });
-    await quickjs.injectFunction('dartMethod', (args) {
+    await engine.injectFunction('dartMethod', (args) {
       _log.insert(0, 'dartMethod() <= $args');
       return '这是静态消息';
     });
-    await quickjs.injectFunction('asyncWithError', (_) async {
+    await engine.injectFunction('asyncWithError', (_) async {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       throw StateError('Some error');
     });
@@ -189,9 +189,9 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _validatePlugins() async {
     await _capture('校验插件契约', () async {
-      final quickjs = _requireRuntime();
-      await quickjs.validatePlugin(_singleFilePlugin);
-      await quickjs.validatePlugin(_packagePlugin);
+      final engine = _requireRuntime();
+      await engine.validatePlugin(_singleFilePlugin);
+      await engine.validatePlugin(_packagePlugin);
       _log.insert(0, 'validatePlugin => api1/api2 exports 均为 function');
       _status = 'manifest exports 已完成显式校验';
     });
@@ -199,7 +199,7 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _callSingleFilePlugin() async {
     await _capture('调用单文件插件', () async {
-      final result = await _requireRuntime().callPlugin(
+      final result = await _requireRuntime().callPluginExport(
         _singleFilePlugin,
         'hello',
         <Object?>[
@@ -217,7 +217,7 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _callPackagePlugin() async {
     await _capture('调用插件包', () async {
-      final result = await _requireRuntime().invokePlugin(
+      final result = await _requireRuntime().callPlugin(
         'hello',
         const <Object?>['package'],
         pluginId: 'api2',
@@ -229,7 +229,7 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _callBytesPlugin() async {
     await _capture('调用 Uint8List 返回', () async {
-      final result = await _requireRuntime().callPlugin(
+      final result = await _requireRuntime().callPluginExport(
         _singleFilePlugin,
         'bytes',
         <Object?>[
@@ -244,7 +244,7 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _callAssetPlugin() async {
     await _capture('调用 asset 插件 test2', () async {
-      final result = await _requireRuntime().invokePlugin('test2', <Object?>[
+      final result = await _requireRuntime().callPlugin('test2', <Object?>[
         'ss\'·\$`"dd"}{s',
         99,
         {'aa': 'vv""`\'v'},
@@ -257,15 +257,15 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _checkErrors() async {
     await _capture('检查插件错误', () async {
-      final quickjs = _requireRuntime();
+      final engine = _requireRuntime();
       final messages = <String>[];
       try {
-        await quickjs.validatePlugin(_invalidPlugin);
+        await engine.validatePlugin(_invalidPlugin);
       } catch (error) {
         messages.add('非函数导出：${_describeError(error)}');
       }
       try {
-        await quickjs.validatePlugin(_missingDependencyPlugin);
+        await engine.validatePlugin(_missingDependencyPlugin);
       } catch (error) {
         messages.add('缺失依赖：${_describeError(error)}');
       }
@@ -279,14 +279,14 @@ class _PluginPageState extends State<PluginPage> {
 
   Future<void> _runStopRecovery() async {
     await _capture('stop 后恢复', () async {
-      final quickjs = _requireRuntime();
-      final running = quickjs
+      final engine = _requireRuntime();
+      final running = engine
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.restart();
+      await engine.restart();
       await running;
-      final result = await quickjs.callPlugin(
+      final result = await engine.callPluginExport(
         _packagePlugin,
         'hello',
         const <Object?>['after stop'],
@@ -321,12 +321,12 @@ class _PluginPageState extends State<PluginPage> {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeError(Object error) {
@@ -339,14 +339,14 @@ class _PluginPageState extends State<PluginPage> {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
     return Scaffold(
       appBar: AppBar(title: const Text('JS 插件')),
       body: Padding(
@@ -357,7 +357,7 @@ class _PluginPageState extends State<PluginPage> {
             Text(_status),
             const SizedBox(height: 8),
             const Text(
-              'JsPlugin → JsFeatures → validatePlugin() / invokePlugin()',
+              'JsPlugin → JsFeatures → validatePlugin() / callPlugin()',
             ),
             const SizedBox(height: 16),
             Wrap(

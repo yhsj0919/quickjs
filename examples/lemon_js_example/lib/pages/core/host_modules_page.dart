@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-const _hostMathModule = JsModule.esModule(
-  specifier: 'app/math',
+const _hostMathModule = JsModule(
+  name: 'app/math',
   source: '''
 export const value = 41;
 export function add(a, b) {
@@ -13,23 +13,23 @@ export function add(a, b) {
 ''',
 );
 
-const _hostPackageMainModule = JsModule.esModule(
-  specifier: 'pkg/main',
+const _hostPackageMainModule = JsModule(
+  name: 'pkg/main',
   source: '''
 import { value } from "./dep";
 export const result = value + 1;
 ''',
 );
 
-const _hostPackageDepModule = JsModule.esModule(
-  specifier: 'pkg/dep',
+const _hostPackageDepModule = JsModule(
+  name: 'pkg/dep',
   source: '''
 export const value = 9;
 ''',
 );
 
-const _hostBufferModule = JsModule.esModule(
-  specifier: 'buffer',
+const _hostBufferModule = JsModule(
+  name: 'buffer',
   source: '''
 export const label = "host-buffer";
 export function byteLength(value) {
@@ -39,7 +39,7 @@ export function byteLength(value) {
 );
 
 const _hostCommonJsModule = JsModule.commonJs(
-  specifier: 'app/cjs',
+  name: 'app/cjs',
   source: '''
 const local = require("./local");
 module.exports = {
@@ -49,14 +49,14 @@ module.exports = {
 );
 
 const _hostCommonJsLocalModule = JsModule.commonJs(
-  specifier: 'app/local',
+  name: 'app/local',
   source: '''
 module.exports = { value: 6 };
 ''',
 );
 
-const _hostCounterModule = JsModule.esModule(
-  specifier: 'app/counter',
+const _hostCounterModule = JsModule(
+  name: 'app/counter',
   source: '''
 globalThis.hostModuleImportCount = (globalThis.hostModuleImportCount || 0) + 1;
 export const count = globalThis.hostModuleImportCount;
@@ -64,7 +64,7 @@ export const count = globalThis.hostModuleImportCount;
 );
 
 const _hostCommonJsCounterModule = JsModule.commonJs(
-  specifier: 'app/cjs-counter',
+  name: 'app/cjs-counter',
   source: '''
 globalThis.hostCommonJsImportCount = (globalThis.hostCommonJsImportCount || 0) + 1;
 exports.count = globalThis.hostCommonJsImportCount;
@@ -80,7 +80,7 @@ class HostModulesPage extends StatefulWidget {
 }
 
 class _HostModulesPageState extends State<HostModulesPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建启用 modules 的 runtime...';
@@ -100,11 +100,11 @@ class _HostModulesPageState extends State<HostModulesPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         modules: <JsModule>[
           _hostMathModule,
           _hostPackageMainModule,
@@ -117,12 +117,12 @@ class _HostModulesPageState extends State<HostModulesPage> {
         ],
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'runtime 已就绪：modules 只能通过 import / require 使用';
       });
@@ -139,7 +139,7 @@ class _HostModulesPageState extends State<HostModulesPage> {
 
   Future<void> _runEsModule() async {
     await _capture('ES module 导入', () async {
-      await _requireRuntime().evalModule('''
+      await _requireRuntime().runModule('''
 import { value, add } from "app/math";
 globalThis.hostModuleDemo = add(value, 1);
 ''', name: 'example:host-module-esm.js');
@@ -151,7 +151,7 @@ globalThis.hostModuleDemo = add(value, 1);
 
   Future<void> _runRelativeDependency() async {
     await _capture('相对依赖', () async {
-      await _requireRuntime().evalModule('''
+      await _requireRuntime().runModule('''
 import { result } from "pkg/main";
 globalThis.hostPackageDemo = result;
 ''', name: 'example:host-module-relative.js');
@@ -163,7 +163,7 @@ globalThis.hostPackageDemo = result;
 
   Future<void> _runNodePrefix() async {
     await _capture('node: 前缀', () async {
-      await _requireRuntime().evalModule('''
+      await _requireRuntime().runModule('''
 import { label, byteLength } from "node:buffer";
 globalThis.hostNodeBufferDemo = label + "/" + byteLength("demo");
 ''', name: 'example:host-module-node-prefix.js');
@@ -177,7 +177,7 @@ globalThis.hostNodeBufferDemo = label + "/" + byteLength("demo");
 
   Future<void> _runCommonJs() async {
     await _capture('CommonJS require', () async {
-      final result = await _requireRuntime().evalCommonJs(
+      final result = await _requireRuntime().runCommonJs(
         'const cjs = require("app/cjs"); module.exports = cjs.value;',
         name: 'example:host-module-cjs.js',
       );
@@ -203,15 +203,15 @@ typeof byteLength === "undefined"
 
   Future<void> _runCacheCheck() async {
     await _capture('模块缓存检查', () async {
-      final quickjs = _requireRuntime();
+      final engine = _requireRuntime();
       final suffix = DateTime.now().microsecondsSinceEpoch;
-      await quickjs.evalModule('''
+      await engine.runModule('''
 import { count as first } from "app/counter";
 import { count as second } from "app/counter";
 globalThis.hostModuleCacheDemo = first + "/" + second + "/" + globalThis.hostModuleImportCount;
 ''', name: 'example:host-module-cache-$suffix.js');
-      final esm = await quickjs.eval('globalThis.hostModuleCacheDemo');
-      final cjs = await quickjs.evalCommonJs('''
+      final esm = await engine.eval('globalThis.hostModuleCacheDemo');
+      final cjs = await engine.runCommonJs('''
 const first = require("app/cjs-counter");
 const second = require("app/cjs-counter");
 module.exports = first.count + "/" + second.count + "/" + globalThis.hostCommonJsImportCount;
@@ -239,21 +239,21 @@ module.exports = first.count + "/" + second.count + "/" + globalThis.hostCommonJ
 
   Future<void> _runEssentialBuffer() async {
     await _capture('essential Buffer', () async {
-      final quickjs = await Quickjs.create(
-        features: <JsFeatures>[JsFeatures.essential(globalBuffer: true)],
+      final engine = await JsEngine.create(
+        features: <JsFeatures>[EssentialFeatures(globalBuffer: true)],
       );
       try {
-        await quickjs.evalModule('''
+        await engine.runModule('''
 import { Buffer } from "node:buffer";
 globalThis.essentialBufferModuleDemo =
   Buffer.isBuffer(Buffer.from("module")) + "/" +
   Buffer.from("module").toString() + "/" +
   Buffer.byteLength("module");
 ''', name: 'example:essential-buffer.mjs');
-        final moduleResult = await quickjs.eval(
+        final moduleResult = await engine.eval(
           'globalThis.essentialBufferModuleDemo',
         );
-        final globalResult = await quickjs.eval(
+        final globalResult = await engine.eval(
           'Buffer.isBuffer(Buffer.from("global")) + "/" + Buffer.from("global").toString()',
         );
         _log.insert(
@@ -261,18 +261,18 @@ globalThis.essentialBufferModuleDemo =
           'essential import "node:buffer" => $moduleResult\n'
           'essential global Buffer => $globalResult',
         );
-        _status = 'JsFeatures.essential() 的 Buffer 可用';
+        _status = 'EssentialFeatures() 的 Buffer 可用';
       } finally {
-        await quickjs.dispose();
+        await engine.dispose();
       }
     });
   }
 
   Future<void> _runNodePreset() async {
     await _capture('node preset', () async {
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         features: <JsFeatures>[
-          JsFeatures.node(
+          NodeFeatures(
             globalBuffer: true,
             globalProcess: true,
             env: <String, String>{'APP_ENV': 'example'},
@@ -281,7 +281,7 @@ globalThis.essentialBufferModuleDemo =
         ],
       );
       try {
-        await quickjs.evalModule('''
+        await engine.runModule('''
 import { Buffer } from "node:buffer";
 import path from "node:path";
 import process from "node:process";
@@ -296,29 +296,29 @@ globalThis.nodePresetDemo = [
   typeof globalThis.process
 ].join("/");
 ''', name: 'example:node-preset.mjs');
-        final result = await quickjs.eval('globalThis.nodePresetDemo');
-        _log.insert(0, 'JsFeatures.node() => $result');
+        final result = await engine.eval('globalThis.nodePresetDemo');
+        _log.insert(0, 'NodeFeatures() => $result');
         _status = 'node preset provides buffer/path/process/timers modules';
       } finally {
-        await quickjs.dispose();
+        await engine.dispose();
       }
     });
   }
 
   Future<void> _runStopRecovery() async {
     await _capture('stop 后恢复', () async {
-      final quickjs = _requireRuntime();
-      final running = quickjs
+      final engine = _requireRuntime();
+      final running = engine
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.restart();
+      await engine.restart();
       await running;
-      await quickjs.evalModule('''
+      await engine.runModule('''
 import { value, add } from "app/math";
 globalThis.hostModuleAfterStop = add(value, 1);
 ''', name: 'example:host-module-after-stop.js');
-      final result = await quickjs.eval('globalThis.hostModuleAfterStop');
+      final result = await engine.eval('globalThis.hostModuleAfterStop');
       _log.insert(0, 'stop 后再次导入 "app/math" => $result');
       _status = 'stop / rebuild 后 modules 已重新可用';
     });
@@ -350,12 +350,12 @@ globalThis.hostModuleAfterStop = add(value, 1);
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeError(Object error) {
@@ -368,14 +368,14 @@ globalThis.hostModuleAfterStop = add(value, 1);
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('宿主模块')),
@@ -388,7 +388,7 @@ globalThis.hostModuleAfterStop = add(value, 1);
             const SizedBox(height: 8),
             const Text(
               'JsOptions.modules + '
-              'JsModule.esModule/commonJs',
+              'JsModule/commonJs',
             ),
             const SizedBox(height: 16),
             Wrap(

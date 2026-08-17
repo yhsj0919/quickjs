@@ -1,8 +1,8 @@
 import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 
 Future<void> main() async {
-  final extension = await QuickjsExtension.load(
-    QuickjsExtensionPackage(
+  final extension = await JsExtension.load(
+    JsExtensionPackage(
       manifestSource: '''
 {
   "schemaVersion": 2,
@@ -25,8 +25,8 @@ Future<void> main() async {
     ),
   );
 
-  final registry = QuickjsExtensionRegistry();
-  QuickjsExtensionInstaller(registry: registry).install(extension);
+  final registry = JsExtensionRegistry();
+  JsExtensionInstaller(registry: registry).install(extension);
 
   // ignore: avoid_print
   print('${extension.id}: ${extension.kind}');

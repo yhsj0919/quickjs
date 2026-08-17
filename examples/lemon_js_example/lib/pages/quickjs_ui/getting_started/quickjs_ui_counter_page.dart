@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 import '../../../example_quickjs_ui_runtime.dart';
 
 /// QuickJS UI 计数器 Demo：加载单文件 Page（.mjs）并用原生 Flutter Widget 渲染。
-class QuickjsUiCounterPage extends StatefulWidget {
-  const QuickjsUiCounterPage({
+class JsUiCounterPage extends StatefulWidget {
+  const JsUiCounterPage({
     super.key,
     this.runtime,
     this.title = '单文件计数器',
@@ -14,7 +16,7 @@ class QuickjsUiCounterPage extends StatefulWidget {
 
   /// Optional application-scoped runtime. A null value preserves the original
   /// cold-start behavior and lets the controller own its engine.
-  final QuickjsUiRuntime? runtime;
+  final JsUiRuntime? runtime;
   final String title;
   final String timingLabel;
 
@@ -22,12 +24,12 @@ class QuickjsUiCounterPage extends StatefulWidget {
   static const String path = 'assets/quickjs_ui/counter_page.mjs';
 
   @override
-  State<QuickjsUiCounterPage> createState() => _QuickjsUiCounterPageState();
+  State<JsUiCounterPage> createState() => _JsUiCounterPageState();
 }
 
-/// 记录首帧渲染耗时，并演示 [QuickjsUiController] 状态监听。
-class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
-  late final QuickjsUiController _controller;
+/// 记录首帧渲染耗时，并演示 [JsUiController] 状态监听。
+class _JsUiCounterPageState extends State<JsUiCounterPage> {
+  late final JsUiController _controller;
   final Stopwatch _stopwatch = Stopwatch()..start();
   Duration? _firstRenderElapsed;
   String _status = 'Waiting for first render';
@@ -35,7 +37,7 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
   @override
   void initState() {
     super.initState();
-    _controller = QuickjsUiController(runtime: widget.runtime)
+    _controller = JsUiController(runtime: widget.runtime)
       ..addListener(_handleControllerChanged);
   }
 
@@ -78,8 +80,8 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
       ),
       body: Stack(
         children: <Widget>[
-          QuickjsUiView.asset(
-            path: QuickjsUiCounterPage.path,
+          JsUiView.asset(
+            path: JsUiCounterPage.path,
             controller: _controller,
             initialProps: const <String, Object?>{
               'title': 'QuickJS UI',
@@ -117,7 +119,7 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
     final elapsed = _stopwatch.elapsed;
     debugPrint(
       '${widget.timingLabel}: ${elapsed.inMilliseconds}ms '
-      '(${QuickjsUiCounterPage.path})',
+      '(${JsUiCounterPage.path})',
     );
     final metrics = _controller.lastLoadMetrics;
     if (metrics != null) {
@@ -167,13 +169,13 @@ class _QuickjsUiCounterPageState extends State<QuickjsUiCounterPage> {
 
 /// Warm-runtime variant of the counter used for an apples-to-apples benchmark.
 /// It delegates to the same widget and JS asset as the cold counter.
-class QuickjsUiSharedRuntimeCounterPage extends StatelessWidget {
-  const QuickjsUiSharedRuntimeCounterPage({super.key});
+class JsUiSharedRuntimeCounterPage extends StatelessWidget {
+  const JsUiSharedRuntimeCounterPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return QuickjsUiCounterPage(
-      runtime: exampleQuickjsUiRuntime,
+    return JsUiCounterPage(
+      runtime: exampleJsUiRuntime,
       title: '共享运行时计数器',
       timingLabel: 'QuickJS UI shared runtime first render',
     );
@@ -190,17 +192,24 @@ class _DelayedLoadingIndicator extends StatefulWidget {
 
 class _DelayedLoadingIndicatorState extends State<_DelayedLoadingIndicator> {
   bool _visible = false;
+  Timer? _showTimer;
 
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(milliseconds: 180), () {
+    _showTimer = Timer(const Duration(milliseconds: 180), () {
       if (mounted) {
         setState(() {
           _visible = true;
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _showTimer?.cancel();
+    super.dispose();
   }
 
   @override

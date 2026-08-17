@@ -9,8 +9,8 @@ void main() {
   testWidgets('retained Canvas scene survives renderer replacement', (
     tester,
   ) async {
-    final scenes = QuickjsUiCanvasSceneRegistry();
-    final registered = QuickjsUiNode.fromMap(<String, Object?>{
+    final scenes = JsUiCanvasSceneRegistry();
+    final registered = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'key': 'retained-canvas',
       'sceneKey': 'retained-scene',
@@ -26,7 +26,7 @@ void main() {
         },
       ],
     });
-    final reused = QuickjsUiNode.fromMap(<String, Object?>{
+    final reused = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'key': 'retained-canvas',
       'sceneKey': 'retained-scene',
@@ -34,7 +34,7 @@ void main() {
       'height': 100,
     });
 
-    final first = QuickjsUiRenderer(
+    final first = JsUiRenderer(
       canvasSceneRegistry: scenes,
       onEvent: (_) async {},
     );
@@ -42,7 +42,7 @@ void main() {
     expect(scenes.resolve('retained-scene'), isNotNull);
     first.dispose();
 
-    final second = QuickjsUiRenderer(
+    final second = JsUiRenderer(
       canvasSceneRegistry: scenes,
       onEvent: (_) async {},
     );
@@ -55,7 +55,7 @@ void main() {
 
   testWidgets('Canvas renders a batch and forwards gestures', (tester) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 200,
       'height': 120,
@@ -88,9 +88,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: QuickjsUiRenderer(onEvent: events.add).build(node),
-        ),
+        home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
       ),
     );
 
@@ -109,7 +107,7 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'key': 'animated',
       'width': 80,
@@ -120,7 +118,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: events.add).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: events.add).build(node)),
     );
     await tester.pump(const Duration(milliseconds: 120));
 
@@ -141,7 +139,7 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 80,
       'height': 80,
@@ -181,7 +179,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: events.add).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: events.add).build(node)),
     );
     for (var frame = 0; frame < 10; frame += 1) {
       await tester.pump(const Duration(microseconds: 8333));
@@ -195,7 +193,7 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 40,
       'height': 40,
@@ -212,7 +210,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: events.add).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: events.add).build(node)),
     );
     await tester.pump(const Duration(milliseconds: 30));
     expect(events, isEmpty);
@@ -226,8 +224,8 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
-    final registered = QuickjsUiNode.fromMap(<String, Object?>{
+    final renderer = JsUiRenderer(onEvent: events.add);
+    final registered = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'key': 'retained-canvas',
       'sceneKey': 'retained-particles',
@@ -246,7 +244,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 150));
     expect(events, isEmpty);
 
-    final reference = QuickjsUiNode.fromMap(<String, Object?>{
+    final reference = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'key': 'retained-canvas',
       'sceneKey': 'retained-particles',
@@ -267,10 +265,10 @@ void main() {
     'Canvas pause preserves progress and playToken starts a new generation',
     (tester) async {
       final events = <Map<String, Object?>>[];
-      final renderer = QuickjsUiRenderer(onEvent: events.add);
+      final renderer = JsUiRenderer(onEvent: events.add);
 
-      QuickjsUiNode node({required bool paused, required int playToken}) =>
-          QuickjsUiNode.fromMap(<String, Object?>{
+      JsUiNode node({required bool paused, required int playToken}) =>
+          JsUiNode.fromMap(<String, Object?>{
             'type': 'Canvas',
             'key': 'generation-canvas',
             'width': 40,
@@ -324,29 +322,28 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
 
-    QuickjsUiNode node({bool reverse = false}) =>
-        QuickjsUiNode.fromMap(<String, Object?>{
-          'type': 'Canvas',
-          'key': 'continuous-canvas',
-          'reverse': reverse,
-          'onAnimationEnd': <String, Object?>{'method': 'ended'},
-          'commands': <Object?>[
-            <String, Object?>{
-              'op': 'circle',
-              'cx': <String, Object?>{
-                'from': 0,
-                'to': 40,
-                'durationMs': 100,
-                'repeat': true,
-              },
-              'cy': 20,
-              'radius': 4,
-              'fill': '#22d3ee',
-            },
-          ],
-        });
+    JsUiNode node({bool reverse = false}) => JsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'key': 'continuous-canvas',
+      'reverse': reverse,
+      'onAnimationEnd': <String, Object?>{'method': 'ended'},
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'circle',
+          'cx': <String, Object?>{
+            'from': 0,
+            'to': 40,
+            'durationMs': 100,
+            'repeat': true,
+          },
+          'cy': 20,
+          'radius': 4,
+          'fill': '#22d3ee',
+        },
+      ],
+    });
 
     await tester.pumpWidget(MaterialApp(home: renderer.build(node())));
     await tester.pump(const Duration(milliseconds: 350));
@@ -363,8 +360,8 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final renderer = JsUiRenderer(onEvent: events.add);
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'key': 'removed-canvas',
       'onAnimationEnd': <String, Object?>{'method': 'ended'},
@@ -390,10 +387,10 @@ void main() {
   test(
     'Canvas retained scene registry evicts oldest and clears on dispose',
     () {
-      final renderer = QuickjsUiRenderer(onEvent: (_) {});
+      final renderer = JsUiRenderer(onEvent: (_) {});
       for (var index = 0; index < 33; index += 1) {
         renderer.build(
-          QuickjsUiNode.fromMap(<String, Object?>{
+          JsUiNode.fromMap(<String, Object?>{
             'type': 'Canvas',
             'sceneKey': 'scene-$index',
             'commands': <Object?>[
@@ -420,7 +417,7 @@ void main() {
   test(
     'Snapshot registry evicts oldest capture and clears on dispose',
     () async {
-      final registry = QuickjsUiSnapshotRegistry(maxSnapshots: 2);
+      final registry = JsUiSnapshotRegistry(maxSnapshots: 2);
       final images = <ui.Image>[];
       for (var index = 0; index < 3; index += 1) {
         final recorder = ui.PictureRecorder();
@@ -458,7 +455,7 @@ void main() {
 
   testWidgets('Canvas exposes local pointer coordinates', (tester) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 100,
       'height': 100,
@@ -471,7 +468,7 @@ void main() {
       MaterialApp(
         home: Align(
           alignment: Alignment.topLeft,
-          child: QuickjsUiRenderer(onEvent: events.add).build(node),
+          child: JsUiRenderer(onEvent: events.add).build(node),
         ),
       ),
     );
@@ -495,8 +492,8 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
-    final boundary = QuickjsUiNode.fromMap(<String, Object?>{
+    final renderer = JsUiRenderer(onEvent: events.add);
+    final boundary = JsUiNode.fromMap(<String, Object?>{
       'type': 'SnapshotBoundary',
       'key': 'capture-card',
       'captureToken': 0,
@@ -524,7 +521,7 @@ void main() {
     expect(events.last['height'], 50);
     expect(renderer.snapshotRegistry.length, 1);
 
-    final canvas = QuickjsUiNode.fromMap(<String, Object?>{
+    final canvas = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 80,
       'height': 50,
@@ -545,7 +542,7 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
 
-    final particleCanvas = QuickjsUiNode.fromMap(<String, Object?>{
+    final particleCanvas = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 80,
       'height': 50,
@@ -589,21 +586,20 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode boundary(Object token) =>
-        QuickjsUiNode.fromMap(<String, Object?>{
-          'type': 'SnapshotBoundary',
-          'key': 'stable-capture',
-          'captureToken': token,
-          'onCaptured': <String, Object?>{'method': 'captured'},
-          'child': <String, Object?>{
-            'type': 'Container',
-            'width': 80,
-            'height': 50,
-          },
-        });
+    JsUiNode boundary(Object token) => JsUiNode.fromMap(<String, Object?>{
+      'type': 'SnapshotBoundary',
+      'key': 'stable-capture',
+      'captureToken': token,
+      'onCaptured': <String, Object?>{'method': 'captured'},
+      'child': <String, Object?>{
+        'type': 'Container',
+        'width': 80,
+        'height': 50,
+      },
+    });
 
     Future<void> pumpCapture(Object token) async {
       await tester.pumpWidget(
@@ -644,7 +640,7 @@ void main() {
   });
 
   test('SnapshotRegistry releases interrupted capture claims', () {
-    final registry = QuickjsUiSnapshotRegistry();
+    final registry = JsUiSnapshotRegistry();
     addTearDown(registry.dispose);
     final firstOwner = Object();
     final secondOwner = Object();
@@ -683,8 +679,8 @@ void main() {
   });
 
   test('Canvas validates save/restore before paint', () {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final renderer = JsUiRenderer(onEvent: (_) {});
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'commands': <Object?>[
         <String, Object?>{'op': 'restore'},
@@ -694,9 +690,9 @@ void main() {
   });
 
   test('Canvas validates native snapshot particle grid bounds', () {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'commands': <Object?>[
         <String, Object?>{
@@ -719,29 +715,28 @@ void main() {
   });
 
   test('Canvas validates snapshot particle animation direction', () {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode particle(String direction) =>
-        QuickjsUiNode.fromMap(<String, Object?>{
-          'type': 'Canvas',
-          'commands': <Object?>[
-            <String, Object?>{
-              'op': 'snapshotParticleGrid',
-              'sourceSlot': 'source',
-              'targetSlot': 'target',
-              'width': 80,
-              'height': 50,
-              'columns': 8,
-              'rows': 5,
-              'bucketCount': 4,
-              'direction': direction,
-              'staggerMs': 4,
-              'travelMs': 60,
-              'fadeMs': 40,
-            },
-          ],
-        });
+    JsUiNode particle(String direction) => JsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'snapshotParticleGrid',
+          'sourceSlot': 'source',
+          'targetSlot': 'target',
+          'width': 80,
+          'height': 50,
+          'columns': 8,
+          'rows': 5,
+          'bucketCount': 4,
+          'direction': direction,
+          'staggerMs': 4,
+          'travelMs': 60,
+          'fadeMs': 40,
+        },
+      ],
+    });
 
     for (final direction in const <String>['create', 'destroy', 'transition']) {
       expect(() => renderer.build(particle(direction)), returnsNormally);
@@ -753,27 +748,26 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode canvas(String label) =>
-        QuickjsUiNode.fromMap(<String, Object?>{
-          'type': 'Canvas',
-          'key': 'finite-animation',
-          'semanticLabel': label,
-          'width': 80,
-          'height': 50,
-          'commands': <Object?>[
-            <String, Object?>{
-              'op': 'circle',
-              'cx': <String, Object?>{'from': 0, 'to': 80, 'durationMs': 40},
-              'cy': 25,
-              'radius': 4,
-              'fill': '#ffffff',
-            },
-          ],
-          'onAnimationEnd': <String, Object?>{'method': 'finished'},
-        });
+    JsUiNode canvas(String label) => JsUiNode.fromMap(<String, Object?>{
+      'type': 'Canvas',
+      'key': 'finite-animation',
+      'semanticLabel': label,
+      'width': 80,
+      'height': 50,
+      'commands': <Object?>[
+        <String, Object?>{
+          'op': 'circle',
+          'cx': <String, Object?>{'from': 0, 'to': 80, 'durationMs': 40},
+          'cy': 25,
+          'radius': 4,
+          'fill': '#ffffff',
+        },
+      ],
+      'onAnimationEnd': <String, Object?>{'method': 'finished'},
+    });
 
     await tester.pumpWidget(MaterialApp(home: renderer.build(canvas('one'))));
     await tester.pump(const Duration(milliseconds: 50));
@@ -795,7 +789,7 @@ void main() {
   testWidgets('Canvas renders progress clips gradients and dashed paths', (
     tester,
   ) async {
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 240,
       'height': 120,
@@ -851,7 +845,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: QuickjsUiRenderer(onEvent: (_) {}).build(node)),
+      MaterialApp(home: JsUiRenderer(onEvent: (_) {}).build(node)),
     );
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -862,7 +856,7 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Canvas',
       'width': 200,
       'height': 100,
@@ -874,7 +868,7 @@ void main() {
       MaterialApp(
         home: Align(
           alignment: Alignment.topLeft,
-          child: QuickjsUiRenderer(onEvent: events.add).build(node),
+          child: JsUiRenderer(onEvent: events.add).build(node),
         ),
       ),
     );

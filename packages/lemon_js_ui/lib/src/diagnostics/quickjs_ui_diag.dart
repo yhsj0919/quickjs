@@ -1,14 +1,17 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/foundation.dart';
 
 /// Opt-in runtime diagnostics for quickjs_ui pipeline debugging.
 ///
 /// Enabled in debug mode by default. Set [enabled] to true in profile/release
 /// builds when investigating issues such as progress event storms.
-abstract final class QuickjsUiDiag {
+abstract final class JsUiDiag {
   static bool enabled = kDebugMode;
 
-  static final Map<String, _QuickjsUiDiagBucket> _buckets =
-      <String, _QuickjsUiDiagBucket>{};
+  static final Map<String, _JsUiDiagBucket> _buckets =
+      <String, _JsUiDiagBucket>{};
 
   static void log(String channel, String message) {
     if (!enabled) {
@@ -21,7 +24,7 @@ abstract final class QuickjsUiDiag {
     if (!enabled) {
       return;
     }
-    final bucket = _buckets.putIfAbsent(channel, _QuickjsUiDiagBucket.new);
+    final bucket = _buckets.putIfAbsent(channel, _JsUiDiagBucket.new);
     bucket.count += 1;
     if (detail != null) {
       bucket.lastDetail = detail;
@@ -44,8 +47,8 @@ abstract final class QuickjsUiDiag {
   }
 }
 
-final class _QuickjsUiDiagBucket {
-  _QuickjsUiDiagBucket();
+final class _JsUiDiagBucket {
+  _JsUiDiagBucket();
 
   int count = 0;
   String? lastDetail;

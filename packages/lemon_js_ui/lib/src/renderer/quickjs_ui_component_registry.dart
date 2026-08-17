@@ -17,89 +17,108 @@ import 'quickjs_ui_component_types.dart';
 
 export 'quickjs_ui_component_types.dart';
 
-typedef QuickjsUiComponentControllerFactory =
-    QuickjsUiComponentController Function(QuickjsUiNode node);
+/// Callback contract for js ui component controller factory.
+typedef JsUiComponentControllerFactory =
+    JsUiComponentController Function(JsUiNode node);
 
-typedef QuickjsUiLifecycleComponentBuilder<
-  T extends QuickjsUiComponentController
-> =
-    Widget Function(
-      QuickjsUiRenderContext context,
-      QuickjsUiNode node,
-      T controller,
-    );
+/// Callback contract for js ui lifecycle component builder.
+typedef JsUiLifecycleComponentBuilder<T extends JsUiComponentController> =
+    Widget Function(JsUiRenderContext context, JsUiNode node, T controller);
 
-base class QuickjsUiComponentController {
-  void mount(QuickjsUiNode node) {}
+/// Public JSUI js ui component controller API.
+base class JsUiComponentController {
+  /// Performs the mount operation.
+  void mount(JsUiNode node) {}
 
-  void update(QuickjsUiNode previous, QuickjsUiNode next) {}
+  /// Performs the update operation.
+  void update(JsUiNode previous, JsUiNode next) {}
 
+  /// Performs the show operation.
   void show() {}
 
+  /// Performs the hide operation.
   void hide() {}
 
+  /// Performs the pause operation.
   void pause() {}
 
+  /// Performs the resume operation.
   void resume() {}
 
+  /// Performs the dispose operation.
   void dispose() {}
 }
 
-final class QuickjsUiComponentRegistry {
-  QuickjsUiComponentRegistry([Map<String, QuickjsUiComponentBuilder>? builders])
-    : _components = <String, _QuickjsUiComponentDefinition>{
-        for (final entry in builders?.entries ?? const Iterable.empty())
-          entry.key: _QuickjsUiComponentDefinition.builder(entry.value),
-      };
+/// Public JSUI js ui component registry API.
+final class JsUiComponentRegistry {
+  /// Creates a js ui component registry.
+  JsUiComponentRegistry();
 
-  factory QuickjsUiComponentRegistry.defaults() {
-    return QuickjsUiComponentRegistry(<String, QuickjsUiComponentBuilder>{
-      ...quickjsUiBasicComponentBuilders,
-      ...quickjsUiAutoRefreshComponentBuilders,
-      ...quickjsUiCanvasComponentBuilders,
-      ...quickjsUiLayoutComponentBuilders,
-      ...quickjsUiMediaComponentBuilders,
-      ...quickjsUiScrollComponentBuilders,
-      ...quickjsUiInputComponentBuilders,
-      ...quickjsUiNavigationComponentBuilders,
-      ...quickjsUiParticleFlowComponentBuilders,
-      ...quickjsUiFeedbackComponentBuilders,
-      ...quickjsUiSnapshotComponentBuilders,
+  /// Creates a js ui component registry.
+  factory JsUiComponentRegistry.defaults() {
+    final registry = JsUiComponentRegistry();
+    registry._registerAll(<String, JsUiComponentBuilder>{
+      ...jsUiBasicComponentBuilders,
+      ...jsUiAutoRefreshComponentBuilders,
+      ...jsUiCanvasComponentBuilders,
+      ...jsUiLayoutComponentBuilders,
+      ...jsUiMediaComponentBuilders,
+      ...jsUiScrollComponentBuilders,
+      ...jsUiInputComponentBuilders,
+      ...jsUiNavigationComponentBuilders,
+      ...jsUiParticleFlowComponentBuilders,
+      ...jsUiFeedbackComponentBuilders,
+      ...jsUiSnapshotComponentBuilders,
     });
+    return registry;
   }
 
-  final Map<String, _QuickjsUiComponentDefinition> _components;
+  final Map<String, _JsUiComponentDefinition> _components =
+      <String, _JsUiComponentDefinition>{};
 
+  void _registerAll(Map<String, JsUiComponentBuilder> builders) {
+    for (final entry in builders.entries) {
+      register(entry.key, entry.value);
+    }
+  }
+
+  /// Returns the current types.
   Iterable<String> get types => _components.keys;
 
+  /// Performs the contains operation.
   bool contains(String type) {
     return _components.containsKey(type);
   }
 
-  void register(String type, QuickjsUiComponentBuilder builder) {
-    _components[type] = _QuickjsUiComponentDefinition.builder(builder);
+  /// Performs the register operation.
+  void register(String type, JsUiComponentBuilder builder) {
+    _components[type] = _JsUiComponentDefinition.builder(builder);
   }
 
-  void registerLifecycle<T extends QuickjsUiComponentController>(
+  /// The value value.
+  void registerLifecycle<T extends JsUiComponentController>(
     String type, {
-    required T Function(QuickjsUiNode node) createController,
-    required QuickjsUiLifecycleComponentBuilder<T> build,
+    required T Function(JsUiNode node) createController,
+    required JsUiLifecycleComponentBuilder<T> build,
   }) {
-    _components[type] = _QuickjsUiComponentDefinition.lifecycle(
+    _components[type] = _JsUiComponentDefinition.lifecycle(
       createController: createController,
       build: build,
     );
   }
 
+  /// Performs the unregister operation.
   void unregister(String type) {
     _components.remove(type);
   }
 
+  /// Performs the has lifecycle operation.
   bool hasLifecycle(String type) {
     return _components[type]?.hasLifecycle == true;
   }
 
-  QuickjsUiComponentController createController(QuickjsUiNode node) {
+  /// Performs the create controller operation.
+  JsUiComponentController createController(JsUiNode node) {
     final component = _components[node.type];
     if (component == null) {
       throw FormatException('Unknown quickjs_ui node type: ${node.type}');
@@ -113,12 +132,13 @@ final class QuickjsUiComponentRegistry {
     return create(node);
   }
 
+  /// Performs the build operation.
   Widget build(
-    QuickjsUiRenderContext context,
-    QuickjsUiNode node, {
-    QuickjsUiComponentController? controller,
+    JsUiRenderContext context,
+    JsUiNode node, {
+    JsUiComponentController? controller,
   }) {
-    if (isQuickjsUiRouteOverlayType(node.type)) {
+    if (isJsUiRouteOverlayType(node.type)) {
       return const SizedBox.shrink();
     }
     final component = _components[node.type];
@@ -129,22 +149,21 @@ final class QuickjsUiComponentRegistry {
   }
 }
 
-final class _QuickjsUiComponentDefinition {
-  _QuickjsUiComponentDefinition.builder(QuickjsUiComponentBuilder builder)
+final class _JsUiComponentDefinition {
+  _JsUiComponentDefinition.builder(JsUiComponentBuilder builder)
     : createController = null,
       _build = ((context, node, _) => builder(context, node));
 
-  _QuickjsUiComponentDefinition._({
+  _JsUiComponentDefinition._({
     required this.createController,
     required this._build,
   });
 
-  static _QuickjsUiComponentDefinition
-  lifecycle<T extends QuickjsUiComponentController>({
-    required T Function(QuickjsUiNode node) createController,
-    required QuickjsUiLifecycleComponentBuilder<T> build,
+  static _JsUiComponentDefinition lifecycle<T extends JsUiComponentController>({
+    required T Function(JsUiNode node) createController,
+    required JsUiLifecycleComponentBuilder<T> build,
   }) {
-    return _QuickjsUiComponentDefinition._(
+    return _JsUiComponentDefinition._(
       createController: createController,
       build: (context, node, controller) {
         if (controller is! T) {
@@ -157,20 +176,20 @@ final class _QuickjsUiComponentDefinition {
     );
   }
 
-  final QuickjsUiComponentControllerFactory? createController;
+  final JsUiComponentControllerFactory? createController;
   final Widget Function(
-    QuickjsUiRenderContext context,
-    QuickjsUiNode node,
-    QuickjsUiComponentController? controller,
+    JsUiRenderContext context,
+    JsUiNode node,
+    JsUiComponentController? controller,
   )
   _build;
 
   bool get hasLifecycle => createController != null;
 
   Widget build(
-    QuickjsUiRenderContext context,
-    QuickjsUiNode node,
-    QuickjsUiComponentController? controller,
+    JsUiRenderContext context,
+    JsUiNode node,
+    JsUiComponentController? controller,
   ) {
     if (hasLifecycle && controller == null) {
       throw StateError(

@@ -14,8 +14,8 @@ class BasicEvalPage extends StatefulWidget {
 class _BasicEvalPageState extends State<BasicEvalPage> {
   static const String _code = '1 + 2 * 3';
 
-  Quickjs? _quickjs;
-  String _quickjsVersion = '加载中';
+  JsEngine? _engine;
+  String _engineVersion = '加载中';
   String _evalResult = '加载中';
   bool _disposed = false;
 
@@ -27,18 +27,18 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
 
   Future<void> _createAndRun() async {
     try {
-      final quickjs = await Quickjs.create();
-      final result = await quickjs.evalRaw(_code);
+      final engine = await JsEngine.create();
+      final result = await engine.evalRaw(_code);
 
       // 页面可能在 async create/eval 完成前被关闭，必须及时释放刚创建的 runtime。
       if (_disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
-        _quickjsVersion = quickjs.quickjsVersion;
+        _engine = engine;
+        _engineVersion = engine.engineVersion;
         _evalResult = result;
       });
     } catch (e) {
@@ -46,7 +46,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
         return;
       }
       setState(() {
-        _quickjsVersion = '错误';
+        _engineVersion = '错误';
         _evalResult = '$e';
       });
     }
@@ -56,8 +56,8 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
   void dispose() {
     _disposed = true;
     // dispose 不阻塞 Flutter 页面销毁流程，但必须触发底层 runtime 释放。
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
@@ -70,7 +70,7 @@ class _BasicEvalPageState extends State<BasicEvalPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('QuickJS 版本：$_quickjsVersion'),
+            Text('QuickJS 版本：$_engineVersion'),
             const SizedBox(height: 8),
             Text('执行 "$_code" => $_evalResult'),
           ],

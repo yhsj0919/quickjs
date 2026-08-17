@@ -6,9 +6,9 @@ import 'package:lemon_js_ui/src/renderer/quickjs_ui_overlay_layer.dart';
 
 void main() {
   testWidgets('AnchoredOverlay shrink-wraps content height', (tester) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Center',
@@ -56,9 +56,9 @@ void main() {
   testWidgets('AnchoredOverlay remains attached while its anchor scrolls', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'ListView',
@@ -126,9 +126,9 @@ void main() {
     'AnchoredOverlay positions above its anchor and dismisses outside',
     (tester) async {
       final events = <Map<String, Object?>>[];
-      final renderer = QuickjsUiRenderer(onEvent: events.add);
+      final renderer = JsUiRenderer(onEvent: events.add);
       addTearDown(renderer.dispose);
-      final node = QuickjsUiNode.fromMap(<String, Object?>{
+      final node = JsUiNode.fromMap(<String, Object?>{
         'type': 'Scaffold',
         'body': <String, Object?>{
           'type': 'Center',
@@ -193,9 +193,9 @@ void main() {
     tester,
   ) async {
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Column',
@@ -254,9 +254,9 @@ void main() {
   });
 
   testWidgets('Overlay honors a shrink-wrapped Column child', (tester) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Overlay',
@@ -300,10 +300,10 @@ void main() {
   ) async {
     var visible = true;
     final events = <Map<String, Object?>>[];
-    final renderer = QuickjsUiRenderer(onEvent: events.add);
+    final renderer = JsUiRenderer(onEvent: events.add);
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode schema() => JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Overlay',
@@ -335,10 +335,10 @@ void main() {
     tester,
   ) async {
     var visible = true;
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode schema() => JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'AlertDialog',
@@ -363,10 +363,10 @@ void main() {
     tester,
   ) async {
     var showFirst = true;
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode schema() => JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Column',
@@ -408,9 +408,9 @@ void main() {
   ) async {
     var mounted = true;
     late StateSetter rebuild;
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'AlertDialog',
@@ -442,9 +442,9 @@ void main() {
   testWidgets('slideDown enters from above and reverses on close', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Overlay',
@@ -488,8 +488,8 @@ void main() {
   ) async {
     var visible = true;
     late StateSetter rebuild;
-    late final QuickjsUiRenderer renderer;
-    renderer = QuickjsUiRenderer(
+    late final JsUiRenderer renderer;
+    renderer = JsUiRenderer(
       onEvent: (event) {
         if (event['method'] == 'close') {
           rebuild(() => visible = false);
@@ -498,7 +498,7 @@ void main() {
     );
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode schema() => JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Overlay',
@@ -537,8 +537,8 @@ void main() {
     var visible = true;
     var closes = 0;
     late StateSetter rebuild;
-    late final QuickjsUiRenderer renderer;
-    renderer = QuickjsUiRenderer(
+    late final JsUiRenderer renderer;
+    renderer = JsUiRenderer(
       onEvent: (event) {
         if (event['method'] == 'close') {
           closes += 1;
@@ -548,7 +548,7 @@ void main() {
     );
     addTearDown(renderer.dispose);
 
-    QuickjsUiNode schema() => QuickjsUiNode.fromMap(<String, Object?>{
+    JsUiNode schema() => JsUiNode.fromMap(<String, Object?>{
       'type': 'Scaffold',
       'body': <String, Object?>{
         'type': 'Overlay',
@@ -609,9 +609,9 @@ void main() {
       ),
     );
 
-    Widget host(List<QuickjsUiOverlayIntent> intents) => MaterialApp(
+    Widget host(List<JsUiOverlayIntent> intents) => MaterialApp(
       home: Scaffold(
-        body: QuickjsUiOverlayLayer(
+        body: JsUiOverlayLayer(
           key: layerKey,
           overlayContext: staleContext,
           intents: intents,
@@ -620,11 +620,11 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(host(const <QuickjsUiOverlayIntent>[]));
+    await tester.pumpWidget(host(const <JsUiOverlayIntent>[]));
     await tester.pump();
     await tester.pumpWidget(
-      host(const <QuickjsUiOverlayIntent>[
-        QuickjsUiSnackBarOverlayIntent(
+      host(const <JsUiOverlayIntent>[
+        JsUiSnackBarOverlayIntent(
           signature: 'late-snack',
           content: Text('Safe SnackBar'),
           duration: Duration(seconds: 1),

@@ -20,7 +20,7 @@ class JsCallDartPluginPage extends StatefulWidget {
 class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
   static const _runtimeMaxAge = Duration(minutes: 30);
 
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   DateTime? _runtimeCreatedAt;
   bool _busy = true;
   String _result = '';
@@ -35,28 +35,27 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
   Future<void> _createRuntime() async {
     try {
       _appendLog('创建 QuickJS runtime');
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       _runtimeCreatedAt = null;
       await previous?.dispose();
-      final plugin = JsPlugin.singleFileAsset(
+      final plugin = JsPlugin.asset(
         id: 'assetApi',
         version: '1.0.0',
-        assetKey: 'assets/js/js_call_dart_plugin.mjs',
+        path: 'assets/js/js_call_dart_plugin.mjs',
         exports: const <String>['test2', 'axiosGet'],
       );
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         features: <JsFeatures>[
           AxiosFeatures(
-            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
             allowedOrigins: <String>{_originOf(widget.axiosUrl)},
             maxResponseBytes: 1024 * 1024,
             timeout: const Duration(seconds: 15),
           ),
-          plugin.asFeatures(),
         ],
-        providers: <JsProvider>[
-          JsProvider.global(
+        plugins: <JsPlugin>[plugin],
+        methods: <JsHostMethod>[
+          JsHostMethod.global(
             name: 'alert',
             callback: (args, _) {
               final output = args.join(' ');
@@ -79,21 +78,21 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
               );
             },
           ),
-          JsProvider.global(
+          JsHostMethod.global(
             name: 'getDataAsync',
             callback: (args, _) {
               _appendLog('getDataAsync <= $args');
               return '来自Dart的消息';
             },
           ),
-          JsProvider.global(
+          JsHostMethod.global(
             name: 'dartMethod',
             callback: (args, _) {
               _appendLog('dartMethod <= $args');
               return '这是静态消息';
             },
           ),
-          JsProvider.global(
+          JsHostMethod.global(
             name: 'asyncWithError',
             callback: (_, _) async {
               await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -105,10 +104,10 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
           _appendLog('console.${event.level.name}: ${event.text}');
         },
       );
-      _quickjs = quickjs;
+      _engine = engine;
       _runtimeCreatedAt = DateTime.now();
       if (!mounted) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
@@ -132,18 +131,18 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
     return '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
   }
 
-  Future<Quickjs> _runtimeForRun() async {
-    final quickjs = _quickjs;
+  Future<JsEngine> _runtimeForRun() async {
+    final engine = _engine;
     final createdAt = _runtimeCreatedAt;
-    if (quickjs != null &&
+    if (engine != null &&
         createdAt != null &&
         DateTime.now().difference(createdAt) < _runtimeMaxAge) {
-      return quickjs;
+      return engine;
     }
 
     _appendLog('runtime 闲置超过 ${_runtimeMaxAge.inMinutes} 分钟，运行前自动重建');
     await _createRuntime();
-    final rebuilt = _quickjs;
+    final rebuilt = _engine;
     if (rebuilt == null) {
       throw StateError('QuickJS runtime rebuild failed');
     }
@@ -156,8 +155,8 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
       _result = '';
     });
     try {
-      final quickjs = await _runtimeForRun();
-      final result = await quickjs.invokePlugin('test2', <Object?>[
+      final engine = await _runtimeForRun();
+      final result = await engine.callPlugin('test2', <Object?>[
         'ss\'·\$`"dd"}{s',
         99,
         {'aa': 'vv""`\'v'},
@@ -189,8 +188,8 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
       _result = '';
     });
     try {
-      final quickjs = await _runtimeForRun();
-      final result = await quickjs.invokePlugin('axiosGet', <Object?>[
+      final engine = await _runtimeForRun();
+      final result = await engine.callPlugin('axiosGet', <Object?>[
         widget.axiosUrl,
       ]);
       if (!mounted) {
@@ -224,10 +223,10 @@ class _JsCallDartPluginPageState extends State<JsCallDartPluginPage> {
 
   @override
   void dispose() {
-    final quickjs = _quickjs;
-    _quickjs = null;
+    final engine = _engine;
+    _engine = null;
     _runtimeCreatedAt = null;
-    unawaited(quickjs?.dispose() ?? Future<void>.value());
+    unawaited(engine?.dispose() ?? Future<void>.value());
     super.dispose();
   }
 

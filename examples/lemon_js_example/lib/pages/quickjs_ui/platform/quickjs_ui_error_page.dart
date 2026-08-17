@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 错误浮层 Demo：展示 schema、resource、route 与 action 错误的定位信息。
-class QuickjsUiErrorPage extends StatelessWidget {
-  const QuickjsUiErrorPage({super.key});
+class JsUiErrorPage extends StatelessWidget {
+  const JsUiErrorPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('错误诊断浮层')),
-      body: const QuickjsUiErrorOverlay(
-        error: QuickjsUiError(
-          kind: QuickjsUiErrorKind.schema,
+      body: const JsUiErrorOverlay(
+        error: JsUiError(
+          kind: JsUiErrorKind.schema,
           message: 'Unknown quickjs_ui node type: DemoMissing',
           cause: FormatException(
             'Unknown quickjs_ui node type: DemoMissing',

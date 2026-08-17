@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
@@ -10,23 +13,20 @@ import 'quickjs_ui_render_context.dart';
 ///
 /// State overrides are merged over `normal`. The most specific active state
 /// wins in this order: disabled, pressed, selected, focused, hovered.
-final class QuickjsUiControlStyle {
-  QuickjsUiControlStyle._(this.context, Map<String, Object?> value)
+final class JsUiControlStyle {
+  JsUiControlStyle._(this.context, Map<String, Object?> value)
     : _states = _parseStates(value),
       _keys = _styleKeys(value);
 
-  factory QuickjsUiControlStyle.from(
-    QuickjsUiRenderContext context,
-    Object? value,
-  ) {
-    final root = QuickjsUiProps.map(value, name: 'control style');
-    return QuickjsUiControlStyle._(
+  factory JsUiControlStyle.from(JsUiRenderContext context, Object? value) {
+    final root = JsUiProps.map(value, name: 'control style');
+    return JsUiControlStyle._(
       context,
-      QuickjsUiProps.map(root['stateStyles'] ?? root, name: 'stateStyles'),
+      JsUiProps.map(root['stateStyles'] ?? root, name: 'stateStyles'),
     );
   }
 
-  final QuickjsUiRenderContext context;
+  final JsUiRenderContext context;
   final Map<String, Map<String, Object?>> _states;
   final Set<String> _keys;
 
@@ -51,8 +51,8 @@ final class QuickjsUiControlStyle {
     return result;
   }
 
-  QuickjsUiResolvedControlStyle resolve(Set<WidgetState> states) {
-    return QuickjsUiResolvedControlStyle(<String, Object?>{
+  JsUiResolvedControlStyle resolve(Set<WidgetState> states) {
+    return JsUiResolvedControlStyle(<String, Object?>{
       for (final key in _keys)
         key: _resolveValue(key, _valueOrVisualDefault(key, states)),
     });
@@ -79,7 +79,7 @@ final class QuickjsUiControlStyle {
   WidgetStateProperty<double?>? number(String key) {
     if (!has(key)) return null;
     return WidgetStateProperty.resolveWith(
-      (states) => QuickjsUiProps.doubleValue(value(key, states), name: key),
+      (states) => JsUiProps.doubleValue(value(key, states), name: key),
     );
   }
 
@@ -97,7 +97,7 @@ final class QuickjsUiControlStyle {
     );
   }
 
-  ButtonStyle buttonStyle(QuickjsUiControlTransition transition) {
+  ButtonStyle buttonStyle(JsUiControlTransition transition) {
     final borderColor = color('borderColor');
     final borderWidth = number('borderWidth');
     final radius = has('borderRadius')
@@ -137,7 +137,7 @@ final class QuickjsUiControlStyle {
       return context.color(value);
     }
     if (_numberKeys.contains(key)) {
-      return QuickjsUiProps.doubleValue(value, name: key);
+      return JsUiProps.doubleValue(value, name: key);
     }
     return switch (key) {
       'padding' => context.edgeInsets(value),
@@ -153,14 +153,14 @@ final class QuickjsUiControlStyle {
     return <String, Map<String, Object?>>{
       for (final name in _stateNames)
         if (value[name] != null)
-          name: QuickjsUiProps.map(value[name], name: '$name state style'),
+          name: JsUiProps.map(value[name], name: '$name state style'),
     };
   }
 
   static Set<String> _styleKeys(Map<String, Object?> value) {
     return <String>{
       for (final name in _stateNames)
-        ...QuickjsUiProps.map(value[name], name: '$name state style').keys,
+        ...JsUiProps.map(value[name], name: '$name state style').keys,
     };
   }
 }
@@ -168,8 +168,8 @@ final class QuickjsUiControlStyle {
 /// A fully resolved visual state. Values are converted once when interaction
 /// state changes and are then interpolated locally by Flutter's ticker.
 @immutable
-final class QuickjsUiResolvedControlStyle {
-  const QuickjsUiResolvedControlStyle(this._values);
+final class JsUiResolvedControlStyle {
+  const JsUiResolvedControlStyle(this._values);
 
   final Map<String, Object?> _values;
 
@@ -204,13 +204,13 @@ final class QuickjsUiResolvedControlStyle {
     return result;
   }
 
-  static QuickjsUiResolvedControlStyle lerp(
-    QuickjsUiResolvedControlStyle a,
-    QuickjsUiResolvedControlStyle b,
+  static JsUiResolvedControlStyle lerp(
+    JsUiResolvedControlStyle a,
+    JsUiResolvedControlStyle b,
     double t,
   ) {
     final keys = <String>{...a._values.keys, ...b._values.keys};
-    return QuickjsUiResolvedControlStyle(<String, Object?>{
+    return JsUiResolvedControlStyle(<String, Object?>{
       for (final key in keys)
         key: _lerpValue(a._values[key], b._values[key], t),
     });
@@ -240,8 +240,7 @@ final class QuickjsUiResolvedControlStyle {
 
   @override
   bool operator ==(Object other) =>
-      other is QuickjsUiResolvedControlStyle &&
-      mapEquals(_values, other._values);
+      other is JsUiResolvedControlStyle && mapEquals(_values, other._values);
 
   @override
   int get hashCode => Object.hashAll(
@@ -251,25 +250,25 @@ final class QuickjsUiResolvedControlStyle {
 
 /// Shared duration and curve for native control-state transitions.
 @immutable
-final class QuickjsUiControlTransition {
-  const QuickjsUiControlTransition({
+final class JsUiControlTransition {
+  const JsUiControlTransition({
     this.duration = const Duration(milliseconds: 140),
     this.curve = Curves.easeOutCubic,
   });
 
-  factory QuickjsUiControlTransition.from(Object? value) {
+  factory JsUiControlTransition.from(Object? value) {
     if (value == false) {
-      return const QuickjsUiControlTransition(duration: Duration.zero);
+      return const JsUiControlTransition(duration: Duration.zero);
     }
-    final props = QuickjsUiProps.map(value, name: 'stateTransition');
-    return QuickjsUiControlTransition(
+    final props = JsUiProps.map(value, name: 'stateTransition');
+    return JsUiControlTransition(
       duration:
-          QuickjsUiProps.duration(
+          JsUiProps.duration(
             props['durationMs'] ?? props['duration'],
             name: 'stateTransition duration',
           ) ??
           const Duration(milliseconds: 140),
-      curve: QuickjsUiProps.curve(props['curve'] ?? 'easeOutCubic'),
+      curve: JsUiProps.curve(props['curve'] ?? 'easeOutCubic'),
     );
   }
 
@@ -277,10 +276,10 @@ final class QuickjsUiControlTransition {
   final Curve curve;
 }
 
-typedef QuickjsUiControlTransitionWidgetBuilder =
+typedef JsUiControlTransitionWidgetBuilder =
     Widget Function(
       BuildContext context,
-      List<QuickjsUiResolvedControlStyle> styles,
+      List<JsUiResolvedControlStyle> styles,
       Widget? child,
     );
 
@@ -288,8 +287,8 @@ typedef QuickjsUiControlTransitionWidgetBuilder =
 ///
 /// [TweenAnimationBuilder] retargets from the current sampled frame, so rapid
 /// hover/press/focus changes do not jump back to a previous endpoint.
-final class QuickjsUiControlTransitionBuilder extends StatelessWidget {
-  const QuickjsUiControlTransitionBuilder({
+final class JsUiControlTransitionBuilder extends StatelessWidget {
+  const JsUiControlTransitionBuilder({
     required this.styles,
     required this.states,
     required this.transition,
@@ -298,27 +297,25 @@ final class QuickjsUiControlTransitionBuilder extends StatelessWidget {
     super.key,
   });
 
-  final List<QuickjsUiControlStyle> styles;
+  final List<JsUiControlStyle> styles;
   final Set<WidgetState> states;
-  final QuickjsUiControlTransition transition;
-  final QuickjsUiControlTransitionWidgetBuilder builder;
+  final JsUiControlTransition transition;
+  final JsUiControlTransitionWidgetBuilder builder;
   final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    final target = _QuickjsUiResolvedControlStyles(
-      <QuickjsUiResolvedControlStyle>[
-        for (final style in styles) style.resolve(states),
-      ],
-    );
+    final target = _JsUiResolvedControlStyles(<JsUiResolvedControlStyle>[
+      for (final style in styles) style.resolve(states),
+    ]);
     final disableAnimations =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final duration = disableAnimations ? Duration.zero : transition.duration;
     if (duration == Duration.zero) {
       return builder(context, target.values, child);
     }
-    return TweenAnimationBuilder<_QuickjsUiResolvedControlStyles>(
-      tween: _QuickjsUiControlStylesTween(end: target),
+    return TweenAnimationBuilder<_JsUiResolvedControlStyles>(
+      tween: _JsUiControlStylesTween(end: target),
       duration: duration,
       curve: transition.curve,
       child: child,
@@ -327,21 +324,18 @@ final class QuickjsUiControlTransitionBuilder extends StatelessWidget {
   }
 }
 
-typedef QuickjsUiControlInteractionWidgetBuilder =
+typedef JsUiControlInteractionWidgetBuilder =
     Widget Function(
       BuildContext context,
       Set<WidgetState> states,
       FocusNode focusNode,
     );
 
-typedef QuickjsUiControlInteractionScopeWidgetBuilder =
-    Widget Function(
-      BuildContext context,
-      QuickjsUiControlInteraction interaction,
-    );
+typedef JsUiControlInteractionScopeWidgetBuilder =
+    Widget Function(BuildContext context, JsUiControlInteraction interaction);
 
-final class QuickjsUiControlInteraction {
-  const QuickjsUiControlInteraction({
+final class JsUiControlInteraction {
+  const JsUiControlInteraction({
     required this.states,
     required this.statesController,
     required this.focusNode,
@@ -356,8 +350,8 @@ final class QuickjsUiControlInteraction {
   final ValueChanged<bool> setPressed;
 }
 
-final class QuickjsUiControlInteractionScope extends StatefulWidget {
-  const QuickjsUiControlInteractionScope({
+final class JsUiControlInteractionScope extends StatefulWidget {
+  const JsUiControlInteractionScope({
     required this.enabled,
     required this.builder,
     this.selected = false,
@@ -366,15 +360,15 @@ final class QuickjsUiControlInteractionScope extends StatefulWidget {
 
   final bool enabled;
   final bool selected;
-  final QuickjsUiControlInteractionScopeWidgetBuilder builder;
+  final JsUiControlInteractionScopeWidgetBuilder builder;
 
   @override
-  State<QuickjsUiControlInteractionScope> createState() =>
-      _QuickjsUiControlInteractionScopeState();
+  State<JsUiControlInteractionScope> createState() =>
+      _JsUiControlInteractionScopeState();
 }
 
-final class _QuickjsUiControlInteractionScopeState
-    extends State<QuickjsUiControlInteractionScope> {
+final class _JsUiControlInteractionScopeState
+    extends State<JsUiControlInteractionScope> {
   final FocusNode _focusNode = FocusNode();
   late final WidgetStatesController _statesController;
   bool _hovered = false;
@@ -392,7 +386,7 @@ final class _QuickjsUiControlInteractionScopeState
   }
 
   @override
-  void didUpdateWidget(covariant QuickjsUiControlInteractionScope oldWidget) {
+  void didUpdateWidget(covariant JsUiControlInteractionScope oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.enabled && (_hovered || _focused || _pressed)) {
       _hovered = false;
@@ -422,7 +416,7 @@ final class _QuickjsUiControlInteractionScopeState
     };
     return widget.builder(
       context,
-      QuickjsUiControlInteraction(
+      JsUiControlInteraction(
         states: states,
         statesController: _statesController,
         focusNode: _focusNode,
@@ -465,8 +459,8 @@ final class _QuickjsUiControlInteractionScopeState
 /// Publishes interaction state only when it changes. Animation frames are
 /// deliberately handled by descendants so stable control subtrees can be
 /// passed through [TweenAnimationBuilder.child].
-final class QuickjsUiControlInteractionBuilder extends StatelessWidget {
-  const QuickjsUiControlInteractionBuilder({
+final class JsUiControlInteractionBuilder extends StatelessWidget {
+  const JsUiControlInteractionBuilder({
     required this.enabled,
     required this.builder,
     this.selected = false,
@@ -475,11 +469,11 @@ final class QuickjsUiControlInteractionBuilder extends StatelessWidget {
 
   final bool enabled;
   final bool selected;
-  final QuickjsUiControlInteractionWidgetBuilder builder;
+  final JsUiControlInteractionWidgetBuilder builder;
 
   @override
   Widget build(BuildContext context) {
-    return QuickjsUiControlInteractionScope(
+    return JsUiControlInteractionScope(
       enabled: enabled,
       selected: selected,
       builder: (context, interaction) => MouseRegion(
@@ -500,10 +494,10 @@ final class QuickjsUiControlInteractionBuilder extends StatelessWidget {
   }
 }
 
-typedef QuickjsUiControlStateWidgetBuilder =
+typedef JsUiControlStateWidgetBuilder =
     Widget Function(
       BuildContext context,
-      List<QuickjsUiResolvedControlStyle> styles,
+      List<JsUiResolvedControlStyle> styles,
       FocusNode focusNode,
     );
 
@@ -514,8 +508,8 @@ typedef QuickjsUiControlStateWidgetBuilder =
 /// passed through [TweenAnimationBuilder.child]. Animation ticks rebuild only
 /// the lightweight visual decorators, never the Switch, Slider or TextField
 /// subtree.
-final class QuickjsUiControlStateBuilder extends StatelessWidget {
-  const QuickjsUiControlStateBuilder({
+final class JsUiControlStateBuilder extends StatelessWidget {
+  const JsUiControlStateBuilder({
     required this.enabled,
     required this.styles,
     required this.transition,
@@ -526,20 +520,20 @@ final class QuickjsUiControlStateBuilder extends StatelessWidget {
 
   final bool enabled;
   final bool selected;
-  final List<QuickjsUiControlStyle> styles;
-  final QuickjsUiControlTransition transition;
-  final QuickjsUiControlStateWidgetBuilder builder;
+  final List<JsUiControlStyle> styles;
+  final JsUiControlTransition transition;
+  final JsUiControlStateWidgetBuilder builder;
 
   @override
   Widget build(BuildContext context) {
-    return QuickjsUiControlInteractionBuilder(
+    return JsUiControlInteractionBuilder(
       enabled: enabled,
       selected: selected,
       builder: (context, states, focusNode) {
-        final resolvedStyles = <QuickjsUiResolvedControlStyle>[
+        final resolvedStyles = <JsUiResolvedControlStyle>[
           for (final style in styles) style.resolve(states),
         ];
-        return QuickjsUiControlTransitionBuilder(
+        return JsUiControlTransitionBuilder(
           styles: styles,
           states: states,
           transition: transition,
@@ -559,40 +553,38 @@ final class QuickjsUiControlStateBuilder extends StatelessWidget {
 }
 
 @immutable
-final class _QuickjsUiResolvedControlStyles {
-  const _QuickjsUiResolvedControlStyles(this.values);
+final class _JsUiResolvedControlStyles {
+  const _JsUiResolvedControlStyles(this.values);
 
-  final List<QuickjsUiResolvedControlStyle> values;
+  final List<JsUiResolvedControlStyle> values;
 
-  static _QuickjsUiResolvedControlStyles lerp(
-    _QuickjsUiResolvedControlStyles a,
-    _QuickjsUiResolvedControlStyles b,
+  static _JsUiResolvedControlStyles lerp(
+    _JsUiResolvedControlStyles a,
+    _JsUiResolvedControlStyles b,
     double t,
   ) {
     assert(a.values.length == b.values.length);
-    return _QuickjsUiResolvedControlStyles(<QuickjsUiResolvedControlStyle>[
+    return _JsUiResolvedControlStyles(<JsUiResolvedControlStyle>[
       for (var index = 0; index < a.values.length; index += 1)
-        QuickjsUiResolvedControlStyle.lerp(a.values[index], b.values[index], t),
+        JsUiResolvedControlStyle.lerp(a.values[index], b.values[index], t),
     ]);
   }
 
   @override
   bool operator ==(Object other) =>
-      other is _QuickjsUiResolvedControlStyles &&
-      listEquals(values, other.values);
+      other is _JsUiResolvedControlStyles && listEquals(values, other.values);
 
   @override
   int get hashCode => Object.hashAll(values);
 }
 
-final class _QuickjsUiControlStylesTween
-    extends Tween<_QuickjsUiResolvedControlStyles> {
-  _QuickjsUiControlStylesTween({required _QuickjsUiResolvedControlStyles end})
+final class _JsUiControlStylesTween extends Tween<_JsUiResolvedControlStyles> {
+  _JsUiControlStylesTween({required _JsUiResolvedControlStyles end})
     : super(end: end);
 
   @override
-  _QuickjsUiResolvedControlStyles lerp(double t) {
-    return _QuickjsUiResolvedControlStyles.lerp(begin!, end!, t);
+  _JsUiResolvedControlStyles lerp(double t) {
+    return _JsUiResolvedControlStyles.lerp(begin!, end!, t);
   }
 }
 

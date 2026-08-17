@@ -114,7 +114,7 @@ Container({
 
 ## 宿主渲染组件
 
-JS 组件可以返回自定义 `type`。宿主必须在 `QuickjsUiComponentRegistry` 中注册该类型，
+JS 组件可以返回自定义 `type`。宿主必须在 `JsUiComponentRegistry` 中注册该类型，
 否则渲染会因未知节点类型失败。
 
 ```js
@@ -130,7 +130,7 @@ export const Badge = Component((props) => {
 ```
 
 ```dart
-final registry = QuickjsUiComponentRegistry.defaults()
+final registry = JsUiComponentRegistry.defaults()
   ..register('Badge', (context, node) {
     return DecoratedBox(
       decoration: const BoxDecoration(color: Color(0xffeeeeee)),
@@ -139,12 +139,12 @@ final registry = QuickjsUiComponentRegistry.defaults()
   });
 ```
 
-自定义渲染器的高频原生回调应使用 `context.dispatchEvent()`，以共享同一事件策略。
+自定义渲染器的高频原生回调应使用 `context.dispatch()`，以共享同一事件策略。
 例如，视频播放器可丢弃过于频繁的进度采样，同时立即发送结束事件：
 
 ```dart
-context.dispatchEvent(
-  QuickjsUiProps.event(node.props['onProgress'])!,
+context.dispatch(
+  JsUiProps.event(node.props['onProgress'])!,
   defaultCoalesceKey: 'VideoPlayer:${node.props['key']}:onProgress',
   payload: <String, Object?>{
     'positionMs': position.inMilliseconds,
@@ -166,17 +166,17 @@ context.dispatchEvent(
 
 ## 渲染器事件入口
 
-`QuickjsUiView` 不会把渲染器回调直接连接到 `QuickjsUiController.dispatch()`。
-所有渲染器及自定义组件事件均经过 `QuickjsUiEventIngress`，由其入队并在当前帧后刷新，
+`JsUiView` 不会把渲染器回调直接连接到 `JsUiController.dispatch()`。
+所有渲染器及自定义组件事件均经过 `JsUiEventIngress`，由其入队并在当前帧后刷新，
 避免页面状态更新在 Flutter `build` 期间同步重建 View。
 
-自定义渲染器正常调用 `context.dispatch()` / `context.dispatchEvent()` 即可，
+自定义渲染器正常调用 `context.dispatch()` / `context.dispatch()` 即可，
 宿主代码不要再在调用外包裹 `addPostFrameCallback`。
 
 完整管线、修复/重构策略，以及原生视频播放器示例采用的 `seekToken` / `restartToken`
 命令式控制模式见 `docs/quickjs_ui_cross_cutting.md`。
 
-`QuickjsUiView` 与 `QuickjsUiNavigator` 应使用同一注册表，保证嵌套 JSUI 路由一致渲染
+`JsUiView` 与 `JsUiNavigator` 应使用同一注册表，保证嵌套 JSUI 路由一致渲染
 自定义组件类型。所有渲染节点还可使用 `onMouseEnter`、`onMouseExit`、`onMouseHover`、
 `onMouseScroll`、`onPointerDown`、`onPointerMove`、`onPointerUp` 和
 `onPointerCancel`。

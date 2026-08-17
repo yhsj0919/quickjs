@@ -33,6 +33,12 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
   }
 }
 
+Future<void> _disposeTestWidget(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 1));
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump(const Duration(milliseconds: 1));
+}
+
 Future<void> _scrollUntilFound(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isNotEmpty) {
     return;
@@ -95,11 +101,11 @@ void main() {
   ) async {
     await tester.pumpWidget(const ExampleApp());
     final groups = <(String, List<ExamplePageSpec>)>[
-      ('入门加载', quickjsUiGettingStartedExamplePages),
-      ('UI 基础', quickjsUiFoundationExamplePages),
-      ('宿主工程', quickjsUiPlatformExamplePages),
-      ('场景', quickjsUiScenarioExamplePages),
-      ('实验室', quickjsUiLabExamplePages),
+      ('入门加载', jsUiGettingStartedExamplePages),
+      ('UI 基础', jsUiFoundationExamplePages),
+      ('宿主工程', jsUiPlatformExamplePages),
+      ('场景', jsUiScenarioExamplePages),
+      ('实验室', jsUiLabExamplePages),
     ];
     for (final (tab, pages) in groups) {
       await tester.tap(find.text(tab));
@@ -114,7 +120,7 @@ void main() {
   });
 
   testWidgets('registers quickjs_ui counter page', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiCounterPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiCounterPage()));
 
     expect(find.text('单文件计数器'), findsOneWidget);
     expect(find.byTooltip('Refresh render'), findsOneWidget);
@@ -125,9 +131,7 @@ void main() {
   testWidgets('registers quickjs_ui bundle counter page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiBundleCounterPage()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: JsUiBundleCounterPage()));
 
     expect(find.text('多文件模块计数器'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -136,7 +140,7 @@ void main() {
   testWidgets('registers quickjs_ui controls page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiControlsPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiControlsPage()));
 
     expect(find.text('布局与媒体基础'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('网络图片'));
@@ -151,7 +155,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiCustomComponentsPage()),
+      const MaterialApp(home: JsUiCustomComponentsPage()),
     );
 
     expect(find.text('自定义组件'), findsOneWidget);
@@ -176,7 +180,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiCustomComponentsPage()),
+      const MaterialApp(home: JsUiCustomComponentsPage()),
     );
     await _pumpUntilFound(tester, find.text('Size: medium'));
 
@@ -202,7 +206,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiVideoPlayerPluginPage()),
+      const MaterialApp(home: JsUiVideoPlayerPluginPage()),
     );
 
     expect(find.text('视频播放器插件'), findsOneWidget);
@@ -218,13 +222,14 @@ void main() {
       find.textContaining('Imported from quickjs_ui/video_player'),
       findsOneWidget,
     );
+    await _disposeTestWidget(tester);
   });
 
   testWidgets('registers quickjs_ui 0.4.2 scroll transition page', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiScrollTransitionPage()),
+      const MaterialApp(home: JsUiScrollTransitionPage()),
     );
 
     expect(find.text('滚动控制与嵌套滚动'), findsOneWidget);
@@ -240,7 +245,7 @@ void main() {
   testWidgets('registers quickjs_ui 0.4.3 dev panel page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiDevPanelPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiDevPanelPage()));
 
     expect(find.text('开发调试面板'), findsWidgets);
     expect(find.text('状态'), findsOneWidget);
@@ -256,18 +261,18 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiNetworkInspectorPage()),
+      const MaterialApp(home: JsUiNetworkInspectorPage()),
     );
 
     expect(find.text('网络请求调试'), findsOneWidget);
     expect(find.text('状态'), findsOneWidget);
     expect(find.text('Schema'), findsOneWidget);
     expect(find.text('网络'), findsOneWidget);
-    expect(find.byType(QuickjsUiInspectorPanel), findsOneWidget);
+    expect(find.byType(JsUiInspectorPanel), findsOneWidget);
   });
 
   testWidgets('registers quickjs_ui todo page', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiTodoPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiTodoPage()));
 
     expect(find.text('待办列表'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Add todo'));
@@ -282,9 +287,7 @@ void main() {
   testWidgets('registers quickjs_ui profile form page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiProfileFormPage()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: JsUiProfileFormPage()));
 
     expect(find.text('个人资料表单'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Save profile'));
@@ -314,7 +317,7 @@ void main() {
   testWidgets('registers quickjs_ui diff refresh page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiDiffPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiDiffPage()));
 
     expect(find.text('局部刷新诊断'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('Refresh changed node'));
@@ -333,7 +336,7 @@ void main() {
   testWidgets('registers quickjs_ui JSON schema page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiSchemaPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiSchemaPage()));
 
     expect(find.text('JSON Schema 页面'), findsOneWidget);
     await _pumpUntilFound(tester, find.textContaining('quickjs_ui UI schema'));
@@ -345,7 +348,7 @@ void main() {
   testWidgets('registers quickjs_ui error overlay page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiErrorPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiErrorPage()));
 
     expect(find.text('错误诊断浮层'), findsOneWidget);
     expect(
@@ -363,7 +366,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiHostCapabilitiesPage()),
+      const MaterialApp(home: JsUiHostCapabilitiesPage()),
     );
 
     expect(find.text('宿主能力调用'), findsOneWidget);
@@ -380,12 +383,13 @@ void main() {
     await _pumpUntilFound(tester, find.textContaining('生命周期：mount'));
     expect(find.textContaining('生命周期：mount'), findsOneWidget);
     expect(find.text('检查 network 默认关闭'), findsOneWidget);
+    await _disposeTestWidget(tester);
   });
 
   testWidgets('registers quickjs_ui permission policy page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiPermissionPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiPermissionPage()));
 
     expect(find.text('页面权限策略'), findsOneWidget);
     await _pumpUntilFound(tester, find.text('结果：不限制策略 已加载'));
@@ -401,12 +405,9 @@ void main() {
     await tester.pump();
     await _pumpUntilFound(
       tester,
-      find.textContaining('权限拦截：QuickjsUiPermissionException'),
+      find.textContaining('权限拦截：JsUiPermissionException'),
     );
-    expect(
-      find.textContaining('权限拦截：QuickjsUiPermissionException'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('权限拦截：JsUiPermissionException'), findsOneWidget);
   });
 
   testWidgets('runs quickjs_ui native and JSUI navigation page', (
@@ -423,7 +424,7 @@ void main() {
       debugPrint = previousDebugPrint;
     });
 
-    await tester.pumpWidget(const MaterialApp(home: QuickjsUiNavigationPage()));
+    await tester.pumpWidget(const MaterialApp(home: JsUiNavigationPage()));
 
     expect(find.text('原生与 JS 页面互通'), findsOneWidget);
     expect(find.text('打开 JSUI 详情页'), findsOneWidget);

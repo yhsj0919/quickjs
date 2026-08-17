@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -6,20 +9,16 @@ import '../schema/quickjs_ui_node.dart';
 import '../schema/quickjs_ui_props.dart';
 import 'quickjs_ui_render_context.dart';
 
-Widget withQuickjsUiInput(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-  Widget child,
-) {
-  final enabled = QuickjsUiProps.boolValue(node.props['enabled']) ?? true;
-  final onMouseEnter = QuickjsUiProps.event(node.props['onMouseEnter']);
-  final onMouseExit = QuickjsUiProps.event(node.props['onMouseExit']);
-  final onMouseHover = QuickjsUiProps.event(node.props['onMouseHover']);
-  final onMouseScroll = QuickjsUiProps.event(node.props['onMouseScroll']);
-  final onPointerDown = QuickjsUiProps.event(node.props['onPointerDown']);
-  final onPointerMove = QuickjsUiProps.event(node.props['onPointerMove']);
-  final onPointerUp = QuickjsUiProps.event(node.props['onPointerUp']);
-  final onPointerCancel = QuickjsUiProps.event(node.props['onPointerCancel']);
+Widget withJsUiInput(JsUiRenderContext context, JsUiNode node, Widget child) {
+  final enabled = JsUiProps.boolValue(node.props['enabled']) ?? true;
+  final onMouseEnter = JsUiProps.event(node.props['onMouseEnter']);
+  final onMouseExit = JsUiProps.event(node.props['onMouseExit']);
+  final onMouseHover = JsUiProps.event(node.props['onMouseHover']);
+  final onMouseScroll = JsUiProps.event(node.props['onMouseScroll']);
+  final onPointerDown = JsUiProps.event(node.props['onPointerDown']);
+  final onPointerMove = JsUiProps.event(node.props['onPointerMove']);
+  final onPointerUp = JsUiProps.event(node.props['onPointerUp']);
+  final onPointerCancel = JsUiProps.event(node.props['onPointerCancel']);
   final behavior = _hitTestBehavior(node.props['hitTestBehavior']);
   Widget result = child;
   if (enabled &&
@@ -132,30 +131,30 @@ Widget withQuickjsUiInput(
     );
   }
   result = _withKeyboardAndFocus(context, node, result, enabled: enabled);
-  if (QuickjsUiProps.boolValue(node.props['absorbPointer']) ?? false) {
+  if (JsUiProps.boolValue(node.props['absorbPointer']) ?? false) {
     result = AbsorbPointer(child: result);
   }
-  if (QuickjsUiProps.boolValue(node.props['ignorePointer']) ?? false) {
+  if (JsUiProps.boolValue(node.props['ignorePointer']) ?? false) {
     result = IgnorePointer(child: result);
   }
   return result;
 }
 
-Widget withQuickjsUiGestures(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+Widget withJsUiGestures(
+  JsUiRenderContext context,
+  JsUiNode node,
   Widget child,
 ) {
-  if (!(QuickjsUiProps.boolValue(node.props['enabled']) ?? true)) {
+  if (!(JsUiProps.boolValue(node.props['enabled']) ?? true)) {
     return child;
   }
-  final onTap = QuickjsUiProps.event(node.props['onTap']);
-  final onLongPress = QuickjsUiProps.event(node.props['onLongPress']);
-  final onDoubleTap = QuickjsUiProps.event(node.props['onDoubleTap']);
-  final onDragStart = QuickjsUiProps.event(node.props['onDragStart']);
-  final onDragUpdate = QuickjsUiProps.event(node.props['onDragUpdate']);
-  final onDragEnd = QuickjsUiProps.event(node.props['onDragEnd']);
-  final onSwipe = QuickjsUiProps.event(node.props['onSwipe']);
+  final onTap = JsUiProps.event(node.props['onTap']);
+  final onLongPress = JsUiProps.event(node.props['onLongPress']);
+  final onDoubleTap = JsUiProps.event(node.props['onDoubleTap']);
+  final onDragStart = JsUiProps.event(node.props['onDragStart']);
+  final onDragUpdate = JsUiProps.event(node.props['onDragUpdate']);
+  final onDragEnd = JsUiProps.event(node.props['onDragEnd']);
+  final onSwipe = JsUiProps.event(node.props['onSwipe']);
   final hasPan =
       onDragStart != null ||
       onDragUpdate != null ||
@@ -169,30 +168,30 @@ Widget withQuickjsUiGestures(
     behavior: _hitTestBehavior(node.props['hitTestBehavior']),
     onTap: onTap == null
         ? null
-        : () => context.dispatchEvent(
+        : () => context.dispatch(
             onTap,
-            defaultCoalesceKey: quickjsUiEventKey(node, 'onTap'),
+            defaultCoalesceKey: jsUiEventKey(node, 'onTap'),
           ),
     onLongPress: onLongPress == null
         ? null
-        : () => context.dispatchEvent(
+        : () => context.dispatch(
             onLongPress,
-            defaultCoalesceKey: quickjsUiEventKey(node, 'onLongPress'),
+            defaultCoalesceKey: jsUiEventKey(node, 'onLongPress'),
           ),
     onDoubleTap: onDoubleTap == null
         ? null
-        : () => context.dispatchEvent(
+        : () => context.dispatch(
             onDoubleTap,
-            defaultCoalesceKey: quickjsUiEventKey(node, 'onDoubleTap'),
+            defaultCoalesceKey: jsUiEventKey(node, 'onDoubleTap'),
           ),
     onPanStart: !hasPan
         ? null
         : (details) {
             dragTotal = Offset.zero;
             if (onDragStart != null) {
-              context.dispatchEvent(
+              context.dispatch(
                 onDragStart,
-                defaultCoalesceKey: quickjsUiEventKey(node, 'onDragStart'),
+                defaultCoalesceKey: jsUiEventKey(node, 'onDragStart'),
                 payload: <String, Object?>{
                   'x': details.localPosition.dx,
                   'y': details.localPosition.dy,
@@ -207,10 +206,10 @@ Widget withQuickjsUiGestures(
         : (details) {
             dragTotal += details.delta;
             if (onDragUpdate != null) {
-              context.dispatchEvent(
+              context.dispatch(
                 onDragUpdate,
-                defaultCoalesceKey: quickjsUiEventKey(node, 'onDragUpdate'),
-                kind: QuickjsUiEventKind.sample,
+                defaultCoalesceKey: jsUiEventKey(node, 'onDragUpdate'),
+                kind: JsUiEventKind.sample,
                 payload: <String, Object?>{
                   'deltaX': details.delta.dx,
                   'deltaY': details.delta.dy,
@@ -228,9 +227,9 @@ Widget withQuickjsUiGestures(
         ? null
         : (details) {
             if (onDragEnd != null) {
-              context.dispatchEvent(
+              context.dispatch(
                 onDragEnd,
-                defaultCoalesceKey: quickjsUiEventKey(node, 'onDragEnd'),
+                defaultCoalesceKey: jsUiEventKey(node, 'onDragEnd'),
                 payload: <String, Object?>{
                   'velocityX': details.velocity.pixelsPerSecond.dx,
                   'velocityY': details.velocity.pixelsPerSecond.dy,
@@ -245,9 +244,9 @@ Widget withQuickjsUiGestures(
                 details.velocity.pixelsPerSecond,
               );
               if (direction != null) {
-                context.dispatchEvent(
+                context.dispatch(
                   onSwipe,
-                  defaultCoalesceKey: quickjsUiEventKey(node, 'onSwipe'),
+                  defaultCoalesceKey: jsUiEventKey(node, 'onSwipe'),
                   payload: <String, Object?>{
                     'direction': direction,
                     'velocityX': details.velocity.pixelsPerSecond.dx,
@@ -264,18 +263,18 @@ Widget withQuickjsUiGestures(
 }
 
 void _dispatchPointer(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+  JsUiRenderContext context,
+  JsUiNode node,
   Map<String, Object?> event,
   PointerEvent details,
   String prop, {
   bool sample = false,
   Offset? scrollDelta,
 }) {
-  context.dispatchEvent(
+  context.dispatch(
     event,
-    defaultCoalesceKey: quickjsUiEventKey(node, prop),
-    kind: sample ? QuickjsUiEventKind.sample : QuickjsUiEventKind.command,
+    defaultCoalesceKey: jsUiEventKey(node, prop),
+    kind: sample ? JsUiEventKind.sample : JsUiEventKind.command,
     payload: <String, Object?>{
       'pointer': details.pointer,
       'kind': details.kind.name,
@@ -298,8 +297,8 @@ void _dispatchPointer(
 }
 
 Widget _withKeyboardAndFocus(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+  JsUiRenderContext context,
+  JsUiNode node,
   Widget child, {
   required bool enabled,
 }) {
@@ -307,17 +306,15 @@ Widget _withKeyboardAndFocus(
       node.type == 'TextField' || node.type == 'TextFormField';
   final onFocus = managesOwnFocus
       ? null
-      : QuickjsUiProps.event(node.props['onFocus']);
-  final onBlur = managesOwnFocus
-      ? null
-      : QuickjsUiProps.event(node.props['onBlur']);
-  final onKeyDown = QuickjsUiProps.event(node.props['onKeyDown']);
-  final onKeyUp = QuickjsUiProps.event(node.props['onKeyUp']);
+      : JsUiProps.event(node.props['onFocus']);
+  final onBlur = managesOwnFocus ? null : JsUiProps.event(node.props['onBlur']);
+  final onKeyDown = JsUiProps.event(node.props['onKeyDown']);
+  final onKeyUp = JsUiProps.event(node.props['onKeyUp']);
   final autofocus = managesOwnFocus
       ? false
-      : QuickjsUiProps.boolValue(node.props['autofocus']) ?? false;
+      : JsUiProps.boolValue(node.props['autofocus']) ?? false;
   final canRequestFocus =
-      QuickjsUiProps.boolValue(node.props['canRequestFocus']) ?? true;
+      JsUiProps.boolValue(node.props['canRequestFocus']) ?? true;
   if (onFocus == null &&
       onBlur == null &&
       onKeyDown == null &&
@@ -332,9 +329,9 @@ Widget _withKeyboardAndFocus(
     onFocusChange: (focused) {
       final event = focused ? onFocus : onBlur;
       if (enabled && event != null) {
-        context.dispatchEvent(
+        context.dispatch(
           event,
-          defaultCoalesceKey: quickjsUiEventKey(
+          defaultCoalesceKey: jsUiEventKey(
             node,
             focused ? 'onFocus' : 'onBlur',
           ),
@@ -349,9 +346,9 @@ Widget _withKeyboardAndFocus(
         _ => null,
       };
       if (enabled && descriptor != null) {
-        context.dispatchEvent(
+        context.dispatch(
           descriptor,
-          defaultCoalesceKey: quickjsUiEventKey(
+          defaultCoalesceKey: jsUiEventKey(
             node,
             event is KeyDownEvent ? 'onKeyDown' : 'onKeyUp',
           ),
@@ -422,7 +419,7 @@ String? _swipeDirection(Offset delta, Offset velocity) {
   return primaryDelta >= 0 ? 'down' : 'up';
 }
 
-String quickjsUiEventKey(QuickjsUiNode node, String prop) {
+String jsUiEventKey(JsUiNode node, String prop) {
   final key = node.props['key'];
   if (key is String && key.isNotEmpty) {
     return '${node.type}:$key:$prop';

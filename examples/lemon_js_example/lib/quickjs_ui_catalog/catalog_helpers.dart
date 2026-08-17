@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../example_page_spec.dart';
 
-ExamplePageSpec quickjsUiPageSpec({
+ExamplePageSpec jsUiPageSpec({
   required ExampleCategory category,
   required String title,
   required String description,
@@ -20,11 +20,11 @@ ExamplePageSpec quickjsUiPageSpec({
   tags: tags,
 );
 
-ExamplePageSpec quickjsUiLabSpec({
+ExamplePageSpec jsUiLabSpec({
   required String title,
   required String description,
   required WidgetBuilder builder,
-}) => quickjsUiPageSpec(
+}) => jsUiPageSpec(
   category: ExampleCategory.lab,
   kind: ExampleKind.benchmark,
   status: ExampleStatus.experimental,

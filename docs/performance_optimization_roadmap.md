@@ -68,7 +68,7 @@ lifecycle(event) => {
 
 ## P0：core 原生模块调用通道（暂缓）
 
-当前 `Quickjs.callModule()` 每次调用都会动态生成 JS 包装代码，并重复注入 `inflate()`、`convert()`、breadcrumb 和 JSON 转换逻辑，然后通过异步执行通道（现公开为 `run()`）执行。
+当前 `JsEngine.callModule()` 每次调用都会动态生成 JS 包装代码，并重复注入 `inflate()`、`convert()`、breadcrumb 和 JSON 转换逻辑，然后通过异步执行通道（现公开为 `run()`）执行。
 
 2026-07-14 使用 50 次 warm-up、500 次空模块调用测得：
 
@@ -118,12 +118,12 @@ Asset 页面热加载仍会重复执行资源读取、Bundle 解析以及 Plugin
 现已提供默认启用的独立资源缓存：
 
 ```dart
-QuickjsUiResourceCache.shared.loadAsset(path: path, bundleRoot: ...)
-QuickjsUiResourceCache.shared.invalidate(path)
-QuickjsUiResourceCache.shared.clear()
+JsUiResourceCache.shared.loadAsset(path: path, bundleRoot: ...)
+JsUiResourceCache.shared.invalidate(path)
+JsUiResourceCache.shared.clear()
 ```
 
-实际公开类型为 `QuickjsUiResourceCache`，默认边界为 10 分钟、16MiB、64 条，采用最大存活时间 TTL 与 LRU 容量淘汰。相同 key 的并发加载共享 Future；失败和超过总字节上限的单项不入缓存。缓存仅持有 JS module 文本和 Plugin 描述，不缓存 Context、页面状态、Widget 或图片字节。
+实际公开类型为 `JsUiResourceCache`，默认边界为 10 分钟、16MiB、64 条，采用最大存活时间 TTL 与 LRU 容量淘汰。相同 key 的并发加载共享 Future；失败和超过总字节上限的单项不入缓存。缓存仅持有 JS module 文本和 Plugin 描述，不缓存 Context、页面状态、Widget 或图片字节。
 
 缓存策略：
 
@@ -137,7 +137,7 @@ QuickjsUiResourceCache.shared.clear()
 
 ## P1：批量 Context 初始化（已完成）
 
-创建 Context 后当前会依次安装 console、text encoding、capabilities、providers、provider registry、environment patches 和 features。多个步骤会形成独立 worker 请求。
+创建 Context 后当前会依次安装 console、text encoding、capabilities、methods、method registry、environment patches 和 features。多个步骤会形成独立 worker 请求。
 
 当前实现将 Context 创建配置作为一个初始化计划处理：
 
@@ -147,10 +147,10 @@ createContext + bind callbacks + install environment + register modules
 
 具体边界如下：
 
-- Dart 侧先校验配置、加载 environment patch 源码并绑定 provider callbacks。
-- console、text encoding、capabilities、provider registry 和 environment patches 合并为一次 bootstrap eval。
+- Dart 侧先校验配置、加载 environment patch 源码并绑定 method callbacks。
+- console、text encoding、capabilities、method registry 和 environment patches 合并为一次 bootstrap eval。
 - 每段源码仍通过独立 indirect global eval 执行，保留原先的全局作用域和失败顺序语义。
-- `QuickjsRuntime.createContext()` 在任一步失败时释放整个 Context；`activeContextCount` 可用于容量诊断。
+- `JsRuntime.createContext()` 在任一步失败时释放整个 Context；`activeContextCount` 可用于容量诊断。
 - quickjs_ui 创建共享 Context 时将 helper、业务 features 和页面 plugin features 一起传入，不再创建后进行第二次页面挂载。
 
 2026-07-14 Release native DLL、8 个启动脚本、30 次 Context 创建/释放基准：批量初始化 median 约 1.517ms，逐脚本安装约 1.771ms，中位数减少约 0.25ms。基础页面收益较小；脚本和 capability 越多，减少 worker 往返的收益越明显。基准入口为 `benchmark/context_initialization_benchmark_test.dart`。
@@ -197,7 +197,7 @@ context.pumpJobs() => { didRun, changed, snapshot?, commit? }
 
 已完成：
 
-- `QuickjsUiNode` 构造时深度冻结 props，并自底向上生成固定 64 字符 SHA-256 结构签名。
+- `JsUiNode` 构造时深度冻结 props，并自底向上生成固定 64 字符 SHA-256 结构签名。
 - key 与重复 sibling key 在节点准备阶段计算；Renderer 正常路径只做 O(1) 校验。
 - Renderer 使用预计算签名，不再为每个 keyed 节点递归序列化子树；Theme identity 每次 render 只读取一次。
 - overlay declaration 在节点准备阶段汇总，构建结束后不再第二次遍历完整 schema 树。

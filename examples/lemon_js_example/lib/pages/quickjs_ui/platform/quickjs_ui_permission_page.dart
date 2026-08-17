@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 权限策略 Demo：测试页面声明的 permissions、unrestricted 策略与 restricted 拦截。
-class QuickjsUiPermissionPage extends StatefulWidget {
-  const QuickjsUiPermissionPage({super.key});
+class JsUiPermissionPage extends StatefulWidget {
+  const JsUiPermissionPage({super.key});
 
   /// 入口 JS 页面的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/permission_page.mjs';
@@ -17,11 +17,10 @@ class QuickjsUiPermissionPage extends StatefulWidget {
   ];
 
   @override
-  State<QuickjsUiPermissionPage> createState() =>
-      _QuickjsUiPermissionPageState();
+  State<JsUiPermissionPage> createState() => _JsUiPermissionPageState();
 }
 
-class _QuickjsUiPermissionPageState extends State<QuickjsUiPermissionPage> {
+class _JsUiPermissionPageState extends State<JsUiPermissionPage> {
   final Map<_PermissionCase, _PermissionResult> _results =
       <_PermissionCase, _PermissionResult>{};
 
@@ -67,13 +66,13 @@ class _QuickjsUiPermissionPageState extends State<QuickjsUiPermissionPage> {
   }
 
   Future<_PermissionResult> _runCase(_PermissionCase permissionCase) async {
-    final controller = QuickjsUiController();
+    final controller = JsUiController();
     try {
-      final plugin = QuickjsUiPagePlugin.asset(
+      final plugin = JsUiPagePlugin.asset(
         id: permissionCase.pluginId,
         version: '0.3.0',
-        path: QuickjsUiPermissionPage.path,
-        permissions: QuickjsUiPermissionPage.declaredPermissions,
+        path: JsUiPermissionPage.path,
+        permissions: JsUiPermissionPage.declaredPermissions,
       );
       await controller.loadPlugin(
         plugin,
@@ -81,7 +80,7 @@ class _QuickjsUiPermissionPageState extends State<QuickjsUiPermissionPage> {
         grantedPermissions: permissionCase.grantedPermissions,
         initialProps: <String, Object?>{
           'policyName': permissionCase.policyName,
-          'permissions': QuickjsUiPermissionPage.declaredPermissions,
+          'permissions': JsUiPermissionPage.declaredPermissions,
         },
       );
       final error = controller.error;
@@ -117,7 +116,7 @@ class _PermissionCaseCard extends StatelessWidget {
         ? _PermissionError(error: error)
         : node == null
         ? const Center(child: CircularProgressIndicator())
-        : QuickjsUiRenderer(onEvent: (_) {}).build(node, buildContext: context);
+        : JsUiRenderer(onEvent: (_) {}).build(node, buildContext: context);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -147,7 +146,7 @@ class _PermissionResult {
   const _PermissionResult.loaded(this.node) : error = null;
   const _PermissionResult.error(this.error) : node = null;
 
-  final QuickjsUiNode? node;
+  final JsUiNode? node;
   final Object? error;
 }
 
@@ -158,6 +157,7 @@ class _PermissionError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cause = error is JsUiError ? (error as JsUiError).cause : error;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.errorContainer,
@@ -166,7 +166,7 @@ class _PermissionError extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Text(
-          '权限拦截：$error',
+          '权限拦截：$cause',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onErrorContainer,
           ),
@@ -208,13 +208,13 @@ enum _PermissionCase {
     return 'quickjs_ui_permission_$suffix';
   }
 
-  QuickjsUiPermissionPolicy? get policy {
+  JsUiPermissionPolicy? get policy {
     return switch (this) {
       _PermissionCase.unrestricted => null,
-      _PermissionCase.allowed => QuickjsUiPermissionPolicy.restricted(
-        allowed: QuickjsUiPermissionPage.declaredPermissions,
+      _PermissionCase.allowed => JsUiPermissionPolicy.restricted(
+        allowed: JsUiPermissionPage.declaredPermissions,
       ),
-      _PermissionCase.denied => QuickjsUiPermissionPolicy.restricted(
+      _PermissionCase.denied => JsUiPermissionPolicy.restricted(
         allowed: const <String>['toast'],
       ),
     };
@@ -223,7 +223,7 @@ enum _PermissionCase {
   Iterable<String> get grantedPermissions {
     return switch (this) {
       _PermissionCase.unrestricted => const <String>[],
-      _PermissionCase.allowed => QuickjsUiPermissionPage.declaredPermissions,
+      _PermissionCase.allowed => JsUiPermissionPage.declaredPermissions,
       _PermissionCase.denied => const <String>['toast'],
     };
   }

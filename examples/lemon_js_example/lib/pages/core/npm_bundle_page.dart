@@ -14,7 +14,7 @@ class NpmBundlePage extends StatefulWidget {
 }
 
 class _NpmBundlePageState extends State<NpmBundlePage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   int _callCount = 0;
@@ -34,24 +34,24 @@ class _NpmBundlePageState extends State<NpmBundlePage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       _callCount = 0;
       await previous?.dispose();
 
       final source = await rootBundle.loadString('assets/js/npm_bundle.mjs');
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         modules: <JsModule>[
-          JsModule.esModule(specifier: 'example/npm-bundle', source: source),
+          JsModule(name: 'example/npm-bundle', source: source),
         ],
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'bundle 已注册：example/npm-bundle';
         _result = '尚未调用 compareValues()';
@@ -68,8 +68,8 @@ class _NpmBundlePageState extends State<NpmBundlePage> {
   }
 
   Future<void> _callCompareValues() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -78,14 +78,14 @@ class _NpmBundlePageState extends State<NpmBundlePage> {
       _status = '正在调用 compareValues()...';
     });
     try {
-      await quickjs.evalModule('''
+      await engine.runModule('''
 import { bundledDependency, compareValues } from 'example/npm-bundle';
 globalThis.npmBundleResult = bundledDependency + '/' + [
   compareValues({ answer: 42 }, { answer: 42 }),
   compareValues({ answer: 42 }, { answer: 7 })
 ].join('/');
 ''', name: 'example/call-npm-bundle-${++_callCount}.mjs');
-      final result = await quickjs.eval('globalThis.npmBundleResult');
+      final result = await engine.eval('globalThis.npmBundleResult');
       if (!mounted || _disposed) {
         return;
       }
@@ -108,14 +108,14 @@ globalThis.npmBundleResult = bundledDependency + '/' + [
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
     return Scaffold(
       appBar: AppBar(title: const Text('NPM 打包模块')),
       body: Padding(

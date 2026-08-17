@@ -8,20 +8,22 @@ import 'package:crypto/crypto.dart';
 ///
 /// The schema is intentionally small and JSON-compatible. Higher-level DSLs can
 /// compile into this shape later, but this remains the runtime rendering input.
-final class QuickjsUiNode {
+final class JsUiNode {
+  /// Maximum supported nesting depth when parsing a node tree.
   static const int maxDepth = 128;
 
-  QuickjsUiNode({
+  /// Creates an immutable UI node.
+  JsUiNode({
     required String type,
     Map<String, Object?> props = const <String, Object?>{},
-    List<QuickjsUiNode> children = const <QuickjsUiNode>[],
+    List<JsUiNode> children = const <JsUiNode>[],
   }) : this._prepared(
          type: type,
          props: _prepareProps(props),
-         children: List<QuickjsUiNode>.unmodifiable(children),
+         children: List<JsUiNode>.unmodifiable(children),
        );
 
-  QuickjsUiNode._prepared({
+  JsUiNode._prepared({
     required this.type,
     required _PreparedProps props,
     required this.children,
@@ -32,14 +34,12 @@ final class QuickjsUiNode {
     overlayNodes = _prepareOverlayNodes(this);
   }
 
-  factory QuickjsUiNode.fromMap(Map<String, Object?> value) {
-    return QuickjsUiNode._fromMap(value, depth: 0);
+  /// Parses a node tree from its JSON-compatible map representation.
+  factory JsUiNode.fromMap(Map<String, Object?> value) {
+    return JsUiNode._fromMap(value, depth: 0);
   }
 
-  factory QuickjsUiNode._fromMap(
-    Map<String, Object?> value, {
-    required int depth,
-  }) {
+  factory JsUiNode._fromMap(Map<String, Object?> value, {required int depth}) {
     if (depth > maxDepth) {
       throw const FormatException('quickjs_ui node tree is too deep');
     }
@@ -56,23 +56,24 @@ final class QuickjsUiNode {
             entry.key != 'child')
           entry.key: entry.value,
     });
-    final children = List<QuickjsUiNode>.unmodifiable(
+    final children = List<JsUiNode>.unmodifiable(
       _parseNodeChildren(
         rawChild: rawChild,
         rawChildren: rawChildren,
         depth: depth,
       ),
     );
-    return QuickjsUiNode._prepared(
-      type: type,
-      props: props,
-      children: children,
-    );
+    return JsUiNode._prepared(type: type, props: props, children: children);
   }
 
+  /// Component type registered with the renderer.
   final String type;
+
+  /// Immutable component properties.
   final Map<String, Object?> props;
-  final List<QuickjsUiNode> children;
+
+  /// Immutable direct child nodes.
+  final List<JsUiNode> children;
 
   /// Stable signature of this node and its complete subtree.
   ///
@@ -95,8 +96,9 @@ final class QuickjsUiNode {
   /// Most schemas contain no overlays, so this is usually the shared empty
   /// list. The renderer can consume it directly without walking the complete
   /// node tree again after widget construction.
-  late final List<QuickjsUiNode> overlayNodes;
+  late final List<JsUiNode> overlayNodes;
 
+  /// Converts this node tree to a JSON-compatible map.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'type': type,
@@ -108,17 +110,14 @@ final class QuickjsUiNode {
     };
   }
 
-  static List<QuickjsUiNode> _parseChildren(
-    Object? value, {
-    required int depth,
-  }) {
+  static List<JsUiNode> _parseChildren(Object? value, {required int depth}) {
     if (value is! List) {
       throw const FormatException('quickjs_ui node children must be a list');
     }
-    return <QuickjsUiNode>[
+    return <JsUiNode>[
       for (final child in value)
         if (child is Map)
-          QuickjsUiNode._fromMap(
+          JsUiNode._fromMap(
             child.map((key, value) => MapEntry<String, Object?>('$key', value)),
             depth: depth + 1,
           )
@@ -129,7 +128,7 @@ final class QuickjsUiNode {
     ];
   }
 
-  static List<QuickjsUiNode> _parseNodeChildren({
+  static List<JsUiNode> _parseNodeChildren({
     required Object? rawChild,
     required Object? rawChildren,
     required int depth,
@@ -140,17 +139,17 @@ final class QuickjsUiNode {
       );
     }
     if (rawChild != null) {
-      return <QuickjsUiNode>[_parseChild(rawChild, depth: depth)];
+      return <JsUiNode>[_parseChild(rawChild, depth: depth)];
     }
     if (rawChildren != null) {
       return _parseChildren(rawChildren, depth: depth);
     }
-    return const <QuickjsUiNode>[];
+    return const <JsUiNode>[];
   }
 
-  static QuickjsUiNode _parseChild(Object? value, {required int depth}) {
+  static JsUiNode _parseChild(Object? value, {required int depth}) {
     if (value is Map) {
-      return QuickjsUiNode._fromMap(
+      return JsUiNode._fromMap(
         value.map((key, value) => MapEntry<String, Object?>('$key', value)),
         depth: depth + 1,
       );
@@ -241,7 +240,7 @@ _PreparedProps _prepareProps(Map<String, Object?> props) {
 String _nodeSignature(
   String type,
   String propsSignature,
-  List<QuickjsUiNode> children,
+  List<JsUiNode> children,
 ) {
   final childSignatures = children
       .map((child) => child.structuralSignature)
@@ -259,7 +258,7 @@ String? _readKey(Map<String, Object?> props) {
   return key is String && key.isNotEmpty ? key : null;
 }
 
-String? _findDuplicateSiblingKey(List<QuickjsUiNode> children) {
+String? _findDuplicateSiblingKey(List<JsUiNode> children) {
   final keys = <String>{};
   for (final child in children) {
     final key = child.key;
@@ -268,33 +267,33 @@ String? _findDuplicateSiblingKey(List<QuickjsUiNode> children) {
   return null;
 }
 
-List<QuickjsUiNode> _prepareOverlayNodes(QuickjsUiNode node) {
-  List<QuickjsUiNode>? result;
-  if (isQuickjsUiRouteOverlayType(node.type)) {
-    result = <QuickjsUiNode>[node];
+List<JsUiNode> _prepareOverlayNodes(JsUiNode node) {
+  List<JsUiNode>? result;
+  if (isJsUiRouteOverlayType(node.type)) {
+    result = <JsUiNode>[node];
   }
   for (final child in node.children) {
     if (child.overlayNodes.isNotEmpty) {
-      (result ??= <QuickjsUiNode>[]).addAll(child.overlayNodes);
+      (result ??= <JsUiNode>[]).addAll(child.overlayNodes);
     }
   }
   for (final value in node.props.values) {
     final embedded = _propOverlayNodes(value);
     if (embedded != null) {
-      (result ??= <QuickjsUiNode>[]).addAll(embedded);
+      (result ??= <JsUiNode>[]).addAll(embedded);
     }
   }
   if (result == null || result.isEmpty) {
-    return const <QuickjsUiNode>[];
+    return const <JsUiNode>[];
   }
-  return List<QuickjsUiNode>.unmodifiable(result);
+  return List<JsUiNode>.unmodifiable(result);
 }
 
-List<QuickjsUiNode>? _propOverlayNodes(Object? value) {
+List<JsUiNode>? _propOverlayNodes(Object? value) {
   if (value is Map) {
     final type = value['type'];
     if (type is String && type.isNotEmpty) {
-      final embedded = QuickjsUiNode.fromMap(
+      final embedded = JsUiNode.fromMap(
         value.map((key, value) => MapEntry<String, Object?>('$key', value)),
       );
       return embedded.overlayNodes.isEmpty ? null : embedded.overlayNodes;
@@ -302,11 +301,11 @@ List<QuickjsUiNode>? _propOverlayNodes(Object? value) {
     return null;
   }
   if (value is Iterable && value is! String && value is! Uint8List) {
-    List<QuickjsUiNode>? result;
+    List<JsUiNode>? result;
     for (final item in value) {
       final embedded = _propOverlayNodes(item);
       if (embedded != null) {
-        (result ??= <QuickjsUiNode>[]).addAll(embedded);
+        (result ??= <JsUiNode>[]).addAll(embedded);
       }
     }
     return result;
@@ -314,7 +313,8 @@ List<QuickjsUiNode>? _propOverlayNodes(Object? value) {
   return null;
 }
 
-bool isQuickjsUiRouteOverlayType(String type) {
+/// Whether [type] represents a route-level overlay component.
+bool isJsUiRouteOverlayType(String type) {
   return type == 'Overlay' ||
       type == 'SnackBar' ||
       type == 'AlertDialog' ||

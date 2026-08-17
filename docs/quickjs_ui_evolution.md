@@ -16,7 +16,7 @@ QuickJS-powered 动态页面运行时。Flutter 始终是应用主体，负责�
 
 ### 产品边界
 
-JSUI 可以作为 Flutter 导航栈中的完整页面，也可以作为 `QuickjsUiView` 嵌入原生页面的一块
+JSUI 可以作为 Flutter 导航栈中的完整页面，也可以作为 `JsUiView` 嵌入原生页面的一块
 区域；同一页面可以同时包含宿主 Flutter Widget、JSUI Schema 组件和注册的原生扩展组件。
 它的加载、更新、页面包和 Bridge 体验类似 Web，但渲染仍由 Flutter 完成。
 
@@ -61,7 +61,7 @@ Flutter 原生 Widget、RenderObject 和宿主组件
 这一阶段优先巩固“Flutter 主体、JSUI 补充”的产品边界：
 
 - 原生页面和 JSUI 页面可相互导航，但最终路由解析、权限检查和返回行为由 Flutter 宿主决定。
-- `QuickjsUiView` 可稳定嵌入任意原生布局，并正确同步 show/hide、前后台和 dispose 生命周期。
+- `JsUiView` 可稳定嵌入任意原生布局，并正确同步 show/hide、前后台和 dispose 生命周期。
 - 宿主组件注册表支持在 JSUI 中使用地图、视频等原生能力，JS 不持有其 Controller 或原生对象。
 - 每个页面 Session 独立设置内存、超时、资源、权限和错误边界；加载失败可显示原生兜底页面。
 - JSUI 页面只管理局部状态；登录态、账户、支付等应用状态由宿主通过 props/capability 提供。
@@ -108,7 +108,7 @@ Patch 必须满足以下约束：
 - 加载更多允许显示 footer、overlay 或宿主提示；提示是否可见不影响请求状态机。
 - RefreshIndicator 作为显式包裹组件，避免普通快速上滑被解释为刷新。
 
-其他复杂组件通过 `QuickjsUiComponentRegistry` 接入；JS 只持有可序列化 props、事件描述和资源
+其他复杂组件通过 `JsUiComponentRegistry` 接入；JS 只持有可序列化 props、事件描述和资源
 标识，不持有 Dart Widget、Controller 或原生对象。
 
 ### Canvas 2D（后期能力）

@@ -68,7 +68,7 @@ export default Page({
   },
 
   replaceSelf(state, _payload, props) {
-    quickjsUiNavigation.replace({
+    jsUiNavigation.replace({
       route: 'quickjs-ui.navigation.child.replaced',
       path: './navigation_child_page.mjs',
       transition: {
@@ -99,7 +99,7 @@ export default Page({
   },
 
   async popToDetail(state, _payload, props) {
-    await quickjsUiNavigation.pop({
+    await jsUiNavigation.pop({
       from: 'jsui-child',
       itemId: props.itemId,
       localCount: state.localCount

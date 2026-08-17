@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -9,8 +12,8 @@ import 'quickjs_ui_control_style.dart';
 import 'quickjs_ui_gestures.dart';
 import 'quickjs_ui_render_context.dart';
 
-final QuickjsUiComponentBuilderMap quickjsUiBasicComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{
+final JsUiComponentBuilderMap jsUiBasicComponentBuilders =
+    <String, JsUiComponentBuilder>{
       'Text': _buildText,
       'ElevatedButton': _buildElevatedButton,
       'TextButton': _buildTextButton,
@@ -33,14 +36,13 @@ final QuickjsUiComponentBuilderMap quickjsUiBasicComponentBuilders =
       'LinearProgressIndicator': _buildLinearProgressIndicator,
     };
 
-Widget _buildText(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final data =
-      QuickjsUiProps.string(node.props['data'] ?? node.props['text']) ?? '';
+Widget _buildText(JsUiRenderContext context, JsUiNode node) {
+  final data = JsUiProps.string(node.props['data'] ?? node.props['text']) ?? '';
   return Text(
     data,
-    textAlign: QuickjsUiProps.textAlign(node.props['textAlign']),
-    maxLines: QuickjsUiProps.intValue(node.props['maxLines']),
-    softWrap: QuickjsUiProps.boolValue(node.props['softWrap']),
+    textAlign: JsUiProps.textAlign(node.props['textAlign']),
+    maxLines: JsUiProps.intValue(node.props['maxLines']),
+    softWrap: JsUiProps.boolValue(node.props['softWrap']),
     overflow: _textOverflow(node.props['overflow']),
     style: context.textStyle(node.props['style']),
   );
@@ -55,42 +57,34 @@ TextOverflow? _textOverflow(Object? value) => switch (value) {
   _ => throw const FormatException('Unknown quickjs_ui Text overflow'),
 };
 
-Widget _buildElevatedButton(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  return _buildButton(context, node, _QuickjsUiButtonKind.elevated);
+Widget _buildElevatedButton(JsUiRenderContext context, JsUiNode node) {
+  return _buildButton(context, node, _JsUiButtonKind.elevated);
 }
 
-Widget _buildTextButton(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  return _buildButton(context, node, _QuickjsUiButtonKind.text);
+Widget _buildTextButton(JsUiRenderContext context, JsUiNode node) {
+  return _buildButton(context, node, _JsUiButtonKind.text);
 }
 
-Widget _buildOutlinedButton(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  return _buildButton(context, node, _QuickjsUiButtonKind.outlined);
+Widget _buildOutlinedButton(JsUiRenderContext context, JsUiNode node) {
+  return _buildButton(context, node, _JsUiButtonKind.outlined);
 }
 
 Widget _buildButton(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-  _QuickjsUiButtonKind kind,
+  JsUiRenderContext context,
+  JsUiNode node,
+  _JsUiButtonKind kind,
 ) {
-  final event = QuickjsUiProps.event(node.props['onPressed']);
-  final style = QuickjsUiControlStyle.from(context, node.props['stateStyles']);
-  final transition = QuickjsUiControlTransition.from(
-    node.props['stateTransition'],
-  );
+  final event = JsUiProps.event(node.props['onPressed']);
+  final style = JsUiControlStyle.from(context, node.props['stateStyles']);
+  final transition = JsUiControlTransition.from(node.props['stateTransition']);
   final onPressed = event == null ? null : () => context.dispatch(event);
   final child = _buttonChild(context, node);
-  return QuickjsUiControlInteractionScope(
+  return JsUiControlInteractionScope(
     enabled: event != null,
     builder: (buildContext, interaction) {
       final effectiveTransition =
           MediaQuery.maybeOf(buildContext)?.disableAnimations ?? false
-          ? QuickjsUiControlTransition(
+          ? JsUiControlTransition(
               duration: Duration.zero,
               curve: transition.curve,
             )
@@ -110,21 +104,21 @@ Widget _buildButton(
         child: child,
       );
       final button = switch (kind) {
-        _QuickjsUiButtonKind.elevated => ElevatedButton(
+        _JsUiButtonKind.elevated => ElevatedButton(
           focusNode: interaction.focusNode,
           statesController: interaction.statesController,
           onPressed: onPressed,
           style: buttonStyle,
           child: interactiveChild,
         ),
-        _QuickjsUiButtonKind.text => TextButton(
+        _JsUiButtonKind.text => TextButton(
           focusNode: interaction.focusNode,
           statesController: interaction.statesController,
           onPressed: onPressed,
           style: buttonStyle,
           child: interactiveChild,
         ),
-        _QuickjsUiButtonKind.outlined => OutlinedButton(
+        _JsUiButtonKind.outlined => OutlinedButton(
           focusNode: interaction.focusNode,
           statesController: interaction.statesController,
           onPressed: onPressed,
@@ -132,8 +126,8 @@ Widget _buildButton(
           child: interactiveChild,
         ),
       };
-      return QuickjsUiControlTransitionBuilder(
-        styles: <QuickjsUiControlStyle>[style],
+      return JsUiControlTransitionBuilder(
+        styles: <JsUiControlStyle>[style],
         states: interaction.states,
         transition: transition,
         child: RepaintBoundary(child: button),
@@ -147,58 +141,49 @@ Widget _buildButton(
   );
 }
 
-enum _QuickjsUiButtonKind { elevated, text, outlined }
+enum _JsUiButtonKind { elevated, text, outlined }
 
-Widget _buildIconButton(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final event = QuickjsUiProps.event(node.props['onPressed']);
-  final tooltip = QuickjsUiProps.string(node.props['tooltip']);
+Widget _buildIconButton(JsUiRenderContext context, JsUiNode node) {
+  final event = JsUiProps.event(node.props['onPressed']);
+  final tooltip = JsUiProps.string(node.props['tooltip']);
   return IconButton(
     tooltip: tooltip,
-    iconSize: QuickjsUiProps.doubleValue(node.props['iconSize']),
+    iconSize: JsUiProps.doubleValue(node.props['iconSize']),
     color: context.color(node.props['color']),
     onPressed: event == null ? null : () => context.dispatch(event),
     icon:
         context.child(node) ??
-        Icon(
-          quickjsUiIconData(
-            QuickjsUiProps.string(node.props['icon']) ?? 'help',
-          ),
-        ),
+        Icon(jsUiIconData(JsUiProps.string(node.props['icon']) ?? 'help')),
   );
 }
 
-Widget _buildInkWell(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  return withQuickjsUiGestures(
+Widget _buildInkWell(JsUiRenderContext context, JsUiNode node) {
+  return withJsUiGestures(
     context,
     node,
     context.child(node) ?? const SizedBox(),
   );
 }
 
-Widget _buildFloatingActionButton(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final event = QuickjsUiProps.event(node.props['onPressed']);
+Widget _buildFloatingActionButton(JsUiRenderContext context, JsUiNode node) {
+  final event = JsUiProps.event(node.props['onPressed']);
   return FloatingActionButton(
     onPressed: event == null ? null : () => context.dispatch(event),
-    tooltip: QuickjsUiProps.string(node.props['tooltip']),
+    tooltip: JsUiProps.string(node.props['tooltip']),
     backgroundColor: context.color(node.props['backgroundColor']),
     foregroundColor: context.color(node.props['foregroundColor']),
     child:
         context.child(node) ??
-        Icon(
-          quickjsUiIconData(QuickjsUiProps.string(node.props['icon']) ?? 'add'),
-        ),
+        Icon(jsUiIconData(JsUiProps.string(node.props['icon']) ?? 'add')),
   );
 }
 
-Widget _buttonChild(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buttonChild(JsUiRenderContext context, JsUiNode node) {
   final leading = context.slot(node, 'leading');
   final content =
       context.child(node) ??
       context.slot(node, 'content') ??
-      Text(QuickjsUiProps.string(node.props['label']) ?? '');
+      Text(JsUiProps.string(node.props['label']) ?? '');
   final trailing = context.slot(node, 'trailing');
   if (leading == null && trailing == null) {
     return content;
@@ -216,76 +201,66 @@ Widget _buttonChild(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildIcon(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildIcon(JsUiRenderContext context, JsUiNode node) {
   return Icon(
-    quickjsUiIconData(
-      QuickjsUiProps.string(node.props['icon'] ?? node.props['name']),
-    ),
-    size: QuickjsUiProps.doubleValue(node.props['size']),
+    jsUiIconData(JsUiProps.string(node.props['icon'] ?? node.props['name'])),
+    size: JsUiProps.doubleValue(node.props['size']),
     color: context.color(node.props['color']),
-    semanticLabel: QuickjsUiProps.string(node.props['semanticLabel']),
+    semanticLabel: JsUiProps.string(node.props['semanticLabel']),
   );
 }
 
-Widget _buildDivider(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildDivider(JsUiRenderContext context, JsUiNode node) {
   return Divider(
-    height: QuickjsUiProps.doubleValue(node.props['height']),
-    thickness: QuickjsUiProps.doubleValue(node.props['thickness']),
-    indent: QuickjsUiProps.doubleValue(node.props['indent']),
-    endIndent: QuickjsUiProps.doubleValue(node.props['endIndent']),
+    height: JsUiProps.doubleValue(node.props['height']),
+    thickness: JsUiProps.doubleValue(node.props['thickness']),
+    indent: JsUiProps.doubleValue(node.props['indent']),
+    endIndent: JsUiProps.doubleValue(node.props['endIndent']),
     color: context.color(node.props['color']),
   );
 }
 
-Widget _buildVerticalDivider(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
+Widget _buildVerticalDivider(JsUiRenderContext context, JsUiNode node) {
   return VerticalDivider(
-    width: QuickjsUiProps.doubleValue(node.props['width']),
-    thickness: QuickjsUiProps.doubleValue(node.props['thickness']),
-    indent: QuickjsUiProps.doubleValue(node.props['indent']),
-    endIndent: QuickjsUiProps.doubleValue(node.props['endIndent']),
+    width: JsUiProps.doubleValue(node.props['width']),
+    thickness: JsUiProps.doubleValue(node.props['thickness']),
+    indent: JsUiProps.doubleValue(node.props['indent']),
+    endIndent: JsUiProps.doubleValue(node.props['endIndent']),
     color: context.color(node.props['color']),
   );
 }
 
-Widget _buildPlaceholder(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildPlaceholder(JsUiRenderContext context, JsUiNode node) {
   return Placeholder(
     color: context.color(node.props['color']) ?? const Color(0xFF455A64),
-    strokeWidth: QuickjsUiProps.doubleValue(node.props['strokeWidth']) ?? 2,
-    fallbackWidth:
-        QuickjsUiProps.doubleValue(node.props['fallbackWidth']) ?? 400,
-    fallbackHeight:
-        QuickjsUiProps.doubleValue(node.props['fallbackHeight']) ?? 400,
+    strokeWidth: JsUiProps.doubleValue(node.props['strokeWidth']) ?? 2,
+    fallbackWidth: JsUiProps.doubleValue(node.props['fallbackWidth']) ?? 400,
+    fallbackHeight: JsUiProps.doubleValue(node.props['fallbackHeight']) ?? 400,
   );
 }
 
-Widget _buildGestureDetector(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  return withQuickjsUiGestures(
+Widget _buildGestureDetector(JsUiRenderContext context, JsUiNode node) {
+  return withJsUiGestures(
     context,
     node,
     context.child(node) ?? const SizedBox.shrink(),
   );
 }
 
-Widget _buildTooltip(QuickjsUiRenderContext context, QuickjsUiNode node) {
-  final message = QuickjsUiProps.string(node.props['message']);
+Widget _buildTooltip(JsUiRenderContext context, JsUiNode node) {
+  final message = JsUiProps.string(node.props['message']);
   if (message == null || message.isEmpty) {
     throw const FormatException('quickjs_ui Tooltip message is required');
   }
   return Tooltip(
     message: message,
-    waitDuration: QuickjsUiProps.duration(node.props['waitDurationMs']),
-    showDuration: QuickjsUiProps.duration(node.props['showDurationMs']),
+    waitDuration: JsUiProps.duration(node.props['waitDurationMs']),
+    showDuration: JsUiProps.duration(node.props['showDurationMs']),
     child: context.child(node) ?? const SizedBox.shrink(),
   );
 }
 
-Widget _buildCard(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildCard(JsUiRenderContext context, JsUiNode node) {
   return Card(
     color: context.color(node.props['color']),
     elevation: context.elevation(node.props['elevation']),
@@ -295,7 +270,7 @@ Widget _buildCard(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildClipRRect(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildClipRRect(JsUiRenderContext context, JsUiNode node) {
   return ClipRRect(
     borderRadius:
         context.borderRadius(node.props['borderRadius']) ?? BorderRadius.zero,
@@ -304,17 +279,14 @@ Widget _buildClipRRect(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildBackdropFilter(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
+Widget _buildBackdropFilter(JsUiRenderContext context, JsUiNode node) {
   return BackdropFilter(
     filter: _imageFilter(node.props['filter'] ?? node.props['imageFilter']),
     child: context.child(node) ?? const SizedBox.shrink(),
   );
 }
 
-Widget _buildDecoratedBox(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildDecoratedBox(JsUiRenderContext context, JsUiNode node) {
   return DecoratedBox(
     decoration:
         context.boxDecoration(node.props) ??
@@ -326,10 +298,9 @@ Widget _buildDecoratedBox(QuickjsUiRenderContext context, QuickjsUiNode node) {
   );
 }
 
-Widget _buildRichText(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildRichText(JsUiRenderContext context, JsUiNode node) {
   return RichText(
-    textAlign:
-        QuickjsUiProps.textAlign(node.props['textAlign']) ?? TextAlign.start,
+    textAlign: JsUiProps.textAlign(node.props['textAlign']) ?? TextAlign.start,
     text: TextSpan(
       style: context.textStyle(node.props['style']),
       children: _textSpans(context, node.props['spans'] ?? node.props['text']),
@@ -338,30 +309,27 @@ Widget _buildRichText(QuickjsUiRenderContext context, QuickjsUiNode node) {
 }
 
 Widget _buildCircularProgressIndicator(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
+  JsUiRenderContext context,
+  JsUiNode node,
 ) {
   return CircularProgressIndicator(
-    value: QuickjsUiProps.doubleValue(node.props['value']),
+    value: JsUiProps.doubleValue(node.props['value']),
     color: context.color(node.props['color']),
     backgroundColor: context.color(node.props['backgroundColor']),
-    strokeWidth: QuickjsUiProps.doubleValue(node.props['strokeWidth']) ?? 4,
+    strokeWidth: JsUiProps.doubleValue(node.props['strokeWidth']) ?? 4,
   );
 }
 
-Widget _buildLinearProgressIndicator(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
+Widget _buildLinearProgressIndicator(JsUiRenderContext context, JsUiNode node) {
   return LinearProgressIndicator(
-    value: QuickjsUiProps.doubleValue(node.props['value']),
+    value: JsUiProps.doubleValue(node.props['value']),
     color: context.color(node.props['color']),
     backgroundColor: context.color(node.props['backgroundColor']),
-    minHeight: QuickjsUiProps.doubleValue(node.props['minHeight']),
+    minHeight: JsUiProps.doubleValue(node.props['minHeight']),
   );
 }
 
-List<InlineSpan> _textSpans(QuickjsUiRenderContext context, Object? value) {
+List<InlineSpan> _textSpans(JsUiRenderContext context, Object? value) {
   if (value == null) {
     return const <InlineSpan>[];
   }
@@ -374,7 +342,7 @@ List<InlineSpan> _textSpans(QuickjsUiRenderContext context, Object? value) {
   return <InlineSpan>[for (final item in value) _textSpan(context, item)];
 }
 
-InlineSpan _textSpan(QuickjsUiRenderContext context, Object? value) {
+InlineSpan _textSpan(JsUiRenderContext context, Object? value) {
   if (value is String) {
     return TextSpan(text: value);
   }
@@ -383,7 +351,7 @@ InlineSpan _textSpan(QuickjsUiRenderContext context, Object? value) {
       (key, value) => MapEntry<String, Object?>('$key', value),
     );
     return TextSpan(
-      text: QuickjsUiProps.string(props['text']) ?? '',
+      text: JsUiProps.string(props['text']) ?? '',
       style: context.textStyle(props['style']),
       children: _textSpans(context, props['children']),
     );
@@ -421,10 +389,10 @@ ui.ImageFilter _imageFilter(Object? value) {
   switch (type) {
     case null:
     case 'blur':
-      final sigma = QuickjsUiProps.doubleValue(props['sigma']);
+      final sigma = JsUiProps.doubleValue(props['sigma']);
       return ui.ImageFilter.blur(
-        sigmaX: QuickjsUiProps.doubleValue(props['sigmaX']) ?? sigma ?? 0,
-        sigmaY: QuickjsUiProps.doubleValue(props['sigmaY']) ?? sigma ?? 0,
+        sigmaX: JsUiProps.doubleValue(props['sigmaX']) ?? sigma ?? 0,
+        sigmaY: JsUiProps.doubleValue(props['sigmaY']) ?? sigma ?? 0,
       );
   }
   throw FormatException('Unsupported quickjs_ui ImageFilter "$type"');

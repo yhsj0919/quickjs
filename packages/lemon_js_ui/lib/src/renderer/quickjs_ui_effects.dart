@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -11,11 +14,7 @@ import 'quickjs_ui_animation.dart';
 import 'quickjs_ui_frame_scheduler.dart';
 import 'quickjs_ui_render_context.dart';
 
-Widget withQuickjsUiEffects(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-  Widget child,
-) {
+Widget withJsUiEffects(JsUiRenderContext context, JsUiNode node, Widget child) {
   final props = node.props;
   final transform =
       props['transform'] ??
@@ -49,8 +48,8 @@ Widget withQuickjsUiEffects(
     colorFilter: props.containsKey('colorFilter'),
   );
 
-  final onAnimationEnd = QuickjsUiProps.event(props['onAnimationEnd']);
-  return _QuickjsUiEffects(
+  final onAnimationEnd = JsUiProps.event(props['onAnimationEnd']);
+  return _JsUiEffects(
     opacity: props['opacity'],
     transform: transform,
     clipRadius: props['clipRadius'],
@@ -69,7 +68,7 @@ Widget withQuickjsUiEffects(
     resolveColor: context.color,
     onAnimationEnd: onAnimationEnd == null
         ? null
-        : () => context.dispatchEvent(
+        : () => context.dispatch(
             onAnimationEnd,
             defaultCoalesceKey:
                 '${node.type}:${node.key ?? 'anonymous'}:onAnimationEnd',
@@ -78,8 +77,8 @@ Widget withQuickjsUiEffects(
   );
 }
 
-final class _QuickjsUiEffects extends StatefulWidget {
-  _QuickjsUiEffects({
+final class _JsUiEffects extends StatefulWidget {
+  _JsUiEffects({
     required this.opacity,
     required this.transform,
     required this.clipRadius,
@@ -97,7 +96,7 @@ final class _QuickjsUiEffects extends StatefulWidget {
     required this.onAnimationEnd,
     required this.child,
   }) : values = <Object?>[opacity, transform, clipRadius, blur, backdropBlur],
-       valueHash = quickjsUiValueHash(<Object?>[
+       valueHash = jsUiValueHash(<Object?>[
          opacity,
          transform,
          clipRadius,
@@ -105,7 +104,7 @@ final class _QuickjsUiEffects extends StatefulWidget {
          backdropBlur,
          colorFilter,
        ]),
-       timeline = QuickjsUiAnimationTimeline.from(<Object?>[
+       timeline = JsUiAnimationTimeline.from(<Object?>[
          opacity,
          transform,
          clipRadius,
@@ -121,30 +120,30 @@ final class _QuickjsUiEffects extends StatefulWidget {
   final Object? colorFilter;
   final Clip clipBehavior;
   final int? animationFrameIntervalMs;
-  final QuickjsUiFrameScheduler frameScheduler;
+  final JsUiFrameScheduler frameScheduler;
   final bool paused;
   final Object? playToken;
   final bool reverse;
-  final QuickjsUiPerformanceController performanceController;
+  final JsUiPerformanceController performanceController;
   final Color? Function(Object? value) resolveColor;
   final VoidCallback? onAnimationEnd;
   final Widget child;
   final List<Object?> values;
   final int valueHash;
-  final QuickjsUiAnimationTimeline timeline;
+  final JsUiAnimationTimeline timeline;
 
   @override
-  State<_QuickjsUiEffects> createState() => _QuickjsUiEffectsState();
+  State<_JsUiEffects> createState() => _JsUiEffectsState();
 }
 
-final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
+final class _JsUiEffectsState extends State<_JsUiEffects>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   double _elapsedMs = 0;
   double _playbackOffsetMs = 0;
   bool _didComplete = false;
   int _generation = 0;
-  QuickjsUiFrameClock? _frameClock;
+  JsUiFrameClock? _frameClock;
   final Stopwatch _limitedStopwatch = Stopwatch();
 
   @override
@@ -156,7 +155,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   }
 
   @override
-  void didUpdateWidget(covariant _QuickjsUiEffects oldWidget) {
+  void didUpdateWidget(covariant _JsUiEffects oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.performanceController != widget.performanceController) {
       oldWidget.performanceController.removeListener(_qualityChanged);
@@ -202,7 +201,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
         widget.timeline.hasAnimations &&
         !widget.paused &&
         (widget.timeline.isContinuous || !_didComplete) &&
-        widget.performanceController.quality != QuickjsUiEffectQuality.off;
+        widget.performanceController.quality != JsUiEffectQuality.off;
     if (!shouldRun) {
       _stopScheduler();
       return;
@@ -267,10 +266,10 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
   @override
   Widget build(BuildContext context) {
     final quality = widget.performanceController.quality;
-    final resolvedElapsed = quality == QuickjsUiEffectQuality.off
+    final resolvedElapsed = quality == JsUiEffectQuality.off
         ? (widget.timeline.endMs.isFinite ? widget.timeline.endMs : 1e12)
         : _animationTimeMs();
-    final clock = QuickjsUiAnimationClock(
+    final clock = JsUiAnimationClock(
       elapsedMs: resolvedElapsed,
       epochMs: DateTime.now().microsecondsSinceEpoch / 1000,
     );
@@ -278,7 +277,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
 
     final colorFilter = widget.colorFilter;
     if (colorFilter is Map &&
-        quality.index <= QuickjsUiEffectQuality.balanced.index) {
+        quality.index <= JsUiEffectQuality.balanced.index) {
       final color = widget.resolveColor(colorFilter['color']);
       if (color != null) {
         result = RepaintBoundary(
@@ -297,7 +296,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
     }
 
     final blur = _qualityBlur(_blur(widget.blur, clock), quality);
-    if (widget.blur != null && quality != QuickjsUiEffectQuality.off) {
+    if (widget.blur != null && quality != JsUiEffectQuality.off) {
       result = RepaintBoundary(
         child: ClipRect(
           clipBehavior: Clip.hardEdge,
@@ -314,7 +313,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
       quality,
     );
     if (widget.backdropBlur != null &&
-        quality.index <= QuickjsUiEffectQuality.balanced.index) {
+        quality.index <= JsUiEffectQuality.balanced.index) {
       result = RepaintBoundary(
         child: ClipRect(
           clipBehavior: Clip.hardEdge,
@@ -388,10 +387,7 @@ final class _QuickjsUiEffectsState extends State<_QuickjsUiEffects>
 
 int? _animationFrameIntervalMs(Object? value) {
   if (value == null) return null;
-  final interval = QuickjsUiProps.intValue(
-    value,
-    name: 'animationFrameIntervalMs',
-  );
+  final interval = JsUiProps.intValue(value, name: 'animationFrameIntervalMs');
   if (interval == null || interval < 4 || interval > 1000) {
     throw const FormatException(
       'quickjs_ui animationFrameIntervalMs must be between 4 and 1000',
@@ -402,18 +398,18 @@ int? _animationFrameIntervalMs(Object? value) {
 
 (double, double) _qualityBlur(
   (double, double) blur,
-  QuickjsUiEffectQuality quality,
+  JsUiEffectQuality quality,
 ) {
   final maximum = switch (quality) {
-    QuickjsUiEffectQuality.high => 100.0,
-    QuickjsUiEffectQuality.balanced => 12.0,
-    QuickjsUiEffectQuality.low => 4.0,
-    QuickjsUiEffectQuality.off => 0.0,
+    JsUiEffectQuality.high => 100.0,
+    JsUiEffectQuality.balanced => 12.0,
+    JsUiEffectQuality.low => 4.0,
+    JsUiEffectQuality.off => 0.0,
   };
   return (blur.$1.clamp(0, maximum), blur.$2.clamp(0, maximum));
 }
 
-(double, double) _blur(Object? raw, QuickjsUiAnimationClock clock) {
+(double, double) _blur(Object? raw, JsUiAnimationClock clock) {
   if (raw is Map &&
       !(raw.containsKey('from') &&
           raw.containsKey('to') &&
@@ -428,10 +424,10 @@ int? _animationFrameIntervalMs(Object? value) {
 
 double _number(
   Object? raw,
-  QuickjsUiAnimationClock clock, {
+  JsUiAnimationClock clock, {
   required double fallback,
 }) {
-  final value = quickjsUiAnimatedNumber(raw, clock) ?? fallback;
+  final value = jsUiAnimatedNumber(raw, clock) ?? fallback;
   if (!value.isFinite) {
     throw const FormatException('quickjs_ui effect values must be finite');
   }

@@ -15,7 +15,7 @@ void main() {
 </svg>
 ''';
 
-    final normalized = normalizeQuickjsUiSvg(source);
+    final normalized = normalizeJsUiSvg(source);
 
     expect(normalized, contains('<path id="visible" fill="black" />'));
     expect(normalized, contains('<path id="masked" fill="white" />'));
@@ -27,6 +27,6 @@ void main() {
 <svg><mask mask-type='alpha'><path fill='#000'/></mask></svg>
 ''';
 
-    expect(normalizeQuickjsUiSvg(source), contains("<path fill='white'/>"));
+    expect(normalizeJsUiSvg(source), contains("<path fill='white'/>"));
   });
 }

@@ -3,51 +3,60 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
-abstract interface class QuickjsUiNetworkCacheStore {
-  Future<QuickjsUiNetworkCacheEntry?> read(Uri uri);
+/// Persists text responses used by the JSUI network loader.
+abstract interface class JsUiNetworkCacheStore {
+  /// Reads the cached response for [uri], or returns `null`.
+  Future<JsUiNetworkCacheEntry?> read(Uri uri);
 
-  Future<void> write(Uri uri, QuickjsUiNetworkCacheEntry entry);
+  /// Stores [entry] under its normalized [uri].
+  Future<void> write(Uri uri, JsUiNetworkCacheEntry entry);
 }
 
-final class QuickjsUiNetworkCacheEntry {
-  QuickjsUiNetworkCacheEntry({
-    required this.body,
-    this.etag,
-    DateTime? cachedAt,
-  }) : cachedAt = cachedAt ?? DateTime.now();
+/// A cached network response body and its validation metadata.
+final class JsUiNetworkCacheEntry {
+  /// Creates a cache entry, defaulting [cachedAt] to the current time.
+  JsUiNetworkCacheEntry({required this.body, this.etag, DateTime? cachedAt})
+    : cachedAt = cachedAt ?? DateTime.now();
 
+  /// Decoded response body.
   final String body;
+
+  /// Entity tag used for conditional revalidation.
   final String? etag;
+
+  /// Time at which the entry was stored.
   final DateTime cachedAt;
 }
 
-final class QuickjsUiMemoryNetworkCacheStore
-    implements QuickjsUiNetworkCacheStore {
-  QuickjsUiMemoryNetworkCacheStore([
-    Map<Uri, QuickjsUiNetworkCacheEntry>? entries,
-  ]) : _entries = entries ?? <Uri, QuickjsUiNetworkCacheEntry>{};
+/// An in-memory network cache store.
+final class JsUiMemoryNetworkCacheStore implements JsUiNetworkCacheStore {
+  /// Creates a store optionally backed by an existing [entries] map.
+  JsUiMemoryNetworkCacheStore([Map<Uri, JsUiNetworkCacheEntry>? entries])
+    : _entries = entries ?? <Uri, JsUiNetworkCacheEntry>{};
 
-  final Map<Uri, QuickjsUiNetworkCacheEntry> _entries;
+  final Map<Uri, JsUiNetworkCacheEntry> _entries;
 
   @override
-  Future<QuickjsUiNetworkCacheEntry?> read(Uri uri) async {
+  Future<JsUiNetworkCacheEntry?> read(Uri uri) async {
     return _entries[uri];
   }
 
   @override
-  Future<void> write(Uri uri, QuickjsUiNetworkCacheEntry entry) async {
+  Future<void> write(Uri uri, JsUiNetworkCacheEntry entry) async {
     _entries[uri] = entry;
   }
 }
 
-final class QuickjsUiFileNetworkCacheStore
-    implements QuickjsUiNetworkCacheStore {
-  const QuickjsUiFileNetworkCacheStore({required this.directory});
+/// A persistent file-backed cache store where file I/O is supported.
+final class JsUiFileNetworkCacheStore implements JsUiNetworkCacheStore {
+  /// Creates a store that writes hashed JSON entries below [directory].
+  const JsUiFileNetworkCacheStore({required this.directory});
 
+  /// Directory containing cached JSON response entries.
   final Directory directory;
 
   @override
-  Future<QuickjsUiNetworkCacheEntry?> read(Uri uri) async {
+  Future<JsUiNetworkCacheEntry?> read(Uri uri) async {
     final file = _fileFor(uri);
     if (!await file.exists()) {
       return null;
@@ -62,7 +71,7 @@ final class QuickjsUiFileNetworkCacheStore
     }
     final etag = decoded['etag'];
     final cachedAt = decoded['cachedAt'];
-    return QuickjsUiNetworkCacheEntry(
+    return JsUiNetworkCacheEntry(
       body: body,
       etag: etag is String ? etag : null,
       cachedAt: cachedAt is String ? DateTime.tryParse(cachedAt) : null,
@@ -70,7 +79,7 @@ final class QuickjsUiFileNetworkCacheStore
   }
 
   @override
-  Future<void> write(Uri uri, QuickjsUiNetworkCacheEntry entry) async {
+  Future<void> write(Uri uri, JsUiNetworkCacheEntry entry) async {
     await directory.create(recursive: true);
     final file = _fileFor(uri);
     await file.writeAsString(

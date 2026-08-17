@@ -6,7 +6,7 @@ void main() {
   testWidgets('built-in Material color tokens resolve across ColorScheme', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
     late Map<String, Color> expected;
 
@@ -41,7 +41,7 @@ void main() {
               'shadow': scheme.shadow,
               'scrim': scheme.scrim,
             };
-            final node = QuickjsUiNode.fromMap(<String, Object?>{
+            final node = JsUiNode.fromMap(<String, Object?>{
               'type': 'Stack',
               'children': <Object?>[
                 for (final token in expected.keys)
@@ -69,9 +69,9 @@ void main() {
   testWidgets('font size tokens are independent from spacing tokens', (
     tester,
   ) async {
-    final renderer = QuickjsUiRenderer(onEvent: (_) {});
+    final renderer = JsUiRenderer(onEvent: (_) {});
     addTearDown(renderer.dispose);
-    final node = QuickjsUiNode.fromMap(<String, Object?>{
+    final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Text',
       'data': 'font token',
       'style': <String, Object?>{'fontSize': r'$font.lg'},
@@ -87,16 +87,13 @@ void main() {
 
     expect(tester.widget<Text>(find.text('font token')).style?.fontSize, 20);
     expect(
-      QuickjsUiDesignTokens().number(
-        r'$spacing.lg',
-        QuickjsUiTokenCategory.spacing,
-      ),
+      JsUiDesignTokens().number(r'$spacing.lg', JsUiTokenCategory.spacing),
       16,
     );
     expect(
-      QuickjsUiDesignTokens(
+      JsUiDesignTokens(
         fontSizes: const <String, double>{'caption': 11},
-      ).number(r'$font.caption', QuickjsUiTokenCategory.fontSize),
+      ).number(r'$font.caption', JsUiTokenCategory.fontSize),
       11,
     );
   });

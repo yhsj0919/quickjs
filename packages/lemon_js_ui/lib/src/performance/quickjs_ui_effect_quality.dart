@@ -6,17 +6,47 @@ import 'package:flutter/scheduler.dart';
 
 import 'quickjs_ui_performance_report.dart';
 
-enum QuickjsUiEffectQuality { high, balanced, low, off }
+/// The effective renderer quality used to scale expensive visual effects.
+enum JsUiEffectQuality {
+  /// Renders effects at their requested quality.
+  high,
 
-enum QuickjsUiPerformanceMode { auto, high, balanced, low, off }
+  /// Applies moderate limits while retaining the effects.
+  balanced,
+
+  /// Applies aggressive limits and disables selected expensive effects.
+  low,
+
+  /// Disables animated or optional effects.
+  off,
+}
+
+/// Selects automatic or fixed renderer effect quality.
+enum JsUiPerformanceMode {
+  /// Adjusts quality from measured Flutter frame timings.
+  auto,
+
+  /// Fixes quality at [JsUiEffectQuality.high].
+  high,
+
+  /// Fixes quality at [JsUiEffectQuality.balanced].
+  balanced,
+
+  /// Fixes quality at [JsUiEffectQuality.low].
+  low,
+
+  /// Fixes quality at [JsUiEffectQuality.off].
+  off,
+}
 
 /// Host-owned performance controller for renderer-local effect degradation.
 ///
 /// Auto mode uses Flutter frame timings and hysteresis. It never rebuilds the
 /// JavaScript page or sends per-frame data over the bridge.
-final class QuickjsUiPerformanceController extends ChangeNotifier {
-  QuickjsUiPerformanceController({
-    this.mode = QuickjsUiPerformanceMode.high,
+final class JsUiPerformanceController extends ChangeNotifier {
+  /// Creates a performance controller with optional automatic-mode thresholds.
+  JsUiPerformanceController({
+    this.mode = JsUiPerformanceMode.high,
     Duration? targetFrameBudget,
     this.degradeAfterFrames = 24,
     this.upgradeAfterFrames = 240,
@@ -27,12 +57,17 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
        assert(upgradeAfterFrames > degradeAfterFrames),
        _quality = _qualityForMode(mode);
 
-  final QuickjsUiPerformanceMode mode;
+  /// The configured automatic or fixed quality mode.
+  final JsUiPerformanceMode mode;
+
+  /// Consecutive slow frames required before automatic degradation.
   final int degradeAfterFrames;
+
+  /// Consecutive stable frames required before automatic recovery.
   final int upgradeAfterFrames;
   Duration _targetFrameBudget;
   final bool _hasExplicitFrameBudget;
-  QuickjsUiEffectQuality _quality;
+  JsUiEffectQuality _quality;
   bool _reduceMotion = false;
   double? _refreshRate;
   String? _lastTransitionReason;
@@ -60,14 +95,26 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   double? _devicePixelRatio;
   _PerformanceSession? _session;
 
-  QuickjsUiEffectQuality get quality =>
-      _reduceMotion ? QuickjsUiEffectQuality.off : _quality;
+  /// The effective quality after applying mode and reduced-motion settings.
+  JsUiEffectQuality get quality =>
+      _reduceMotion ? JsUiEffectQuality.off : _quality;
+
+  /// Target duration used to classify sampled frames.
   Duration get targetFrameBudget => _targetFrameBudget;
+
+  /// Last valid display refresh rate supplied by the host, in hertz.
   double? get refreshRate => _refreshRate;
+
+  /// Whether system reduced-motion disables optional effects.
   bool get reduceMotion => _reduceMotion;
+
+  /// Whether Flutter frame timing collection is active.
   bool get isStarted => _started;
+
+  /// Whether an explicit report capture is active.
   bool get isSessionActive => _session != null;
 
+  /// Updates the display [refreshRate] and inferred frame budget.
   void updateDisplayRefreshRate(double refreshRate) {
     if (!refreshRate.isFinite || refreshRate <= 0) return;
     _refreshRate = refreshRate;
@@ -78,6 +125,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     }
   }
 
+  /// Records display metrics included in subsequent performance reports.
   void updateDisplayMetrics({
     required Size logicalSize,
     required double devicePixelRatio,
@@ -109,7 +157,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   }
 
   /// Stops the active capture and returns a stable, JSON-serializable report.
-  QuickjsUiPerformanceReport stopSession() {
+  JsUiPerformanceReport stopSession() {
     final session = _session;
     if (session == null) {
       throw StateError('No performance session is active.');
@@ -156,6 +204,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     );
   }
 
+  /// Enables or disables reduced-motion effect suppression.
   void updateReduceMotion(bool value) {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
@@ -170,7 +219,8 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  QuickjsUiPerformanceSnapshot get snapshot => QuickjsUiPerformanceSnapshot(
+  /// Returns the latest frame, renderer, and resource counters.
+  JsUiPerformanceSnapshot get snapshot => JsUiPerformanceSnapshot(
     mode: mode,
     quality: quality,
     refreshRate: _refreshRate,
@@ -195,18 +245,18 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
       quality,
     ),
     blurEffectCount: _blurEffectCount,
-    clampedBlurEffectCount: quality == QuickjsUiEffectQuality.high
+    clampedBlurEffectCount: quality == JsUiEffectQuality.high
         ? 0
         : _blurEffectCount,
     backdropBlurEffectCount: _backdropBlurEffectCount,
-    disabledBackdropBlurCount: quality.index >= QuickjsUiEffectQuality.low.index
+    disabledBackdropBlurCount: quality.index >= JsUiEffectQuality.low.index
         ? _backdropBlurEffectCount
         : 0,
     colorFilterEffectCount: _colorFilterEffectCount,
-    disabledColorFilterCount: quality.index >= QuickjsUiEffectQuality.low.index
+    disabledColorFilterCount: quality.index >= JsUiEffectQuality.low.index
         ? _colorFilterEffectCount
         : 0,
-    stoppedCanvasTickerCount: quality == QuickjsUiEffectQuality.off
+    stoppedCanvasTickerCount: quality == JsUiEffectQuality.off
         ? _animatedCanvasCount
         : 0,
     retainedSceneCount: _retainedSceneCount,
@@ -220,6 +270,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     lastCanvasRejection: _lastCanvasRejection,
   );
 
+  /// Resets per-render-pass schema counters before recording rendered nodes.
   void beginRenderPass() {
     _canvasCount = 0;
     _animatedCanvasCount = 0;
@@ -231,6 +282,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     _colorFilterEffectCount = 0;
   }
 
+  /// Adds one canvas node's schema complexity to the current render pass.
   void recordCanvasSchema({
     required int commandCount,
     required int pathSegmentCount,
@@ -244,6 +296,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     _snapshotParticleFragments += particleFragments;
   }
 
+  /// Adds effect-node usage to the current render pass.
   void recordEffectSchema({
     required bool blur,
     required bool backdropBlur,
@@ -254,6 +307,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     if (colorFilter) _colorFilterEffectCount += 1;
   }
 
+  /// Replaces retained-scene and snapshot resource counters.
   void updateResourceMetrics({
     required int retainedSceneCount,
     required int snapshotCount,
@@ -264,22 +318,26 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     _snapshotPixels = snapshotPixels;
   }
 
+  /// Records the elapsed time for one canvas paint.
   void recordCanvasPaint(Duration elapsed) {
     _canvasRepaintCount += 1;
     _appendSample(_canvasPaintSamplesMs, elapsed.inMicroseconds / 1000);
   }
 
+  /// Records a rejected canvas command and its latest [error].
   void recordCanvasRejection(Object error) {
     _rejectedCanvasCommandCount += 1;
     _lastCanvasRejection = '$error';
   }
 
+  /// Starts listening to Flutter frame timing reports.
   void start() {
     if (_started) return;
     SchedulerBinding.instance.addTimingsCallback(_handleTimings);
     _started = true;
   }
 
+  /// Stops listening to Flutter frame timing reports.
   void stop() {
     if (!_started) return;
     SchedulerBinding.instance.removeTimingsCallback(_handleTimings);
@@ -287,6 +345,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
   }
 
   @visibleForTesting
+  /// Adds a frame timing sample and applies automatic quality hysteresis.
   void addFrameSample({
     required Duration build,
     required Duration raster,
@@ -300,7 +359,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
       raster: raster,
       frameBudget: targetFrameBudget,
     );
-    if (mode != QuickjsUiPerformanceMode.auto) return;
+    if (mode != JsUiPerformanceMode.auto) return;
     final elapsed = build > raster ? build : raster;
     final slowThreshold = targetFrameBudget * 1.15;
     final stableThreshold = targetFrameBudget * 0.75;
@@ -340,7 +399,7 @@ final class QuickjsUiPerformanceController extends ChangeNotifier {
     }
   }
 
-  void _setQuality(QuickjsUiEffectQuality value, {required String reason}) {
+  void _setQuality(JsUiEffectQuality value, {required String reason}) {
     if (_quality == value) return;
     _quality = value;
     _lastTransitionReason = reason;
@@ -405,7 +464,7 @@ final class _PerformanceSession {
     _changes.add(_QualityChange(timestamp, quality, reason));
   }
 
-  QuickjsUiPerformanceReport finish({
+  JsUiPerformanceReport finish({
     required DateTime endedAt,
     required Map<String, Object?> environment,
     required Map<String, Object?> sceneMetrics,
@@ -416,14 +475,14 @@ final class _PerformanceSession {
     final relevantChanges = _changes
         .where((change) => !change.at.isBefore(captureStart))
         .toList();
-    final events = <QuickjsUiQualityEvent>[
-      QuickjsUiQualityEvent(
+    final events = <JsUiQualityEvent>[
+      JsUiQualityEvent(
         offsetMs: captureStart.difference(startedAt).inMilliseconds,
         quality: _qualityAt(captureStart),
         reason: 'capture started',
       ),
       for (final change in relevantChanges)
-        QuickjsUiQualityEvent(
+        JsUiQualityEvent(
           offsetMs: change.at.difference(startedAt).inMilliseconds,
           quality: change.quality,
           reason: change.reason,
@@ -449,7 +508,7 @@ final class _PerformanceSession {
       if (current > previous) degradeCount += 1;
       if (current < previous) recoveryCount += 1;
     }
-    return QuickjsUiPerformanceReport(
+    return JsUiPerformanceReport(
       startedAt: startedAt,
       endedAt: endedAt,
       warmUp: warmUp,
@@ -464,7 +523,7 @@ final class _PerformanceSession {
       rasterP90Ms: _listPercentile(_rasterMs, 0.90),
       rasterP99Ms: _listPercentile(_rasterMs, 0.99),
       rasterMaxMs: _listMax(_rasterMs),
-      qualityTimeline: List<QuickjsUiQualityEvent>.unmodifiable(events),
+      qualityTimeline: List<JsUiQualityEvent>.unmodifiable(events),
       qualityDurationsMs: Map<String, int>.unmodifiable(durations),
       degradeCount: degradeCount,
       recoveryCount: recoveryCount,
@@ -490,8 +549,10 @@ final class _QualityChange {
   final String reason;
 }
 
-final class QuickjsUiPerformanceSnapshot {
-  const QuickjsUiPerformanceSnapshot({
+/// An immutable snapshot of performance state and renderer workload counters.
+final class JsUiPerformanceSnapshot {
+  /// Creates a complete performance snapshot.
+  const JsUiPerformanceSnapshot({
     required this.mode,
     required this.quality,
     required this.refreshRate,
@@ -530,43 +591,115 @@ final class QuickjsUiPerformanceSnapshot {
     required this.lastCanvasRejection,
   });
 
-  final QuickjsUiPerformanceMode mode;
-  final QuickjsUiEffectQuality quality;
+  /// Configured performance mode.
+  final JsUiPerformanceMode mode;
+
+  /// Effective renderer quality.
+  final JsUiEffectQuality quality;
+
+  /// Last known display refresh rate in hertz.
   final double? refreshRate;
+
+  /// Frame duration used as the performance target.
   final Duration targetFrameBudget;
+
+  /// Whether reduced motion is active.
   final bool reduceMotion;
+
+  /// Median sampled Flutter build duration in milliseconds.
   final double? buildP50Ms;
+
+  /// 90th-percentile build duration in milliseconds.
   final double? buildP90Ms;
+
+  /// 99th-percentile build duration in milliseconds.
   final double? buildP99Ms;
+
+  /// Median sampled raster duration in milliseconds.
   final double? rasterP50Ms;
+
+  /// 90th-percentile raster duration in milliseconds.
   final double? rasterP90Ms;
+
+  /// 99th-percentile raster duration in milliseconds.
   final double? rasterP99Ms;
+
+  /// Current consecutive slow-frame count used by hysteresis.
   final int consecutiveSlowFrames;
+
+  /// Current consecutive stable-frame count used by hysteresis.
   final int consecutiveStableFrames;
+
+  /// Explanation for the latest quality or reduced-motion transition.
   final String? lastTransitionReason;
+
+  /// Canvas nodes observed in the latest render pass.
   final int canvasCount;
+
+  /// Animated canvas nodes observed in the latest render pass.
   final int animatedCanvasCount;
+
+  /// Canvas commands requested in the latest render pass.
   final int canvasCommandCount;
+
+  /// Canvas path segments requested in the latest render pass.
   final int canvasPathSegmentCount;
+
+  /// Particle fragments requested by the latest scene.
   final int requestedParticleFragments;
+
+  /// Particle fragments retained after quality limits.
   final int effectiveParticleFragments;
+
+  /// Blur effects requested by the latest scene.
   final int blurEffectCount;
+
+  /// Blur effects subject to quality clamping.
   final int clampedBlurEffectCount;
+
+  /// Backdrop blur effects requested by the latest scene.
   final int backdropBlurEffectCount;
+
+  /// Backdrop blur effects disabled by effective quality.
   final int disabledBackdropBlurCount;
+
+  /// Color-filter effects requested by the latest scene.
   final int colorFilterEffectCount;
+
+  /// Color-filter effects disabled by effective quality.
   final int disabledColorFilterCount;
+
+  /// Animated canvas tickers stopped by effective quality.
   final int stoppedCanvasTickerCount;
+
+  /// Currently retained renderer scenes.
   final int retainedSceneCount;
+
+  /// Currently retained snapshots.
   final int snapshotCount;
+
+  /// Total pixel count of retained snapshots.
   final int snapshotPixels;
+
+  /// Canvas repaints recorded by the controller.
   final int canvasRepaintCount;
+
+  /// Median canvas paint duration in milliseconds.
   final double? canvasPaintP50Ms;
+
+  /// 90th-percentile canvas paint duration in milliseconds.
   final double? canvasPaintP90Ms;
+
+  /// 99th-percentile canvas paint duration in milliseconds.
   final double? canvasPaintP99Ms;
+
+  /// Canvas commands rejected by renderer validation.
   final int rejectedCanvasCommandCount;
+
+  /// Text of the latest canvas rejection.
   final String? lastCanvasRejection;
 
+  /// Serializes this snapshot to JSON-compatible structured data.
   Map<String, Object?> toMap() => <String, Object?>{
     'mode': mode.name,
     'quality': quality.name,
@@ -608,15 +741,13 @@ final class QuickjsUiPerformanceSnapshot {
   };
 }
 
-int _effectiveParticleFragments(
-  int requested,
-  QuickjsUiEffectQuality quality,
-) => switch (quality) {
-  QuickjsUiEffectQuality.high => requested,
-  QuickjsUiEffectQuality.balanced => requested.clamp(0, 1024),
-  QuickjsUiEffectQuality.low => requested.clamp(0, 256),
-  QuickjsUiEffectQuality.off => 0,
-};
+int _effectiveParticleFragments(int requested, JsUiEffectQuality quality) =>
+    switch (quality) {
+      JsUiEffectQuality.high => requested,
+      JsUiEffectQuality.balanced => requested.clamp(0, 1024),
+      JsUiEffectQuality.low => requested.clamp(0, 256),
+      JsUiEffectQuality.off => 0,
+    };
 
 void _appendSample(ListQueue<double> samples, double value) {
   samples.add(value);
@@ -646,25 +777,22 @@ int _qualityRank(String quality) => switch (quality) {
   _ => 0,
 };
 
-QuickjsUiEffectQuality _qualityForMode(QuickjsUiPerformanceMode mode) =>
-    switch (mode) {
-      QuickjsUiPerformanceMode.auto ||
-      QuickjsUiPerformanceMode.high => QuickjsUiEffectQuality.high,
-      QuickjsUiPerformanceMode.balanced => QuickjsUiEffectQuality.balanced,
-      QuickjsUiPerformanceMode.low => QuickjsUiEffectQuality.low,
-      QuickjsUiPerformanceMode.off => QuickjsUiEffectQuality.off,
-    };
+JsUiEffectQuality _qualityForMode(JsUiPerformanceMode mode) => switch (mode) {
+  JsUiPerformanceMode.auto ||
+  JsUiPerformanceMode.high => JsUiEffectQuality.high,
+  JsUiPerformanceMode.balanced => JsUiEffectQuality.balanced,
+  JsUiPerformanceMode.low => JsUiEffectQuality.low,
+  JsUiPerformanceMode.off => JsUiEffectQuality.off,
+};
 
-QuickjsUiEffectQuality _degraded(QuickjsUiEffectQuality quality) =>
-    switch (quality) {
-      QuickjsUiEffectQuality.high => QuickjsUiEffectQuality.balanced,
-      QuickjsUiEffectQuality.balanced => QuickjsUiEffectQuality.low,
-      QuickjsUiEffectQuality.low || QuickjsUiEffectQuality.off => quality,
-    };
+JsUiEffectQuality _degraded(JsUiEffectQuality quality) => switch (quality) {
+  JsUiEffectQuality.high => JsUiEffectQuality.balanced,
+  JsUiEffectQuality.balanced => JsUiEffectQuality.low,
+  JsUiEffectQuality.low || JsUiEffectQuality.off => quality,
+};
 
-QuickjsUiEffectQuality _upgraded(QuickjsUiEffectQuality quality) =>
-    switch (quality) {
-      QuickjsUiEffectQuality.low => QuickjsUiEffectQuality.balanced,
-      QuickjsUiEffectQuality.balanced => QuickjsUiEffectQuality.high,
-      QuickjsUiEffectQuality.high || QuickjsUiEffectQuality.off => quality,
-    };
+JsUiEffectQuality _upgraded(JsUiEffectQuality quality) => switch (quality) {
+  JsUiEffectQuality.low => JsUiEffectQuality.balanced,
+  JsUiEffectQuality.balanced => JsUiEffectQuality.high,
+  JsUiEffectQuality.high || JsUiEffectQuality.off => quality,
+};

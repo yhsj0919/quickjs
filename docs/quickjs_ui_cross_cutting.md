@@ -56,24 +56,24 @@ UI Schema 应携带足够信息，使 Flutter 能生成可用的无障碍树。�
 
 ```text
 Widget build / gesture / media callback
-  -> QuickjsUiRenderContext.dispatch / dispatchEvent
-  -> QuickjsUiEventDispatcher（合并、节流、防抖）
-  -> QuickjsUiEventIngress.submit（入队）
+  -> JsUiRenderContext.dispatch
+  -> JsUiEventDispatcher（合并、节流、防抖）
+  -> JsUiEventIngress.submit（入队）
   -> 帧结束后刷新
-  -> QuickjsUiController.dispatch
-  -> QuickjsUiSession.dispatch
+  -> JsUiController.dispatch
+  -> JsUiSession.dispatch
   -> notifyListeners
-  -> QuickjsUiView setState
+  -> JsUiView setState
 ```
 
 职责划分：
 
 | 层 | 职责 |
 | --- | --- |
-| `QuickjsUiEventDispatcher` | 高频事件进入页面 Session 前的 Renderer 侧背压。 |
-| `QuickjsUiEventIngress` | 按帧安全投递到 Controller，并保持单次刷新内的事件顺序。 |
-| `QuickjsUiController` | Session 串行化、错误呈现，以及 dispatch 完成后一次通知。 |
-| `QuickjsUiView` | Controller 变化时执行普通 `setState`，不维护帧时序重建链。 |
+| `JsUiEventDispatcher` | 高频事件进入页面 Session 前的 Renderer 侧背压。 |
+| `JsUiEventIngress` | 按帧安全投递到 Controller，并保持单次刷新内的事件顺序。 |
+| `JsUiController` | Session 串行化、错误呈现，以及 dispatch 完成后一次通知。 |
+| `JsUiView` | Controller 变化时执行普通 `setState`，不维护帧时序重建链。 |
 | 自定义 Renderer | 只发送可序列化事件，不增加自己的帧后延迟补丁。 |
 
 ### 通过 JS state 进行命令式控制
@@ -103,7 +103,7 @@ quickjs_ui 和发布包元数据，不应要求 quickjs core 理解 UI Schema。
 
 视频、地图、相机和平台 View 等自定义 Renderer 应像 `StatefulWidget` 一样管理资源：
 初始化时创建，Schema 变化时更新，响应 show/hide、pause/resume，并确定性 dispose。
-高频回调统一通过 `QuickjsUiRenderContext.dispatchEvent()`，不得自行增加帧后回调。
+高频回调统一通过 `JsUiRenderContext.dispatch()`，不得自行增加帧后回调。
 
 边界：自定义 Renderer 可以持有 Flutter/Dart 资源；JS 只能观察可序列化状态和事件。
 Stream 只用于真正的数据流，不作为普通 UI 事件的默认通道。
@@ -111,7 +111,7 @@ Stream 只用于真正的数据流，不作为普通 UI 事件的默认通道。
 ## 资源与媒体模型
 
 asset、file、network、zip 发布包和自定义媒体组件应使用一致的资源解析模型。
-`QuickjsUiResourceReference` 将资源分类为 `asset`、`file`、`network`、`data` 或
+`JsUiResourceReference` 将资源分类为 `asset`、`file`、`network`、`data` 或
 `custom`，校验 scheme，并携带缓存、校验和及诊断元数据。
 
 资源属性可使用旧字符串，也可使用对象：
@@ -135,7 +135,7 @@ Image({
 [`quickjs_ui_package_format.md`](quickjs_ui_package_format.md)。
 
 核心 Stream 传输只用于响应体、字幕、定时元数据或长期宿主数据源。普通 Widget 事件
-和媒体进度继续通过 `QuickjsUiEventIngress`。
+和媒体进度继续通过 `JsUiEventIngress`。
 
 ## 滚动、手势与列表过渡模型
 
@@ -154,12 +154,12 @@ JS 始终拥有列表状态，只返回下一份 Schema。
 
 开发工具按需启用，位于 quickjs_ui diagnostics 模块，不进入 quickjs core。
 
-`QuickjsUiDevOptions` 控制错误浮层、热重载状态保留及 Schema/Diff/资源日志。
-`QuickjsUiInspector` 记录生命周期、最近 Action、Renderer Diff 和资源日志。
+`JsUiDevOptions` 控制错误浮层、热重载状态保留及 Schema/Diff/资源日志。
+`JsUiInspector` 记录生命周期、最近 Action、Renderer Diff 和资源日志。
 `exportPageSnapshot()` 导出可 JSON 序列化的 props、state、Schema、manifest、资源、宿主
 API、生命周期及 Diff，仅用于调试和问题复现，不用于跨启动持久化。
 
-`QuickjsUiNetworkJournal` 统一记录发布包加载和经过埋点的宿主网络请求，包括 method、
+`JsUiNetworkJournal` 统一记录发布包加载和经过埋点的宿主网络请求，包括 method、
 URI、状态、耗时、Body 大小、缓存阶段及结构化错误。它只提供开发期可观测性，不改变
 权限、缓存或生产网络语义。
 

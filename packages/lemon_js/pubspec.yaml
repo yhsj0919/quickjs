@@ -1,6 +1,6 @@
 name: lemon_js
 description: "QuickJS JavaScript engine for Flutter — cross-platform FFI and WebAssembly."
-version: 0.1.1
+version: 0.2.0
 homepage: https://github.com/yhsj0919/quickjs
 repository: https://github.com/yhsj0919/quickjs
 issue_tracker: https://github.com/yhsj0919/quickjs/issues
@@ -31,6 +31,7 @@ dev_dependencies:
 
 flutter:
   assets:
+    - assets/js/axios.js
     - assets/web/quickjs.wasm
     - assets/web/quickjs_wasi.js
     - assets/web/wasi-shim.js
@@ -43,21 +44,21 @@ flutter:
   plugin:
     platforms:
       android:
-        package: xyz.yhsj.quickjs
-        pluginClass: QuickjsPlugin
+        package: xyz.yhsj.lemon_js
+        pluginClass: LemonJsPlugin
         ffiPlugin: true
       ios:
-        pluginClass: QuickjsPlugin
+        pluginClass: LemonJsPlugin
         ffiPlugin: true
       linux:
-        pluginClass: QuickjsPlugin
+        pluginClass: LemonJsPlugin
         ffiPlugin: true
       macos:
-        pluginClass: QuickjsPlugin
+        pluginClass: LemonJsPlugin
         ffiPlugin: true
       windows:
-        pluginClass: QuickjsPluginCApi
+        pluginClass: LemonJsPluginCApi
         ffiPlugin: true
       web:
-        pluginClass: QuickjsWeb
+        pluginClass: JsWeb
         fileName: lemon_js_web.dart

@@ -18,8 +18,8 @@ set(PLUGIN_NAME "lemon_js_plugin")
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
-  "quickjs_plugin.cpp"
-  "quickjs_plugin.h"
+  "lemon_js_plugin.cpp"
+  "lemon_js_plugin.h"
 )
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native" quickjs_native)
@@ -27,8 +27,8 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native" quickjs_native)
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).
 add_library(${PLUGIN_NAME} SHARED
-  "include/lemon_js/quickjs_plugin_c_api.h"
-  "quickjs_plugin_c_api.cpp"
+  "include/lemon_js/lemon_js_plugin_c_api.h"
+  "lemon_js_plugin_c_api.cpp"
   ${PLUGIN_SOURCES}
 )
 
@@ -83,7 +83,7 @@ FetchContent_MakeAvailable(googletest)
 # The plugin's C API is not very useful for unit testing, so build the sources
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
-  test/quickjs_plugin_test.cpp
+  test/lemon_js_plugin_test.cpp
   ${PLUGIN_SOURCES}
 )
 apply_standard_settings(${TEST_RUNNER})

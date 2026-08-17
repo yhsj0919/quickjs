@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
+import 'package:lemon_js_ui/lemon_js_ui_session.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,12 +20,12 @@ void main() {
   for (final path in assets) {
     test('$path builds a locally animated Canvas scene', () async {
       final source = await rootBundle.loadString(path);
-      final engine = await Quickjs.create();
-      final session = QuickjsUiSession(engine: engine);
+      final engine = await JsEngine.create();
+      final session = JsUiSession(engine: engine);
       addTearDown(session.dispose);
 
       await session.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: path.split('/').last.replaceAll('.mjs', ''),
           version: '1.0.0',
           source: source,
@@ -50,10 +51,10 @@ void main() {
     final particleLayerSource = await rootBundle.loadString(
       'assets/quickjs_ui/adaptive_performance/snapshot_particle_stage.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
-    final scaffold = QuickjsUiPagePlugin.singleFile(
+    final scaffold = JsUiPagePlugin.source(
       id: 'adaptive_performance_lab',
       version: '1.0.0',
       source: source,
@@ -64,12 +65,12 @@ void main() {
         modules: <JsPluginModule>[
           scaffold.modules.first,
           JsPluginModule(
-            specifier:
+            name:
                 'adaptive_performance_lab/adaptive_performance/retained_load_scene.mjs',
             source: retainedSceneSource,
           ),
           JsPluginModule(
-            specifier:
+            name:
                 'adaptive_performance_lab/adaptive_performance/snapshot_particle_stage.mjs',
             source: particleLayerSource,
           ),
@@ -160,11 +161,11 @@ void main() {
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/universal_effects_page.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'universal_effects',
         version: '1.0.0',
         source: source,
@@ -183,11 +184,11 @@ void main() {
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/control_states_slots_page.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'control_states_slots',
         version: '1.0.0',
         source: source,
@@ -217,11 +218,11 @@ void main() {
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/control_state_transitions_page.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'control_state_transitions',
         version: '1.0.0',
         source: source,
@@ -250,11 +251,11 @@ void main() {
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/overlay_system_page.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'overlay_system',
         version: '1.0.0',
         source: source,
@@ -274,11 +275,11 @@ void main() {
   });
 
   test('Canvas 2D-style API records familiar operations', () async {
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'canvas_2d_style',
         version: '1.0.0',
         source: '''
@@ -331,16 +332,12 @@ export default Page({
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/arc_gauge_page.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
 
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
-        id: 'arc_gauge',
-        version: '1.0.0',
-        source: source,
-      ),
+      JsUiPagePlugin.source(id: 'arc_gauge', version: '1.0.0', source: source),
     );
 
     final initialCanvas = _findCanvas(session.node!)!;
@@ -362,12 +359,12 @@ export default Page({
     final source = await rootBundle.loadString(
       'assets/quickjs_ui/snappable_dust_page.mjs',
     );
-    final engine = await Quickjs.create();
-    final session = QuickjsUiSession(engine: engine);
+    final engine = await JsEngine.create();
+    final session = JsUiSession(engine: engine);
     addTearDown(session.dispose);
 
     await session.loadPlugin(
-      QuickjsUiPagePlugin.singleFile(
+      JsUiPagePlugin.source(
         id: 'snappable_dust',
         version: '1.0.0',
         source: source,
@@ -403,6 +400,7 @@ export default Page({
     expect(retainedCommands, hasLength(1));
     expect(retainedCommands.single, <String, Object?>{
       'op': 'snapshotParticleGrid',
+      'direction': 'transition',
       'sourceSlot': 'source',
       'targetSlot': 'target',
       'x': 38,
@@ -462,7 +460,7 @@ export default Page({
   });
 }
 
-QuickjsUiNode? _findCanvas(QuickjsUiNode node) {
+JsUiNode? _findCanvas(JsUiNode node) {
   if (node.type == 'Canvas') return node;
   for (final child in node.children) {
     final result = _findCanvas(child);
@@ -471,7 +469,7 @@ QuickjsUiNode? _findCanvas(QuickjsUiNode node) {
   return null;
 }
 
-QuickjsUiNode? _findNode(QuickjsUiNode node, String type) {
+JsUiNode? _findNode(JsUiNode node, String type) {
   if (node.type == type) return node;
   for (final child in node.children) {
     final result = _findNode(child, type);
@@ -480,7 +478,7 @@ QuickjsUiNode? _findNode(QuickjsUiNode node, String type) {
   return null;
 }
 
-QuickjsUiNode? _findNodeByKey(QuickjsUiNode node, String key) {
+JsUiNode? _findNodeByKey(JsUiNode node, String key) {
   if (node.key == key) return node;
   for (final child in node.children) {
     final result = _findNodeByKey(child, key);

@@ -3,8 +3,8 @@ import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 自定义组件 Demo：演示 JS `Component()`、Dart 自定义 renderer、
 /// 表单控件、事件描述符与基础隐式动画。
-class QuickjsUiCustomComponentsPage extends StatelessWidget {
-  const QuickjsUiCustomComponentsPage({super.key});
+class JsUiCustomComponentsPage extends StatelessWidget {
+  const JsUiCustomComponentsPage({super.key});
 
   /// 入口 JS 页面的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/custom_components_page.mjs';
@@ -13,7 +13,7 @@ class QuickjsUiCustomComponentsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('自定义组件')),
-      body: QuickjsUiView.asset(
+      body: JsUiView.asset(
         path: path,
         uiPlugins: _customComponentPlugins,
         initialProps: const <String, Object?>{
@@ -30,10 +30,10 @@ class QuickjsUiCustomComponentsPage extends StatelessWidget {
 }
 
 /// 本页使用的自定义 UI 插件：注册示例 AppBar 等 Dart 渲染器。
-final List<QuickjsUiPlugin> _customComponentPlugins = <QuickjsUiPlugin>[
-  QuickjsUiPlugin(
+final List<JsUiPlugin> _customComponentPlugins = <JsUiPlugin>[
+  JsUiPlugin(
     name: 'example:custom-components',
-    configureRegistry: (registry) {
+    configure: (registry) {
       registry
         ..register('AppBar', (context, node) {
           return Material(

@@ -1,5 +1,27 @@
 # 更新日志 / Changelog
 
+## 0.2.0
+
+### 中文
+
+- **破坏性更新：** 本版本随 `lemon_js` / `lemon_js_ui` 的公开 API 重构同步迁移，不提供旧
+  API 兼容层；升级前请阅读
+  [破坏性 API 迁移指南](../../docs/breaking_api_migration.md)。
+- renderer builder 不再作为公开 API；视频组件统一通过 `JsUiPlugin` 注册。
+- TypeScript props 删除任意属性索引签名，并补全 `showLoading` 和资源引用类型。
+- 统一播放控制、事件载荷、进度节流和播放器生命周期约定。
+
+### English
+
+- **Breaking update:** This release follows the `lemon_js` / `lemon_js_ui` public API refactor and does
+  not provide a legacy compatibility layer. Read the
+  [breaking API migration guide](../../docs/breaking_api_migration.md) before upgrading.
+- Removed the renderer builder from the public API; video components are now registered through
+  `JsUiPlugin`.
+- Removed the arbitrary TypeScript props index signature and added explicit `showLoading` and resource
+  reference types.
+- Standardized playback controls, event payloads, progress throttling, and player lifecycle behavior.
+
 ## 0.1.1
 
 ### 中文

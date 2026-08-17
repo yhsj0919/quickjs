@@ -22,7 +22,7 @@
 2. Core 插件负责数据获取、认证请求、认证状态判断和凭据使用。
 3. JSUI 负责宿主无法统一的认证、验证和配置交互。
 4. 宿主根据 manifest 发现能力和入口，不再通过探测某个 JS 方法是否存在来决定页面行为。
-5. 一个混合插件包可以包含 Core 和 JSUI 两种基础插件；宿主分别加载，但绑定到同一个宿主级 `QuickjsExtensionSession`。
+5. 一个混合插件包可以包含 Core 和 JSUI 两种基础插件；宿主分别加载，但绑定到同一个宿主级 `JsExtensionSession`。
 6. 同一混合插件的 Core 与 JSUI 共享插件身份、权限和 KV 命名空间，但不要求运行在同一个 QuickJS Context。
 7. 不同站点拥有不同 Session，存储和能力互相隔离。
 8. JSUI 不得在运行时自行传入任意插件 ID 选择 Core；宿主根据当前 route 所属 Session 注入已绑定的 Core 能力。
@@ -55,7 +55,7 @@ lemon_js_ui -> lemon_js
 
 依赖方向必须保持单向：
 
-- `lemon_js` 只负责 JS runtime、模块、Core 插件、features/provider 和底层生命周期，不依赖 lemon_js_ui 或 `lemon_js_extensions`；
+- `lemon_js` 只负责 JS runtime、模块、Core 插件、features/method 和底层生命周期，不依赖 lemon_js_ui 或 `lemon_js_extensions`；
 - lemon_js_ui 负责通用 JSUI 加载、渲染、事件、导航与页面生命周期，继续依赖 `lemon_js`，但不依赖 `lemon_js_extensions`；
 - `lemon_js_extensions` 同时依赖 `lemon_js` 与 lemon_js_ui，提供二者的通用组合能力；
 - 业务宿主可以直接使用 `lemon_js`、lemon_js_ui，也可以选择依赖 `lemon_js_extensions`，由业务层解释登录、内容源、播放器等具体语义。
@@ -63,7 +63,7 @@ lemon_js_ui -> lemon_js
 `lemon_js_extensions` 是可选的插件系统与组合语法糖层。它不取代 `lemon_js` 和 `lemon_js_ui` 的独立使用方式。它负责：
 
 - 统一混合插件包和 manifest；
-- `InstalledQuickjsExtension` 与 `QuickjsExtensionSession`；
+- `JsExtensionInstallation` 与 `JsExtensionSession`；
 - service、UI bundle/routes 和资源的组合加载；
 - 同插件 scoped KV、权限和 host capabilities 的绑定；
 - JSUI 到同 Session Core 的受限 service bridge；
@@ -93,15 +93,15 @@ import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 统一主体类型与构造变体：
 
 ```dart
-QuickjsExtension.js(...)
-QuickjsExtension.ui(...)
-QuickjsExtension.hybrid(...)
+JsExtension.js(...)
+JsExtension.ui(...)
+JsExtension.hybrid(...)
 ```
 
 也支持从统一 manifest 自动加载：
 
 ```dart
-final extension = await QuickjsExtension.load(package);
+final extension = await JsExtension.load(package);
 ```
 
 形态由实际组件派生，而不是驱动三套加载流程：
@@ -115,17 +115,17 @@ service + ui -> hybrid
 统一使用以下命名族：
 
 ```text
-QuickjsExtension
-QuickjsExtensionManifest
-InstalledQuickjsExtension
-QuickjsExtensionSession
-QuickjsExtensionRegistry
-QuickjsExtensionInstaller
-QuickjsServiceComponent
-QuickjsUiComponent
+JsExtension
+JsExtensionManifest
+JsExtensionInstallation
+JsExtensionSession
+JsExtensionRegistry
+JsExtensionInstaller
+JsExtensionServiceComponent
+JsExtensionUiComponent
 ```
 
-不引入 `InstalledCorePlugin`、`InstalledUiPlugin`、`InstalledHybridPlugin` 等平行公开类型。`.js`、`.ui`、`.hybrid` 只是同一个 `QuickjsExtension` 的构造与分类变体。
+不引入 `InstalledCorePlugin`、`InstalledUiPlugin`、`InstalledHybridPlugin` 等平行公开类型。`.js`、`.ui`、`.hybrid` 只是同一个 `JsExtension` 的构造与分类变体。
 
 底层能力仍保持独立可用：
 
@@ -134,22 +134,22 @@ QuickjsUiComponent
 final plugin = JsPlugin(...);
 
 // 不经过 lemon_js_extensions，直接使用 JSUI bundle。
-final bundle = QuickjsUiBundle(...);
+final bundle = JsUiBundle(...);
 ```
 
-`lemon_js_extensions` 必须通过 `lemon_js` 与 `lemon_js_ui` 的公开 API 完成组合，不要求简单使用者先包装成 `QuickjsExtension`，也不应让底层 API 依赖扩展系统。
+`lemon_js_extensions` 必须通过 `lemon_js` 与 `lemon_js_ui` 的公开 API 完成组合，不要求简单使用者先包装成 `JsExtension`，也不应让底层 API 依赖扩展系统。
 
 ### 3.3 View 命名与职责
 
-现有 `QuickjsUiView` 保持原名和现有职责，不增加 `.js`、`.ui` 或 `.hybrid` 构造变体。它属于 quickjs_ui，只负责直接加载和渲染 JSUI 页面；现有 `.plugin`、`.asset`、`.file`、`.network` 描述页面来源，继续独立可用。
+现有 `JsUiView` 保持原名和现有职责，不增加 `.js`、`.ui` 或 `.hybrid` 构造变体。它属于 quickjs_ui，只负责直接加载和渲染 JSUI 页面；现有 `.plugin`、`.asset`、`.file`、`.network` 描述页面来源，继续独立可用。
 
 不采用以下 API：
 
 ```dart
-QuickjsUiView.js(...)
-QuickjsUiView.ui(...)
-QuickjsUiView.hybrid(...)
-QuickjsUiView.extension(...)
+JsUiView.js(...)
+JsUiView.ui(...)
+JsUiView.hybrid(...)
+JsUiView.extension(...)
 ```
 
 其中 `.js` 没有可渲染 UI，`.ui` 与类本身语义重复；`.hybrid`/`.extension` 会迫使 quickjs_ui 理解上层扩展系统，并造成 quickjs_ui 反向依赖 `lemon_js_extensions`。
@@ -157,7 +157,7 @@ QuickjsUiView.extension(...)
 `lemon_js_extensions` 新增 Session 感知的包装 View：
 
 ```dart
-QuickjsExtensionView.route(
+JsExtensionView.route(
   session: session,
   route: 'authentication',
   initialProps: props,
@@ -166,16 +166,16 @@ QuickjsExtensionView.route(
 
 它负责：
 
-- 从 `QuickjsExtensionSession` 解析指定 UI route；
+- 从 `JsExtensionSession` 解析指定 UI route；
 - 取得对应 bundle/plugin；
 - 绑定宿主明确配置的 scoped KV、权限策略与 host features；
 - 对 hybrid 变体注入绑定到同一 Session Core 的 service bridge；
-- 最终委托现有 `QuickjsUiView` 完成加载和渲染。
+- 最终委托现有 `JsUiView` 完成加载和渲染。
 
 ```text
-QuickjsExtensionView.route
+JsExtensionView.route
         ↓ 解析 extension/session/route/features
-QuickjsUiView
+JsUiView
         ↓
 Flutter Widget
 ```
@@ -183,29 +183,29 @@ Flutter Widget
 统一命名关系为：
 
 ```text
-QuickjsUiView
+JsUiView
 ├── .plugin
 ├── .asset
 ├── .file
 └── .network
 
-QuickjsExtension
+JsExtension
 ├── .js
 ├── .ui
 └── .hybrid
 
-QuickjsExtensionView
+JsExtensionView
 └── .route
 ```
 
-`package:lemon_js_extensions/lemon_js_extensions.dart` 作为扩展系统的统一导出入口，可以同时导出 `QuickjsExtension`、`QuickjsExtensionView` 等扩展 API，以及使用扩展 API 时必要的 `lemon_js`、`lemon_js_ui` 公共类型。直接依赖 `lemon_js_ui` 的使用者仍从其原入口使用 `QuickjsUiView`，不需要引入扩展包。
+`package:lemon_js_extensions/lemon_js_extensions.dart` 作为扩展系统的统一导出入口，可以同时导出 `JsExtension`、`JsExtensionView` 等扩展 API，以及使用扩展 API 时必要的 `lemon_js`、`lemon_js_ui` 公共类型。直接依赖 `lemon_js_ui` 的使用者仍从其原入口使用 `JsUiView`，不需要引入扩展包。
 
-## 4. QuickjsExtensionSession
+## 4. JsExtensionSession
 
 每个已安装并启用的站点插件对应一个独立 Session：
 
 ```text
-QuickjsExtensionSession(site.example1)
+JsExtensionSession(site.example1)
 ├── Core runtime/context（可以长期存在）
 ├── JSUI context（打开页面时创建，可以随页面销毁）
 ├── scoped KV：site.example1
@@ -227,7 +227,7 @@ Session 是宿主级的身份和资源边界，不等同于 QuickJS Context。JS
 
 ### 4.1 常驻生命周期
 
-`QuickjsExtension` 一般是创建并注册后常驻系统内存的稳定对象，不是一次调用或一个页面的临时包装器。其默认 `QuickjsExtensionSession` 与 extension 使用同一长期生命周期。
+`JsExtension` 一般是创建并注册后常驻系统内存的稳定对象，不是一次调用或一个页面的临时包装器。其默认 `JsExtensionSession` 与 extension 使用同一长期生命周期。
 
 默认生命周期规则：
 
@@ -247,7 +247,7 @@ Session 是宿主级的身份和资源边界，不等同于 QuickJS Context。JS
 
 ### 4.2 能力的统一管理与分别注入
 
-基础能力由 `QuickjsExtensionSession` 统一配置和授权，但 Core 与 JSUI 通常处于不同 Context，创建各自 runtime 时分别注入：
+基础能力由 `JsExtensionSession` 统一配置和授权，但 Core 与 JSUI 通常处于不同 Context，创建各自 runtime 时分别注入：
 
 ```text
 Core runtime = authorized sharedFeaturess + serviceFeaturess
@@ -262,7 +262,7 @@ UI runtime = authorized sharedFeaturess
 - `sharedFeaturess` 同时提供给 Core 与 UI，例如连接同一个 Session 后端的 scoped KV；
 - `serviceFeaturess` 只提供给 Core，例如完整网络、认证和数据处理能力；
 - `uiFeaturess` 只提供给 JSUI，例如剪贴板、文件选择和页面交互能力；
-- `routeFeaturess` 在 `QuickjsExtensionView.route()` 创建具体页面时补充，例如只有扫码登录页获得相机能力；
+- `routeFeaturess` 在 `JsExtensionView.route()` 创建具体页面时补充，例如只有扫码登录页获得相机能力；
 - hybrid service bridge 默认绑定当前 Session 的 Core，不接收任意 pluginId，也不把 Core 的全部底层能力暴露给 UI。
 
 manifest 权限声明不等于实际注入。宿主授权后才可进入相应 runtime 的有效 features。
@@ -321,10 +321,10 @@ assets/
   icon.png
 ```
 
-来源加载统一收敛到 `QuickjsExtensionPackage`。开发期支持以 `manifest.json`
+来源加载统一收敛到 `JsExtensionPackage`。开发期支持以 `manifest.json`
 为入口从 asset、file 或 network 目录递归加载相对模块；生产分发支持
 asset ZIP、file ZIP、network ZIP 和内存 ZIP 字节。来源层完成后统一交给
-`QuickjsExtension.load(...)`，安装、Session 和调用层不区分物理来源。
+`JsExtension.load(...)`，安装、Session 和调用层不区分物理来源。
 
 讨论阶段的 manifest 示例：
 
@@ -433,7 +433,7 @@ URL 字段使用绝对 HTTPS 地址。`homepage` 可以仅用于展示或跳转�
           ↓
 校验模块、资源、权限与兼容版本
           ↓
-创建 InstalledQuickjsExtension 与 QuickjsExtensionSession
+创建 JsExtensionInstallation 与 JsExtensionSession
           ├── 有 service：注册 Core 数据插件
           ├── 有 ui：注册 JSUI bundle/routes
           └── 有 flows：注册宿主交互入口
@@ -442,11 +442,11 @@ URL 字段使用绝对 HTTPS 地址。`homepage` 可以仅用于展示或跳转�
 概念模型：
 
 ```dart
-final class InstalledQuickjsExtension {
-  final QuickjsExtensionManifest manifest;
-  final QuickjsExtensionSession session;
+final class JsExtensionInstallation {
+  final JsExtensionManifest manifest;
+  final JsExtensionSession session;
   final JsPlugin? servicePlugin;
-  final QuickjsUiBundle? uiBundle;
+  final JsUiBundle? uiBundle;
 }
 ```
 
@@ -455,7 +455,7 @@ final class InstalledQuickjsExtension {
 - `ServiceRegistry`：按 contract 查询可供原生页面遍历的 Core service；
 - `InteractionFlowRegistry`：按 `pluginId + flowId` 查询 JSUI 交互入口。
 
-二者都指向同一个 `InstalledQuickjsExtension` 和 `QuickjsExtensionSession`。
+二者都指向同一个 `JsExtensionInstallation` 和 `JsExtensionSession`。
 
 ## 8. 标准数据调用
 
@@ -545,7 +545,7 @@ JSUI -> navigation.pop -> 宿主流程结果
 推荐由 Session 持有 Core runtime，JSUI Context 通过 bridge 调用：
 
 ```text
-QuickjsExtensionSession
+JsExtensionSession
 ├── Core runtime/context
 ├── scoped KV
 └── service bridge
@@ -588,9 +588,9 @@ const result = await pluginService.call('submitLogin', form);
 
 ### 12.2 安装管理和持久化注册表（第一版已实现）
 
-已提供 `QuickjsExtensionInstaller`、`InstalledQuickjsExtension` 和
-`QuickjsExtensionRegistry`，支持注册、停用、启用、卸载以及按 contract/flow
-查询。现已增加统一的 `QuickjsExtensionManager`，负责：
+已提供 `JsExtensionInstaller`、`JsExtensionInstallation` 和
+`JsExtensionRegistry`，支持注册、停用、启用、卸载以及按 contract/flow
+查询。现已增加统一的 `JsExtensionManager`，负责：
 
 - 从 asset、file、network、ZIP 等来源安装，并将来源归一化为受管理的安装包；
 - 查看全部安装项以及 enabled、disabled、broken 等状态；
@@ -616,7 +616,7 @@ manifest 可通过 `storageVersion` 描述插件 KV 结构版本。版本变化�
 插件命名空间，迁移或激活失败时恢复 KV 与旧安装记录。纯 UI 插件若需要改变 KV 结构，
 应在混合包中提供迁移 service，或保持原 `storageVersion`。
 
-### 12.3 QuickjsExtensionSession 生命周期与资源边界（第一版已实现）
+### 12.3 JsExtensionSession 生命周期与资源边界（第一版已实现）
 
 已提供宿主级 Session，统一绑定插件身份、Core runtime、JSUI routes、KV、权限和 host
 features。Core runtime 首次调用时创建并保持到停用或卸载；UI 页面销毁不影响 Session。
@@ -641,7 +641,7 @@ manifest 权限只表达插件可能使用的受限能力。宿主可选择不�
 ### 12.4 Core 与 JSUI 的绑定 service bridge（第一版已实现）
 
 已提供 `lemon_js_extensions/plugin_service` 模块，根据当前 Session 自动绑定 Core，仅允许
-调用 manifest 的 `uiExports`，且不接受 pluginId。底层 provider 取消会向调用链传播，
+调用 manifest 的 `uiExports`，且不接受 pluginId。底层 method 取消会向调用链传播，
 默认超时、队列上限、手动重启和故障 Runtime 惰性恢复已经由 Session 统一处理。手动重启
 会丢弃 Runtime 内存状态，并在下一次调用时重新创建 Runtime、执行插件 `init()`。
 
@@ -676,9 +676,8 @@ manifest 中声明权限不等于授权。需要将声明、用户授权与实�
 
 ```dart
 await manager.call(
-  pluginId: 'site.example1',
-  method: 'getHome',
-  arguments: const [],
+  'site.example1',
+  'getHome',
 );
 ```
 
@@ -694,7 +693,7 @@ await manager.call(
 ### 12.12 简化的兼容码与不饱和接口校验（已实现）
 
 第一阶段不引入完整的参数和返回值 Schema 系统，而是在统一 manifest 增加
-`compatibilityCode`，由宿主注册对应的兼容策略。该字段只表示插件声称兼容某一套宿主
+`compatibilityCode`，由宿主注册对应的接口约束。该字段只表示插件声称兼容某一套宿主
 接口，不是签名或安全校验，不能用于证明来源可信或防止包被篡改。
 
 ```json
@@ -709,7 +708,7 @@ await manager.call(
 宿主策略同时声明必需和可选公开方法：
 
 ```dart
-QuickjsExtensionCompatibilityPolicy(
+JsExtensionConstraint(
   compatibilityCode: 'lemon-content-source-v1',
   requiredPublicExports: const {'getPluginInfo'},
   optionalPublicExports: const {
@@ -723,7 +722,7 @@ QuickjsExtensionCompatibilityPolicy(
 
 安装、更新和重启恢复时执行相同校验：
 
-- `compatibilityCode` 必须存在，并与宿主注册的策略精确匹配；
+- `compatibilityCode` 必须存在，并与宿主注册的约束精确匹配；
 - 必须存在 Core service；
 - `requiredPublicExports` 必须全部声明并真实导出为函数；
 - 插件允许不饱和实现，可只选择部分 `optionalPublicExports`；
@@ -808,7 +807,7 @@ manifest 的正式字段，不继续放在无约束的 `metadata` 中。安装�
 实际运行能力
 ```
 
-当前 `QuickjsExtensionSession` 在 Core 首次调用后保持到停用、卸载、Manager 释放或进程
+当前 `JsExtensionSession` 在 Core 首次调用后保持到停用、卸载、Manager 释放或进程
 结束，行为接近 `resident`。本阶段不改变现有行为，也不增加 runtime manifest 字段、空闲
 回收器或后台调度 API；待有真实后台任务场景后再实现，并优先将默认模式收敛为
 `onDemand`。
@@ -819,45 +818,41 @@ manifest 的正式字段，不继续放在无约束的 `metadata` 中。安装�
 `lemon_js_ui` 页面包。三种格式继续各自存在，并由 Manager 在安装入口显式选择输入格式：
 
 ```dart
-enum QuickjsExtensionPackageFormat {
-  extension,
+enum JsExtensionPackageFormat {
+  manifest,
   core,
   ui,
 }
 ```
 
-建议保留 `QuickjsExtensionPackageFormat` 这个名称，不使用 `ExtensionType`。原因是现有
-`QuickjsExtensionKind.js/ui/hybrid` 已表示加载完成后实际包含的能力类型，而这里表示安装
+建议保留 `JsExtensionPackageFormat` 这个名称，不使用 `ExtensionType`。原因是现有
+`JsExtensionKind.js/ui/hybrid` 已表示加载完成后实际包含的能力类型，而这里表示安装
 来源的物理包格式。分开命名可避免把“输入格式”和“派生能力形态”混为一谈。
 
-Manager 安装入口默认使用统一扩展格式：
+Package 负责解析来源和格式，Manager 只负责安装：
 
 ```dart
-await manager.installAssetZip(
-  assetKey: 'assets/plugins/site.zip',
-  format: QuickjsExtensionPackageFormat.extension,
+final package = await JsExtensionPackage.assetZip(
+  path: 'assets/plugins/site.zip',
 );
+await manager.install(package);
 ```
 
-`format` 默认值为 `extension`，旧格式必须显式指定：
+旧格式必须在创建 Package 时显式指定 adapter：
 
 ```dart
-await manager.installAssetZip(
-  assetKey: 'assets/plugins/legacy_core.zip',
-  format: QuickjsExtensionPackageFormat.core,
+final package = await JsExtensionPackage.assetZip(
+  path: 'assets/plugins/legacy_core.zip',
+  format: JsExtensionPackageFormat.core,
+  coreAdapter: coreAdapter,
 );
-
-await manager.installAssetZip(
-  assetKey: 'assets/plugins/legacy_ui.zip',
-  format: QuickjsExtensionPackageFormat.ui,
-);
+await manager.install(package);
 ```
-
 格式职责：
 
 - `extension`：读取统一 Extension manifest，可派生为 Core-only、UI-only 或 hybrid；
 - `core`：使用现有 `JsZipPlugin`/`JsPlugin` 规则读取旧 Core 插件，再由显式适配信息包装为 Core-only Extension；
-- `ui`：使用现有 `QuickjsUiBundle` 包格式读取旧 JSUI 包，再由显式适配信息包装为 UI-only Extension；
+- `ui`：使用现有 `JsUiBundle` 包格式读取旧 JSUI 包，再由显式适配信息包装为 UI-only Extension；
 - 不根据 ZIP 内文件进行模糊猜测，避免多个 `manifest.json` 或相似目录导致错误识别；
 - 原 Core 和 JSUI API 继续可以绕过 Manager 单独使用，缺少统一 manifest 或兼容码不会破坏原加载方式；
 - 旧插件进入 Manager 时需要宿主提供统一管理所缺少的 ID、展示元数据、兼容码、默认 route 或 contract 等适配信息；
@@ -928,8 +923,8 @@ Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段�
 
 ## 14. 建议实施顺序
 
-1. 已完成 `QuickjsExtensionInstallRecord`、持久化 Store 接口和本地文件 Store。
-2. 已完成 `QuickjsExtensionManager.restore()`、损坏隔离和懒加载 Session。
+1. 已完成 `JsExtensionInstallRecord`、持久化 Store 接口和本地文件 Store。
+2. 已完成 `JsExtensionManager.restore()`、损坏隔离和懒加载 Session。
 3. 已完成 asset、file、network、ZIP 统一加载，以及安装、更新回滚和可恢复卸载流程。
 4. 已完成 `install/update/uninstall/list/enable/disable` 管理 API。
 5. 已完成按 `pluginId` 调用、按 contract 枚举及多实现歧义检查。
@@ -938,7 +933,7 @@ Manager 只负责协调并汇总校验结果，不用 Extension 的版本字段�
 7. 已完成图标、主页、更新地址、下载地址、数字 `versionCode` 比较和更新描述模型。
 8. 后续接入签名、摘要、来源绑定、ID 抢占防护、自动更新策略和更完整的权限模型。
 9. 有真实场景后再实现 Service `onDemand/resident/background` 策略和受控后台任务调度。
-10. 已完成 `QuickjsExtensionPackageFormat`，适配旧 Core ZIP、JSUI Package 和裸入口；
+10. 已完成 `JsExtensionPackageFormat`，适配旧 Core ZIP、JSUI Package 和裸入口；
     默认仍为统一 Extension 格式。
 11. 默认 Store 不满足业务需求时，由宿主提供自定义持久化适配。
 

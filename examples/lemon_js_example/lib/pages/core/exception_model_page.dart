@@ -12,7 +12,7 @@ class ExceptionModelPage extends StatefulWidget {
 }
 
 class _ExceptionModelPageState extends State<ExceptionModelPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -32,22 +32,22 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       if (previous != null) {
         await previous.dispose();
       }
 
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -77,13 +77,13 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
 
   Future<void> _runStop() async {
     await _capture('stop / cancel', () async {
-      final quickjs = _requireRuntime();
-      final running = quickjs
+      final engine = _requireRuntime();
+      final running = engine
           .eval('while (true) {}')
           // 先把 running eval 的错误捕获下来，避免 stop 前后出现未处理错误。
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.restart();
+      await engine.restart();
       final error = await running;
       if (error != null) {
         throw error;
@@ -93,15 +93,15 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
 
   Future<void> _runClosed() async {
     await _capture('closed runtime', () async {
-      final quickjs = _requireRuntime();
-      await quickjs.dispose();
+      final engine = _requireRuntime();
+      await engine.dispose();
       if (!mounted || _disposed) {
         return;
       }
       setState(() {
-        _quickjs = null;
+        _engine = null;
       });
-      await quickjs.eval('1 + 1');
+      await engine.eval('1 + 1');
     });
   }
 
@@ -134,12 +134,12 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeError(Object error) {
@@ -168,14 +168,14 @@ class _ExceptionModelPageState extends State<ExceptionModelPage> {
   void dispose() {
     _disposed = true;
     // 页面退出时释放 runtime，避免后续页面复用到异常状态。
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('基础错误模型')),

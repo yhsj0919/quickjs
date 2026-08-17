@@ -100,7 +100,7 @@ export default Page({
           style: { fontSize: 22, fontWeight: 'w700' }
         }),
         Text(
-          '通过 QuickjsFetchMount + Axios 1.6.2 请求远程 JSON，并在 JS 页面内渲染结果。'
+          '通过 FetchFeatures + AxiosFeatures 请求远程 JSON，并在 JS 页面内渲染结果。'
         ),
         Container({
           padding: 12,
@@ -179,7 +179,7 @@ async function loadPosts(state, props) {
       loading: false,
       apiUrl,
       error:
-        'axios 未注入，请在 Dart 侧挂载 QuickjsFetchMount 并通过 environmentPatches 安装 axios',
+        'axios 未注入，请在 Dart 侧通过 features 加载 AxiosFeatures',
       posts: [],
       statusCode: null,
       preview: '',

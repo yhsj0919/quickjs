@@ -37,7 +37,7 @@
 ## Zip 发布包
 
 `JsZipPlugin.asset()` 和 `JsZipPlugin.bytes()` 会查找
-`quickjs-plugin.json` 或 `manifest.json`。假设目录结构如下：
+`manifest.json` 或 `manifest.json`。假设目录结构如下：
 
 ```text
 manifest.json
@@ -77,6 +77,6 @@ zip 路径不符合默认映射时，使用 `files` 显式声明：
 ## 运行时边界
 
 - 清单中的 `permissions` 只是标签；宿主能力仍须显式配置
-  `JsFeatures` / provider。
+  `JsFeatures` / method。
 - 清单中的 `version` 不代表更新策略；由应用决定挂载哪个插件版本。
 - 文件系统扫描、安装状态、哈希/签名校验和更新源均不属于运行时职责。

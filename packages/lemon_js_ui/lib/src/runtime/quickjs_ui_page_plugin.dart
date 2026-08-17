@@ -1,7 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-const List<String> quickjsUiPagePluginExports = <String>[
+/// Protocol exports provided by the generated JSUI page adapter module.
+const List<String> jsUiPagePluginExports = <String>[
   'mount',
   'handleEvent',
   'commit',
@@ -17,9 +18,10 @@ const List<String> quickjsUiPagePluginExports = <String>[
 ];
 
 /// Builds QuickJS plugins from `export default Page(...)` UI modules.
-final class QuickjsUiPagePlugin {
-  const QuickjsUiPagePlugin._();
+final class JsUiPagePlugin {
+  const JsUiPagePlugin._();
 
+  /// Creates a page plugin from a JavaScript module in a Flutter asset.
   static JsPlugin asset({
     required String id,
     required String path,
@@ -34,8 +36,8 @@ final class QuickjsUiPagePlugin {
       version: version,
       pageSpecifier: pageSpecifier,
       pageModule: JsPluginModule.asset(
-        specifier: pageSpecifier,
-        assetKey: path,
+        name: pageSpecifier,
+        path: path,
         bundle: bundle,
       ),
       entryName: entryName,
@@ -43,10 +45,11 @@ final class QuickjsUiPagePlugin {
     );
   }
 
-  static JsPlugin singleFile({
+  /// Creates a UI page plugin from inline JavaScript [source].
+  static JsPlugin source({
     required String id,
-    required String version,
     required String source,
+    String version = '0.1.0',
     String entryName = 'page',
     List<String> permissions = const <String>[],
   }) {
@@ -55,7 +58,7 @@ final class QuickjsUiPagePlugin {
       id: id,
       version: version,
       pageSpecifier: pageSpecifier,
-      pageModule: JsPluginModule(specifier: pageSpecifier, source: source),
+      pageModule: JsPluginModule(name: pageSpecifier, source: source),
       entryName: entryName,
       permissions: permissions,
     );
@@ -75,19 +78,20 @@ final class QuickjsUiPagePlugin {
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: quickjsUiPagePluginExports,
+        exports: jsUiPagePluginExports,
         permissions: permissions,
       ),
       modules: <JsPluginModule>[
         pageModule,
         JsPluginModule(
-          specifier: adapterSpecifier,
+          name: adapterSpecifier,
           source: adapterSource(pageSpecifier),
         ),
       ],
     );
   }
 
+  /// Generates the adapter module for the page at [pageSpecifier].
   static String adapterSource(String pageSpecifier) {
     return '''
 import page from '$pageSpecifier';

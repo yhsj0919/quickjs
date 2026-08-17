@@ -72,9 +72,9 @@ void _drawSnapshotParticleGrid(
   Canvas canvas,
   Map<String, Object?> command,
   _CanvasClock clock,
-  QuickjsUiSnapshotRegistry registry,
+  JsUiSnapshotRegistry registry,
   Map<String, String> resources,
-  QuickjsUiEffectQuality quality,
+  JsUiEffectQuality quality,
 ) {
   final source = _resolveSnapshotSlot(
     command['sourceSlot'],
@@ -94,7 +94,7 @@ void _drawSnapshotParticleGrid(
   final height = _rawFiniteNumber(command['height']);
   final requestedColumns = command['columns'] as int;
   final requestedRows = command['rows'] as int;
-  if (quality == QuickjsUiEffectQuality.off) {
+  if (quality == JsUiEffectQuality.off) {
     canvas.drawImageRect(
       target.image,
       Rect.fromLTWH(
@@ -109,10 +109,10 @@ void _drawSnapshotParticleGrid(
     return;
   }
   final fragmentBudget = switch (quality) {
-    QuickjsUiEffectQuality.high => _maxSnapshotParticleFragments,
-    QuickjsUiEffectQuality.balanced => 1024,
-    QuickjsUiEffectQuality.low => 256,
-    QuickjsUiEffectQuality.off => 1,
+    JsUiEffectQuality.high => _maxSnapshotParticleFragments,
+    JsUiEffectQuality.balanced => 1024,
+    JsUiEffectQuality.low => 256,
+    JsUiEffectQuality.off => 1,
   };
   final requestedFragments = requestedColumns * requestedRows;
   final samplingStep = math.max(
@@ -197,7 +197,7 @@ void _drawSnapshotParticleGrid(
 
 void _drawSnapshotParticle({
   required Canvas canvas,
-  required QuickjsUiSnapshot snapshot,
+  required JsUiSnapshot snapshot,
   required double sourceX,
   required double sourceY,
   required double cellWidth,
@@ -256,9 +256,9 @@ void _drawSnapshotParticle({
   canvas.restore();
 }
 
-QuickjsUiSnapshot? _resolveSnapshotSlot(
+JsUiSnapshot? _resolveSnapshotSlot(
   Object? rawSlot,
-  QuickjsUiSnapshotRegistry registry,
+  JsUiSnapshotRegistry registry,
   Map<String, String> resources,
 ) {
   if (rawSlot is! String) return null;

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
-class QuickjsUiAssetDemoPage extends StatelessWidget {
-  const QuickjsUiAssetDemoPage({
+class JsUiAssetDemoPage extends StatelessWidget {
+  const JsUiAssetDemoPage({
     super.key,
     required this.title,
     required this.path,
@@ -30,7 +30,7 @@ class QuickjsUiAssetDemoPage extends StatelessWidget {
         backgroundColor: resolvedBackground,
         foregroundColor: resolvedForeground,
       ),
-      body: QuickjsUiView.asset(
+      body: JsUiView.asset(
         path: path,
         loadingBuilder: (_) => const Center(child: CircularProgressIndicator()),
         errorBuilder: (_, error) => Padding(
@@ -45,8 +45,8 @@ class QuickjsUiAssetDemoPage extends StatelessWidget {
   }
 }
 
-class QuickjsUiDarkAssetDemoPage extends StatelessWidget {
-  const QuickjsUiDarkAssetDemoPage({
+class JsUiDarkAssetDemoPage extends StatelessWidget {
+  const JsUiDarkAssetDemoPage({
     super.key,
     required this.title,
     required this.path,
@@ -58,7 +58,7 @@ class QuickjsUiDarkAssetDemoPage extends StatelessWidget {
   final String errorLabel;
 
   @override
-  Widget build(BuildContext context) => QuickjsUiAssetDemoPage(
+  Widget build(BuildContext context) => JsUiAssetDemoPage(
     title: title,
     path: path,
     errorLabel: errorLabel,

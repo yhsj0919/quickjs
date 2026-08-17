@@ -1,3 +1,6 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -24,10 +27,10 @@ const int _maxPathSegments = 20000;
 const int _maxSaveDepth = 128;
 const int _maxSnapshotParticleFragments = 4096;
 
-final QuickjsUiComponentBuilderMap quickjsUiCanvasComponentBuilders =
-    <String, QuickjsUiComponentBuilder>{'Canvas': _buildCanvas};
+final JsUiComponentBuilderMap jsUiCanvasComponentBuilders =
+    <String, JsUiComponentBuilder>{'Canvas': _buildCanvas};
 
-Widget _buildCanvas(QuickjsUiRenderContext context, QuickjsUiNode node) {
+Widget _buildCanvas(JsUiRenderContext context, JsUiNode node) {
   try {
     return _buildCanvasValidated(context, node);
   } catch (error) {
@@ -36,10 +39,7 @@ Widget _buildCanvas(QuickjsUiRenderContext context, QuickjsUiNode node) {
   }
 }
 
-Widget _buildCanvasValidated(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
+Widget _buildCanvasValidated(JsUiRenderContext context, JsUiNode node) {
   final scene = _resolveScene(context, node);
   final staticCommands = scene.staticCommands;
   final commands = scene.commands;
@@ -65,13 +65,13 @@ Widget _buildCanvasValidated(
       final rows = command['rows'];
       return total + (columns is int && rows is int ? columns * rows : 0);
     }),
-    animated: QuickjsUiAnimationTimeline.from(commands).hasAnimations,
+    animated: JsUiAnimationTimeline.from(commands).hasAnimations,
   );
-  final onFrame = QuickjsUiProps.event(node.props['onFrame']);
-  final onAnimationEnd = QuickjsUiProps.event(node.props['onAnimationEnd']);
-  final surface = _QuickjsUiCanvasSurface(
-    width: QuickjsUiProps.doubleValue(node.props['width']),
-    height: QuickjsUiProps.doubleValue(node.props['height']),
+  final onFrame = JsUiProps.event(node.props['onFrame']);
+  final onAnimationEnd = JsUiProps.event(node.props['onAnimationEnd']);
+  final surface = _JsUiCanvasSurface(
+    width: JsUiProps.doubleValue(node.props['width']),
+    height: JsUiProps.doubleValue(node.props['height']),
     backgroundColor: context.color(node.props['backgroundColor']),
     staticCommands: staticCommands,
     commands: commands,
@@ -88,7 +88,7 @@ Widget _buildCanvasValidated(
     performanceController: context.performanceController,
     onAnimationEnd: onAnimationEnd == null
         ? null
-        : () => context.dispatchEvent(
+        : () => context.dispatch(
             onAnimationEnd,
             defaultCoalesceKey:
                 'Canvas:${node.key ?? 'anonymous'}:onAnimationEnd',
@@ -96,20 +96,20 @@ Widget _buildCanvasValidated(
   );
   Widget canvas = RepaintBoundary(child: surface);
   if (onFrame != null) {
-    canvas = _QuickjsUiFrameSampler(
+    canvas = _JsUiFrameSampler(
       interval: Duration(
         milliseconds: _frameIntervalMs(node.props['frameIntervalMs']),
       ),
-      onFrame: (frame) => context.dispatchEvent(
+      onFrame: (frame) => context.dispatch(
         onFrame,
         payload: frame,
         defaultCoalesceKey: 'Canvas:${node.key ?? 'anonymous'}:onFrame',
-        kind: QuickjsUiEventKind.sample,
+        kind: JsUiEventKind.sample,
       ),
       child: canvas,
     );
   }
-  return withQuickjsUiGestures(context, node, canvas);
+  return withJsUiGestures(context, node, canvas);
 }
 
 Map<String, String> _canvasResources(Object? raw) {
@@ -131,15 +131,12 @@ Map<String, String> _canvasResources(Object? raw) {
   );
 }
 
-QuickjsUiCanvasScene _resolveScene(
-  QuickjsUiRenderContext context,
-  QuickjsUiNode node,
-) {
-  final sceneKey = QuickjsUiProps.string(node.props['sceneKey']);
+JsUiCanvasScene _resolveScene(JsUiRenderContext context, JsUiNode node) {
+  final sceneKey = JsUiProps.string(node.props['sceneKey']);
   final hasCommands = node.props.containsKey('commands');
   final hasStaticCommands = node.props.containsKey('staticCommands');
   if (sceneKey == null) {
-    return QuickjsUiCanvasScene(
+    return JsUiCanvasScene(
       commands: _commands(node.props['commands'], name: 'commands'),
       staticCommands: _commands(
         node.props['staticCommands'],
@@ -157,7 +154,7 @@ QuickjsUiCanvasScene _resolveScene(
         'quickjs_ui Canvas scene "$sceneKey" requires commands when registered',
       );
     }
-    final scene = QuickjsUiCanvasScene(
+    final scene = JsUiCanvasScene(
       commands: _commands(node.props['commands'], name: 'commands'),
       staticCommands: _commands(
         node.props['staticCommands'],
@@ -257,8 +254,8 @@ void _validateCommands(List<Map<String, Object?>> commands) {
   }
 }
 
-final class _QuickjsUiCanvasSurface extends StatefulWidget {
-  _QuickjsUiCanvasSurface({
+final class _JsUiCanvasSurface extends StatefulWidget {
+  _JsUiCanvasSurface({
     required this.width,
     required this.height,
     required this.backgroundColor,
@@ -274,8 +271,8 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
     required this.snapshotRegistry,
     required this.performanceController,
     required this.onAnimationEnd,
-  }) : timeline = QuickjsUiAnimationTimeline.from(commands),
-       commandsHash = quickjsUiValueHash(commands);
+  }) : timeline = JsUiAnimationTimeline.from(commands),
+       commandsHash = jsUiValueHash(commands);
 
   final double? width;
   final double? height;
@@ -288,19 +285,18 @@ final class _QuickjsUiCanvasSurface extends StatefulWidget {
   final bool reverse;
   final bool forceWillChange;
   final int? animationFrameIntervalMs;
-  final QuickjsUiFrameScheduler frameScheduler;
-  final QuickjsUiSnapshotRegistry snapshotRegistry;
-  final QuickjsUiPerformanceController performanceController;
+  final JsUiFrameScheduler frameScheduler;
+  final JsUiSnapshotRegistry snapshotRegistry;
+  final JsUiPerformanceController performanceController;
   final VoidCallback? onAnimationEnd;
-  final QuickjsUiAnimationTimeline timeline;
+  final JsUiAnimationTimeline timeline;
   final int commandsHash;
 
   @override
-  State<_QuickjsUiCanvasSurface> createState() =>
-      _QuickjsUiCanvasSurfaceState();
+  State<_JsUiCanvasSurface> createState() => _JsUiCanvasSurfaceState();
 }
 
-final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
+final class _JsUiCanvasSurfaceState extends State<_JsUiCanvasSurface>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   final _repaint = _CanvasRepaintSignal();
@@ -308,9 +304,9 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   double _playbackOffsetMs = 0;
   bool _didCompleteAnimation = false;
   int _animationGeneration = 0;
-  QuickjsUiFrameClock? _frameClock;
+  JsUiFrameClock? _frameClock;
   final Stopwatch _limitedStopwatch = Stopwatch();
-  late _QuickjsUiCanvasPainter _painter;
+  late _JsUiCanvasPainter _painter;
 
   @override
   void initState() {
@@ -322,7 +318,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   }
 
   @override
-  void didUpdateWidget(covariant _QuickjsUiCanvasSurface oldWidget) {
+  void didUpdateWidget(covariant _JsUiCanvasSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.performanceController != widget.performanceController) {
       oldWidget.performanceController.removeListener(_qualityChanged);
@@ -350,7 +346,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
     _syncScheduler();
   }
 
-  _QuickjsUiCanvasPainter _createPainter() => _QuickjsUiCanvasPainter(
+  _JsUiCanvasPainter _createPainter() => _JsUiCanvasPainter(
     staticCommands: widget.staticCommands,
     commands: widget.commands,
     backgroundColor: widget.backgroundColor,
@@ -380,7 +376,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
         widget.timeline.hasAnimations &&
         !widget.paused &&
         (widget.timeline.isContinuous || !_didCompleteAnimation) &&
-        widget.performanceController.quality != QuickjsUiEffectQuality.off;
+        widget.performanceController.quality != JsUiEffectQuality.off;
     if (!shouldRun) {
       _stopScheduler();
       return;
@@ -414,7 +410,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
   }
 
   double _animationTimeMs() {
-    if (widget.performanceController.quality == QuickjsUiEffectQuality.off) {
+    if (widget.performanceController.quality == JsUiEffectQuality.off) {
       return widget.timeline.endMs.isFinite ? widget.timeline.endMs : 0;
     }
     if (!widget.reverse) return _elapsedMs;
@@ -459,8 +455,7 @@ final class _QuickjsUiCanvasSurfaceState extends State<_QuickjsUiCanvasSurface>
             widget.forceWillChange ||
             (widget.timeline.hasAnimations &&
                 !widget.paused &&
-                widget.performanceController.quality !=
-                    QuickjsUiEffectQuality.off),
+                widget.performanceController.quality != JsUiEffectQuality.off),
       ),
     );
   }
@@ -470,8 +465,8 @@ final class _CanvasRepaintSignal extends ChangeNotifier {
   void repaint() => notifyListeners();
 }
 
-final class _QuickjsUiCanvasPainter extends CustomPainter {
-  _QuickjsUiCanvasPainter({
+final class _JsUiCanvasPainter extends CustomPainter {
+  _JsUiCanvasPainter({
     required this.staticCommands,
     required this.commands,
     required this.backgroundColor,
@@ -486,10 +481,10 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
   final List<Map<String, Object?>> staticCommands;
   final List<Map<String, Object?>> commands;
   final Color? backgroundColor;
-  final QuickjsUiSnapshotRegistry snapshotRegistry;
+  final JsUiSnapshotRegistry snapshotRegistry;
   final Map<String, String> resources;
   final double Function() elapsedMs;
-  final QuickjsUiEffectQuality Function() quality;
+  final JsUiEffectQuality Function() quality;
   final ValueChanged<Duration> onPaint;
   ui.Picture? _staticPicture;
   Size? _staticPictureSize;
@@ -512,7 +507,7 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
             const _CanvasClock(elapsedMs: 0, epochMs: 0),
             snapshotRegistry,
             resources,
-            QuickjsUiEffectQuality.high,
+            JsUiEffectQuality.high,
           );
           _staticPicture = recorder.endRecording();
           _staticPictureSize = size;
@@ -543,11 +538,11 @@ final class _QuickjsUiCanvasPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _QuickjsUiCanvasPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _JsUiCanvasPainter oldDelegate) => true;
 }
 
-final class _QuickjsUiFrameSampler extends StatefulWidget {
-  const _QuickjsUiFrameSampler({
+final class _JsUiFrameSampler extends StatefulWidget {
+  const _JsUiFrameSampler({
     required this.interval,
     required this.onFrame,
     required this.child,
@@ -558,10 +553,10 @@ final class _QuickjsUiFrameSampler extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_QuickjsUiFrameSampler> createState() => _QuickjsUiFrameSamplerState();
+  State<_JsUiFrameSampler> createState() => _JsUiFrameSamplerState();
 }
 
-final class _QuickjsUiFrameSamplerState extends State<_QuickjsUiFrameSampler>
+final class _JsUiFrameSamplerState extends State<_JsUiFrameSampler>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   Duration? _lastDispatchElapsed;
@@ -574,7 +569,7 @@ final class _QuickjsUiFrameSamplerState extends State<_QuickjsUiFrameSampler>
   }
 
   @override
-  void didUpdateWidget(covariant _QuickjsUiFrameSampler oldWidget) {
+  void didUpdateWidget(covariant _JsUiFrameSampler oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.interval != widget.interval) _lastDispatchElapsed = null;
   }
@@ -608,9 +603,9 @@ void _paintCommands(
   Size size,
   List<Map<String, Object?>> commands,
   _CanvasClock clock,
-  QuickjsUiSnapshotRegistry snapshotRegistry,
+  JsUiSnapshotRegistry snapshotRegistry,
   Map<String, String> resources,
-  QuickjsUiEffectQuality quality,
+  JsUiEffectQuality quality,
 ) {
   var saveDepth = 0;
   for (final command in commands) {
@@ -1050,7 +1045,7 @@ Map<String, Object?> _commandMap(Object? raw) {
 int _frameIntervalMs(Object? value) {
   final interval = value == null
       ? 16
-      : QuickjsUiProps.intValue(value, name: 'Canvas frameIntervalMs');
+      : JsUiProps.intValue(value, name: 'Canvas frameIntervalMs');
   if (interval == null || interval < 16 || interval > 60000) {
     throw const FormatException(
       'quickjs_ui Canvas frameIntervalMs must be between 16 and 60000',
@@ -1061,7 +1056,7 @@ int _frameIntervalMs(Object? value) {
 
 int? _canvasAnimationFrameIntervalMs(Object? value) {
   if (value == null) return null;
-  final interval = QuickjsUiProps.intValue(
+  final interval = JsUiProps.intValue(
     value,
     name: 'Canvas animationFrameIntervalMs',
   );

@@ -1,12 +1,12 @@
 # quickjs_ui 导航
 
-`QuickjsUiNavigator` 支持 Flutter 原生页面与 JSUI 之间的导航，以及 JSUI 内部路由。
-JS 页面通过 `quickjsUiNavigation` 发送结构化导航意图。
+`JsUiNavigator` 支持 Flutter 原生页面与 JSUI 之间的导航，以及 JSUI 内部路由。
+JS 页面通过 `jsUiNavigation` 发送结构化导航意图。
 
 ## 路由模型
 
-`quickjsUiNavigation` 是独立的 JSUI Router API，按 JSUI 路由入口注入，并非
-`quickjsUiHost.navigationIntent` 的别名。
+`jsUiNavigation` 是独立的 JSUI Router API，按 JSUI 路由入口注入，并非
+`jsUiHost.navigationIntent` 的别名。
 
 Router 遵循 Flutter `Navigator.push` 语义：
 
@@ -16,7 +16,7 @@ Router 遵循 Flutter `Navigator.push` 语义：
 - `pop(result)` 完成前一页面待处理的 `push()` 结果。
 - `onRouteEnter`、`onRouteLeave` 和 `onRouteResult` 是生命周期通知，不是主要数据返回通道。
 
-内部导航使用两阶段协议：宿主先校验并锁定操作；`quickjsUiNavigation` 再在当前 JS
+内部导航使用两阶段协议：宿主先校验并锁定操作；`jsUiNavigation` 再在当前 JS
 dispatch 内调用 `onRouteLeave` 和 `onHide`，随后提交路由变化。这样既避免二次进入同一
 QuickJS Context，又保留 `await push()` 的结果语义。被覆盖页面完成离开钩子前，新页面
 不会收到 `onRouteEnter`。
@@ -25,13 +25,13 @@ QuickJS Context，又保留 `await push()` 的结果语义。被覆盖页面完�
 移除时依次收到 `onRouteLeave`、`onHide`；旧页面重新可见时依次收到
 `onRouteResult`、`onShow`、`onRouteEnter`。
 
-每个 `quickjsUiNavigation` 对象绑定到接收它的页面。页面只有在当前 JSUI 路由入口时
+每个 `jsUiNavigation` 对象绑定到接收它的页面。页面只有在当前 JSUI 路由入口时
 才能导航，且同一入口最多存在一个待处理导航。push/replace 后在同一回调内重复调用，
 或非当前页面发起调用，都会被拒绝而不是继续增长路由栈。
 
 ```js
 async openChild(state, _payload, props) {
-  const result = await quickjsUiNavigation.push({
+  const result = await jsUiNavigation.push({
     route: 'quickjs-ui.navigation.child',
     path: './navigation_child_page.mjs',
     params: { itemId: props.itemId }
@@ -40,16 +40,16 @@ async openChild(state, _payload, props) {
 }
 ```
 
-回滚说明：旧实验行为把 `await quickjsUiNavigation.push()` 视为“导航已接受”，并要求页面
+回滚说明：旧实验行为把 `await jsUiNavigation.push()` 视为“导航已接受”，并要求页面
 从 `onRouteResult` 读取结果；该行为已回滚。`onRouteResult` 只保留为观察式生命周期钩子。
-旧的 `quickjsUiHost.navigationIntent` 也不属于 JSUI 内部路由，仅用于应用自定义宿主能力。
+旧的 `jsUiHost.navigationIntent` 也不属于 JSUI 内部路由，仅用于应用自定义宿主能力。
 
 ## 宿主控制的 JSUI 路由
 
 JSUI 页面可以通过相对路径打开另一个 JSUI 页面：
 
 ```js
-await quickjsUiNavigation.push({
+await jsUiNavigation.push({
   route: 'quickjs-ui.navigation.child',
   path: './navigation_child_page.mjs',
   params: { itemId: 42 }
@@ -62,8 +62,8 @@ await quickjsUiNavigation.push({
 询问用户或拒绝请求。
 
 ```dart
-final registry = QuickjsUiRouteRegistry(
-  jsRoutePolicy: QuickjsUiJsRoutePolicy(
+final registry = JsUiRouteRegistry(
+  jsRoutePolicy: JsUiRoutePolicy(
     allowedPaths: const <String>{
       'assets/quickjs_ui/navigation_child_page.mjs',
     },
@@ -83,8 +83,8 @@ final registry = QuickjsUiRouteRegistry(
 ```dart
 final trustedPaths = <String>{};
 
-final registry = QuickjsUiRouteRegistry(
-  jsRoutePolicy: QuickjsUiJsRoutePolicy(
+final registry = JsUiRouteRegistry(
+  jsRoutePolicy: JsUiRoutePolicy(
     allowedPaths: const <String>{
       'assets/quickjs_ui/navigation_child_page.mjs',
     },
@@ -122,7 +122,7 @@ final registry = QuickjsUiRouteRegistry(
 );
 ```
 
-请求被拒绝时，`quickjsUiNavigation.push()` / `replace()` 的 Promise 会 reject；
+请求被拒绝时，`jsUiNavigation.push()` / `replace()` 的 Promise 会 reject；
 JS 页面可以捕获错误并显示应用级提示。
 
 预备操作默认在 10 秒后过期，避免异步 `onRouteLeave` 或 `onHide` 永不完成时持续锁定
@@ -130,18 +130,18 @@ JS 页面可以捕获错误并显示应用级提示。
 导航。宿主可以在注册表中修改限制：
 
 ```dart
-final registry = QuickjsUiRouteRegistry(
-  options: const QuickjsUiNavigationOptions(
+final registry = JsUiRouteRegistry(
+  options: const JsUiNavigationOptions(
     preparedNavigationTimeout: Duration(seconds: 15),
     lifecycleTimeout: Duration(seconds: 3),
-    maxJsRouteDepth: 32,
+    maxRouteDepth: 32,
   ),
 );
 ```
 
 `lifecycleTimeout` 把 `onRouteLeave` 和 `onHide` 作为一个离开阶段限制。超时后，已批准
 的导航继续执行；钩子 Promise 不再无限占用路由锁，迟到的状态 patch 会被丢弃。相同
-期限也适用于 Flutter/系统返回，页面 Session 会随 pop 释放。`maxJsRouteDepth` 限制
+期限也适用于 Flutter/系统返回，页面 Session 会随 pop 释放。`maxRouteDepth` 限制
 保留的 JSUI 入口及其 Controller 数量，仅作用于 JSUI 内部 `push`；`replace`、`pop`
 和 Flutter 原生路由不增加该深度。
 
@@ -155,7 +155,7 @@ push 的页面在隐藏期间保留 Controller、state 和最后一次渲染的 
 页面作为临时浮层保留到反向过渡结束，随后释放其 Controller。
 
 ```js
-await quickjsUiNavigation.push({
+await jsUiNavigation.push({
   route: 'settings',
   transition: {
     type: 'slide',

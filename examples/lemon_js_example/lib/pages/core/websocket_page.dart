@@ -14,7 +14,7 @@ class WebSocketPage extends StatefulWidget {
 class _WebSocketPageState extends State<WebSocketPage> {
   static const _defaultEchoUrl = 'wss://ws.postman-echo.com/raw';
 
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 WebSocket runtime...';
@@ -44,10 +44,10 @@ class _WebSocketPageState extends State<WebSocketPage> {
           'must be an absolute ws:// or wss:// URL',
         );
       }
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         features: <JsFeatures>[
           WebSocketFeatures(
             allowedOrigins: <String>{origin},
@@ -56,11 +56,11 @@ class _WebSocketPageState extends State<WebSocketPage> {
         ],
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'runtime 已就绪：WebSocket 全局对象已安装，允许 $origin';
       });
@@ -151,12 +151,12 @@ return await new Promise((resolve, reject) => {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime 尚未就绪');
     }
-    return quickjs;
+    return engine;
   }
 
   String get _currentUrl => _urlController.text.trim();
@@ -184,15 +184,15 @@ return await new Promise((resolve, reject) => {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     _urlController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
     return Scaffold(
       appBar: AppBar(title: const Text('WebSocket 通信')),
       body: Padding(

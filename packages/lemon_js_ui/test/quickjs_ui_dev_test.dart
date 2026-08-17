@@ -6,16 +6,13 @@ import 'package:lemon_js_ui/lemon_js_ui.dart';
 void main() {
   group('quickjs_ui 0.4.3 dev tools', () {
     test('exports page snapshot with structured fields', () async {
-      final engine = await Quickjs.create();
-      final inspector = QuickjsUiInspector();
-      final controller = QuickjsUiController(
-        engine: engine,
-        inspector: inspector,
-      );
+      final engine = await JsEngine.create();
+      final inspector = JsUiInspector();
+      final controller = JsUiController(engine: engine, inspector: inspector);
       addTearDown(controller.dispose);
 
       await controller.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: 'quickjs_ui_dev_snapshot',
           version: '0.4.3',
           source: '''
@@ -49,13 +46,13 @@ export default Page({
       );
 
       await controller.dispatch(const <String, Object?>{'method': 'increment'});
-      final performance = QuickjsUiPerformanceController(
-        mode: QuickjsUiPerformanceMode.low,
+      final performance = JsUiPerformanceController(
+        mode: JsUiPerformanceMode.low,
       );
       inspector.recordPerformance(performance.snapshot);
       performance.dispose();
 
-      final snapshot = controller.exportPageSnapshotMap();
+      final snapshot = controller.exportPageSnapshot().toMap();
       expect(snapshot['props'], const <String, Object?>{'title': 'dev'});
       expect(snapshot['state'], isA<Map>());
       expect(snapshot['schema'], isA<Map>());
@@ -66,25 +63,22 @@ export default Page({
       expect(snapshot['resources'], isA<List>());
       expect(
         snapshot['performance'],
-        containsPair('quality', QuickjsUiEffectQuality.low.name),
+        containsPair('quality', JsUiEffectQuality.low.name),
       );
     });
 
     test('records renderer diff stats for keyed nodes', () async {
-      final engine = await Quickjs.create();
-      final inspector = QuickjsUiInspector();
-      final controller = QuickjsUiController(
-        engine: engine,
-        inspector: inspector,
-      );
+      final engine = await JsEngine.create();
+      final inspector = JsUiInspector();
+      final controller = JsUiController(engine: engine, inspector: inspector);
       addTearDown(controller.dispose);
-      final renderer = QuickjsUiRenderer(
+      final renderer = JsUiRenderer(
         onEvent: controller.dispatch,
         onDiffStats: inspector.recordDiff,
       );
 
       await controller.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: 'quickjs_ui_dev_diff',
           version: '0.4.3',
           source: '''
@@ -126,7 +120,7 @@ export default Page({
     testWidgets('defers inspector notifications until after build', (
       WidgetTester tester,
     ) async {
-      final inspector = QuickjsUiInspector();
+      final inspector = JsUiInspector();
       var buildCount = 0;
 
       await tester.pumpWidget(
@@ -136,7 +130,7 @@ export default Page({
             builder: (context, _) {
               buildCount += 1;
               if (buildCount == 1) {
-                inspector.recordDiff(const QuickjsUiDiffStats(rebuilt: 1));
+                inspector.recordDiff(const JsUiDiffStats(rebuilt: 1));
               }
               return Text('builds: $buildCount');
             },
@@ -156,9 +150,9 @@ export default Page({
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: QuickjsUiErrorOverlay(
-              error: QuickjsUiError(
-                kind: QuickjsUiErrorKind.schema,
+            body: JsUiErrorOverlay(
+              error: JsUiError(
+                kind: JsUiErrorKind.schema,
                 message: 'Unknown quickjs_ui node type: Missing',
                 cause: FormatException('Unknown quickjs_ui node type: Missing'),
                 source: 'asset',
@@ -185,21 +179,21 @@ export default Page({
     });
 
     test('unified errors preserve cause and add operation context', () {
-      final base = QuickjsUiError.wrap(
+      final base = JsUiError.wrap(
         const FormatException('bad schema'),
-        kind: QuickjsUiErrorKind.schema,
+        kind: JsUiErrorKind.schema,
         operation: 'render',
         schemaPath: 'root.children[0]',
       );
-      final enriched = QuickjsUiError.wrap(
+      final enriched = JsUiError.wrap(
         base,
-        kind: QuickjsUiErrorKind.render,
+        kind: JsUiErrorKind.render,
         action: 'openDetails',
         route: 'details',
       );
 
       expect(identical(enriched.cause, base.cause), isTrue);
-      expect(enriched.kind, QuickjsUiErrorKind.schema);
+      expect(enriched.kind, JsUiErrorKind.schema);
       expect(enriched.operation, 'render');
       expect(enriched.action, 'openDetails');
       expect(enriched.route, 'details');
@@ -207,16 +201,13 @@ export default Page({
     });
 
     test('records lifecycle timeline in predictable order', () async {
-      final engine = await Quickjs.create();
-      final inspector = QuickjsUiInspector();
-      final controller = QuickjsUiController(
-        engine: engine,
-        inspector: inspector,
-      );
+      final engine = await JsEngine.create();
+      final inspector = JsUiInspector();
+      final controller = JsUiController(engine: engine, inspector: inspector);
       addTearDown(controller.dispose);
 
       await controller.loadPlugin(
-        QuickjsUiPagePlugin.singleFile(
+        JsUiPagePlugin.source(
           id: 'quickjs_ui_dev_lifecycle',
           version: '0.4.3',
           source: '''
@@ -237,8 +228,8 @@ export default Page({
         ),
       );
 
-      await controller.lifecycle('mount');
-      await controller.routeLifecycle('show');
+      await controller.lifecycle(JsUiLifecycle.mount);
+      await controller.routeLifecycle(JsUiLifecycle.show);
       controller.recordAppLifecycle('pause');
       await controller.dispatch(const <String, Object?>{
         'type': 'tap',

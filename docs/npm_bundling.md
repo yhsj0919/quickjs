@@ -12,7 +12,7 @@ npm 标识的普通 JavaScript 源码。
   除非应用显式提供 polyfill 或将依赖标记为 external。
 - 只有通过 `JsOptions.modules` 注册了相同模块标识时，才能把 npm 依赖
   标记为 external。
-- 文件系统、网络、数据库和平台 API 应留在发布包之外，通过宿主 provider 或 features
+- 文件系统、网络、数据库和平台 API 应留在发布包之外，通过宿主 method 或 features
   按需暴露。
 
 ## 内置 esbuild 示例
@@ -38,7 +38,7 @@ esbuild src/index.js `
 ```
 
 `--bundle` 在构建期跟踪 npm 导入；`--format=esm` 为
-`JsModule.esModule` 保留入口导出；`--platform=browser` 防止意外依赖
+`JsModule` 保留入口导出；`--platform=browser` 防止意外依赖
 Node 运行时全局对象和内置模块。
 
 ## 注册生成的资源
@@ -55,16 +55,16 @@ flutter:
 
 ```dart
 final source = await rootBundle.loadString('assets/js/npm_bundle.mjs');
-final engine = await Quickjs.create(
+final engine = await JsEngine.create(
   modules: <JsModule>[
-      JsModule.esModule(
-        specifier: 'example/npm-bundle',
+      JsModule(
+        name: 'example/npm-bundle',
         source: source,
       ),
     ],
 );
 
-await engine.evalModule('''
+await engine.runModule('''
 import { compareValues } from 'example/npm-bundle';
 globalThis.bundleResult = compareValues(
   { answer: 42 },
@@ -78,7 +78,7 @@ globalThis.bundleResult = compareValues(
 ## IIFE 方案
 
 需要主动安装全局对象的脚本可使用 `--format=iife --global-name=YourNamespace`
-构建，并通过 `Quickjs.eval()` 执行。可复用库应优先使用 ESM，因为其导出显式且不会
+构建，并通过 `JsEngine.eval()` 执行。可复用库应优先使用 ESM，因为其导出显式且不会
 污染 `globalThis`。
 
 ## 不支持或风险较高的包

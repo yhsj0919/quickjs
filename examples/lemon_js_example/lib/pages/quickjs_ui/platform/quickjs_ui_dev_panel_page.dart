@@ -3,26 +3,26 @@ import 'package:flutter/services.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 /// 开发调试 Demo：Inspector 面板、页面快照导出、diff/resource 日志与保留 state 热重载。
-class QuickjsUiDevPanelPage extends StatefulWidget {
-  const QuickjsUiDevPanelPage({super.key});
+class JsUiDevPanelPage extends StatefulWidget {
+  const JsUiDevPanelPage({super.key});
 
   /// 入口 JS 页面的 Flutter asset 路径。
   static const String path = 'assets/quickjs_ui/dev_panel_page.mjs';
 
   @override
-  State<QuickjsUiDevPanelPage> createState() => _QuickjsUiDevPanelPageState();
+  State<JsUiDevPanelPage> createState() => _JsUiDevPanelPageState();
 }
 
-class _QuickjsUiDevPanelPageState extends State<QuickjsUiDevPanelPage> {
-  late final QuickjsUiInspector _inspector;
-  late final QuickjsUiController _controller;
+class _JsUiDevPanelPageState extends State<JsUiDevPanelPage> {
+  late final JsUiInspector _inspector;
+  late final JsUiController _controller;
 
   @override
   void initState() {
     super.initState();
-    _inspector = QuickjsUiInspector();
-    _controller = QuickjsUiController(
-      devOptions: const QuickjsUiDevOptions(
+    _inspector = JsUiInspector();
+    _controller = JsUiController(
+      devOptions: const JsUiDevOptions(
         logDiff: true,
         logResources: true,
         preserveStateOnReload: true,
@@ -59,8 +59,8 @@ class _QuickjsUiDevPanelPageState extends State<QuickjsUiDevPanelPage> {
         children: <Widget>[
           Expanded(
             flex: 3,
-            child: QuickjsUiView.asset(
-              path: QuickjsUiDevPanelPage.path,
+            child: JsUiView.asset(
+              path: JsUiDevPanelPage.path,
               controller: _controller,
               loadingBuilder: (_) =>
                   const Center(child: CircularProgressIndicator()),
@@ -69,7 +69,7 @@ class _QuickjsUiDevPanelPageState extends State<QuickjsUiDevPanelPage> {
           const Divider(height: 1),
           Expanded(
             flex: 2,
-            child: QuickjsUiInspectorPanel(
+            child: JsUiInspectorPanel(
               controller: _controller,
               inspector: _inspector,
             ),
@@ -80,7 +80,7 @@ class _QuickjsUiDevPanelPageState extends State<QuickjsUiDevPanelPage> {
   }
 
   Future<void> _exportSnapshot() async {
-    final snapshot = _controller.exportPageSnapshotMap();
+    final snapshot = _controller.exportPageSnapshot().toMap();
     final text = _prettyJson(snapshot);
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) {

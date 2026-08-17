@@ -12,7 +12,7 @@ class WebHostEnvironmentPage extends StatefulWidget {
 }
 
 class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建启用 Web 宿主环境的 runtime...';
@@ -32,25 +32,25 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         features: <JsFeatures>[
-          JsFeatures.web(
+          WebFeatures(
             locationHref: 'https://example.com:8443/app?q=1#top',
             userAgent: 'quickjs-example',
           ),
         ],
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'runtime 已就绪：Web 宿主环境已显式启用';
       });
@@ -67,9 +67,9 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
 
   Future<void> _runDefaultDisabledCheck() async {
     await _capture('默认未启用检查', () async {
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       try {
-        final result = await quickjs.eval('''
+        final result = await engine.eval('''
 [
   typeof window,
   typeof self,
@@ -82,7 +82,7 @@ class _WebHostEnvironmentPageState extends State<WebHostEnvironmentPage> {
         _log.insert(0, '默认 runtime => $result');
         _status = '默认 runtime 不暴露 Web 宿主环境';
       } finally {
-        await quickjs.dispose();
+        await engine.dispose();
       }
     });
   }
@@ -147,14 +147,14 @@ sessionStorage.setItem('answer', 7);
 
   Future<void> _runStopRecovery() async {
     await _capture('stop 后恢复', () async {
-      final quickjs = _requireRuntime();
-      final running = quickjs
+      final engine = _requireRuntime();
+      final running = engine
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.restart();
+      await engine.restart();
       await running;
-      final result = await quickjs.eval(
+      final result = await engine.eval(
         'window === globalThis && location.hostname === "example.com"',
       );
       _log.insert(0, 'stop 后 Web 宿主环境可用 => $result');
@@ -188,12 +188,12 @@ sessionStorage.setItem('answer', 7);
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeError(Object error) {
@@ -206,14 +206,14 @@ sessionStorage.setItem('answer', 7);
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Web 宿主环境')),
@@ -224,7 +224,7 @@ sessionStorage.setItem('answer', 7);
           children: [
             Text(_status),
             const SizedBox(height: 8),
-            const Text('JsFeatures.web(locationHref: ..., userAgent: ...)'),
+            const Text('WebFeatures(locationHref: ..., userAgent: ...)'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,

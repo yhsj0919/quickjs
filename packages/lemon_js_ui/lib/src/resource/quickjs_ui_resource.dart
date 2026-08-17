@@ -1,23 +1,46 @@
 import '../schema/quickjs_ui_props.dart';
 
-enum QuickjsUiResourceKind { asset, file, network, data, custom }
+/// Identifies how a JSUI resource location is resolved.
+enum JsUiResourceKind {
+  /// A Flutter asset or package-relative path.
+  asset,
 
-final class QuickjsUiResourcePolicy {
-  const QuickjsUiResourcePolicy({required this.allowedSchemes});
+  /// A local file URI.
+  file,
 
-  const QuickjsUiResourcePolicy.rendererDefault()
+  /// An HTTP or HTTPS resource.
+  network,
+
+  /// An inline data URI.
+  data,
+
+  /// A resource handled by an application-defined scheme.
+  custom,
+}
+
+/// Restricts URI schemes accepted while parsing resource references.
+final class JsUiResourcePolicy {
+  /// Creates a policy from its exact scheme allowlist.
+  const JsUiResourcePolicy({required this.allowedSchemes});
+
+  /// Creates the default renderer policy.
+  const JsUiResourcePolicy.renderer()
     : allowedSchemes = const <String>{'asset', 'file', 'http', 'https', 'data'};
 
+  /// URI schemes accepted by this policy.
   final Set<String> allowedSchemes;
 
+  /// Whether [scheme] is accepted.
   bool allows(String scheme) {
     return allowedSchemes.contains(scheme);
   }
 }
 
-final class QuickjsUiResourceReference {
-  const QuickjsUiResourceReference({
-    required this.location,
+/// A validated, typed reference to a JSUI resource.
+final class JsUiResourceReference {
+  /// Creates a resource reference from validated values.
+  const JsUiResourceReference({
+    required this.uri,
     required this.kind,
     this.mimeType,
     this.sha256,
@@ -25,25 +48,39 @@ final class QuickjsUiResourceReference {
     this.headers = const <String, String>{},
   });
 
-  final String location;
-  final QuickjsUiResourceKind kind;
+  /// Resource identifier, URL, asset path, file URI, or data URI.
+  final String uri;
+
+  /// Resource resolution kind.
+  final JsUiResourceKind kind;
+
+  /// Optional MIME type hint.
   final String? mimeType;
+
+  /// Optional lowercase SHA-256 integrity digest.
   final String? sha256;
+
+  /// Optional application-defined cache identity.
   final String? cacheKey;
+
+  /// Headers used for network resource requests.
   final Map<String, String> headers;
 
-  Uri? get uri => Uri.tryParse(location);
+  /// [uri] parsed as a [Uri], or `null` when parsing fails.
+  Uri? get parsedUri => Uri.tryParse(uri);
 
+  /// Whether this reference has a stable or explicit cache identity.
   bool get isCacheable =>
       cacheKey != null ||
       sha256 != null ||
-      kind == QuickjsUiResourceKind.asset ||
-      kind == QuickjsUiResourceKind.network;
+      kind == JsUiResourceKind.asset ||
+      kind == JsUiResourceKind.network;
 
+  /// Serializes this reference to manifest-compatible structured data.
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'kind': kind.name,
-      'uri': location,
+      'uri': uri,
       if (mimeType != null) 'mimeType': mimeType,
       if (sha256 != null) 'sha256': sha256,
       if (cacheKey != null) 'cacheKey': cacheKey,
@@ -51,11 +88,14 @@ final class QuickjsUiResourceReference {
     };
   }
 
-  static QuickjsUiResourceReference parse(
+  /// Parses a string or structured resource reference under [policy].
+  ///
+  /// Throws [FormatException] for invalid locations, kinds, headers, hashes,
+  /// or disallowed schemes.
+  static JsUiResourceReference parse(
     Object? value, {
     String name = 'resource',
-    QuickjsUiResourcePolicy policy =
-        const QuickjsUiResourcePolicy.rendererDefault(),
+    JsUiResourcePolicy policy = const JsUiResourcePolicy.renderer(),
   }) {
     if (value is String) {
       return _fromParts(
@@ -65,9 +105,9 @@ final class QuickjsUiResourceReference {
         policy: policy,
       );
     }
-    final props = QuickjsUiProps.map(value, name: name);
+    final props = JsUiProps.map(value, name: name);
     final location =
-        QuickjsUiProps.string(
+        JsUiProps.string(
           props['uri'] ??
               props['url'] ??
               props['src'] ??
@@ -76,27 +116,27 @@ final class QuickjsUiResourceReference {
           name: '$name uri',
         ) ??
         '';
-    final kind = _kind(QuickjsUiProps.string(props['kind'] ?? props['type']));
+    final kind = _kind(JsUiProps.string(props['kind'] ?? props['type']));
     return _fromParts(
       location: location,
       kind: kind,
       name: name,
       policy: policy,
-      mimeType: QuickjsUiProps.string(props['mimeType'] ?? props['mime']),
-      sha256: QuickjsUiProps.string(
+      mimeType: JsUiProps.string(props['mimeType'] ?? props['mime']),
+      sha256: JsUiProps.string(
         props['sha256'] ?? props['checksum'],
         name: '$name sha256',
       ),
-      cacheKey: QuickjsUiProps.string(props['cacheKey']),
+      cacheKey: JsUiProps.string(props['cacheKey']),
       headers: _headers(props['headers']),
     );
   }
 
-  static QuickjsUiResourceReference _fromParts({
+  static JsUiResourceReference _fromParts({
     required String location,
-    required QuickjsUiResourceKind? kind,
+    required JsUiResourceKind? kind,
     required String name,
-    required QuickjsUiResourcePolicy policy,
+    required JsUiResourcePolicy policy,
     String? mimeType,
     String? sha256,
     String? cacheKey,
@@ -113,8 +153,8 @@ final class QuickjsUiResourceReference {
     if (sha256 != null && !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(sha256)) {
       throw FormatException('quickjs_ui $name sha256 must be 64 hex chars');
     }
-    return QuickjsUiResourceReference(
-      location: location,
+    return JsUiResourceReference(
+      uri: location,
       kind: inferred,
       mimeType: mimeType,
       sha256: sha256?.toLowerCase(),
@@ -123,35 +163,35 @@ final class QuickjsUiResourceReference {
     );
   }
 
-  static QuickjsUiResourceKind _inferKind(String location) {
+  static JsUiResourceKind _inferKind(String location) {
     final uri = Uri.tryParse(location);
     return switch (uri?.scheme) {
-      'http' || 'https' => QuickjsUiResourceKind.network,
-      'file' => QuickjsUiResourceKind.file,
-      'data' => QuickjsUiResourceKind.data,
-      '' || null => QuickjsUiResourceKind.asset,
-      _ => QuickjsUiResourceKind.custom,
+      'http' || 'https' => JsUiResourceKind.network,
+      'file' => JsUiResourceKind.file,
+      'data' => JsUiResourceKind.data,
+      '' || null => JsUiResourceKind.asset,
+      _ => JsUiResourceKind.custom,
     };
   }
 
-  static QuickjsUiResourceKind? _kind(String? value) {
+  static JsUiResourceKind? _kind(String? value) {
     return switch (value) {
       null => null,
-      'asset' => QuickjsUiResourceKind.asset,
-      'file' => QuickjsUiResourceKind.file,
-      'network' || 'http' || 'https' => QuickjsUiResourceKind.network,
-      'data' => QuickjsUiResourceKind.data,
-      'custom' => QuickjsUiResourceKind.custom,
+      'asset' => JsUiResourceKind.asset,
+      'file' => JsUiResourceKind.file,
+      'network' || 'http' || 'https' => JsUiResourceKind.network,
+      'data' => JsUiResourceKind.data,
+      'custom' => JsUiResourceKind.custom,
       _ => throw FormatException('Unknown quickjs_ui resource kind: $value'),
     };
   }
 
-  static String _schemeFor(QuickjsUiResourceKind kind, String location) {
-    if (kind == QuickjsUiResourceKind.network) {
+  static String _schemeFor(JsUiResourceKind kind, String location) {
+    if (kind == JsUiResourceKind.network) {
       final scheme = Uri.tryParse(location)?.scheme;
       return scheme == 'http' ? 'http' : 'https';
     }
-    if (kind == QuickjsUiResourceKind.custom) {
+    if (kind == JsUiResourceKind.custom) {
       return Uri.tryParse(location)?.scheme ?? 'custom';
     }
     return kind.name;
@@ -161,7 +201,7 @@ final class QuickjsUiResourceReference {
     if (value == null) {
       return const <String, String>{};
     }
-    final props = QuickjsUiProps.map(value, name: 'resource headers');
+    final props = JsUiProps.map(value, name: 'resource headers');
     return Map<String, String>.unmodifiable(
       props.map((key, value) {
         if (value is! String) {

@@ -1,17 +1,29 @@
-import type { BoxFit, JsonValue, QuickjsUiEvent, QuickjsUiNode } from 'quickjs_ui';
+import type {
+  BoxFit,
+  ColorValue,
+  JsUiEvent,
+  JsUiNode,
+  JsUiResourceReference
+} from 'quickjs_ui';
 
 declare module 'quickjs_ui/video_player' {
-  export type VideoPlayerEvent = QuickjsUiEvent;
+  export type VideoPlayerEvent = JsUiEvent;
 
   export type VideoPlayerProps = {
     key?: string;
     playerKey?: string;
-    source: string;
+    source: JsUiResourceReference;
     playing?: boolean;
     loop?: boolean;
     fit?: BoxFit;
-    backgroundColor?: string | number;
+    backgroundColor?: ColorValue;
+    /** Whether to show a progress indicator while initializing. Defaults to true. */
+    showLoading?: boolean;
+    /** @deprecated Use showLoading. */
+    showProgress?: boolean;
+    /** Increment to recreate the native player for the current source. */
     restartToken?: number;
+    /** Increment to apply seekPositionMs, including repeated seeks to one position. */
     seekToken?: number;
     seekPositionMs?: number;
     /** Progress event throttle in milliseconds. Defaults to 250. */
@@ -23,8 +35,7 @@ declare module 'quickjs_ui/video_player' {
     onProgress?: VideoPlayerEvent;
     onEnded?: VideoPlayerEvent;
     onError?: VideoPlayerEvent;
-    [key: string]: JsonValue | VideoPlayerEvent | undefined;
   };
 
-  export function VideoPlayer(props: VideoPlayerProps): QuickjsUiNode;
+  export function VideoPlayer(props: VideoPlayerProps): JsUiNode;
 }

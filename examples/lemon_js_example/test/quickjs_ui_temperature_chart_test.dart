@@ -25,7 +25,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiTemperatureChartPage()),
+      const MaterialApp(home: JsUiTemperatureChartPage()),
     );
     await _pumpUntilFound(tester, find.text('一周温度趋势'));
 

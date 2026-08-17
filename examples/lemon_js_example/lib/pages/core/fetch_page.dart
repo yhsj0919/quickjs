@@ -90,7 +90,7 @@ if (!response.ok || !contentType.includes('application/json')) {
 }
 const payload = await response.json();
 const headers = payload.headers || {};
-return `PASS default=${headers['X-Quickjs-Example'] || headers['x-quickjs-example']}, request=${headers['X-Request-Value'] || headers['x-request-value']}`;
+return `PASS default=${headers['X-JsEngine-Example'] || headers['x-quickjs-example']}, request=${headers['X-Request-Value'] || headers['x-request-value']}`;
 ''',
     ),
     _FetchScenario(
@@ -162,7 +162,7 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
     ),
   ];
 
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建启用 Fetch/XHR 的 runtime...';
@@ -181,13 +181,12 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
       _results.clear();
     });
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         features: <JsFeatures>[
           AxiosFeatures(
-            assetKey: 'packages/lemon_js_extensions/assets/js/axios.js',
             allowedOrigins: const <String>{
               _jsonPlaceholderOrigin,
               _httpBingoOrigin,
@@ -203,11 +202,11 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
         ],
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'runtime 已就绪：Fetch/XHR + Axios 1.6.2';
       });
@@ -221,15 +220,15 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
   }
 
   Future<void> _runScenario(_FetchScenario scenario) async {
-    final quickjs = _quickjs;
-    if (quickjs == null) return;
+    final engine = _engine;
+    if (engine == null) return;
     setState(() {
       _busy = true;
       _status = '正在验证：${scenario.name}';
       _results[scenario.name] = 'RUNNING';
     });
     try {
-      final result = await quickjs.runRaw(
+      final result = await engine.runRaw(
         scenario.source,
         name: 'example:fetch-${scenario.name}.js',
       );
@@ -262,14 +261,14 @@ return `PASS Axios ${axios.VERSION}, GET=${get.status}/${get.data.id}, POST=${po
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
     return Scaffold(
       appBar: AppBar(title: const Text('网络请求 · Fetch 与 XHR')),
       body: ListView(

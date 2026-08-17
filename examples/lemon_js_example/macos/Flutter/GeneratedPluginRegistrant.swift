@@ -12,7 +12,7 @@ import video_player_avfoundation
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FvpPlugin.register(with: registry.registrar(forPlugin: "FvpPlugin"))
-  QuickjsPlugin.register(with: registry.registrar(forPlugin: "QuickjsPlugin"))
+  LemonJsPlugin.register(with: registry.registrar(forPlugin: "LemonJsPlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
   VideoPlayerPlugin.register(with: registry.registrar(forPlugin: "VideoPlayerPlugin"))
 }

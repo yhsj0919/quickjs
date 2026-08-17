@@ -1,26 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
-class QuickjsUiWeatherBackgroundPage extends StatefulWidget {
-  const QuickjsUiWeatherBackgroundPage({super.key});
+class JsUiWeatherBackgroundPage extends StatefulWidget {
+  const JsUiWeatherBackgroundPage({super.key});
 
   static const String path =
       'assets/quickjs_ui/weather_background_demo_page.mjs';
 
   @override
-  State<QuickjsUiWeatherBackgroundPage> createState() =>
-      _QuickjsUiWeatherBackgroundPageState();
+  State<JsUiWeatherBackgroundPage> createState() =>
+      _JsUiWeatherBackgroundPageState();
 }
 
-class _QuickjsUiWeatherBackgroundPageState
-    extends State<QuickjsUiWeatherBackgroundPage> {
-  late final QuickjsUiController _controller;
+class _JsUiWeatherBackgroundPageState extends State<JsUiWeatherBackgroundPage> {
+  late final JsUiController _controller;
   Map<String, Object?>? _initialProps;
 
   @override
   void initState() {
     super.initState();
-    _controller = QuickjsUiController(devOptions: QuickjsUiDevOptions.release);
+    _controller = JsUiController(devOptions: JsUiDevOptions.release);
   }
 
   @override
@@ -42,8 +41,8 @@ class _QuickjsUiWeatherBackgroundPageState
           return Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              QuickjsUiView.asset(
-                path: QuickjsUiWeatherBackgroundPage.path,
+              JsUiView.asset(
+                path: JsUiWeatherBackgroundPage.path,
                 controller: _controller,
                 initialProps: _initialProps!,
                 loadingBuilder: (_) =>

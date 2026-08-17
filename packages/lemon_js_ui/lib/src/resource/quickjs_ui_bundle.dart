@@ -12,27 +12,44 @@ import 'quickjs_ui_network_loader.dart';
 import 'quickjs_ui_resource.dart';
 import 'quickjs_ui_resource_resolver.dart';
 
-final class QuickjsUiBundle {
-  const QuickjsUiBundle({
+/// A validated set of JavaScript modules and resources for one JSUI page.
+final class JsUiBundle {
+  /// Creates a bundle from validated module sources.
+  const JsUiBundle({
     required this.id,
     required this.version,
     required this.entry,
     required this.modules,
     this.permissions = const <String>[],
-    this.resources = const <String, QuickjsUiResourceReference>{},
+    this.resources = const <String, JsUiResourceReference>{},
   });
 
+  /// Stable bundle or plugin identifier.
   final String id;
+
+  /// Bundle version exposed through the generated plugin manifest.
   final String version;
+
+  /// Normalized entry-module path.
   final String entry;
+
+  /// JavaScript source keyed by normalized module path.
   final Map<String, String> modules;
+
+  /// Host permissions requested by the bundle.
   final List<String> permissions;
-  final Map<String, QuickjsUiResourceReference> resources;
 
-  static const String packageEntry = quickjsUiPackageEntry;
-  static const String packageManifest = quickjsUiPackageManifest;
+  /// Non-module resources declared by the bundle.
+  final Map<String, JsUiResourceReference> resources;
 
-  static Future<QuickjsUiBundle> asset({
+  /// Required entry path for manifest packages.
+  static const String packageEntry = jsUiPackageEntry;
+
+  /// Conventional manifest file name for packages.
+  static const String packageManifest = jsUiPackageManifest;
+
+  /// Recursively loads an entry and relative imports from Flutter assets.
+  static Future<JsUiBundle> asset({
     required String path,
     String? id,
     String version = '0.2.0',
@@ -40,11 +57,11 @@ final class QuickjsUiBundle {
     AssetBundle? bundle,
   }) async {
     final resolved = _resolveAssetPath(path, bundleRoot: bundleRoot);
-    final resolver = QuickjsUiResourceResolver.asset(
+    final resolver = JsUiResourceResolver.asset(
       bundle: bundle,
-      baseAssetKey: '${resolved.root}/',
+      basePath: '${resolved.root}/',
     );
-    return fromEntry(
+    return loadEntry(
       id: id ?? _bundleIdFromAssetPath(path),
       version: version,
       entry: resolved.entry,
@@ -52,31 +69,31 @@ final class QuickjsUiBundle {
     );
   }
 
-  /// Creates a bundle from module sources embedded in Dart at build time.
+  /// Creates a bundle from module sources already available in Dart.
   ///
   /// This is the synchronous counterpart for build-generated bundles. The
   /// [modules] map uses normalized bundle-relative module paths as keys and
   /// JavaScript source as values.
-  static QuickjsUiBundle compiled({
+  static JsUiBundle sources({
     required String id,
     required String version,
     required String entry,
     required Map<String, String> modules,
     List<String> permissions = const <String>[],
-    Map<String, QuickjsUiResourceReference> resources =
-        const <String, QuickjsUiResourceReference>{},
+    Map<String, JsUiResourceReference> resources =
+        const <String, JsUiResourceReference>{},
   }) {
-    final normalizedEntry = QuickjsUiResourceResolver.normalizePath(entry);
+    final normalizedEntry = JsUiResourceResolver.normalizePath(entry);
     final normalizedModules = <String, String>{
       for (final module in modules.entries)
-        QuickjsUiResourceResolver.normalizePath(module.key): module.value,
+        JsUiResourceResolver.normalizePath(module.key): module.value,
     };
     if (!normalizedModules.containsKey(normalizedEntry)) {
       throw FormatException(
         'quickjs_ui compiled bundle entry is missing: $normalizedEntry',
       );
     }
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: id,
       version: version,
       entry: normalizedEntry,
@@ -86,15 +103,16 @@ final class QuickjsUiBundle {
     );
   }
 
-  static Future<QuickjsUiBundle> file({
+  /// Recursively loads an entry and relative imports from local files.
+  static Future<JsUiBundle> file({
     required String path,
     String? id,
     String version = '0.2.0',
     String? bundleRoot,
   }) async {
     final resolved = _resolveAssetPath(path, bundleRoot: bundleRoot);
-    final resolver = QuickjsUiResourceResolver.file(basePath: resolved.root);
-    return fromEntry(
+    final resolver = JsUiResourceResolver.file(basePath: resolved.root);
+    return loadEntry(
       id: id ?? _bundleIdFromAssetPath(path),
       version: version,
       entry: resolved.entry,
@@ -102,66 +120,72 @@ final class QuickjsUiBundle {
     );
   }
 
-  static Future<QuickjsUiBundle> network({
+  /// Recursively loads an entry and relative imports over the network.
+  static Future<JsUiBundle> network({
     required Uri url,
     String? id,
     String version = '0.2.0',
     Uri? bundleRoot,
-    QuickjsUiNetworkFetch? fetch,
-    QuickjsUiNetworkLogHandler? onLog,
+    JsUiNetworkFetch? fetch,
+    JsUiNetworkLogHandler? onLog,
   }) {
-    return QuickjsUiNetworkLoader(
+    return JsUiNetworkLoader(
       fetch: fetch,
       onLog: onLog,
     ).load(url: url, id: id, version: version, bundleRoot: bundleRoot);
   }
 
-  static Future<QuickjsUiBundle> assetPackage({
+  /// Loads a manifest package from a Flutter asset directory.
+  static Future<JsUiBundle> packageAsset({
     required String root,
     AssetBundle? bundle,
   }) async {
-    final resolver = QuickjsUiResourceResolver.asset(
+    final resolver = JsUiResourceResolver.asset(
       bundle: bundle,
-      baseAssetKey: _packageAssetManifestKey(root),
+      basePath: _packageAssetManifestKey(root),
     );
     final manifestSource = await resolver.loadString(packageManifest);
-    return fromManifestSource(
+    return loadManifest(
       manifestSource,
       resolver: resolver,
       validatePackageRoot: true,
     );
   }
 
-  static Future<QuickjsUiBundle> filePackage({required String root}) async {
-    final resolver = QuickjsUiResourceResolver.file(basePath: root);
+  /// Loads a manifest package from a local directory.
+  static Future<JsUiBundle> packageFile({required String root}) async {
+    final resolver = JsUiResourceResolver.file(basePath: root);
     final manifestSource = await resolver.loadString(packageManifest);
-    return fromManifestSource(
+    return loadManifest(
       manifestSource,
       resolver: resolver,
       validatePackageRoot: true,
     );
   }
 
-  static Future<QuickjsUiBundle> assetZipPackage({
-    required String assetKey,
+  /// Loads a ZIP package from a Flutter asset.
+  static Future<JsUiBundle> archiveAsset({
+    required String path,
     AssetBundle? bundle,
   }) async {
-    final data = await (bundle ?? rootBundle).load(assetKey);
-    return zipPackageBytes(data.buffer.asUint8List());
+    final data = await (bundle ?? rootBundle).load(path);
+    return archiveBytes(data.buffer.asUint8List());
   }
 
-  static Future<QuickjsUiBundle> fileZipPackage({required String path}) async {
-    return zipPackageBytes(await readQuickjsUiFileBytes(path));
+  /// Loads a ZIP package from a local file.
+  static Future<JsUiBundle> archiveFile({required String path}) async {
+    return archiveBytes(await readJsUiFileBytes(path));
   }
 
-  static Future<QuickjsUiBundle> zipPackageBytes(List<int> bytes) async {
+  /// Loads a ZIP package from in-memory bytes.
+  static Future<JsUiBundle> archiveBytes(List<int> bytes) async {
     final archive = ZipDecoder().decodeBytes(bytes);
     final files = <String, Uint8List>{};
     for (final file in archive.files) {
       if (!file.isFile) {
         continue;
       }
-      final normalized = QuickjsUiResourceResolver.normalizePath(file.name);
+      final normalized = JsUiResourceResolver.normalizePath(file.name);
       files[normalized] = _archiveFileBytes(file);
     }
     final manifestBytes = files[packageManifest];
@@ -170,7 +194,7 @@ final class QuickjsUiBundle {
         'quickjs_ui zip package missing manifest.json',
       );
     }
-    final manifest = QuickjsUiManifest.parse(utf8.decode(manifestBytes))
+    final manifest = JsUiManifest.parse(utf8.decode(manifestBytes))
       ..validatePackageRoot();
     final modules = <String, String>{};
     for (final module in manifest.modules.entries) {
@@ -185,7 +209,7 @@ final class QuickjsUiBundle {
       modules[module.key] = moduleSource;
     }
     manifest.validateImports(modules);
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: manifest.id,
       version: manifest.version,
       entry: manifest.entry,
@@ -195,50 +219,51 @@ final class QuickjsUiBundle {
     );
   }
 
-  static Future<QuickjsUiBundle> networkPackage({
+  /// Loads a manifest package from a network directory.
+  static Future<JsUiBundle> packageNetwork({
     required Uri root,
-    QuickjsUiNetworkFetch? fetch,
-    QuickjsUiNetworkLogHandler? onLog,
-    QuickjsUiNetworkCacheStore? cacheStore,
-    QuickjsUiNetworkRefreshMode refreshMode =
-        QuickjsUiNetworkRefreshMode.conditional,
-    QuickjsUiNetworkCacheBuster? cacheBuster,
+    JsUiNetworkFetch? fetch,
+    JsUiNetworkLogHandler? onLog,
+    JsUiNetworkCacheStore? cacheStore,
+    JsUiNetworkRefreshMode refreshMode = JsUiNetworkRefreshMode.conditional,
+    JsUiNetworkCacheBuster? cacheBuster,
   }) {
-    return QuickjsUiNetworkLoader(
+    return JsUiNetworkLoader(
       fetch: fetch,
       onLog: onLog,
       cacheStore: cacheStore,
       cacheBuster: cacheBuster,
-    ).loadPackageWithRefresh(root: root, refreshMode: refreshMode);
+    ).loadPackage(root: root, refreshMode: refreshMode);
   }
 
-  static Future<QuickjsUiBundle> fromEntry({
+  /// Recursively loads an entry module and its relative imports.
+  static Future<JsUiBundle> loadEntry({
     required String id,
     required String version,
     required String entry,
-    required QuickjsUiResourceResolver resolver,
+    required JsUiResourceResolver resolver,
   }) async {
-    final normalizedEntry = QuickjsUiResourceResolver.normalizePath(entry);
+    final normalizedEntry = JsUiResourceResolver.normalizePath(entry);
     final modules = <String, String>{};
     Future<void> visit(String modulePath) async {
-      final normalized = QuickjsUiResourceResolver.normalizePath(modulePath);
+      final normalized = JsUiResourceResolver.normalizePath(modulePath);
       if (modules.containsKey(normalized)) {
         return;
       }
       final source = await resolver.loadString(normalized);
       modules[normalized] = source;
-      for (final importPath in quickjsUiStaticImports(source)) {
-        if (!quickjsUiIsRelativeImport(importPath)) {
+      for (final importPath in jsUiStaticImports(source)) {
+        if (!jsUiIsRelativeImport(importPath)) {
           continue;
         }
         await visit(
-          QuickjsUiResourceResolver.normalizePath(importPath, from: normalized),
+          JsUiResourceResolver.normalizePath(importPath, from: normalized),
         );
       }
     }
 
     await visit(normalizedEntry);
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: id,
       version: version,
       entry: normalizedEntry,
@@ -246,24 +271,23 @@ final class QuickjsUiBundle {
     );
   }
 
-  static Future<QuickjsUiBundle> manifestAsset({
-    required String manifestAsset,
+  /// Loads a manifest file and its declared modules from Flutter assets.
+  static Future<JsUiBundle> manifestAsset({
+    required String path,
     AssetBundle? bundle,
   }) async {
-    final resolver = QuickjsUiResourceResolver.asset(
-      bundle: bundle,
-      baseAssetKey: manifestAsset,
-    );
-    final source = await (bundle ?? rootBundle).loadString(manifestAsset);
-    return fromManifestSource(source, resolver: resolver);
+    final resolver = JsUiResourceResolver.asset(bundle: bundle, basePath: path);
+    final source = await (bundle ?? rootBundle).loadString(path);
+    return loadManifest(source, resolver: resolver);
   }
 
-  static Future<QuickjsUiBundle> fromManifestSource(
+  /// Parses [source] and loads its declared modules through [resolver].
+  static Future<JsUiBundle> loadManifest(
     String source, {
-    required QuickjsUiResourceResolver resolver,
+    required JsUiResourceResolver resolver,
     bool validatePackageRoot = false,
   }) async {
-    final manifest = QuickjsUiManifest.parse(source);
+    final manifest = JsUiManifest.parse(source);
     if (validatePackageRoot) {
       manifest.validatePackageRoot();
     }
@@ -274,7 +298,7 @@ final class QuickjsUiBundle {
       modules[module.key] = moduleSource;
     }
     manifest.validateImports(modules);
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: manifest.id,
       version: manifest.version,
       entry: manifest.entry,
@@ -284,23 +308,22 @@ final class QuickjsUiBundle {
     );
   }
 
-  /// Creates a package bundle from a manifest and module sources embedded in
-  /// Dart at build time.
+  /// Creates a package bundle from a manifest and module sources in Dart.
   ///
   /// [modules] may be keyed by manifest module path or by its `source` load
   /// path. All manifest modules must be present.
-  static QuickjsUiBundle compiledPackage({
+  static JsUiBundle fromManifest({
     required String manifestSource,
     required Map<String, String> modules,
     bool validatePackageRoot = false,
   }) {
-    final manifest = QuickjsUiManifest.parse(manifestSource);
+    final manifest = JsUiManifest.parse(manifestSource);
     if (validatePackageRoot) {
       manifest.validatePackageRoot();
     }
     final normalizedSources = <String, String>{
       for (final module in modules.entries)
-        QuickjsUiResourceResolver.normalizePath(module.key): module.value,
+        JsUiResourceResolver.normalizePath(module.key): module.value,
     };
     final loadedModules = <String, String>{};
     for (final module in manifest.modules.entries) {
@@ -316,7 +339,7 @@ final class QuickjsUiBundle {
       loadedModules[module.key] = source;
     }
     manifest.validateImports(loadedModules);
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: manifest.id,
       version: manifest.version,
       entry: manifest.entry,
@@ -326,29 +349,27 @@ final class QuickjsUiBundle {
     );
   }
 
+  /// Converts this bundle into an installable Lemon JS page plugin.
   JsPlugin toPlugin() {
-    final entrySpecifier = QuickjsUiResourceResolver.moduleSpecifier(id, entry);
-    final adapterSpecifier = '$id/__quickjs_ui_adapter__';
+    final entrySpecifier = JsUiResourceResolver.moduleSpecifier(id, entry);
+    final adapterSpecifier = '$id/__js_ui_adapter__';
     return JsPlugin(
       manifest: JsPluginManifest(
         id: id,
         version: version,
         entry: adapterSpecifier,
-        exports: quickjsUiPagePluginExports,
+        exports: jsUiPagePluginExports,
         permissions: permissions,
       ),
       modules: <JsPluginModule>[
         for (final module in modules.entries)
           JsPluginModule(
-            specifier: QuickjsUiResourceResolver.moduleSpecifier(
-              id,
-              module.key,
-            ),
+            name: JsUiResourceResolver.moduleSpecifier(id, module.key),
             source: module.value,
           ),
         JsPluginModule(
-          specifier: adapterSpecifier,
-          source: QuickjsUiPagePlugin.adapterSource(entrySpecifier),
+          name: adapterSpecifier,
+          source: JsUiPagePlugin.adapterSource(entrySpecifier),
         ),
       ],
     );
@@ -399,7 +420,7 @@ String _packageAssetManifestKey(String root) {
   final prefix = normalized.isEmpty || normalized.endsWith('/')
       ? normalized
       : '$normalized/';
-  return '$prefix${QuickjsUiBundle.packageManifest}';
+  return '$prefix${JsUiBundle.packageManifest}';
 }
 
 Uint8List _archiveFileBytes(ArchiveFile file) {

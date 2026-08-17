@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
-/// Console 演示：通过 [Quickjs.create] 的 `onConsole` 接收
+/// Console 演示：通过 [JsEngine.create] 的 `onConsole` 接收
 /// `console.log` / `warn` / `error` 输出。
 class ConsolePage extends StatefulWidget {
   const ConsolePage({super.key});
@@ -14,7 +14,7 @@ class ConsolePage extends StatefulWidget {
 
 /// [ConsolePage] 的状态：管理 runtime 生命周期并展示 console 日志。
 class _ConsolePageState extends State<ConsolePage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -34,22 +34,22 @@ class _ConsolePageState extends State<ConsolePage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       if (previous != null) {
         await previous.dispose();
       }
 
-      final quickjs = await Quickjs.create(onConsole: _onConsole);
+      final engine = await JsEngine.create(onConsole: _onConsole);
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -87,14 +87,14 @@ console.error(new Error("boom"));
 
   Future<void> _runStopRecovery() async {
     await _capture('stop recovery', () async {
-      final quickjs = _requireRuntime();
-      final running = quickjs
+      final engine = _requireRuntime();
+      final running = engine
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.restart();
+      await engine.restart();
       await running;
-      await quickjs.eval('console.warn("console restored after stop")');
+      await engine.eval('console.warn("console restored after stop")');
     });
   }
 
@@ -124,25 +124,25 @@ console.error(new Error("boom"));
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('控制台输出')),

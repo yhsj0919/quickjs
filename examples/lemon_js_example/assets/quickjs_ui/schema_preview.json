@@ -24,7 +24,7 @@
           "children": [
             {
               "type": "Text",
-              "data": "This page is loaded from a .json asset, parsed as QuickjsUiNode, and rendered without JS."
+              "data": "This page is loaded from a .json asset, parsed as JsUiNode, and rendered without JS."
             },
             {
               "type": "TextField",

@@ -12,7 +12,7 @@ QuickJS，Flutter Web 使用 WASM 与 Web Worker。它提供异步执行、ES Mo
 
 ```yaml
 dependencies:
-  lemon_js: ^0.1.1
+  lemon_js: ^0.2.0
 ```
 
 ```dart
@@ -23,57 +23,59 @@ import 'package:lemon_js/lemon_js.dart';
 
 ```dart
 Future<void> runJavaScript() async {
-  final runtime = await Quickjs.create();
+  final engine = await JsEngine.create();
   try {
-    final result = await runtime.eval('''
+    final result = await engine.eval('''
       const items = [1, 2, 3];
       ({ total: items.reduce((sum, value) => sum + value, 0) });
     ''');
     print(result); // {total: 6}
   } finally {
-    await runtime.dispose();
+    await engine.dispose();
   }
 }
 ```
 
 `eval()` 返回 Dart 结构化值。需要底层字符串结果时使用 `evalRaw()`。
-每个 `Quickjs` 实例拥有独立 runtime；不用时应调用 `dispose()`。
+每个 `JsEngine` 实例拥有独立 runtime；不用时应调用 `dispose()`。
 
 ## Dart 与 JavaScript 互调
 
 ```dart
-final runtime = await Quickjs.create();
-await runtime.injectFunction('addFromDart', (arguments) {
+final engine = await JsEngine.create();
+await engine.injectFunction('addFromDart', (arguments) {
   return (arguments[0] as num) + (arguments[1] as num);
 });
 
-final result = await runtime.run('''
+final result = await engine.run('''
   return await addFromDart(20, 22);
 ''');
 print(result); // 42
 ```
 
-`injectFunction()` 暴露的 Dart 函数在 JS 中返回 Promise。参数和结果支持 JSON 值以及
+`injectFunction()` 临时注入的 Dart 函数在 JS 中返回 Promise；同名注入会替换旧回调，
+`restart()` 后不会恢复。需要随引擎重建恢复的正式宿主能力应通过创建参数 `methods` 配置。
+参数和结果支持 JSON 值以及
 `Uint8List`/`Uint8Array`。
 
 ## ES Module
 
 ```dart
-final runtime = await Quickjs.create(
+final engine = await JsEngine.create(
   moduleLoader: (name) => <String, String>{
       'math.mjs': 'export const answer = 42;',
     }[name],
 );
 
-await runtime.evalModule('''
+await engine.runModule('''
   import { answer } from './math.mjs';
   globalThis.result = answer;
 ''', name: 'main.mjs');
 
-print(await runtime.eval('globalThis.result')); // 42
+print(await engine.eval('globalThis.result')); // 42
 ```
 
-Flutter asset 模块可使用 `jsAssetModuleLoader()`。npm 依赖建议先通过 esbuild、
+Flutter asset 模块可使用 `assetModuleLoader()`。npm 依赖建议先通过 esbuild、
 Rollup 或 webpack 打包，不提供完整 Node.js resolver。
 
 ## 宿主能力
@@ -83,11 +85,12 @@ Rollup 或 webpack 打包，不提供完整 Node.js resolver。
 - `FetchFeatures`：Fetch、XHR、FormData、Blob 等网络 API；
 - `StorageFeatures`：按 namespace 隔离的异步 KV；
 - `WebCryptoFeatures`：随机数、摘要和 HMAC；
+- `WebSocketFeatures`：原生平台 WebSocket；当前 Flutter Web 不支持此能力；
 - `AxiosFeatures`：向 JS 提供 Axios；
-- `JsFeatures.essential()`、`JsFeatures.node()`：常用环境兼容能力。
+- `EssentialFeatures()`、`NodeFeatures()`：常用环境兼容能力。
 
 ```dart
-final runtime = await Quickjs.create(
+final engine = await JsEngine.create(
   features: <JsFeatures>[
     FetchFeatures(
       allowedOrigins: <String>{'https://api.example.com'},
@@ -115,8 +118,8 @@ final plugin = JsPlugin.sources(
   },
 );
 
-final runtime = await Quickjs.create();
-final result = await runtime.callPlugin(plugin, 'getHome', const []);
+final engine = await JsEngine.create();
+final result = await engine.callPluginExport(plugin, 'getHome', const []);
 ```
 
 插件 ID 同时作为模块命名空间。多文件插件和 ZIP 插件也使用相同的 manifest、导出校验与
@@ -124,7 +127,7 @@ final result = await runtime.callPlugin(plugin, 'getHome', const []);
 
 ## 运行限制与错误
 
-`JsOptions` 可配置内存、原生栈、调用队列和默认超时。框架错误可通过
+`JsOptions` 可配置内存、原生栈和执行队列上限。框架错误可通过
 `JsException.kind` 或具体异常类型区分超时、取消、队列已满、runtime 关闭、崩溃、
 内存不足和栈溢出。
 

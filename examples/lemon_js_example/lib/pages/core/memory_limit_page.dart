@@ -17,7 +17,7 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
   // recursion still reaches this limit and exercises JsStackOverflowException.
   static const int _stackLimitBytes = 256 * 1024;
 
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建受限 runtime...';
@@ -37,23 +37,23 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         options: const JsOptions(
           memoryLimitBytes: _memoryLimitBytes,
           stackLimitBytes: _stackLimitBytes,
         ),
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status =
             'runtime 已就绪：memoryLimitBytes=$_memoryLimitBytes, '
@@ -158,12 +158,12 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeError(Object error) {
@@ -176,14 +176,14 @@ class _MemoryLimitPageState extends State<MemoryLimitPage> {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('资源限制')),

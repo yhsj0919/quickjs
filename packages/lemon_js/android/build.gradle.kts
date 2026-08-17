@@ -1,4 +1,4 @@
-group = "xyz.yhsj.quickjs"
+group = "xyz.yhsj.lemon_js"
 version = "1.0-SNAPSHOT"
 
 buildscript {
@@ -26,7 +26,7 @@ plugins {
 }
 
 android {
-    namespace = "xyz.yhsj.quickjs"
+    namespace = "xyz.yhsj.lemon_js"
 
     compileSdk = 36
 

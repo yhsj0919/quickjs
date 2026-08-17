@@ -39,8 +39,8 @@ void main() {
 }
 
 double? _sample(Map<String, Object?> animation, double elapsedMs) {
-  return quickjsUiAnimatedNumber(
+  return jsUiAnimatedNumber(
     animation,
-    QuickjsUiAnimationClock(elapsedMs: elapsedMs, epochMs: 0),
+    JsUiAnimationClock(elapsedMs: elapsedMs, epochMs: 0),
   );
 }

@@ -12,7 +12,7 @@ class CryptoRandomUuidPage extends StatefulWidget {
 }
 
 class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建启用 Web Crypto 的 runtime...';
@@ -32,11 +32,11 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       await previous?.dispose();
 
-      final quickjs = await Quickjs.create(
+      final engine = await JsEngine.create(
         features: <JsFeatures>[
           WebCryptoFeatures(
             allowInsecureRandomFallback: true,
@@ -46,12 +46,12 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
         ],
       );
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
+        _engine = engine;
         _busy = false;
         _status = 'runtime 已就绪：Web Crypto 已启用';
       });
@@ -68,9 +68,9 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
 
   Future<void> _runDefaultDisabledCheck() async {
     await _capture('默认未启用检查', () async {
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       try {
-        final result = await quickjs.eval(
+        final result = await engine.eval(
           'typeof crypto === "undefined" || '
           'typeof crypto.randomUUID === "undefined" || '
           'typeof crypto.getRandomValues === "undefined"',
@@ -80,7 +80,7 @@ class _CryptoRandomUuidPageState extends State<CryptoRandomUuidPage> {
             ? '默认 runtime 未暴露 Web Crypto'
             : '默认 runtime 检查失败';
       } finally {
-        await quickjs.dispose();
+        await engine.dispose();
       }
     });
   }
@@ -156,14 +156,14 @@ return hex + "\\nvalid=" + valid;
 
   Future<void> _runStopRecovery() async {
     await _capture('stop 后恢复', () async {
-      final quickjs = _requireRuntime();
-      final running = quickjs
+      final engine = _requireRuntime();
+      final running = engine
           .eval('while (true) {}')
           .then<Object?>((_) => null, onError: (Object error) => error);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      await quickjs.restart();
+      await engine.restart();
       await running;
-      final result = await quickjs.eval(
+      final result = await engine.eval(
         'typeof crypto.randomUUID() === "string" && '
         'crypto.getRandomValues(new Uint8Array(1)) instanceof Uint8Array && '
         'typeof crypto.subtle.digest === "function" && '
@@ -200,12 +200,12 @@ return hex + "\\nvalid=" + valid;
     }
   }
 
-  Quickjs _requireRuntime() {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+  JsEngine _requireRuntime() {
+    final engine = _engine;
+    if (engine == null) {
       throw JsRuntimeClosedException('QuickJS runtime is not ready');
     }
-    return quickjs;
+    return engine;
   }
 
   String _describeError(Object error) {
@@ -218,14 +218,14 @@ return hex + "\\nvalid=" + valid;
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Web 加密能力')),

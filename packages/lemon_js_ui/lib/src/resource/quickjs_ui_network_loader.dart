@@ -8,21 +8,29 @@ import 'quickjs_ui_network_cache_store.dart';
 
 // ignore_for_file: prefer_initializing_formals
 
-typedef QuickjsUiNetworkFetch =
-    Future<QuickjsUiNetworkResponse> Function(QuickjsUiNetworkRequest request);
-typedef QuickjsUiNetworkLogHandler =
-    void Function(QuickjsUiNetworkLogEvent event);
-typedef QuickjsUiNetworkCacheBuster = String Function(Uri uri);
+/// Fetches one text resource for a [JsUiNetworkLoader].
+typedef JsUiNetworkFetch =
+    Future<JsUiNetworkResponse> Function(JsUiNetworkRequest request);
+
+/// Receives request, response, and cache diagnostic events.
+typedef JsUiNetworkLogHandler = void Function(JsUiNetworkLogEvent event);
+
+/// Produces the query value used to bypass caches during forced refresh.
+typedef JsUiNetworkCacheBuster = String Function(Uri uri);
 
 const _httpHeaderIfNoneMatch = 'if-none-match';
 const _httpHeaderEtag = 'etag';
 const _httpStatusNotModified = 304;
 
 /// quickjs_ui 网络加载失败时抛出的异常。
-final class QuickjsUiNetworkException implements Exception {
-  const QuickjsUiNetworkException(this.message, {this.uri});
+final class JsUiNetworkException implements Exception {
+  /// Creates a network loading failure, optionally associated with [uri].
+  const JsUiNetworkException(this.message, {this.uri});
 
+  /// Human-readable failure description.
   final String message;
+
+  /// Resource URI associated with the failure.
   final Uri? uri;
 
   @override
@@ -35,10 +43,22 @@ final class QuickjsUiNetworkException implements Exception {
   }
 }
 
-enum QuickjsUiNetworkRefreshMode { conditional, force, staleWhileRevalidate }
+/// Controls how package resources interact with the network cache.
+enum JsUiNetworkRefreshMode {
+  /// Revalidates cached resources with their ETag when available.
+  conditional,
 
-final class QuickjsUiNetworkLogEvent {
-  const QuickjsUiNetworkLogEvent({
+  /// Fetches from a cache-busted URI without conditional headers.
+  force,
+
+  /// Returns cached content immediately and refreshes it in the background.
+  staleWhileRevalidate,
+}
+
+/// A structured network loader diagnostic event.
+final class JsUiNetworkLogEvent {
+  /// Creates a network diagnostic event.
+  const JsUiNetworkLogEvent({
     this.id,
     required this.type,
     required this.uri,
@@ -52,62 +72,101 @@ final class QuickjsUiNetworkLogEvent {
     this.timestamp,
   });
 
+  /// Identifier correlating events from the same request.
   final String? id;
+
+  /// Event type, such as `network.request` or `network.cacheHit`.
   final String type;
+
+  /// Requested resource URI.
   final Uri uri;
+
+  /// HTTP method when applicable.
   final String? method;
+
+  /// HTTP response status when available.
   final int? statusCode;
+
+  /// Entity tag sent or received by the request.
   final String? etag;
+
+  /// Whether the reported body came from a cache.
   final bool fromCache;
+
+  /// Elapsed request time in milliseconds.
   final int? durationMs;
+
+  /// UTF-8 body size in bytes.
   final int? bodyBytes;
+
+  /// Text of a request failure.
   final String? error;
+
+  /// Time at which the event occurred.
   final DateTime? timestamp;
 }
 
-final class QuickjsUiNetworkRequest {
-  const QuickjsUiNetworkRequest({
+/// A text resource request issued by [JsUiNetworkLoader].
+final class JsUiNetworkRequest {
+  /// Creates a resource request.
+  const JsUiNetworkRequest({
     required this.uri,
     this.headers = const <String, String>{},
   });
 
+  /// URI passed to the fetch implementation.
   final Uri uri;
+
+  /// Request headers, including conditional headers when applicable.
   final Map<String, String> headers;
 }
 
-final class QuickjsUiNetworkResponse {
-  const QuickjsUiNetworkResponse({
+/// A text response returned by [JsUiNetworkFetch].
+final class JsUiNetworkResponse {
+  /// Creates a text response.
+  const JsUiNetworkResponse({
     required this.body,
     this.statusCode = 200,
     this.headers = const <String, String>{},
   });
 
+  /// Decoded response body.
   final String body;
+
+  /// HTTP-compatible status code.
   final int statusCode;
+
+  /// Response headers.
   final Map<String, String> headers;
 }
 
-final class QuickjsUiNetworkLoader {
-  QuickjsUiNetworkLoader({
-    QuickjsUiNetworkFetch? fetch,
-    Map<Uri, QuickjsUiNetworkCacheEntry>? cache,
-    QuickjsUiNetworkCacheStore? cacheStore,
-    QuickjsUiNetworkLogHandler? onLog,
-    QuickjsUiNetworkCacheBuster? cacheBuster,
+/// Loads JavaScript UI bundles and manifest packages over HTTP.
+final class JsUiNetworkLoader {
+  /// Creates a loader with optional fetching, caching, and logging hooks.
+  JsUiNetworkLoader({
+    JsUiNetworkFetch? fetch,
+    Map<Uri, JsUiNetworkCacheEntry>? cache,
+    JsUiNetworkCacheStore? cacheStore,
+    JsUiNetworkLogHandler? onLog,
+    JsUiNetworkCacheBuster? cacheBuster,
   }) : _fetch = fetch,
-       _cache = cache ?? <Uri, QuickjsUiNetworkCacheEntry>{},
+       _cache = cache ?? <Uri, JsUiNetworkCacheEntry>{},
        _cacheStore = cacheStore,
        _onLog = onLog,
        _cacheBuster = cacheBuster;
 
-  final QuickjsUiNetworkFetch? _fetch;
-  final Map<Uri, QuickjsUiNetworkCacheEntry> _cache;
-  final QuickjsUiNetworkCacheStore? _cacheStore;
-  final QuickjsUiNetworkLogHandler? _onLog;
-  final QuickjsUiNetworkCacheBuster? _cacheBuster;
+  final JsUiNetworkFetch? _fetch;
+  final Map<Uri, JsUiNetworkCacheEntry> _cache;
+  final JsUiNetworkCacheStore? _cacheStore;
+  final JsUiNetworkLogHandler? _onLog;
+  final JsUiNetworkCacheBuster? _cacheBuster;
   int _nextEventId = 0;
 
-  Future<QuickjsUiBundle> load({
+  /// Recursively loads an entry module and its relative static imports.
+  ///
+  /// Imports that escape [bundleRoot] are rejected. When [bundleRoot] is
+  /// omitted, a root is inferred from [url].
+  Future<JsUiBundle> load({
     required Uri url,
     String? id,
     String version = '0.2.0',
@@ -131,14 +190,14 @@ final class QuickjsUiNetworkLoader {
       final eventId = _nextLogId();
       final startedAt = DateTime.now();
       final stopwatch = Stopwatch()..start();
-      final request = QuickjsUiNetworkRequest(
+      final request = JsUiNetworkRequest(
         uri: normalizedUrl,
         headers: <String, String>{
           if (cached?.etag != null) _httpHeaderIfNoneMatch: cached!.etag!,
         },
       );
       _log(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: eventId,
           type: 'network.request',
           uri: normalizedUrl,
@@ -152,7 +211,7 @@ final class QuickjsUiNetworkLoader {
         stopwatch.stop();
         final etag = _header(response.headers, _httpHeaderEtag);
         _log(
-          QuickjsUiNetworkLogEvent(
+          JsUiNetworkLogEvent(
             id: eventId,
             type: 'network.response',
             uri: normalizedUrl,
@@ -166,13 +225,13 @@ final class QuickjsUiNetworkLoader {
         );
         if (response.statusCode == _httpStatusNotModified) {
           if (cached == null) {
-            throw QuickjsUiNetworkException(
+            throw JsUiNetworkException(
               'quickjs_ui network resource returned 304 without cache',
               uri: normalizedUrl,
             );
           }
           _log(
-            QuickjsUiNetworkLogEvent(
+            JsUiNetworkLogEvent(
               id: eventId,
               type: 'network.cacheHit',
               uri: normalizedUrl,
@@ -187,8 +246,8 @@ final class QuickjsUiNetworkLoader {
           );
           final path = _relativePath(root, normalizedUrl);
           modules[path] = cached.body;
-          for (final importPath in quickjsUiStaticImports(cached.body)) {
-            if (!quickjsUiIsRelativeImport(importPath)) {
+          for (final importPath in jsUiStaticImports(cached.body)) {
+            if (!jsUiIsRelativeImport(importPath)) {
               continue;
             }
             await visit(normalizedUrl.resolve(importPath));
@@ -196,7 +255,7 @@ final class QuickjsUiNetworkLoader {
           return;
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw QuickjsUiNetworkException(
+          throw JsUiNetworkException(
             'quickjs_ui network resource failed with ${response.statusCode}',
             uri: normalizedUrl,
           );
@@ -205,10 +264,10 @@ final class QuickjsUiNetworkLoader {
         modules[path] = response.body;
         await _storeEntry(
           normalizedUrl,
-          QuickjsUiNetworkCacheEntry(body: response.body, etag: etag),
+          JsUiNetworkCacheEntry(body: response.body, etag: etag),
         );
         _log(
-          QuickjsUiNetworkLogEvent(
+          JsUiNetworkLogEvent(
             id: eventId,
             type: 'network.cacheStore',
             uri: normalizedUrl,
@@ -220,8 +279,8 @@ final class QuickjsUiNetworkLoader {
             timestamp: DateTime.now(),
           ),
         );
-        for (final importPath in quickjsUiStaticImports(response.body)) {
-          if (!quickjsUiIsRelativeImport(importPath)) {
+        for (final importPath in jsUiStaticImports(response.body)) {
+          if (!jsUiIsRelativeImport(importPath)) {
             continue;
           }
           await visit(normalizedUrl.resolve(importPath));
@@ -229,7 +288,7 @@ final class QuickjsUiNetworkLoader {
       } catch (error) {
         stopwatch.stop();
         _log(
-          QuickjsUiNetworkLogEvent(
+          JsUiNetworkLogEvent(
             id: eventId,
             type: 'network.response',
             uri: normalizedUrl,
@@ -244,7 +303,7 @@ final class QuickjsUiNetworkLoader {
     }
 
     await visit(url);
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: id ?? _bundleIdFromUrl(url),
       version: version,
       entry: _relativePath(root, url.normalizePath()),
@@ -252,26 +311,18 @@ final class QuickjsUiNetworkLoader {
     );
   }
 
-  Future<QuickjsUiBundle> loadPackage({required Uri root}) async {
-    return loadPackageWithRefresh(
-      root: root,
-      refreshMode: QuickjsUiNetworkRefreshMode.conditional,
-    );
-  }
-
-  Future<QuickjsUiBundle> loadPackageWithRefresh({
+  /// Loads a manifest package using the selected cache refresh behavior.
+  Future<JsUiBundle> loadPackage({
     required Uri root,
-    QuickjsUiNetworkRefreshMode refreshMode =
-        QuickjsUiNetworkRefreshMode.conditional,
+    JsUiNetworkRefreshMode refreshMode = JsUiNetworkRefreshMode.conditional,
   }) async {
     final packageRoot = _normalizePackageRoot(root);
-    final manifestUri = packageRoot.resolve(quickjsUiPackageManifest);
+    final manifestUri = packageRoot.resolve(jsUiPackageManifest);
     final manifestSource = await _loadText(
       manifestUri,
       refreshMode: refreshMode,
     );
-    final manifest = QuickjsUiManifest.parse(manifestSource)
-      ..validatePackageRoot();
+    final manifest = JsUiManifest.parse(manifestSource)..validatePackageRoot();
     final modules = <String, String>{};
     for (final module in manifest.modules.entries) {
       final moduleUri = packageRoot.resolve(module.value.loadPath);
@@ -280,7 +331,7 @@ final class QuickjsUiNetworkLoader {
       modules[module.key] = moduleSource;
     }
     manifest.validateImports(modules);
-    return QuickjsUiBundle(
+    return JsUiBundle(
       id: manifest.id,
       version: manifest.version,
       entry: manifest.entry,
@@ -292,15 +343,14 @@ final class QuickjsUiNetworkLoader {
 
   Future<String> _loadText(
     Uri uri, {
-    QuickjsUiNetworkRefreshMode refreshMode =
-        QuickjsUiNetworkRefreshMode.conditional,
+    JsUiNetworkRefreshMode refreshMode = JsUiNetworkRefreshMode.conditional,
   }) async {
     final normalizedUri = uri.normalizePath();
     final cached = await _cachedEntry(normalizedUri);
-    if (refreshMode == QuickjsUiNetworkRefreshMode.staleWhileRevalidate &&
+    if (refreshMode == JsUiNetworkRefreshMode.staleWhileRevalidate &&
         cached != null) {
       _log(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: _nextLogId(),
           type: 'network.stale',
           uri: normalizedUri,
@@ -320,7 +370,7 @@ final class QuickjsUiNetworkLoader {
   void _refreshText(Uri normalizedUri) {
     _fetchText(
       normalizedUri,
-      refreshMode: QuickjsUiNetworkRefreshMode.conditional,
+      refreshMode: JsUiNetworkRefreshMode.conditional,
     ).catchError((Object _) {
       return '';
     });
@@ -328,23 +378,22 @@ final class QuickjsUiNetworkLoader {
 
   Future<String> _fetchText(
     Uri normalizedUri, {
-    required QuickjsUiNetworkRefreshMode refreshMode,
+    required JsUiNetworkRefreshMode refreshMode,
   }) async {
     final cached = await _cachedEntry(normalizedUri);
     final eventId = _nextLogId();
     final startedAt = DateTime.now();
     final stopwatch = Stopwatch()..start();
     final requestUri = _requestUri(normalizedUri, refreshMode: refreshMode);
-    final request = QuickjsUiNetworkRequest(
+    final request = JsUiNetworkRequest(
       uri: requestUri,
       headers: <String, String>{
-        if (refreshMode != QuickjsUiNetworkRefreshMode.force &&
-            cached?.etag != null)
+        if (refreshMode != JsUiNetworkRefreshMode.force && cached?.etag != null)
           _httpHeaderIfNoneMatch: cached!.etag!,
       },
     );
     _log(
-      QuickjsUiNetworkLogEvent(
+      JsUiNetworkLogEvent(
         id: eventId,
         type: 'network.request',
         uri: requestUri,
@@ -358,7 +407,7 @@ final class QuickjsUiNetworkLoader {
       stopwatch.stop();
       final etag = _header(response.headers, _httpHeaderEtag);
       _log(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: eventId,
           type: 'network.response',
           uri: requestUri,
@@ -372,13 +421,13 @@ final class QuickjsUiNetworkLoader {
       );
       if (response.statusCode == _httpStatusNotModified) {
         if (cached == null) {
-          throw QuickjsUiNetworkException(
+          throw JsUiNetworkException(
             'quickjs_ui network resource returned 304 without cache',
             uri: normalizedUri,
           );
         }
         _log(
-          QuickjsUiNetworkLogEvent(
+          JsUiNetworkLogEvent(
             id: eventId,
             type: 'network.cacheHit',
             uri: requestUri,
@@ -394,17 +443,17 @@ final class QuickjsUiNetworkLoader {
         return cached.body;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw QuickjsUiNetworkException(
+        throw JsUiNetworkException(
           'quickjs_ui network resource failed with ${response.statusCode}',
           uri: normalizedUri,
         );
       }
       await _storeEntry(
         normalizedUri,
-        QuickjsUiNetworkCacheEntry(body: response.body, etag: etag),
+        JsUiNetworkCacheEntry(body: response.body, etag: etag),
       );
       _log(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: eventId,
           type: 'network.cacheStore',
           uri: requestUri,
@@ -420,7 +469,7 @@ final class QuickjsUiNetworkLoader {
     } catch (error) {
       stopwatch.stop();
       _log(
-        QuickjsUiNetworkLogEvent(
+        JsUiNetworkLogEvent(
           id: eventId,
           type: 'network.response',
           uri: requestUri,
@@ -434,7 +483,7 @@ final class QuickjsUiNetworkLoader {
     }
   }
 
-  Future<QuickjsUiNetworkCacheEntry?> _cachedEntry(Uri uri) async {
+  Future<JsUiNetworkCacheEntry?> _cachedEntry(Uri uri) async {
     final memoryEntry = _cache[uri];
     if (memoryEntry != null) {
       return memoryEntry;
@@ -446,12 +495,12 @@ final class QuickjsUiNetworkLoader {
     return storedEntry;
   }
 
-  Future<void> _storeEntry(Uri uri, QuickjsUiNetworkCacheEntry entry) async {
+  Future<void> _storeEntry(Uri uri, JsUiNetworkCacheEntry entry) async {
     _cache[uri] = entry;
     await _cacheStore?.write(uri, entry);
   }
 
-  void _log(QuickjsUiNetworkLogEvent event) {
+  void _log(JsUiNetworkLogEvent event) {
     _onLog?.call(event);
   }
 
@@ -460,9 +509,8 @@ final class QuickjsUiNetworkLoader {
     return 'bundle-$_nextEventId';
   }
 
-  Uri _requestUri(Uri uri, {required QuickjsUiNetworkRefreshMode refreshMode}) {
-    if (refreshMode != QuickjsUiNetworkRefreshMode.force ||
-        _cacheBuster == null) {
+  Uri _requestUri(Uri uri, {required JsUiNetworkRefreshMode refreshMode}) {
+    if (refreshMode != JsUiNetworkRefreshMode.force || _cacheBuster == null) {
       return uri;
     }
     final queryParameters = Map<String, String>.from(uri.queryParameters);
@@ -471,14 +519,14 @@ final class QuickjsUiNetworkLoader {
   }
 }
 
-Future<QuickjsUiNetworkResponse> _defaultFetch(
-  QuickjsUiNetworkRequest fetchRequest,
+Future<JsUiNetworkResponse> _defaultFetch(
+  JsUiNetworkRequest fetchRequest,
 ) async {
   final response = await http.get(
     fetchRequest.uri,
     headers: fetchRequest.headers,
   );
-  return QuickjsUiNetworkResponse(
+  return JsUiNetworkResponse(
     body: utf8.decode(response.bodyBytes),
     statusCode: response.statusCode,
     headers: Map<String, String>.from(response.headers),

@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart' show JsUndefined;
 
-typedef QuickjsUiColorResolver = Color? Function(Object? value);
-typedef QuickjsUiTextStyleResolver = TextStyle? Function(Object? value);
-typedef QuickjsUiNumberResolver = double? Function(Object? value);
+/// Resolves a protocol value to a themed Flutter color.
+typedef JsUiColorResolver = Color? Function(Object? value);
 
-final class QuickjsUiProps {
-  const QuickjsUiProps._();
+/// Resolves a protocol value to a themed Flutter text style.
+typedef JsUiTextStyleResolver = TextStyle? Function(Object? value);
 
+/// Resolves a protocol value to a themed numeric token.
+typedef JsUiNumberResolver = double? Function(Object? value);
+
+/// Strict converters from JSON-compatible component props to Flutter values.
+final class JsUiProps {
+  const JsUiProps._();
+
+  /// Reads an object-valued property, returning an empty map for `null`.
   static Map<String, Object?> map(Object? value, {String name = 'property'}) {
     if (value == null) {
       return const <String, Object?>{};
@@ -20,6 +27,7 @@ final class QuickjsUiProps {
     throw FormatException('quickjs_ui $name must be an object');
   }
 
+  /// Reads an optional event descriptor.
   static Map<String, Object?>? event(Object? value) {
     if (value == null || value is JsUndefined) {
       return null;
@@ -32,6 +40,7 @@ final class QuickjsUiProps {
     throw const FormatException('quickjs_ui event must be an object');
   }
 
+  /// Reads an optional string property.
   static String? string(Object? value, {String name = 'string property'}) {
     if (value == null) {
       return null;
@@ -42,6 +51,7 @@ final class QuickjsUiProps {
     throw FormatException('quickjs_ui $name must be a string');
   }
 
+  /// Reads an optional numeric property as a double.
   static double? doubleValue(Object? value, {String name = 'number property'}) {
     if (value == null) {
       return null;
@@ -52,10 +62,11 @@ final class QuickjsUiProps {
     throw FormatException('quickjs_ui $name must be a number');
   }
 
+  /// Reads a number, consulting [resolveNumber] before literal conversion.
   static double? number(
     Object? value, {
     String name = 'number property',
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) {
       return null;
@@ -67,6 +78,7 @@ final class QuickjsUiProps {
     return doubleValue(value, name: name);
   }
 
+  /// Reads an optional integer property.
   static int? intValue(Object? value, {String name = 'int property'}) {
     if (value == null) {
       return null;
@@ -77,6 +89,7 @@ final class QuickjsUiProps {
     throw FormatException('quickjs_ui $name must be an int');
   }
 
+  /// Reads an optional boolean property.
   static bool? boolValue(Object? value, {String name = 'bool property'}) {
     if (value == null) {
       return null;
@@ -87,10 +100,12 @@ final class QuickjsUiProps {
     throw FormatException('quickjs_ui $name must be a bool');
   }
 
+  /// Reads an opacity clamped to the inclusive range from zero to one.
   static double opacity(Object? value) {
     return (doubleValue(value, name: 'opacity') ?? 1).clamp(0, 1).toDouble();
   }
 
+  /// Reads an optional non-negative millisecond duration.
   static Duration? duration(Object? value, {String name = 'duration'}) {
     if (value == null) {
       return null;
@@ -101,6 +116,7 @@ final class QuickjsUiProps {
     return Duration(milliseconds: value.round());
   }
 
+  /// Reads a supported animation curve, defaulting to ease-in-out.
   static Curve curve(Object? value) {
     return switch (value) {
       null => Curves.easeInOut,
@@ -114,7 +130,8 @@ final class QuickjsUiProps {
     };
   }
 
-  static Color? color(Object? value, {QuickjsUiColorResolver? resolveColor}) {
+  /// Reads an integer, hex, or theme-resolved color.
+  static Color? color(Object? value, {JsUiColorResolver? resolveColor}) {
     if (value == null) {
       return null;
     }
@@ -147,9 +164,10 @@ final class QuickjsUiProps {
     );
   }
 
+  /// Reads scalar or per-edge padding and margin values.
   static EdgeInsetsGeometry? edgeInsets(
     Object? value, {
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) {
       return null;
@@ -221,9 +239,10 @@ final class QuickjsUiProps {
     );
   }
 
+  /// Reads scalar or per-corner border radii.
   static BorderRadiusGeometry? borderRadius(
     Object? value, {
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) {
       return null;
@@ -289,6 +308,7 @@ final class QuickjsUiProps {
     );
   }
 
+  /// Reads a supported alignment name.
   static AlignmentGeometry? alignment(Object? value) {
     return switch (value) {
       null => null,
@@ -305,6 +325,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a supported image fitting mode.
   static BoxFit? boxFit(Object? value) {
     return switch (value) {
       null => null,
@@ -319,6 +340,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a layout axis, defaulting to vertical.
   static Axis axis(Object? value) {
     return switch (value) {
       null => Axis.vertical,
@@ -328,6 +350,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a stack fitting mode, defaulting to loose.
   static StackFit stackFit(Object? value) {
     return switch (value) {
       null => StackFit.loose,
@@ -338,6 +361,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a supported software-keyboard input type.
   static TextInputType? textInputType(Object? value) {
     return switch (value) {
       null => null,
@@ -353,6 +377,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a supported software-keyboard action.
   static TextInputAction? textInputAction(Object? value) {
     return switch (value) {
       null => null,
@@ -373,6 +398,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads main-axis alignment, defaulting to start.
   static MainAxisAlignment mainAxisAlignment(Object? value) {
     return switch (value) {
       null => MainAxisAlignment.start,
@@ -386,6 +412,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads main-axis sizing, defaulting to maximum size.
   static MainAxisSize mainAxisSize(Object? value) {
     return switch (value) {
       null || 'max' => MainAxisSize.max,
@@ -394,6 +421,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads cross-axis alignment, defaulting to center.
   static CrossAxisAlignment crossAxisAlignment(Object? value) {
     return switch (value) {
       null => CrossAxisAlignment.center,
@@ -406,6 +434,7 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a supported text alignment.
   static TextAlign? textAlign(Object? value) {
     return switch (value) {
       null => null,
@@ -419,11 +448,12 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads a text style, optionally resolving theme tokens.
   static TextStyle? textStyle(
     Object? value, {
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiTextStyleResolver? resolveTextStyle,
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiColorResolver? resolveColor,
+    JsUiTextStyleResolver? resolveTextStyle,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) {
       return null;
@@ -461,8 +491,8 @@ final class QuickjsUiProps {
 
   static List<Shadow>? _textShadows(
     Object? value, {
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiColorResolver? resolveColor,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) return null;
     final values = value is List ? value : <Object?>[value];
@@ -509,6 +539,7 @@ final class QuickjsUiProps {
         .toList(growable: false);
   }
 
+  /// Reads a named or numeric font weight.
   static FontWeight? fontWeight(Object? value) {
     if (value == null) {
       return null;
@@ -543,11 +574,12 @@ final class QuickjsUiProps {
     };
   }
 
+  /// Reads the decoration fields of a container's [props].
   static BoxDecoration? boxDecoration(
     Map<String, Object?> props, {
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiNumberResolver? resolveRadius,
-    QuickjsUiNumberResolver? resolveBorderWidth,
+    JsUiColorResolver? resolveColor,
+    JsUiNumberResolver? resolveRadius,
+    JsUiNumberResolver? resolveBorderWidth,
   }) {
     final decoration = map(props['decoration'], name: 'Container decoration');
     final merged = <String, Object?>{
@@ -615,8 +647,8 @@ final class QuickjsUiProps {
 
   static List<BoxShadow>? _boxShadows(
     Object? value, {
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiColorResolver? resolveColor,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) return null;
     final values = value is List ? value : <Object?>[value];
@@ -673,8 +705,8 @@ final class QuickjsUiProps {
 
   static Gradient? _gradient(
     Object? value, {
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiColorResolver? resolveColor,
+    JsUiNumberResolver? resolveNumber,
   }) {
     if (value == null) return null;
     final gradient = map(value, name: 'Container gradient');
@@ -761,7 +793,7 @@ final class QuickjsUiProps {
 
   static double _positiveGradientRadius(
     Object? value, {
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiNumberResolver? resolveNumber,
   }) {
     final radius =
         number(value, name: 'gradient radius', resolveNumber: resolveNumber) ??
@@ -776,8 +808,8 @@ final class QuickjsUiProps {
 
   static BoxBorder? _border(
     Map<String, Object?> props, {
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiColorResolver? resolveColor,
+    JsUiNumberResolver? resolveNumber,
   }) {
     final border = props['border'] == null
         ? const <String, Object?>{}
@@ -815,8 +847,8 @@ final class QuickjsUiProps {
 
   static BorderSide _borderSide(
     Object? value,
-    QuickjsUiColorResolver? resolveColor,
-    QuickjsUiNumberResolver? resolveNumber,
+    JsUiColorResolver? resolveColor,
+    JsUiNumberResolver? resolveNumber,
   ) {
     if (value == null) return BorderSide.none;
     final side = map(value, name: 'Container border side');

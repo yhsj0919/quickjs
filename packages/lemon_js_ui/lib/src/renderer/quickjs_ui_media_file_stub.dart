@@ -1,10 +1,13 @@
+// Internal implementation library; not exported as stable package API.
+// ignore_for_file: public_member_api_docs
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:vector_graphics/vector_graphics_compat.dart'
     show RenderingStrategy;
 
-Widget buildQuickjsUiFileImage(
+Widget buildJsUiFileImage(
   String location, {
   double? width,
   double? height,
@@ -26,7 +29,7 @@ Widget buildQuickjsUiFileImage(
   );
 }
 
-Widget buildQuickjsUiFileSvg(
+Widget buildJsUiFileSvg(
   String location, {
   double? width,
   double? height,

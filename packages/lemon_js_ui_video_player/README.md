@@ -12,12 +12,12 @@
 
 ```yaml
 dependencies:
-  lemon_js_ui_video_player: ^0.1.1
+  lemon_js_ui_video_player: ^0.2.0
 ```
 
 ## Flutter 端注册
 
-把插件传给使用它的 `QuickjsUiView`：
+把插件传给使用它的 `JsUiView`：
 
 ```dart
 import 'package:flutter/material.dart';
@@ -29,10 +29,10 @@ class VideoPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return QuickjsUiView.asset(
+    return JsUiView.asset(
       path: 'assets/pages/video_page.mjs',
-      uiPlugins: <QuickjsUiPlugin>[
-        QuickjsUiVideoPlayerPlugin.plugin,
+      uiPlugins: <JsUiPlugin>[
+        JsUiVideoPlayerPlugin.plugin,
       ],
     );
   }
@@ -95,16 +95,26 @@ export default Page({
 });
 ```
 
-`source` 支持 HTTP(S) 网络地址和原生平台文件地址。主要属性包括 `playing`、`loop`、
-`fit`、`playbackSpeed`、`seekToken`、`seekPositionMs` 和 `restartToken`；事件包括
-`onReady`、`onProgress`、`onEnded`、`onError`。
+`source` 必填，支持 HTTP(S) 网络地址、原生平台文件地址或对应的
+`JsUiResourceReference` 对象。主要属性包括：
+
+- `playing`、`loop`、`fit`、`backgroundColor` 和 `showLoading`；
+- `playbackSpeed`，默认 `1`；
+- `seekPositionMs` 配合递增的 `seekToken` 执行定位；
+- 递增 `restartToken` 可重新从头播放当前来源；
+- `progressThrottleMs` 默认 `250`，控制 `onProgress` 的发送频率。
+
+事件包括 `onReady`、`onProgress`、`onEnded`、`onError`。`onReady` 提供
+`durationMs`；`onProgress` 提供 `positionMs`、`durationMs` 和 `isPlaying`；
+`onError` 提供 `message`。
 
 ## 桌面端自定义
 
-插件默认自动注册 FVP。只有需要修改桌面解码参数时，才在创建 UI Session 前调用：
+插件默认自动注册 FVP。只有需要修改桌面解码参数时，才在创建 `JsUiView` 或
+`JsUiController` 前调用：
 
 ```dart
-QuickjsUiVideoPlayerPlugin.registerDesktopBackend(
+JsUiVideoPlayerPlugin.registerDesktopBackend(
   options: const <String, Object>{
     'platforms': <String>['windows', 'macos', 'linux'],
   },

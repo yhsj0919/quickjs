@@ -27,7 +27,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: QuickjsUiWeatherBackgroundPage()),
+      const MaterialApp(home: JsUiWeatherBackgroundPage()),
     );
     await _pumpUntilMissing(tester, find.byType(CircularProgressIndicator));
 

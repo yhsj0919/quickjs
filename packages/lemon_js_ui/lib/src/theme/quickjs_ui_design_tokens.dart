@@ -3,9 +3,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 @immutable
-final class QuickjsUiDesignTokens
-    extends ThemeExtension<QuickjsUiDesignTokens> {
-  QuickjsUiDesignTokens({
+/// Public JSUI js ui design tokens API.
+final class JsUiDesignTokens extends ThemeExtension<JsUiDesignTokens> {
+  /// Creates a js ui design tokens.
+  JsUiDesignTokens({
     Map<String, Color> colors = const <String, Color>{},
     Map<String, TextStyle> textStyles = const <String, TextStyle>{},
     Map<String, double> spacing = const <String, double>{},
@@ -19,43 +20,57 @@ final class QuickjsUiDesignTokens
        elevation = _normalizeNumberMap(elevation),
        fontSizes = _normalizeNumberMap(fontSizes);
 
+  /// The colors value.
   final Map<String, Color> colors;
+
+  /// The text styles value.
   final Map<String, TextStyle> textStyles;
+
+  /// The spacing value.
   final Map<String, double> spacing;
+
+  /// The radius value.
   final Map<String, double> radius;
+
+  /// The elevation value.
   final Map<String, double> elevation;
+
+  /// The font sizes value.
   final Map<String, double> fontSizes;
 
+  /// The color value.
   Color? color(Object? value) {
     final token = tokenKey(value);
     return token == null ? null : colors[token];
   }
 
+  /// The text style value.
   TextStyle? textStyle(Object? value) {
     final token = tokenKey(value);
     return token == null ? null : textStyles[token];
   }
 
-  double? number(Object? value, QuickjsUiTokenCategory category) {
+  /// The number value.
+  double? number(Object? value, JsUiTokenCategory category) {
     final token = tokenKey(value);
     if (token == null) {
       return null;
     }
     final stripped = stripCategory(token, category.prefixes);
     return switch (category) {
-      QuickjsUiTokenCategory.spacing =>
+      JsUiTokenCategory.spacing =>
         spacing[token] ?? spacing[stripped] ?? _defaultSpacing[stripped],
-      QuickjsUiTokenCategory.radius =>
+      JsUiTokenCategory.radius =>
         radius[token] ?? radius[stripped] ?? _defaultRadius[stripped],
-      QuickjsUiTokenCategory.elevation =>
+      JsUiTokenCategory.elevation =>
         elevation[token] ?? elevation[stripped] ?? _defaultElevation[stripped],
-      QuickjsUiTokenCategory.fontSize =>
+      JsUiTokenCategory.fontSize =>
         fontSizes[token] ?? fontSizes[stripped] ?? _defaultFontSizes[stripped],
     };
   }
 
   @override
-  QuickjsUiDesignTokens copyWith({
+  JsUiDesignTokens copyWith({
     Map<String, Color>? colors,
     Map<String, TextStyle>? textStyles,
     Map<String, double>? spacing,
@@ -63,7 +78,7 @@ final class QuickjsUiDesignTokens
     Map<String, double>? elevation,
     Map<String, double>? fontSizes,
   }) {
-    return QuickjsUiDesignTokens(
+    return JsUiDesignTokens(
       colors: colors ?? this.colors,
       textStyles: textStyles ?? this.textStyles,
       spacing: spacing ?? this.spacing,
@@ -74,14 +89,11 @@ final class QuickjsUiDesignTokens
   }
 
   @override
-  QuickjsUiDesignTokens lerp(
-    ThemeExtension<QuickjsUiDesignTokens>? other,
-    double t,
-  ) {
-    if (other is! QuickjsUiDesignTokens) {
+  JsUiDesignTokens lerp(ThemeExtension<JsUiDesignTokens>? other, double t) {
+    if (other is! JsUiDesignTokens) {
       return this;
     }
-    return QuickjsUiDesignTokens(
+    return JsUiDesignTokens(
       colors: _lerpColors(colors, other.colors, t),
       textStyles: _lerpTextStyles(textStyles, other.textStyles, t),
       spacing: _lerpNumbers(spacing, other.spacing, t),
@@ -91,6 +103,7 @@ final class QuickjsUiDesignTokens
     );
   }
 
+  /// The token key value.
   static String? tokenKey(Object? value) {
     if (value is! String || !value.startsWith(r'$')) {
       return null;
@@ -98,6 +111,7 @@ final class QuickjsUiDesignTokens
     return normalizeToken(value);
   }
 
+  /// Performs the strip category operation.
   static String stripCategory(String token, Iterable<String> prefixes) {
     for (final prefix in prefixes) {
       if (token.startsWith(prefix)) {
@@ -107,20 +121,30 @@ final class QuickjsUiDesignTokens
     return token;
   }
 
+  /// Performs the normalize token operation.
   static String normalizeToken(String value) {
     final raw = value.startsWith(r'$') ? value.substring(1) : value;
     return raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
   }
 }
 
-enum QuickjsUiTokenCategory {
+/// Values supported by js ui token category.
+enum JsUiTokenCategory {
+  /// The spacing value.
   spacing(<String>['space', 'spacing']),
+
+  /// The radius value.
   radius(<String>['radius', 'radii']),
+
+  /// The elevation value.
   elevation(<String>['elevation', 'shadow']),
+
+  /// The font size value.
   fontSize(<String>['font', 'fontsize', 'type', 'typography']);
 
-  const QuickjsUiTokenCategory(this.prefixes);
+  const JsUiTokenCategory(this.prefixes);
 
+  /// The prefixes value.
   final List<String> prefixes;
 }
 
@@ -167,7 +191,7 @@ Map<String, Color> _normalizeColorMap(Map<String, Color> values) {
   return Map<String, Color>.unmodifiable(
     values.map((key, value) {
       return MapEntry<String, Color>(
-        QuickjsUiDesignTokens.normalizeToken(key),
+        JsUiDesignTokens.normalizeToken(key),
         value,
       );
     }),
@@ -178,7 +202,7 @@ Map<String, TextStyle> _normalizeTextStyleMap(Map<String, TextStyle> values) {
   return Map<String, TextStyle>.unmodifiable(
     values.map((key, value) {
       return MapEntry<String, TextStyle>(
-        QuickjsUiDesignTokens.normalizeToken(key),
+        JsUiDesignTokens.normalizeToken(key),
         value,
       );
     }),
@@ -189,7 +213,7 @@ Map<String, double> _normalizeNumberMap(Map<String, double> values) {
   return Map<String, double>.unmodifiable(
     values.map((key, value) {
       return MapEntry<String, double>(
-        QuickjsUiDesignTokens.normalizeToken(key),
+        JsUiDesignTokens.normalizeToken(key),
         value,
       );
     }),

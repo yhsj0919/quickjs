@@ -12,7 +12,7 @@ class AsyncApiPage extends StatefulWidget {
 }
 
 class _AsyncApiPageState extends State<AsyncApiPage> {
-  Quickjs? _quickjs;
+  JsEngine? _engine;
   bool _disposed = false;
   bool _busy = false;
   String _status = '正在创建 runtime...';
@@ -32,22 +32,22 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
     });
 
     try {
-      final previous = _quickjs;
-      _quickjs = null;
+      final previous = _engine;
+      _engine = null;
       // 重新创建前先释放旧 runtime，避免 example 页面里残留状态。
       if (previous != null) {
         await previous.dispose();
       }
 
-      final quickjs = await Quickjs.create();
+      final engine = await JsEngine.create();
       if (!mounted || _disposed) {
-        await quickjs.dispose();
+        await engine.dispose();
         return;
       }
 
       setState(() {
-        _quickjs = quickjs;
-        _status = 'runtime 已就绪（${quickjs.quickjsVersion}）';
+        _engine = engine;
+        _status = 'runtime 已就绪（${engine.engineVersion}）';
       });
     } catch (error) {
       if (!mounted || _disposed) {
@@ -66,8 +66,8 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
   }
 
   Future<void> _runQueuedEvals() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -79,9 +79,9 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
 
     final futures = <Future<String>>[
       // 三个请求立即提交，底层应按 FIFO 串行进入同一个 runtime。
-      quickjs.evalRaw('globalThis.queue = (globalThis.queue || "") + "A"'),
-      quickjs.evalRaw('globalThis.queue = (globalThis.queue || "") + "B"'),
-      quickjs.evalRaw('globalThis.queue = (globalThis.queue || "") + "C"'),
+      engine.evalRaw('globalThis.queue = (globalThis.queue || "") + "A"'),
+      engine.evalRaw('globalThis.queue = (globalThis.queue || "") + "B"'),
+      engine.evalRaw('globalThis.queue = (globalThis.queue || "") + "C"'),
     ];
 
     try {
@@ -115,8 +115,8 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
   }
 
   Future<void> _runAsyncEvaluation() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -126,7 +126,7 @@ class _AsyncApiPageState extends State<AsyncApiPage> {
     });
 
     try {
-      final result = await quickjs.run('''
+      final result = await engine.run('''
 await new Promise((resolve) => setTimeout(resolve, 100));
 return { answer: 6 * 7, state: "resolved" };
 ''', name: 'example:async-api.js');
@@ -155,8 +155,8 @@ return { answer: 6 * 7, state: "resolved" };
   }
 
   Future<void> _disposeRuntime() async {
-    final quickjs = _quickjs;
-    if (quickjs == null) {
+    final engine = _engine;
+    if (engine == null) {
       return;
     }
 
@@ -166,9 +166,9 @@ return { answer: 6 * 7, state: "resolved" };
     });
 
     try {
-      await quickjs.dispose();
+      await engine.dispose();
       // 销毁后继续 eval 应返回 closed error，用于展示生命周期语义。
-      await quickjs.eval('1 + 1');
+      await engine.eval('1 + 1');
       if (mounted && !_disposed) {
         _log.add('销毁后 eval 未返回预期错误');
       }
@@ -183,7 +183,7 @@ return { answer: 6 * 7, state: "resolved" };
     }
 
     setState(() {
-      _quickjs = null;
+      _engine = null;
       _busy = false;
       _status = 'runtime 已销毁';
     });
@@ -200,14 +200,14 @@ return { answer: 6 * 7, state: "resolved" };
   void dispose() {
     _disposed = true;
     // 页面退出时释放 runtime；不等待释放完成以免阻塞 Navigator pop。
-    unawaited(_quickjs?.dispose() ?? Future<void>.value());
-    _quickjs = null;
+    unawaited(_engine?.dispose() ?? Future<void>.value());
+    _engine = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasRuntime = _quickjs != null;
+    final hasRuntime = _engine != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('异步 API')),
