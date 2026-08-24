@@ -73,6 +73,30 @@ jobs:
         working-directory: examples/lemon_js_example
         run: ${{ matrix.command }}
 
+      - name: Verify Apple FFI symbols
+        if: matrix.platform == 'iOS' || matrix.platform == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.platform }}" == "iOS" ]]; then
+            app_path="examples/lemon_js_example/build/ios/iphoneos/Runner.app"
+          else
+            app_path="examples/lemon_js_example/build/macos/Build/Products/Release/quickjs_example.app"
+          fi
+
+          symbols_path="${RUNNER_TEMP}/apple-global-symbols.txt"
+          : >"${symbols_path}"
+          while IFS= read -r -d '' binary; do
+            nm -gU "${binary}" >>"${symbols_path}" 2>/dev/null || true
+          done < <(find "${app_path}" -type f -perm -111 -print0)
+
+          if ! grep -Eq '(^|[[:space:]])_quickjs_version$' "${symbols_path}"; then
+            echo "quickjs_version is missing from the built ${{ matrix.platform }} app."
+            tail -n 200 "${symbols_path}"
+            exit 1
+          fi
+          grep -E '(^|[[:space:]])_quickjs_version$' "${symbols_path}"
+
       - name: Launch Android app in emulator
         if: matrix.platform == 'Android'
         shell: bash
@@ -147,6 +171,7 @@ jobs:
         with:
           name: lemon-js-example-iOS-launch-diagnostics
           path: |
+            ${{ runner.temp }}/apple-global-symbols.txt
             ${{ runner.temp }}/ios-launch.log
             ${{ runner.temp }}/ios-system.log
             ${{ runner.temp }}/ios-smoke.png
@@ -218,8 +243,10 @@ jobs:
 
           sleep 15
           if ! kill -0 "${app_pid}" 2>/dev/null; then
+            set +e
             wait "${app_pid}"
             exit_code=$?
+            set -e
             echo "macOS app exited during startup with code ${exit_code}."
             cat "${log_path}"
             exit 1
@@ -238,6 +265,7 @@ jobs:
         with:
           name: lemon-js-example-macOS-launch-diagnostics
           path: |
+            ${{ runner.temp }}/apple-global-symbols.txt
             ${{ runner.temp }}/macos-smoke.log
             ${{ runner.temp }}/macos-smoke.png
           if-no-files-found: warn

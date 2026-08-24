@@ -96,6 +96,24 @@ void main() {
     );
   });
 
+  testWidgets('renders a startup error instead of a blank screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ExampleApp(
+        startupError: StateError('quickjs_version symbol not found'),
+        startupStackTrace: StackTrace.current,
+      ),
+    );
+
+    expect(find.text('QuickJS 初始化失败'), findsOneWidget);
+    expect(
+      find.textContaining('quickjs_version symbol not found'),
+      findsOneWidget,
+    );
+    expect(find.text('堆栈信息'), findsOneWidget);
+  });
+
   testWidgets('registers quickjs_ui example pages', (
     WidgetTester tester,
   ) async {

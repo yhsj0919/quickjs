@@ -10,7 +10,7 @@
 #    define QJS_BRIDGE_EXPORT __declspec(dllimport)
 #  endif
 #else
-#  define QJS_BRIDGE_EXPORT __attribute__((visibility("default")))
+#  define QJS_BRIDGE_EXPORT __attribute__((visibility("default"))) __attribute__((used))
 #endif
 
 #ifdef __cplusplus

@@ -7,7 +7,7 @@ issue_tracker: https://github.com/yhsj0919/quickjs/issues
 
 environment:
   sdk: ^3.12.0
-  flutter: '>=3.3.0'
+  flutter: '>=3.44.0'
 
 resolution: workspace
 
@@ -50,12 +50,14 @@ flutter:
       ios:
         pluginClass: LemonJsPlugin
         ffiPlugin: true
+        sharedDarwinSource: true
       linux:
         pluginClass: LemonJsPlugin
         ffiPlugin: true
       macos:
         pluginClass: LemonJsPlugin
         ffiPlugin: true
+        sharedDarwinSource: true
       windows:
         pluginClass: LemonJsPluginCApi
         ffiPlugin: true
