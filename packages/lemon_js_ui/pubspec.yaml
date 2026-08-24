@@ -1,6 +1,6 @@
 name: lemon_js_ui
 description: "Declarative Flutter UI layer powered by package:lemon_js."
-version: 0.2.0
+version: 0.2.1
 homepage: https://github.com/yhsj0919/quickjs
 repository: https://github.com/yhsj0919/quickjs
 issue_tracker: https://github.com/yhsj0919/quickjs/issues
@@ -18,7 +18,7 @@ dependencies:
     sdk: flutter
   flutter_svg: ^2.3.0
   http: ^1.6.0
-  lemon_js: ^0.2.0
+  lemon_js: ^0.2.1
   vector_graphics: ^1.2.3
 
 executables:

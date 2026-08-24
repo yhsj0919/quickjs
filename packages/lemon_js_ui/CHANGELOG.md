@@ -1,5 +1,10 @@
 # 更新日志 / Changelog
 
+## 0.2.1
+
+- 升级 `archive` 依赖，并要求 `lemon_js ^0.2.1`。
+- Upgraded the `archive` dependency and now requires `lemon_js ^0.2.1`.
+
 ## 0.2.0
 
 ### 中文

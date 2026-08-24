@@ -21,7 +21,7 @@ JavaScript、加载隔离插件、注入宿主能力，并使用 JavaScript 描�
 
 ```yaml
 dependencies:
-  lemon_js: ^0.2.0
+  lemon_js: ^0.2.1
 ```
 
 ```dart

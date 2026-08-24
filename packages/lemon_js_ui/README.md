@@ -10,7 +10,7 @@ JavaScript 中，Flutter 将 JS 返回的 Schema 渲染成原生 Widget。它适
 
 ```yaml
 dependencies:
-  lemon_js_ui: ^0.2.0
+  lemon_js_ui: ^0.2.1
 ```
 
 ```dart
