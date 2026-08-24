@@ -12,7 +12,7 @@ QuickJS，Flutter Web 使用 WASM 与 Web Worker。它提供异步执行、ES Mo
 
 ```yaml
 dependencies:
-  lemon_js: ^0.2.0
+  lemon_js: ^0.2.1
 ```
 
 ```dart

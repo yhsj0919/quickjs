@@ -8,7 +8,7 @@
 
 ```yaml
 dependencies:
-  lemon_js_extensions: ^0.2.0
+  lemon_js_extensions: ^0.2.1
 ```
 
 ```dart

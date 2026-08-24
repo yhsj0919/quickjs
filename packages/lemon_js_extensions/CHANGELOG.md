@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## 0.2.1
+
+- 升级 `archive`、`http` 与 `path_provider` 依赖。
+- 升级到 `lemon_js ^0.2.1` 与 `lemon_js_ui ^0.2.1`。
+- Upgraded the `archive`, `http`, and `path_provider` dependencies.
+- Upgraded to `lemon_js ^0.2.1` and `lemon_js_ui ^0.2.1`.
+
 ## 0.2.0
 
 ### 中文

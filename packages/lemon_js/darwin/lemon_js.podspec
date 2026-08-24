@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'lemon_js'
-  s.version          = '0.2.0'
+  s.version          = '0.2.1'
   s.summary          = 'QuickJS JavaScript engine for Flutter'
   s.description      = <<-DESC
 Embeds QuickJS for JavaScript evaluation on iOS and macOS.

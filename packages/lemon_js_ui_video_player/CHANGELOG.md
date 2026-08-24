@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## 0.2.1
+
+- 升级 FVP 视频后端，并补充 Linux 与 Apple 平台的宿主依赖配置说明。
+- 升级到 `lemon_js ^0.2.1` 与 `lemon_js_ui ^0.2.1`。
+- Upgraded the FVP video backend and documented Linux and Apple host requirements.
+- Upgraded to `lemon_js ^0.2.1` and `lemon_js_ui ^0.2.1`.
+
 ## 0.2.0
 
 ### 中文

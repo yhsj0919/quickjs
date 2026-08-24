@@ -32,6 +32,7 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.9
+  web: ^1.1.1
 
 dependency_overrides:
   # 某些 Android 开发板使用较新的后端版本时会出现视频绿屏，暂时固定为 2.7.1。

@@ -12,7 +12,7 @@
 
 ```yaml
 dependencies:
-  lemon_js_ui_video_player: ^0.2.0
+  lemon_js_ui_video_player: ^0.2.1
 ```
 
 Linux 宿主必须提供 FVP/MDK 使用的 `libpulse.so.0`。Debian/Ubuntu 开发环境可安装
