@@ -31,8 +31,20 @@
 
   <title>quickjs_example</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    #startup-status {
+      align-items: center;
+      color: #4b5563;
+      display: flex;
+      font: 16px system-ui, sans-serif;
+      inset: 0;
+      justify-content: center;
+      position: fixed;
+    }
+  </style>
 </head>
 <body>
+  <div id="startup-status">Loading quickjs example…</div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
