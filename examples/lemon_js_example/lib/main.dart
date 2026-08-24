@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'example_quickjs_ui_runtime.dart';
+import 'web_startup_signal.dart';
 
 /// example 应用入口。
 Future<void> main() async {
@@ -28,4 +29,7 @@ Future<void> main() async {
       startupStackTrace: startupStackTrace,
     ),
   );
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    markWebStartupReady();
+  });
 }

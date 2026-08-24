@@ -117,15 +117,35 @@ jobs:
           emulator_path="${android_sdk}/emulator/emulator"
           adb_path="${android_sdk}/platform-tools/adb"
 
+          echo "Installing Android emulator system image..."
           "${sdkmanager_path}" "system-images;android-35;google_apis;x86_64"
-          echo no | "${avdmanager_path}" create avd --force --name lemon_js_smoke --package "system-images;android-35;google_apis;x86_64" --device pixel
-          "${emulator_path}" -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
-          "${adb_path}" wait-for-device
+          echo "Creating Android virtual device..."
+          printf 'no\n' | "${avdmanager_path}" create avd --force --name lemon_js_smoke --package "system-images;android-35;google_apis;x86_64" --device pixel
+          echo "Android virtual device created. Starting emulator..."
+          "${emulator_path}" -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
+          emulator_pid=$!
+          if ! timeout 180 "${adb_path}" wait-for-device; then
+            echo "Android emulator did not connect to ADB within 180 seconds."
+            cat "${RUNNER_TEMP}/android-emulator.log"
+            exit 1
+          fi
+          echo "Android emulator connected to ADB. Waiting for system boot..."
           for attempt in $(seq 1 60); do
+            if ! kill -0 "${emulator_pid}" 2>/dev/null; then
+              echo "Android emulator exited before completing startup."
+              cat "${RUNNER_TEMP}/android-emulator.log"
+              exit 1
+            fi
             [[ "$("${adb_path}" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
+            echo "Waiting for Android system boot (${attempt}/60)..."
             sleep 5
           done
-          [[ "$("${adb_path}" shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]
+          if [[ "$("${adb_path}" shell getprop sys.boot_completed | tr -d '\r')" != "1" ]]; then
+            echo "Android system did not finish booting within 300 seconds."
+            cat "${RUNNER_TEMP}/android-emulator.log"
+            exit 1
+          fi
+          echo "Android system boot completed. Installing example APK..."
           "${adb_path}" install -r examples/lemon_js_example/build/app/outputs/flutter-apk/app-release.apk
           "${adb_path}" logcat -c
           "${adb_path}" shell am start -W -n xyz.yhsj.quickjs_example/.MainActivity | tee "${RUNNER_TEMP}/android-launch.log"
@@ -159,11 +179,17 @@ jobs:
           open -a Simulator --args -CurrentDeviceUDID "${device_id}"
           xcrun simctl bootstatus "${device_id}" -b
           xcrun simctl install "${device_id}" build/ios/iphonesimulator/Runner.app
-          xcrun simctl launch "${device_id}" xyz.yhsj.quickjsNgExample | tee "${RUNNER_TEMP}/ios-launch.log"
+          launch_output="$(xcrun simctl launch "${device_id}" xyz.yhsj.quickjsNgExample)"
+          printf '%s\n' "${launch_output}" | tee "${RUNNER_TEMP}/ios-launch.log"
+          app_pid="${launch_output##*: }"
+          if [[ ! "${app_pid}" =~ ^[0-9]+$ ]]; then
+            echo "Unable to parse the iOS app PID from simctl output."
+            exit 1
+          fi
           sleep 15
-          xcrun simctl spawn "${device_id}" launchctl print system | grep -q xyz.yhsj.quickjsNgExample
           xcrun simctl io "${device_id}" screenshot "${RUNNER_TEMP}/ios-smoke.png"
           xcrun simctl spawn "${device_id}" log show --last 2m --style compact --predicate 'process == "Runner"' >"${RUNNER_TEMP}/ios-system.log" || true
+          xcrun simctl spawn "${device_id}" ps -p "${app_pid}" | tee "${RUNNER_TEMP}/ios-process.txt"
 
       - name: Upload iOS launch diagnostics
         if: always() && matrix.platform == 'iOS'
@@ -173,6 +199,7 @@ jobs:
           path: |
             ${{ runner.temp }}/apple-global-symbols.txt
             ${{ runner.temp }}/ios-launch.log
+            ${{ runner.temp }}/ios-process.txt
             ${{ runner.temp }}/ios-system.log
             ${{ runner.temp }}/ios-smoke.png
           if-no-files-found: warn
@@ -278,25 +305,66 @@ jobs:
           set -euo pipefail
           python3 -m http.server 8080 --directory examples/lemon_js_example/build/web >"${RUNNER_TEMP}/web-server.log" 2>&1 &
           server_pid=$!
-          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          chromedriver_path="$(command -v chromedriver || true)"
+          if [[ -z "${chromedriver_path}" ]]; then
+            chromedriver_path="$(find /usr/local/share /opt/hostedtoolcache -type f -name chromedriver -print -quit 2>/dev/null || true)"
+          fi
+          if [[ -z "${chromedriver_path}" ]]; then
+            echo "ChromeDriver was not found on the runner."
+            exit 1
+          fi
+          "${chromedriver_path}" --port=9515 --verbose >"${RUNNER_TEMP}/web-driver.log" 2>&1 &
+          driver_pid=$!
+          trap 'kill "${driver_pid}" "${server_pid}" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 20); do
             curl --fail --silent http://127.0.0.1:8080/ >/dev/null && break
             sleep 1
           done
           curl --fail http://127.0.0.1:8080/ >/dev/null
-          browser_args=(
-            --headless
-            --no-sandbox
-            --enable-unsafe-swiftshader
-            --window-size=1280,800
-            --virtual-time-budget=15000
-            --screenshot="${RUNNER_TEMP}/web-smoke.png"
-            http://127.0.0.1:8080/
-          )
-          if command -v dbus-run-session >/dev/null 2>&1; then
-            dbus-run-session -- google-chrome "${browser_args[@]}" >"${RUNNER_TEMP}/web-browser.log" 2>&1
-          else
-            env -u DBUS_SESSION_BUS_ADDRESS google-chrome "${browser_args[@]}" >"${RUNNER_TEMP}/web-browser.log" 2>&1
+          for attempt in $(seq 1 20); do
+            curl --fail --silent http://127.0.0.1:9515/status >/dev/null && break
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:9515/status >/dev/null
+
+          session_response="$(curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"capabilities":{"alwaysMatch":{"browserName":"chrome","goog:chromeOptions":{"args":["--headless=new","--no-sandbox","--enable-unsafe-swiftshader","--window-size=1280,800","--enable-logging=stderr"]},"goog:loggingPrefs":{"browser":"ALL"}}}}' \
+            http://127.0.0.1:9515/session)"
+          session_id="$(SESSION_RESPONSE="${session_response}" python3 -c 'import json,os; data=json.loads(os.environ["SESSION_RESPONSE"]); print(data.get("sessionId") or data["value"]["sessionId"])')"
+          curl --fail --silent \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"http://127.0.0.1:8080/"}' \
+            "http://127.0.0.1:9515/session/${session_id}/url" >/dev/null
+
+          ready=false
+          for attempt in $(seq 1 45); do
+            ready_response="$(curl --fail --silent \
+              -H 'Content-Type: application/json' \
+              -d '{"script":"return document.documentElement.getAttribute(\"data-flutter-ready\") === \"true\"","args":[]}' \
+              "http://127.0.0.1:9515/session/${session_id}/execute/sync")"
+            if READY_RESPONSE="${ready_response}" python3 -c 'import json,os,sys; sys.exit(0 if json.loads(os.environ["READY_RESPONSE"])["value"] is True else 1)'; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          curl --fail --silent "http://127.0.0.1:9515/session/${session_id}/screenshot" \
+            | python3 -c 'import base64,json,sys; sys.stdout.buffer.write(base64.b64decode(json.load(sys.stdin)["value"]))' \
+            >"${RUNNER_TEMP}/web-smoke.png"
+          curl --fail --silent -X POST \
+            -H 'Content-Type: application/json' -d '{"type":"browser"}' \
+            "http://127.0.0.1:9515/session/${session_id}/log" \
+            >"${RUNNER_TEMP}/web-browser.log" || true
+          curl --fail --silent "http://127.0.0.1:9515/session/${session_id}/source" \
+            >"${RUNNER_TEMP}/web-page-source.json" || true
+          curl --silent -X DELETE "http://127.0.0.1:9515/session/${session_id}" >/dev/null || true
+
+          if [[ "${ready}" != true ]]; then
+            echo "Flutter Web did not render its first frame within 45 seconds."
+            cat "${RUNNER_TEMP}/web-browser.log"
+            exit 1
           fi
 
       - name: Upload Web launch diagnostics
@@ -307,6 +375,8 @@ jobs:
           path: |
             ${{ runner.temp }}/web-server.log
             ${{ runner.temp }}/web-browser.log
+            ${{ runner.temp }}/web-driver.log
+            ${{ runner.temp }}/web-page-source.json
             ${{ runner.temp }}/web-smoke.png
           if-no-files-found: warn
           retention-days: 7
