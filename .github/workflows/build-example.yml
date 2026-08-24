@@ -1,0 +1,82 @@
+name: Build lemon_js example on all platforms
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lemon-js-example-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Android
+            os: ubuntu-latest
+            command: flutter build apk --release
+            artifact-path: examples/lemon_js_example/build/app/outputs/flutter-apk/app-release.apk
+          - platform: iOS
+            os: macos-latest
+            command: flutter build ios --release --no-codesign
+            artifact-path: examples/lemon_js_example/build/ios/iphoneos/Runner.app
+          - platform: Linux
+            os: ubuntu-latest
+            command: flutter build linux --release
+            artifact-path: examples/lemon_js_example/build/linux/x64/release/bundle
+          - platform: macOS
+            os: macos-latest
+            command: flutter build macos --release
+            artifact-path: examples/lemon_js_example/build/macos/Build/Products/Release/*.app
+          - platform: Web
+            os: ubuntu-latest
+            command: flutter build web --release
+            artifact-path: examples/lemon_js_example/build/web
+          - platform: Windows
+            os: windows-latest
+            command: flutter build windows --release
+            artifact-path: examples/lemon_js_example/build/windows/x64/runner/Release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show tool versions
+        run: flutter doctor -v
+
+      - name: Resolve workspace dependencies
+        run: flutter pub get
+
+      - name: Build lemon_js example for ${{ matrix.platform }}
+        working-directory: examples/lemon_js_example
+        run: ${{ matrix.command }}
+
+      - name: Upload ${{ matrix.platform }} build
+        uses: actions/upload-artifact@v4
+        with:
+          name: lemon-js-example-${{ matrix.platform }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
+          retention-days: 7
