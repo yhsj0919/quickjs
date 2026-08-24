@@ -35,3 +35,8 @@ migrate_working_dir/
 build/
 /coverage/
 /examples/lemon_js_example/npm_bundle/node_modules/
+
+# Legacy root-level Flutter build trees. The maintained packages and example
+# now live under packages/ and examples/lemon_js_example/.
+/android/
+/example/
