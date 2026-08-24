@@ -1,5 +1,25 @@
 # 更新日志 / Changelog
 
+## 0.2.1
+
+### 中文
+
+- iOS 和 macOS 改为共享的 Swift Package Manager 集成，并修复 Apple 平台 Release
+  构建中 QuickJS FFI 符号未链接的问题。
+- 增加 Android、iOS、Linux、macOS、Web 和 Windows 的示例构建与启动验证，覆盖应用
+  首帧、进程存活及启动诊断。
+- 新增宿主平台配置文档，说明 Apple、Android、Linux、Windows 和 Web 引用插件时所需的
+  构建依赖与工程设置。
+
+### English
+
+- Migrated iOS and macOS to a shared Swift Package Manager integration and fixed missing QuickJS FFI
+  symbols in Apple release builds.
+- Added example build and launch validation for Android, iOS, Linux, macOS, Web, and Windows, covering
+  first-frame rendering, process liveness, and startup diagnostics.
+- Added host-platform setup documentation for the build dependencies and project configuration required
+  when integrating the plugin on Apple, Android, Linux, Windows, and Web.
+
 ## 0.2.0
 
 ### 中文
