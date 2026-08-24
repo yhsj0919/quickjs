@@ -55,7 +55,7 @@ jobs:
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev xvfb xauth x11-utils imagemagick
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libpulse0 xvfb xauth x11-utils imagemagick
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -78,22 +78,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager "system-images;android-35;google_apis;x86_64"
-          echo no | avdmanager create avd --force --name lemon_js_smoke --package "system-images;android-35;google_apis;x86_64" --device pixel
-          emulator -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
-          adb wait-for-device
+          android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "${android_sdk}" || ! -d "${android_sdk}" ]]; then
+            echo "Android SDK directory was not provided by the runner."
+            exit 1
+          fi
+
+          sdkmanager_path="$(find "${android_sdk}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [[ -z "${sdkmanager_path}" ]]; then
+            echo "sdkmanager was not found under ${android_sdk}/cmdline-tools."
+            exit 1
+          fi
+          avdmanager_path="$(dirname "${sdkmanager_path}")/avdmanager"
+          emulator_path="${android_sdk}/emulator/emulator"
+          adb_path="${android_sdk}/platform-tools/adb"
+
+          "${sdkmanager_path}" "system-images;android-35;google_apis;x86_64"
+          echo no | "${avdmanager_path}" create avd --force --name lemon_js_smoke --package "system-images;android-35;google_apis;x86_64" --device pixel
+          "${emulator_path}" -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
+          "${adb_path}" wait-for-device
           for attempt in $(seq 1 60); do
-            [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
+            [[ "$("${adb_path}" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
             sleep 5
           done
-          [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]
-          adb install -r examples/lemon_js_example/build/app/outputs/flutter-apk/app-release.apk
-          adb logcat -c
-          adb shell am start -W -n xyz.yhsj.quickjs_example/.MainActivity | tee "${RUNNER_TEMP}/android-launch.log"
+          [[ "$("${adb_path}" shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]
+          "${adb_path}" install -r examples/lemon_js_example/build/app/outputs/flutter-apk/app-release.apk
+          "${adb_path}" logcat -c
+          "${adb_path}" shell am start -W -n xyz.yhsj.quickjs_example/.MainActivity | tee "${RUNNER_TEMP}/android-launch.log"
           sleep 15
-          adb shell pidof xyz.yhsj.quickjs_example
-          adb exec-out screencap -p >"${RUNNER_TEMP}/android-smoke.png"
-          adb logcat -d >"${RUNNER_TEMP}/android-logcat.txt"
+          "${adb_path}" shell pidof xyz.yhsj.quickjs_example
+          "${adb_path}" exec-out screencap -p >"${RUNNER_TEMP}/android-smoke.png"
+          "${adb_path}" logcat -d >"${RUNNER_TEMP}/android-logcat.txt"
 
       - name: Upload Android launch diagnostics
         if: always() && matrix.platform == 'Android'
@@ -241,7 +256,20 @@ jobs:
             sleep 1
           done
           curl --fail http://127.0.0.1:8080/ >/dev/null
-          google-chrome --headless --no-sandbox --disable-gpu --window-size=1280,800 --virtual-time-budget=15000 --screenshot="${RUNNER_TEMP}/web-smoke.png" http://127.0.0.1:8080/ >"${RUNNER_TEMP}/web-browser.log" 2>&1
+          browser_args=(
+            --headless
+            --no-sandbox
+            --enable-unsafe-swiftshader
+            --window-size=1280,800
+            --virtual-time-budget=15000
+            --screenshot="${RUNNER_TEMP}/web-smoke.png"
+            http://127.0.0.1:8080/
+          )
+          if command -v dbus-run-session >/dev/null 2>&1; then
+            dbus-run-session -- google-chrome "${browser_args[@]}" >"${RUNNER_TEMP}/web-browser.log" 2>&1
+          else
+            env -u DBUS_SESSION_BUS_ADDRESS google-chrome "${browser_args[@]}" >"${RUNNER_TEMP}/web-browser.log" 2>&1
+          fi
 
       - name: Upload Web launch diagnostics
         if: always() && matrix.platform == 'Web'
