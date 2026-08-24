@@ -3,6 +3,20 @@ project(quickjs_native LANGUAGES C)
 
 include(CheckIPOSupported)
 
+# HarmonyOS' hmos.toolchain.cmake delegates to the OpenHarmony toolchain via
+# OHOS_SDK_NATIVE. CMake's IPO probe configures a nested try_compile project,
+# so explicitly propagate the SDK roots instead of letting that child resolve
+# the include as /build/cmake/ohos.toolchain.cmake.
+if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+  if(POLICY CMP0137)
+    cmake_policy(SET CMP0137 NEW)
+  endif()
+  list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+    OHOS_SDK_NATIVE
+    HMOS_SDK_NATIVE
+  )
+endif()
+
 set(QUICKJS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../third_party/quickjs")
 
 if(NOT EXISTS "${QUICKJS_ROOT}/CMakeLists.txt")
