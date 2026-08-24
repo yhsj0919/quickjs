@@ -12,7 +12,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  fvp: ^0.37.3
+  fvp: ^0.38.1
   flutter:
     sdk: flutter
   lemon_js: ^0.2.0

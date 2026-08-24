@@ -12,13 +12,13 @@ environment:
 resolution: workspace
 
 dependencies:
-  archive: ^4.0.7
+  archive: ^4.2.0
   flutter:
     sdk: flutter
-  http: ^1.5.0
+  http: ^1.6.0
   lemon_js: ^0.2.0
   lemon_js_ui: ^0.2.0
-  path_provider: ^2.1.5
+  path_provider: ^2.1.6
   shared_preferences: ^2.5.5
 
 dev_dependencies:
