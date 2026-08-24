@@ -116,14 +116,23 @@ jobs:
           avdmanager_path="$(dirname "${sdkmanager_path}")/avdmanager"
           emulator_path="${android_sdk}/emulator/emulator"
           adb_path="${android_sdk}/platform-tools/adb"
+          export ANDROID_AVD_HOME="${RUNNER_TEMP}/android-avd"
+          mkdir -p "${ANDROID_AVD_HOME}"
 
           echo "Installing Android emulator system image..."
           "${sdkmanager_path}" "system-images;android-35;google_apis;x86_64"
           echo "Creating Android virtual device..."
           printf 'no\n' | "${avdmanager_path}" create avd --force --name lemon_js_smoke --package "system-images;android-35;google_apis;x86_64" --device pixel
+          "${emulator_path}" -list-avds | tee "${RUNNER_TEMP}/android-avd-list.txt"
+          if ! grep -Fxq 'lemon_js_smoke' "${RUNNER_TEMP}/android-avd-list.txt"; then
+            echo "The created Android virtual device is not visible to the emulator."
+            find "${ANDROID_AVD_HOME}" -maxdepth 2 -type f -print || true
+            exit 1
+          fi
           echo "Android virtual device created. Starting emulator..."
           "${emulator_path}" -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
           emulator_pid=$!
+          trap 'kill "${emulator_pid}" 2>/dev/null || true' EXIT
           if ! timeout 180 "${adb_path}" wait-for-device; then
             echo "Android emulator did not connect to ADB within 180 seconds."
             cat "${RUNNER_TEMP}/android-emulator.log"
@@ -160,6 +169,7 @@ jobs:
         with:
           name: lemon-js-example-Android-launch-diagnostics
           path: |
+            ${{ runner.temp }}/android-avd-list.txt
             ${{ runner.temp }}/android-emulator.log
             ${{ runner.temp }}/android-launch.log
             ${{ runner.temp }}/android-logcat.txt
@@ -189,7 +199,12 @@ jobs:
           sleep 15
           xcrun simctl io "${device_id}" screenshot "${RUNNER_TEMP}/ios-smoke.png"
           xcrun simctl spawn "${device_id}" log show --last 2m --style compact --predicate 'process == "Runner"' >"${RUNNER_TEMP}/ios-system.log" || true
-          xcrun simctl spawn "${device_id}" ps -p "${app_pid}" | tee "${RUNNER_TEMP}/ios-process.txt"
+          if ! xcrun simctl terminate "${device_id}" xyz.yhsj.quickjsNgExample; then
+            echo "The iOS app exited before the startup check completed."
+            cat "${RUNNER_TEMP}/ios-system.log"
+            exit 1
+          fi
+          printf 'PID %s survived the 15-second startup window.\n' "${app_pid}" | tee "${RUNNER_TEMP}/ios-process.txt"
 
       - name: Upload iOS launch diagnostics
         if: always() && matrix.platform == 'iOS'

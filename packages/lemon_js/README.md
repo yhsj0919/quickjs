@@ -19,8 +19,8 @@ dependencies:
 import 'package:lemon_js/lemon_js.dart';
 ```
 
-Apple 宿主可以直接使用 Flutter 默认的 Swift Package Manager 配置；`lemon_js` 同时保留
-CocoaPods 兼容。发布前还需设置应用版本和最低系统版本。完整配置见
+Apple 宿主推荐使用 Flutter 的 Swift Package Manager 配置；仓库虽然保留 CocoaPods 清单，
+但 CocoaPods 模式不属于当前发布验证范围。发布前还需设置应用版本和最低系统版本。完整配置见
 [宿主平台配置](https://github.com/yhsj0919/quickjs/blob/master/docs/host_platform_setup.md)。
 
 ## 基本使用
