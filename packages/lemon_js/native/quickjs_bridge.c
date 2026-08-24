@@ -13,8 +13,8 @@
 #define strtok_r strtok_s
 #endif
 
-#include "quickjs-libc.h"
-#include "quickjs.h"
+#include "../third_party/quickjs/quickjs-libc.h"
+#include "../third_party/quickjs/quickjs.h"
 
 typedef struct QuickjsPendingCallback {
   int64_t request_id;

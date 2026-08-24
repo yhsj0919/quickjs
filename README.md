@@ -51,6 +51,7 @@ flutter run
 
 ## 文档
 
+- [宿主平台配置](docs/host_platform_setup.md)
 - [插件 manifest](docs/plugin_manifest.md)
 - [混合插件设计](docs/hybrid_plugin_design.md)
 - [JSUI 组件](docs/quickjs_ui_components.md)

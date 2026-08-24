@@ -15,6 +15,11 @@ dependencies:
   lemon_js_ui_video_player: ^0.2.0
 ```
 
+Linux 宿主必须提供 FVP/MDK 使用的 `libpulse.so.0`。Debian/Ubuntu 开发环境可安装
+`libpulse0`，发布安装包时也必须声明相应的运行依赖。Apple 平台还需采用 `lemon_js`
+文档所述的原生依赖配置。详见
+[宿主平台配置](https://github.com/yhsj0919/quickjs/blob/master/docs/host_platform_setup.md)。
+
 ## Flutter 端注册
 
 把插件传给使用它的 `JsUiView`：
