@@ -88,6 +88,10 @@ Linux 图形应用还需要 Flutter Linux 桌面本身要求的 GTK 运行环境
 
 ## OpenHarmony（实验性）
 
+> **支持边界：仅面向未来版本兼容，当前版本仍有已知缺陷。** OHOS 适配用于跟踪 CPF Flutter
+> 和 HarmonyOS SDK 的后续演进，现阶段不视为生产支持平台，也不承诺 HarmonyOS 6.1.1
+> （API 24）或 x64 模拟器能够完整运行所有示例。发布目标必须以 ARM64 真机验证结果为准。
+
 `lemon_js` 已包含 OHOS HAR 描述和原生 CMake 入口，构建时会把 QuickJS 编译为
 `libquickjs.so`。当前适配以 CPF Flutter `oh-3.44.9-dev` 为基线；官方 Flutter SDK 不识别
 OHOS 平台，不能与该分支混用同一个 SDK 目录。建议单独安装，例如：
@@ -101,9 +105,26 @@ flutter doctor -v
 ```
 
 宿主还必须安装 DevEco Studio 或等价命令行工具，并让 `flutter doctor -v` 能找到 HarmonyOS/
-OpenHarmony SDK、`ohpm` 和 Hvigor。CPF Flutter `oh-3.44.9-dev` 使用 API 24 的 ArkUI 与自动
-填充接口，因此构建 SDK 及 `targetSdkVersion` 必须为 API 24（6.1.1）或更高。仓库中的 OHOS
-example 仍以 API 18（5.1.0）为最低兼容 SDK，目标运行系统为 HarmonyOS。
+OpenHarmony SDK、`ohpm` 和 Hvigor。仓库中的 OHOS example 以 API 18（5.1.0）为最低兼容
+声明、以 API 24（6.1.1）为当前目标 SDK；这两个声明只用于构建配置，不表示当前系统组合
+已经通过完整运行验证。
+
+### 当前已知兼容问题
+
+- CPF Flutter 3.44 的 OHOS 嵌入层引用 `AutoFillType`、`ViewData`、`requestAutoFill` 等
+  API 26 自动填充接口，使用 HarmonyOS 6.1.1/API 24 SDK 时会在 ArkTS 编译阶段失败。
+  降到 HarmonyOS 5.1.0/API 18 不会解决，因为对应接口等级更低。
+- OHOS 原生插件必须同时提供目标 ABI。`lemon_js` 会构建 `arm64-v8a` 与 `x86_64` 的
+  `libquickjs.so`；第三方插件如果只发布 arm64 库，会在 x64 模拟器中报告动态库不存在。
+- `fvp/libmdk` 即使补齐 x86_64 动态库，在当前 x64 模拟器中仍可能出现播放时钟正常、
+  视频 Surface 全黑的情况。这属于第三方视频后端、XComponent/Surface 与模拟器合成链路的
+  未解决兼容问题，不能据此宣称视频能力受支持。
+- DevEco 自动生成的调试签名包含本机路径和密钥材料，不得提交到仓库。每位开发者应在本机
+  生成签名，提交前恢复 `signingConfigs`。
+
+这些限制不应通过长期维护私有 Flutter HAR、修改 Pub 缓存或页面级降级逻辑来掩盖。待 CPF
+Flutter 与 HarmonyOS SDK 的公开版本在同一 API 契约上稳定后，再更新支持矩阵并完成 ARM64
+真机、x64 模拟器、自动填充和视频播放的独立回归验证。
 
 构建 ARM64 真机和 x64 模拟器产物：
 

@@ -6,6 +6,10 @@ Lemon JS 是一组面向 Flutter 的 QuickJS 与动态 UI 工具。它支持在�
 JavaScript、加载隔离插件、注入宿主能力，并使用 JavaScript 描述由 Flutter 原生渲染的
 动态页面。
 
+> **HarmonyOS / OpenHarmony 支持状态：实验性。** 当前适配面向未来版本的 CPF Flutter
+> 与 HarmonyOS SDK，不承诺现有 HarmonyOS 6.1.1（API 24）环境可用于生产。已知问题和
+> 临时限制见[宿主平台配置](docs/host_platform_setup.md#openharmony实验性)。
+
 ## 包组成
 
 | 包 | 用途 |
