@@ -86,6 +86,42 @@ Linux 图形应用还需要 Flutter Linux 桌面本身要求的 GTK 运行环境
 指定与 Flutter 工具链不兼容的 NDK。示例中的 `video_player_android` 版本覆盖是为特定 Android
 开发板的视频绿屏兼容性保留，不是 `lemon_js` 的通用要求；普通宿主不应直接复制该覆盖。
 
+## OpenHarmony（实验性）
+
+`lemon_js` 已包含 OHOS HAR 描述和原生 CMake 入口，构建时会把 QuickJS 编译为
+`libquickjs.so`。当前适配以 CPF Flutter `oh-3.44.9-dev` 为基线；官方 Flutter SDK 不识别
+OHOS 平台，不能与该分支混用同一个 SDK 目录。建议单独安装，例如：
+
+```bash
+git clone --branch oh-3.44.9-dev --single-branch \
+  https://gitcode.com/CPF-Flutter/flutter_flutter.git flutter-ohos
+export PATH="$PWD/flutter-ohos/bin:$PATH"
+export FLUTTER_OHOS_STORAGE_BASE_URL="https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com"
+flutter doctor -v
+```
+
+宿主还必须安装 DevEco Studio 或等价命令行工具，并让 `flutter doctor -v` 能找到 HarmonyOS/
+OpenHarmony SDK、`ohpm` 和 Hvigor。仓库中的 OHOS example 配置以 API 18（5.1.0）为最低
+兼容 SDK，目标运行系统为 HarmonyOS。
+
+构建 ARM64 真机和 x64 模拟器产物：
+
+```bash
+cd examples/lemon_js_example
+flutter pub get
+flutter build hap --release --target-platform=ohos-arm64
+flutter build hap --release --target-platform=ohos-x64
+```
+
+仓库提供手动触发的 `Build lemon_js example for OpenHarmony (experimental)` Action。它固定
+CPF Flutter 提交，并分别构建 ARM64 与 x64 HAP；CI 使用的第三方容器只负责提供
+DevEco/OpenHarmony 命令行环境。升级 Flutter 分支、Harmony SDK 或容器版本时应单独验证，
+不要与官方 Flutter 的 Android/iOS/桌面构建缓存共用 SDK 目录。
+
+当前支持边界是 `lemon_js` 的 QuickJS FFI 核心。完整 example 同时依赖视频播放器、
+SharedPreferences 等平台插件；HAP 能构建不代表这些第三方能力已具备 OHOS 运行实现。发布前
+必须在目标真机或模拟器逐项验证，并检查 `libquickjs.so` 中存在 `quickjs_version` 导出符号。
+
 ## Windows 与 Web
 
 当前没有 Lemon JS 特有的宿主配置。Windows 桌面工具链和 Web 浏览器要求遵循所使用
@@ -99,4 +135,5 @@ package assets 自动进入构建产物，不需要宿主手工复制。
 - 检查启动日志中没有 FFI 符号缺失或动态库缺失；
 - 确认 Apple 应用版本、构建号和 deployment target；
 - 确认 Android 的 minSdk、compileSdk、NDK 和 CMake 满足插件要求；
+- 确认 OpenHarmony 使用独立的 CPF Flutter SDK，并在 ARM64/x64 目标上验证 FFI 动态库；
 - 确认 Linux 安装包声明视频后端所需的系统运行库。

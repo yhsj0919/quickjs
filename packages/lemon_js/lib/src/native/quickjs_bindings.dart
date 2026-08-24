@@ -365,7 +365,9 @@ class JsBindings {
     if (Platform.isWindows) {
       return _openWindows();
     }
-    if (Platform.isLinux || Platform.isAndroid) {
+    if (Platform.isLinux ||
+        Platform.isAndroid ||
+        Platform.operatingSystem == 'ohos') {
       return DynamicLibrary.open('libquickjs.so');
     }
     if (Platform.isMacOS || Platform.isIOS) {

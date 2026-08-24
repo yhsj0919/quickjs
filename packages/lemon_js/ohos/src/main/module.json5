@@ -1,0 +1,11 @@
+{
+  "module": {
+    "name": "lemon_js",
+    "type": "har",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1",
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "entry",
+  "version": "0.2.0",
+  "description": "Lemon JS example entry module.",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

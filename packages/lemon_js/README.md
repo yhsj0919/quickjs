@@ -6,7 +6,7 @@
 QuickJS，Flutter Web 使用 WASM 与 Web Worker。它提供异步执行、ES Module、插件、宿主
 能力注入、结构化值转换、网络、KV、Web Crypto 和运行时隔离。
 
-支持 Android、iOS、macOS、Linux、Windows 和 Web。
+支持 Android、iOS、macOS、Linux、Windows 和 Web；OpenHarmony 基础 FFI 支持目前为实验性。
 
 ## 安装
 
@@ -22,6 +22,10 @@ import 'package:lemon_js/lemon_js.dart';
 Apple 宿主推荐使用 Flutter 的 Swift Package Manager 配置；仓库虽然保留 CocoaPods 清单，
 但 CocoaPods 模式不属于当前发布验证范围。发布前还需设置应用版本和最低系统版本。完整配置见
 [宿主平台配置](https://github.com/yhsj0919/quickjs/blob/master/docs/host_platform_setup.md)。
+
+OpenHarmony 需要使用 CPF Flutter `oh-3.44.9-dev` 分支及 DevEco/OpenHarmony SDK，不能使用
+官方 Flutter SDK 直接构建。当前只保证 `lemon_js` 的 QuickJS FFI 基础接入；完整示例中的
+视频和第三方平台插件仍需分别确认 OHOS 实现。
 
 ## 基本使用
 

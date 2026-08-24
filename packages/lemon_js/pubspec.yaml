@@ -58,6 +58,8 @@ flutter:
         pluginClass: LemonJsPlugin
         ffiPlugin: true
         sharedDarwinSource: true
+      ohos:
+        ffiPlugin: true
       windows:
         pluginClass: LemonJsPluginCApi
         ffiPlugin: true

@@ -1,0 +1,7 @@
+{
+  "name": "lemon_js",
+  "version": "0.2.1",
+  "description": "QuickJS JavaScript engine for Flutter on OpenHarmony.",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

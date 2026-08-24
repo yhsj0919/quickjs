@@ -1,0 +1,93 @@
+name: Build lemon_js example for OpenHarmony (experimental)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lemon-js-ohos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: OpenHarmony ${{ matrix.target-platform }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: ghcr.io/niuhuan/harmony-next-flutter-pipeline-docker/image:6.0.2.642-3.35.7
+    strategy:
+      fail-fast: false
+      matrix:
+        target-platform:
+          - ohos-arm64
+          - ohos-x64
+    env:
+      FLUTTER_OHOS_STORAGE_BASE_URL: https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install the pinned OpenHarmony Flutter SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter_root="${RUNNER_TEMP}/flutter-ohos-3.44.9"
+          git clone --filter=blob:none --branch oh-3.44.9-dev --single-branch \
+            https://gitcode.com/CPF-Flutter/flutter_flutter.git "${flutter_root}"
+          git -C "${flutter_root}" checkout 403c5ef3de94f68e11bea811fc38f77f51f3d084
+          git config --global --add safe.directory "${flutter_root}"
+          printf '%s/bin\n' "${flutter_root}" >>"${GITHUB_PATH}"
+          printf 'FLUTTER_ROOT=%s\n' "${flutter_root}" >>"${GITHUB_ENV}"
+
+      - name: Show tool versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          flutter doctor -v
+          ohpm --version
+          hvigorw --version || true
+
+      - name: Resolve workspace dependencies
+        run: flutter pub get
+
+      - name: Build OpenHarmony HAP
+        working-directory: examples/lemon_js_example
+        run: flutter build hap --release --target-platform=${{ matrix.target-platform }}
+
+      - name: Verify QuickJS FFI symbol
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' libraries < <(find examples/lemon_js_example -type f -name libquickjs.so -print0)
+          if (( ${#libraries[@]} == 0 )); then
+            echo "libquickjs.so was not produced for ${{ matrix.target-platform }}."
+            exit 1
+          fi
+
+          found=false
+          for library in "${libraries[@]}"; do
+            if readelf --dyn-syms --wide "${library}" | grep -Eq '[[:space:]]quickjs_version$'; then
+              echo "Found quickjs_version in ${library}."
+              found=true
+            fi
+          done
+          if [[ "${found}" != true ]]; then
+            echo "quickjs_version is missing from the OpenHarmony native library."
+            exit 1
+          fi
+
+      - name: Upload OpenHarmony build
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-OpenHarmony-${{ matrix.target-platform }}
+          path: |
+            examples/lemon_js_example/ohos/entry/build/default/outputs/**/*.hap
+            examples/lemon_js_example/build/ohos/**/libquickjs.so
+          if-no-files-found: warn
+          retention-days: 7
