@@ -29,6 +29,15 @@ flutter build windows --debug
 flutter build web --release
 ```
 
+OpenHarmony 使用独立的 CPF Flutter SDK：
+
+```bash
+flutter build hap --release --target-platform=ohos-arm64
+flutter build hap --release --target-platform=ohos-x64
+```
+
+环境安装、CI 和当前第三方插件支持边界见[宿主平台配置](../../docs/host_platform_setup.md)。
+
 示例中的 `video_player_android: 2.7.1` override 用于规避部分 Android 开发板的视频绿屏
 问题，请勿在没有对应设备回归的情况下删除或升级。
 

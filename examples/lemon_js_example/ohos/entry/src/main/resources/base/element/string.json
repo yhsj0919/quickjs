@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Lemon JS example"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Lemon JS example ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "lemon_js_example"
+    }
+  ]
+}

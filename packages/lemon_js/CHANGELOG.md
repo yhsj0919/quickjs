@@ -10,6 +10,7 @@
   首帧、进程存活及启动诊断。
 - 新增宿主平台配置文档，说明 Apple、Android、Linux、Windows 和 Web 引用插件时所需的
   构建依赖与工程设置。
+- 增加实验性 OpenHarmony FFI 支持、OHOS example 宿主工程，以及 ARM64/x64 HAP 构建验证。
 
 ### English
 
@@ -19,6 +20,7 @@
   first-frame rendering, process liveness, and startup diagnostics.
 - Added host-platform setup documentation for the build dependencies and project configuration required
   when integrating the plugin on Apple, Android, Linux, Windows, and Web.
+- Added experimental OpenHarmony FFI support, an OHOS example host, and ARM64/x64 HAP build validation.
 
 ## 0.2.0
 
