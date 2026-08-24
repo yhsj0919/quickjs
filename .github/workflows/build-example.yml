@@ -129,11 +129,34 @@ jobs:
             find "${ANDROID_AVD_HOME}" -maxdepth 2 -type f -print || true
             exit 1
           fi
+          if [[ ! -e /dev/kvm ]]; then
+            echo "KVM is not available on this runner; the x86_64 Android emulator cannot start."
+            exit 1
+          fi
+          sudo chmod a+rw /dev/kvm
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "The runner user does not have read/write access to /dev/kvm."
+            exit 1
+          fi
           echo "Android virtual device created. Starting emulator..."
           "${emulator_path}" -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
           emulator_pid=$!
           trap 'kill "${emulator_pid}" 2>/dev/null || true' EXIT
-          if ! timeout 180 "${adb_path}" wait-for-device; then
+          adb_connected=false
+          for attempt in $(seq 1 60); do
+            if ! kill -0 "${emulator_pid}" 2>/dev/null; then
+              echo "Android emulator exited before connecting to ADB."
+              cat "${RUNNER_TEMP}/android-emulator.log"
+              exit 1
+            fi
+            if [[ "$("${adb_path}" get-state 2>/dev/null || true)" == "device" ]]; then
+              adb_connected=true
+              break
+            fi
+            echo "Waiting for Android emulator ADB connection (${attempt}/60)..."
+            sleep 3
+          done
+          if [[ "${adb_connected}" != true ]]; then
             echo "Android emulator did not connect to ADB within 180 seconds."
             cat "${RUNNER_TEMP}/android-emulator.log"
             exit 1
