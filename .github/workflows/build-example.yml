@@ -19,7 +19,7 @@ jobs:
   build:
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -51,11 +51,11 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev xvfb imagemagick
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -73,10 +73,212 @@ jobs:
         working-directory: examples/lemon_js_example
         run: ${{ matrix.command }}
 
+      - name: Launch Android app in emulator
+        if: matrix.platform == 'Android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "system-images;android-35;google_apis;x86_64"
+          echo no | avdmanager create avd --force --name lemon_js_smoke --package "system-images;android-35;google_apis;x86_64" --device pixel
+          emulator -avd lemon_js_smoke -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect >"${RUNNER_TEMP}/android-emulator.log" 2>&1 &
+          adb wait-for-device
+          for attempt in $(seq 1 60); do
+            [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
+            sleep 5
+          done
+          [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]
+          adb install -r examples/lemon_js_example/build/app/outputs/flutter-apk/app-release.apk
+          adb logcat -c
+          adb shell am start -W -n xyz.yhsj.quickjs_example/.MainActivity | tee "${RUNNER_TEMP}/android-launch.log"
+          sleep 15
+          adb shell pidof xyz.yhsj.quickjs_example
+          adb exec-out screencap -p >"${RUNNER_TEMP}/android-smoke.png"
+          adb logcat -d >"${RUNNER_TEMP}/android-logcat.txt"
+
+      - name: Upload Android launch diagnostics
+        if: always() && matrix.platform == 'Android'
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-Android-launch-diagnostics
+          path: |
+            ${{ runner.temp }}/android-emulator.log
+            ${{ runner.temp }}/android-launch.log
+            ${{ runner.temp }}/android-logcat.txt
+            ${{ runner.temp }}/android-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Launch iOS app in simulator
+        if: matrix.platform == 'iOS'
+        shell: bash
+        working-directory: examples/lemon_js_example
+        run: |
+          set -euo pipefail
+          flutter build ios --simulator --release --no-codesign
+          device_id="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if "iPhone" in device["name"]))')"
+          xcrun simctl boot "${device_id}" 2>/dev/null || true
+          open -a Simulator --args -CurrentDeviceUDID "${device_id}"
+          xcrun simctl bootstatus "${device_id}" -b
+          xcrun simctl install "${device_id}" build/ios/iphonesimulator/Runner.app
+          xcrun simctl launch "${device_id}" xyz.yhsj.quickjsNgExample | tee "${RUNNER_TEMP}/ios-launch.log"
+          sleep 15
+          xcrun simctl spawn "${device_id}" launchctl print system | grep -q xyz.yhsj.quickjsNgExample
+          xcrun simctl io "${device_id}" screenshot "${RUNNER_TEMP}/ios-smoke.png"
+          xcrun simctl spawn "${device_id}" log show --last 2m --style compact --predicate 'process == "Runner"' >"${RUNNER_TEMP}/ios-system.log" || true
+
+      - name: Upload iOS launch diagnostics
+        if: always() && matrix.platform == 'iOS'
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-iOS-launch-diagnostics
+          path: |
+            ${{ runner.temp }}/ios-launch.log
+            ${{ runner.temp }}/ios-system.log
+            ${{ runner.temp }}/ios-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Launch Linux app
+        if: matrix.platform == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x800x24 >"${RUNNER_TEMP}/linux-xvfb.log" 2>&1 &
+          export DISPLAY=:99
+          app_path="examples/lemon_js_example/build/linux/x64/release/bundle/quickjs_example"
+          "${app_path}" >"${RUNNER_TEMP}/linux-smoke.log" 2>&1 &
+          app_pid=$!
+          sleep 15
+          kill -0 "${app_pid}"
+          import -display :99 -window root "${RUNNER_TEMP}/linux-smoke.png" || true
+          kill "${app_pid}"
+          wait "${app_pid}" || true
+
+      - name: Upload Linux launch diagnostics
+        if: always() && matrix.platform == 'Linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-Linux-launch-diagnostics
+          path: |
+            ${{ runner.temp }}/linux-smoke.log
+            ${{ runner.temp }}/linux-xvfb.log
+            ${{ runner.temp }}/linux-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Launch macOS app
+        if: matrix.platform == 'macOS'
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          app_path="examples/lemon_js_example/build/macos/Build/Products/Release/quickjs_example.app"
+          log_path="${RUNNER_TEMP}/macos-smoke.log"
+          screenshot_path="${RUNNER_TEMP}/macos-smoke.png"
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${app_path}/Contents/Info.plist")"
+
+          "${app_path}/Contents/MacOS/${executable_name}" >"${log_path}" 2>&1 &
+          app_pid=$!
+
+          sleep 15
+          if ! kill -0 "${app_pid}" 2>/dev/null; then
+            wait "${app_pid}"
+            exit_code=$?
+            echo "macOS app exited during startup with code ${exit_code}."
+            cat "${log_path}"
+            exit 1
+          fi
+
+          osascript -e 'tell application "System Events" to set frontmost of process "quickjs_example" to true' || true
+          sleep 2
+          screencapture -x "${screenshot_path}" || true
+          kill "${app_pid}"
+          wait "${app_pid}" || true
+          cat "${log_path}"
+
+      - name: Upload macOS launch diagnostics
+        if: always() && matrix.platform == 'macOS'
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-macOS-launch-diagnostics
+          path: |
+            ${{ runner.temp }}/macos-smoke.log
+            ${{ runner.temp }}/macos-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Launch Web app
+        if: matrix.platform == 'Web'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8080 --directory examples/lemon_js_example/build/web >"${RUNNER_TEMP}/web-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            curl --fail --silent http://127.0.0.1:8080/ >/dev/null && break
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:8080/ >/dev/null
+          google-chrome --headless --no-sandbox --disable-gpu --window-size=1280,800 --virtual-time-budget=15000 --screenshot="${RUNNER_TEMP}/web-smoke.png" http://127.0.0.1:8080/ >"${RUNNER_TEMP}/web-browser.log" 2>&1
+
+      - name: Upload Web launch diagnostics
+        if: always() && matrix.platform == 'Web'
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-Web-launch-diagnostics
+          path: |
+            ${{ runner.temp }}/web-server.log
+            ${{ runner.temp }}/web-browser.log
+            ${{ runner.temp }}/web-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Launch Windows app
+        if: matrix.platform == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $appPath = Resolve-Path 'examples/lemon_js_example/build/windows/x64/runner/Release/lemon_js_example.exe'
+          $stdoutPath = Join-Path $env:RUNNER_TEMP 'windows-smoke.log'
+          $stderrPath = Join-Path $env:RUNNER_TEMP 'windows-smoke-error.log'
+          $process = Start-Process -FilePath $appPath -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+          Start-Sleep -Seconds 15
+          if ($process.HasExited) {
+            throw "Windows app exited during startup with code $($process.ExitCode)."
+          }
+          try {
+            Add-Type -AssemblyName System.Drawing
+            Add-Type -AssemblyName System.Windows.Forms
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            $bitmap.Save((Join-Path $env:RUNNER_TEMP 'windows-smoke.png'))
+            $graphics.Dispose()
+            $bitmap.Dispose()
+          } catch {
+            Write-Warning "Screenshot unavailable: $_"
+          }
+          Stop-Process -Id $process.Id
+
+      - name: Upload Windows launch diagnostics
+        if: always() && matrix.platform == 'Windows'
+        uses: actions/upload-artifact@v6
+        with:
+          name: lemon-js-example-Windows-launch-diagnostics
+          path: |
+            ${{ runner.temp }}/windows-smoke.log
+            ${{ runner.temp }}/windows-smoke-error.log
+            ${{ runner.temp }}/windows-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload ${{ matrix.platform }} build
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
           name: lemon-js-example-${{ matrix.platform }}
           path: ${{ matrix.artifact-path }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
