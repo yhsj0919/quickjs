@@ -101,8 +101,9 @@ flutter doctor -v
 ```
 
 宿主还必须安装 DevEco Studio 或等价命令行工具，并让 `flutter doctor -v` 能找到 HarmonyOS/
-OpenHarmony SDK、`ohpm` 和 Hvigor。仓库中的 OHOS example 配置以 API 18（5.1.0）为最低
-兼容 SDK，目标运行系统为 HarmonyOS。
+OpenHarmony SDK、`ohpm` 和 Hvigor。CPF Flutter `oh-3.44.9-dev` 使用 API 24 的 ArkUI 与自动
+填充接口，因此构建 SDK 及 `targetSdkVersion` 必须为 API 24（6.1.1）或更高。仓库中的 OHOS
+example 仍以 API 18（5.1.0）为最低兼容 SDK，目标运行系统为 HarmonyOS。
 
 构建 ARM64 真机和 x64 模拟器产物：
 
@@ -114,9 +115,9 @@ flutter build hap --release --target-platform=ohos-x64
 ```
 
 仓库提供手动触发的 `Build lemon_js example for OpenHarmony (experimental)` Action。它固定
-CPF Flutter 提交，并分别构建 ARM64 与 x64 HAP；CI 使用的第三方容器只负责提供
-DevEco/OpenHarmony 命令行环境。升级 Flutter 分支、Harmony SDK 或容器版本时应单独验证，
-不要与官方 Flutter 的 Android/iOS/桌面构建缓存共用 SDK 目录。
+CPF Flutter 提交和 HarmonyOS 6.1.1.280 命令行工具，并分别构建 ARM64 与 x64 HAP。升级
+Flutter 分支或 Harmony SDK 时应单独验证，不要与官方 Flutter 的 Android/iOS/桌面构建缓存
+共用 SDK 目录。
 
 当前支持边界是 `lemon_js` 的 QuickJS FFI 核心。完整 example 同时依赖视频播放器、
 SharedPreferences 等平台插件；HAP 能构建不代表这些第三方能力已具备 OHOS 运行实现。发布前

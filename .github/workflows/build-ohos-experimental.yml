@@ -15,8 +15,6 @@ jobs:
     name: OpenHarmony ${{ matrix.target-platform }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    container:
-      image: ghcr.io/niuhuan/harmony-next-flutter-pipeline-docker/image:6.0.2.642-3.35.7
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +28,19 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Install HarmonyOS command-line tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes libgl1-mesa-dev
+
+      - name: Set up HarmonyOS SDK 6.1.1 (API 24)
+        uses: ErBWs/setup-ohos@v2
+        with:
+          version: 6.1.1.280
+          cache: true
 
       - name: Install the pinned OpenHarmony Flutter SDK
         shell: bash
