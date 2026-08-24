@@ -27,8 +27,9 @@ flutter build ios --no-codesign
 flutter build macos
 ```
 
-使用 CocoaPods 兼容模式的旧宿主应保留 Podfile。Podfile 和 Xcode 工程的最低系统版本应
-保持一致，且不得低于当前 Flutter SDK 要求。仓库示例基于 Flutter 3.47，使用：
+当前仓库示例是纯 SwiftPM 工程，不包含 Podfile。使用 CocoaPods 兼容模式的旧宿主应保留
+自己的 Podfile；Podfile 和 Xcode 工程的最低系统版本应保持一致，且不得低于当前 Flutter
+SDK 要求。例如：
 
 ```ruby
 # ios/Podfile
