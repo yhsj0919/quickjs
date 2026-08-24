@@ -19,6 +19,13 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 add_subdirectory("${QUICKJS_ROOT}" "${CMAKE_BINARY_DIR}/quickjs" EXCLUDE_FROM_ALL)
 
+# QuickJS is built as static libraries and then linked into the plugin's
+# shared library. Ensure every object is suitable for shared-library linkage,
+# including Linux release builds where IPO/LTO exposes non-PIC relocations.
+set_target_properties(qjs qjs-libc PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+)
+
 add_library(quickjs SHARED
   quickjs_bridge.c
 )

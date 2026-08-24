@@ -9,7 +9,7 @@ let package = Package(
         .iOS("13.0")
     ],
     products: [
-        .library(name: "lemon_js", targets: ["lemon_js"])
+        .library(name: "lemon-js", targets: ["lemon_js"])
     ],
     dependencies: [
         .package(name: "FlutterFramework", path: "../FlutterFramework")
