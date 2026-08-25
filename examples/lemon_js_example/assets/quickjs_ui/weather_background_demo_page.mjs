@@ -34,6 +34,8 @@ const TOP_TEXT_SHADOWS = [
 ];
 
 const DEFAULT_RESOURCE_BASE_URL = 'assets/quickjs_ui';
+const DESIGN_WIDTH = 619;
+const DESIGN_HEIGHT = 1100;
 const BACKGROUND_OPTIONS = Object.freeze([null, ...WEATHER_TYPES]);
 const BACKGROUND_LABELS = Object.freeze({
     sunny: '晴天',
@@ -189,21 +191,31 @@ export default Page({
             fit: 'expand',
             children: [
                 weatherBackground(city, state),
-                Padding({
-                    padding: {left: 50, top: 50, right: 50, bottom: 24},
-                    child: Column({
+                ResponsiveViewport({
+                    designWidth: DESIGN_WIDTH,
+                    designHeight: DESIGN_HEIGHT,
+                    fit: 'contain',
+                    child: Stack({
+                        fit: 'expand',
                         children: [
-                            Flexible({flex: 1, child: Container({})}),
-                            errorBanner(state.error),
-                            header(city, state),
-                            Flexible({flex: 1, child: Container({})}),
-                            hourlyCard(city.hourly),
-                            dailyCard(city.daily),
-                            metricsCard(city, state.resourceBaseUrl),
-                        ].filter(Boolean),
-                    })
+                            Padding({
+                                padding: {left: 50, top: 50, right: 50, bottom: 24},
+                                child: Column({
+                                    children: [
+                                        Flexible({flex: 1, child: Container({})}),
+                                        errorBanner(state.error),
+                                        header(city, state),
+                                        Flexible({flex: 1, child: Container({})}),
+                                        hourlyCard(city.hourly),
+                                        dailyCard(city.daily),
+                                        metricsCard(city, state.resourceBaseUrl),
+                                    ].filter(Boolean),
+                                })
+                            }),
+                            backgroundSwitcher(state, actions),
+                        ],
+                    }),
                 }),
-                backgroundSwitcher(state, actions),
             ],
         });
     },
