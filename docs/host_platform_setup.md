@@ -88,9 +88,9 @@ Linux 图形应用还需要 Flutter Linux 桌面本身要求的 GTK 运行环境
 
 ## OpenHarmony（实验性）
 
-> **支持边界：仅面向未来版本兼容，当前版本仍有已知缺陷。** OHOS 适配用于跟踪 CPF Flutter
-> 和 HarmonyOS SDK 的后续演进，现阶段不视为生产支持平台，也不承诺 HarmonyOS 6.1.1
-> （API 24）或 x64 模拟器能够完整运行所有示例。发布目标必须以 ARM64 真机验证结果为准。
+> **开发工具要求：必须使用 DevEco Studio 2026 Dev 版本及其配套 SDK。** 较早的 DevEco
+> Studio、稳定版 SDK 或混合安装的 SDK 不属于当前支持组合。发布目标仍应以 ARM64 真机
+> 验证结果为准。
 
 `lemon_js` 已包含 OHOS HAR 描述和原生 CMake 入口，构建时会把 QuickJS 编译为
 `libquickjs.so`。当前适配以 CPF Flutter `oh-3.44.9-dev` 为基线；官方 Flutter SDK 不识别
@@ -104,16 +104,17 @@ export FLUTTER_OHOS_STORAGE_BASE_URL="https://flutter-ohos.obs.cn-south-1.myhuaw
 flutter doctor -v
 ```
 
-宿主还必须安装 DevEco Studio 或等价命令行工具，并让 `flutter doctor -v` 能找到 HarmonyOS/
-OpenHarmony SDK、`ohpm` 和 Hvigor。仓库中的 OHOS example 以 API 18（5.1.0）为最低兼容
-声明、以 API 24（6.1.1）为当前目标 SDK；这两个声明只用于构建配置，不表示当前系统组合
-已经通过完整运行验证。
+宿主必须安装 **DevEco Studio 2026 Dev**，使用该版本随附或明确匹配的 HarmonyOS/
+OpenHarmony SDK、`ohpm` 和 Hvigor，并让 `flutter doctor -v` 能正确识别它们。不要把 2026
+Dev 的 IDE/Hvigor 与旧版 SDK 混用；即使能够完成 HAP 构建，也可能在 Flutter 嵌入层出现
+ArkTS 方法缺失、参数不兼容或应用无法打开。仓库中的最低/目标 API 声明仅用于构建配置，
+不能替代对这套开发工具组合的要求。
 
 ### 当前已知兼容问题
 
-- CPF Flutter 3.44 的 OHOS 嵌入层引用 `AutoFillType`、`ViewData`、`requestAutoFill` 等
-  API 26 自动填充接口，使用 HarmonyOS 6.1.1/API 24 SDK 时会在 ArkTS 编译阶段失败。
-  降到 HarmonyOS 5.1.0/API 18 不会解决，因为对应接口等级更低。
+- 旧版 DevEco Studio/SDK 缺少 CPF Flutter 嵌入层所需的部分 ArkTS 接口，可能报告
+  `AutoFillType`、`ViewData`、`requestAutoFill` 等方法或类型异常。不要继续维护本地 Flutter
+  补丁规避这些错误，应升级到 DevEco Studio 2026 Dev 及其配套 SDK 后重新构建。
 - OHOS 原生插件必须同时提供目标 ABI。`lemon_js` 会构建 `arm64-v8a` 与 `x86_64` 的
   `libquickjs.so`；第三方插件如果只发布 arm64 库，会在 x64 模拟器中报告动态库不存在。
 - `fvp/libmdk` 即使补齐 x86_64 动态库，在当前 x64 模拟器中仍可能出现播放时钟正常、
@@ -140,9 +141,28 @@ CPF Flutter 提交和 HarmonyOS 6.1.1.280 命令行工具，并分别构建 ARM6
 Flutter 分支或 Harmony SDK 时应单独验证，不要与官方 Flutter 的 Android/iOS/桌面构建缓存
 共用 SDK 目录。
 
-当前支持边界是 `lemon_js` 的 QuickJS FFI 核心。完整 example 同时依赖视频播放器、
-SharedPreferences 等平台插件；HAP 能构建不代表这些第三方能力已具备 OHOS 运行实现。发布前
-必须在目标真机或模拟器逐项验证，并检查 `libquickjs.so` 中存在 `quickjs_version` 导出符号。
+### SharedPreferences 兼容配置
+
+`shared_preferences` 的 OHOS 实现目前尚未通过 pub.dev 正式发布，因此 `lemon_js` 核心包继续
+依赖 pub.dev 正式版本，只在 OHOS 宿主应用中覆盖为 CPF Flutter 的适配分支：
+
+```yaml
+dependency_overrides:
+  shared_preferences:
+    git:
+      url: https://gitcode.com/CPF-Flutter/flutter_packages.git
+      path: packages/shared_preferences/shared_preferences
+      ref: br_shared_preferences-v2.5.4_ohos_dev
+```
+
+如果未添加该覆盖，OHOS 不会注册 `shared_preferences_ohos`，调用
+`SharedPreferencesAsync` 时会报
+`The SharedPreferencesAsyncPlatform instance must be set`。执行 `flutter pub get` 后，可在
+`.flutter-plugins-dependencies` 的 `ohos` 列表中确认存在 `shared_preferences_ohos`。
+
+该依赖需要通过 GitCode 拉取，首次解析可能较慢；Windows 开发环境还需启用 Git 长路径支持。
+发布前必须在目标真机或模拟器逐项验证，并检查 `libquickjs.so` 中存在 `quickjs_version` 导出
+符号。
 
 ## Windows 与 Web
 

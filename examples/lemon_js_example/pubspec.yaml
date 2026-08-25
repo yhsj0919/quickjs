@@ -35,6 +35,16 @@ dependencies:
   web: ^1.1.1
 
 dependency_overrides:
+  # Hvigor requires OHOS plugin source paths to stay relative to this project.
+  integration_test:
+    path: ../../build/ohos-sdk-packages/integration_test
+  # OHOS support is not published on pub.dev yet. Use the CPF Flutter port so
+  # SharedPreferencesAsync is registered instead of failing during login.
+  shared_preferences:
+    git:
+      url: https://gitcode.com/CPF-Flutter/flutter_packages.git
+      path: packages/shared_preferences/shared_preferences
+      ref: br_shared_preferences-v2.5.4_ohos_dev
   # 某些 Android 开发板使用较新的后端版本时会出现视频绿屏，暂时固定为 2.7.1。
   video_player_android: 2.7.1
 
