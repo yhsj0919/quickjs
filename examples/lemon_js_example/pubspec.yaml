@@ -17,6 +17,8 @@ resolution: workspace
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  # Example-only desktop compatibility backend for video_player.
+  fvp: ^0.38.1
   flutter:
     sdk: flutter
 
@@ -26,6 +28,8 @@ dependencies:
     path: ../../packages/lemon_js_ui
   lemon_js_ui_video_player:
     path: ../../packages/lemon_js_ui_video_player
+  lemon_js_ui_webview:
+    path: ../../packages/lemon_js_ui_webview
   lemon_js_extensions:
     path: ../../packages/lemon_js_extensions
 

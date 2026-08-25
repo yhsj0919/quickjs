@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   fvp
   lemon_js
+  webview_all_linux
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

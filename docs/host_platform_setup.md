@@ -60,7 +60,7 @@ CocoaPods 构建阶段或配置引用，不应通过重复执行 `pod install` �
 ## Linux
 
 `lemon_js` 本身随插件编译 QuickJS，不要求宿主单独安装 QuickJS。使用
-`lemon_js_ui_video_player` 时，桌面视频后端 FVP/MDK 需要 PulseAudio 运行库
+example 选择 FVP/MDK 作为桌面视频后端时，需要 PulseAudio 运行库
 `libpulse.so.0`。Debian/Ubuntu 开发与 CI 环境可安装：
 
 ```bash

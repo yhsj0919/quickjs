@@ -24,6 +24,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $QuickjsRoot = Join-Path $Root 'packages/lemon_js'
 $JsUiRoot = Join-Path $Root 'packages/lemon_js_ui'
 $JsUiVideoPlayerRoot = Join-Path $Root 'packages/lemon_js_ui_video_player'
+$JsUiWebViewRoot = Join-Path $Root 'packages/lemon_js_ui_webview'
 $ExtensionsRoot = Join-Path $Root 'packages/lemon_js_extensions'
 $ExampleRoot = Join-Path $Root 'examples/lemon_js_example'
 $LogDirectory = Join-Path $Root 'build/verification-logs'
@@ -192,6 +193,8 @@ if (-not $SkipFormat) {
         'packages/lemon_js_ui/test',
         'packages/lemon_js_ui_video_player/lib',
         'packages/lemon_js_ui_video_player/test',
+        'packages/lemon_js_ui_webview/lib',
+        'packages/lemon_js_ui_webview/test',
         'packages/lemon_js_extensions/lib',
         'packages/lemon_js_extensions/test',
         'examples/lemon_js_example/lib',
@@ -201,6 +204,7 @@ if (-not $SkipFormat) {
 Invoke-LoggedCommand -Name 'quickjs-analyze' -WorkingDirectory $QuickjsRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
 Invoke-LoggedCommand -Name 'quickjs-ui-analyze' -WorkingDirectory $JsUiRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
 Invoke-LoggedCommand -Name 'quickjs-ui-video-player-analyze' -WorkingDirectory $JsUiVideoPlayerRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
+Invoke-LoggedCommand -Name 'quickjs-ui-webview-analyze' -WorkingDirectory $JsUiWebViewRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
 Invoke-LoggedCommand -Name 'extensions-analyze' -WorkingDirectory $ExtensionsRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
 Invoke-LoggedCommand -Name 'example-analyze' -WorkingDirectory $ExampleRoot -Executable $DartExecutable -Arguments @($FlutterTool, 'analyze')
 Initialize-QuickjsWindowsDll
@@ -211,6 +215,7 @@ Invoke-FlutterTest `
     -ExtraArguments @('test/consistency_test.dart', '--platform', 'chrome')
 Invoke-FlutterTest -Name 'quickjs-ui-tests' -WorkingDirectory $JsUiRoot
 Invoke-FlutterTest -Name 'quickjs-ui-video-player-tests' -WorkingDirectory $JsUiVideoPlayerRoot
+Invoke-FlutterTest -Name 'quickjs-ui-webview-tests' -WorkingDirectory $JsUiWebViewRoot
 Invoke-FlutterTest -Name 'extensions-tests' -WorkingDirectory $ExtensionsRoot
 Invoke-FlutterTest -Name 'example-tests' -WorkingDirectory $ExampleRoot
 
