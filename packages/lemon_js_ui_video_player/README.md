@@ -3,10 +3,10 @@
 `lemon_js_ui_video_player` 是 `lemon_js_ui` 的官方视频组件插件。它同时注册：
 
 - Flutter 原生 `VideoPlayer` 渲染组件；
-- JS 模块 `quickjs_ui/video_player`；
-- Windows、macOS、Linux 使用的 FVP 后端。
+- JS 模块 `quickjs_ui/video_player`。
 
-宿主只需要注入插件，不需要直接依赖或初始化 `video_player`、`fvp`。
+插件基于 Flutter 官方 `video_player` 接口，不绑定具体平台实现。宿主如需 FVP 等兼容
+后端，应在应用层自行引入和初始化。
 
 ## 安装
 
@@ -15,10 +15,9 @@ dependencies:
   lemon_js_ui_video_player: ^0.2.1
 ```
 
-Linux 宿主必须提供 FVP/MDK 使用的 `libpulse.so.0`。Debian/Ubuntu 开发环境可安装
-`libpulse0`，发布安装包时也必须声明相应的运行依赖。Apple 平台还需采用 `lemon_js`
-文档所述的原生依赖配置。详见
-[宿主平台配置](https://github.com/yhsj0919/quickjs/blob/master/docs/host_platform_setup.md)。
+各平台应按 `video_player` 文档选择并配置实现。仓库 example 演示了将 FVP 作为桌面平台
+兼容后端接入，并仅在 example 中保留特定 Android 设备所需的后端版本回退；这些选择
+都不是本插件公共依赖的一部分。
 
 ## Flutter 端注册
 
@@ -113,18 +112,23 @@ export default Page({
 `durationMs`；`onProgress` 提供 `positionMs`、`durationMs` 和 `isPlaying`；
 `onError` 提供 `message`。
 
-## 桌面端自定义
+## 可选的平台兼容后端
 
-插件默认自动注册 FVP。只有需要修改桌面解码参数时，才在创建 `JsUiView` 或
-`JsUiController` 前调用：
+如果宿主选择 FVP，请在宿主应用中直接声明 `fvp` 依赖，并在创建 `JsUiView` 或
+`JsUiController` 前注册：
 
 ```dart
-JsUiVideoPlayerPlugin.registerDesktopBackend(
+import 'package:fvp/fvp.dart' as fvp;
+
+fvp.registerWith(
   options: const <String, Object>{
     'platforms': <String>['windows', 'macos', 'linux'],
   },
 );
 ```
+
+Linux 使用 FVP/MDK 时，宿主还需提供 `libpulse.so.0`。具体配置见
+[宿主平台配置](https://github.com/yhsj0919/quickjs/blob/master/docs/host_platform_setup.md)。
 
 ## 完整示例
 

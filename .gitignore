@@ -40,3 +40,4 @@ build/
 # now live under packages/ and examples/lemon_js_example/.
 /android/
 /example/
+.p/

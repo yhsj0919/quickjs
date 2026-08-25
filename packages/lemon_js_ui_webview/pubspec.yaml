@@ -1,0 +1,34 @@
+name: lemon_js_ui_webview
+description: "WebView component and JavaScript bridge plugin for package:lemon_js_ui."
+version: 0.1.0
+homepage: https://github.com/yhsj0919/quickjs
+repository: https://github.com/yhsj0919/quickjs
+issue_tracker: https://github.com/yhsj0919/quickjs/issues
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  lemon_js: ^0.3.0
+  lemon_js_ui: ^0.2.1
+  # 1.3.9 switched the Windows renderer to a free-threaded capture frame pool,
+  # which fails to register FrameArrived on some supported Windows 10 hosts.
+  # 1.3.8 still provides document-start scripts and async JavaScript calls.
+  webview_all: 1.3.8
+  # webview_all uses a caret constraint for its platform implementations, so
+  # pin the Windows implementation too; otherwise pub selects 1.3.9 again.
+  webview_all_windows: 1.3.8
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  assets:
+    - js/quickjs_ui_webview.js

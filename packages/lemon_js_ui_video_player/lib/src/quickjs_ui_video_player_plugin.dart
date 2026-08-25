@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:fvp/fvp.dart' as fvp;
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 import 'package:video_player/video_player.dart' as native;
@@ -51,8 +50,6 @@ export function VideoPlayer(props = {}) {
 final class JsUiVideoPlayerPlugin {
   const JsUiVideoPlayerPlugin._();
 
-  static bool _desktopBackendRegistered = false;
-
   /// 注册 `quickjs_ui/video_player` 模块的内部 features。
   static const JsFeatures _features = JsFeatures(
     name: 'quickjs_ui:plugin:video_player',
@@ -72,34 +69,7 @@ final class JsUiVideoPlayerPlugin {
   );
 
   static void _configure(JsUiComponentRegistry registry) {
-    _ensureDesktopBackendRegistered();
     registry.register('VideoPlayer', _build);
-  }
-
-  /// Registers the desktop implementation used by `video_player`.
-  ///
-  /// Applications normally do not need to call this method. The plugin
-  /// registers the backend automatically when its component registry is
-  /// configured. Call it before creating a UI session only when custom FVP
-  /// options are required.
-  static void registerDesktopBackend({Map<String, Object>? options}) {
-    if (_desktopBackendRegistered ||
-        !(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
-      return;
-    }
-    fvp.registerWith(
-      options:
-          options ??
-          const <String, Object>{
-            'platforms': <String>['windows', 'macos', 'linux'],
-            'video.decoders': <String>['BRAW:gpu', 'auto'],
-          },
-    );
-    _desktopBackendRegistered = true;
-  }
-
-  static void _ensureDesktopBackendRegistered() {
-    registerDesktopBackend();
   }
 
   static Widget _build(JsUiRenderContext context, JsUiNode node) {

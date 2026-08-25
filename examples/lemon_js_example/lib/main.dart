@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:fvp/fvp.dart' as fvp;
 
 import 'app.dart';
 import 'example_quickjs_ui_runtime.dart';
@@ -7,6 +9,7 @@ import 'web_startup_signal.dart';
 /// example 应用入口。
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _registerExampleVideoBackend();
   Object? startupError;
   StackTrace? startupStackTrace;
   try {
@@ -32,4 +35,19 @@ Future<void> main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     markWebStartupReady();
   });
+}
+
+void _registerExampleVideoBackend() {
+  if (kIsWeb ||
+      (defaultTargetPlatform != TargetPlatform.windows &&
+          defaultTargetPlatform != TargetPlatform.macOS &&
+          defaultTargetPlatform != TargetPlatform.linux)) {
+    return;
+  }
+  fvp.registerWith(
+    options: const <String, Object>{
+      'platforms': <String>['windows', 'macos', 'linux'],
+      'video.decoders': <String>['BRAW:gpu', 'auto'],
+    },
+  );
 }

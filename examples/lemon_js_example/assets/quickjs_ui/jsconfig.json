@@ -12,6 +12,9 @@
       ],
       "quickjs_ui/video_player": [
         "../../../../packages/lemon_js_ui_video_player/js/quickjs_ui_video_player.d.ts"
+      ],
+      "quickjs_ui/webview": [
+        "../../../../packages/lemon_js_ui_webview/js/quickjs_ui_webview.d.ts"
       ]
     }
   },
