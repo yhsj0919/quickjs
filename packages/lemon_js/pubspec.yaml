@@ -1,6 +1,6 @@
 name: lemon_js
 description: "QuickJS JavaScript engine for Flutter — cross-platform FFI and WebAssembly."
-version: 0.2.1
+version: 0.3.0
 homepage: https://github.com/yhsj0919/quickjs
 repository: https://github.com/yhsj0919/quickjs
 issue_tracker: https://github.com/yhsj0919/quickjs/issues

@@ -16,7 +16,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
-  lemon_js: ^0.2.1
+  lemon_js: ^0.3.0
   lemon_js_ui: ^0.2.1
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5

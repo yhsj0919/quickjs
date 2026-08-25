@@ -1,5 +1,25 @@
 # 更新日志 / Changelog
 
+## 0.3.0
+
+### 中文
+
+- 新增实验性 OpenHarmony FFI 适配，包括 OHOS 插件声明、`libquickjs.so` 动态加载和
+  HarmonyOS 交叉编译所需的 CMake 配置。
+- 新增 OHOS example 宿主工程，以及分别构建 ARM64 真机和 x64 模拟器 HAP、校验
+  QuickJS FFI 导出符号的手动 CI 工作流。
+- 补充 CPF Flutter 与 HarmonyOS SDK 的环境配置、构建方式和支持边界，记录 API 24
+  自动填充编译冲突、第三方插件 ABI 及 x64 视频 Surface 等已知兼容问题。
+
+### English
+
+- Added experimental OpenHarmony FFI integration, including the OHOS plugin declaration,
+  `libquickjs.so` loading, and CMake handling required by the HarmonyOS cross toolchain.
+- Added an OHOS example host and a manually triggered CI workflow that builds ARM64 device and x64
+  emulator HAPs and verifies the exported QuickJS FFI symbol.
+- Documented the CPF Flutter and HarmonyOS SDK setup, build steps, and support boundaries, including
+  known API 24 autofill compilation, third-party ABI, and x64 video Surface compatibility issues.
+
 ## 0.2.1
 
 ### 中文
@@ -10,7 +30,6 @@
   首帧、进程存活及启动诊断。
 - 新增宿主平台配置文档，说明 Apple、Android、Linux、Windows 和 Web 引用插件时所需的
   构建依赖与工程设置。
-- 增加实验性 OpenHarmony FFI 支持、OHOS example 宿主工程，以及 ARM64/x64 HAP 构建验证。
 
 ### English
 
@@ -20,7 +39,6 @@
   first-frame rendering, process liveness, and startup diagnostics.
 - Added host-platform setup documentation for the build dependencies and project configuration required
   when integrating the plugin on Apple, Android, Linux, Windows, and Web.
-- Added experimental OpenHarmony FFI support, an OHOS example host, and ARM64/x64 HAP build validation.
 
 ## 0.2.0
 

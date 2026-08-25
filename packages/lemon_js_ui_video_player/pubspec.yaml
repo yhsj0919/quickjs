@@ -15,7 +15,7 @@ dependencies:
   fvp: ^0.38.1
   flutter:
     sdk: flutter
-  lemon_js: ^0.2.1
+  lemon_js: ^0.3.0
   lemon_js_ui: ^0.2.1
   video_player: ^2.14.0
 
