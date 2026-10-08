@@ -83,8 +83,9 @@ Linux 图形应用还需要 Flutter Linux 桌面本身要求的 GTK 运行环境
 - Flutter SDK 对应版本的 Android NDK，以及可用于原生插件构建的 CMake。
 
 通常应在应用的 `android/app/build.gradle.kts` 中沿用 Flutter 提供的 `ndkVersion`，不要单独
-指定与 Flutter 工具链不兼容的 NDK。示例中的 `video_player_android` 版本覆盖是为特定 Android
-开发板的视频绿屏兼容性保留，不是 `lemon_js` 的通用要求；普通宿主不应直接复制该覆盖。
+指定与 Flutter 工具链不兼容的 NDK。示例中的 `video_player_android: 2.7.1` 版本覆盖已注释，
+默认使用正常依赖解析结果。该覆盖仅作为部分 Android 开发板视频绿屏的兼容回退参考，
+需要时由宿主显式启用并在目标设备验证，不是 `lemon_js` 的通用要求。
 
 ## OpenHarmony（实验性）
 

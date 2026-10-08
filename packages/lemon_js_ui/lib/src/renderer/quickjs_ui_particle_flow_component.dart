@@ -41,7 +41,9 @@ Widget _buildParticleFlow(JsUiRenderContext context, JsUiNode node) {
     height: height,
     particles: particles,
     frameIntervalMs: intervalMs,
-    paused: node.props['paused'] == true,
+    paused:
+        node.props['paused'] == true ||
+        context.performanceController.animationsDisabled,
     playToken: node.props['playToken'],
     frameScheduler: context.frameScheduler,
     children: children,

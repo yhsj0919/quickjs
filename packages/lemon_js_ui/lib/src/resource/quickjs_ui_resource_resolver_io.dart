@@ -5,12 +5,23 @@ import 'package:flutter/services.dart';
 /// Loads normalized JSUI text resources from a configured backing store.
 final class JsUiResourceResolver {
   /// Creates a resolver backed by a Flutter [AssetBundle].
-  JsUiResourceResolver.asset({AssetBundle? bundle, String basePath = ''})
-    : this._(
-        loadString: (path) => (bundle ?? rootBundle).loadString(
-          _resolveResourcePath(basePath, path),
-        ),
-      );
+  JsUiResourceResolver.asset({
+    AssetBundle? bundle,
+    String basePath = '',
+    bool cache = true,
+    Set<String> uncachedResources = const <String>{},
+  }) : this._(
+         loadString: (path) {
+           final resolved = _resolveResourcePath(basePath, path);
+           return (bundle ?? rootBundle).loadString(
+             resolved,
+             cache:
+                 cache &&
+                 !uncachedResources.contains(path) &&
+                 !uncachedResources.contains(resolved),
+           );
+         },
+       );
 
   /// Creates a resolver backed by local files.
   ///

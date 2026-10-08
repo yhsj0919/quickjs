@@ -87,7 +87,7 @@ class _JsUiDiffPageState extends State<JsUiDiffPage> {
   }
 
   Future<void> _load() async {
-    await _controller.load(() async {
+    await _controller.load(({bool forceRefresh = false}) async {
       final bundle = await JsUiBundle.asset(path: path);
       return bundle.toPlugin();
     });

@@ -45,10 +45,10 @@ OHOS 版 `shared_preferences` 尚未正式发布到 pub.dev，本 example 已在
 `dependency_overrides` 中固定 CPF Flutter 的适配分支。宿主项目必须保留同样的覆盖，否则
 登录等持久化操作会报告 `SharedPreferencesAsyncPlatform instance must be set`。
 
-本 example 包含两项宿主平台兼容策略：桌面端显式引入并注册 FVP；Android 端通过
-`video_player_android: 2.7.1` override 规避部分开发板的视频绿屏。两者都只属于 example，
-不进入 `lemon_js_ui_video_player` 的依赖或实现；实际宿主应按目标设备自行选择
-`video_player` 平台实现和版本。没有对应设备回归时，请勿随意调整 Android 回退版本。
+本 example 在桌面端显式引入并注册 FVP；Android 端默认不固定平台实现版本。
+部分 Android 开发板出现视频绿屏时，可在宿主的 `dependency_overrides` 中按需启用
+`video_player_android: 2.7.1`，example 中该配置已注释。此版本仅作为设备兼容回退参考，
+启用前应在目标设备验证；它不属于 `lemon_js_ui_video_player` 的依赖或实现。
 
 ## 主要示例文件
 

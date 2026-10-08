@@ -92,6 +92,29 @@ JavaScript 只提供一次可序列化轨迹和保留子 Widget；Flutter 用一
 
 ### 自适应效果质量
 
+宿主策略只有两个配置：`mode` 控制效果质量，`motion` 控制动态效果。初始化和运行时
+使用同一个控制器，更新无需重新加载 JS 页面：
+
+```dart
+final policy = JsUiPerformanceController(
+  mode: JsUiPerformanceMode.auto,
+  motion: JsUiMotionMode.system,
+);
+// 注入 JsUiView 的 performanceController；内部路由可注入 JsUiRouteRegistry。
+policy.update(mode: JsUiPerformanceMode.low);
+policy.update(motion: JsUiMotionMode.reduced);
+policy.update(mode: JsUiPerformanceMode.high, motion: JsUiMotionMode.enabled);
+```
+
+`system` 跟随系统设置，`enabled` 显式允许动画，`reduced` 强制静态效果。
+减少动态效果或质量 `off` 时，Canvas、效果和 ParticleFlow 停止播放，控件和隐式动画
+使用零时长。恢复后重新使用配置的质量。组件 `paused` 仍可单独暂停。
+`quality` 和 `animationsDisabled` 返回最终策略；通过控制器监听变化。
+原 `updateReduceMotion` 已移除，宿主改用 `update(motion: ...)`。
+
+`JsUiRouteRegistry(performanceController: policy)` 把同一策略传递给内部页面和
+Flutter 路由过渡；过渡进行中更新为静态策略会立即结束过渡并清理离场页面。
+
 宿主可以保留完整质量，也可启用由帧耗时驱动的本地降级，且无需重建 JavaScript 页面：
 
 ```dart

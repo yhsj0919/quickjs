@@ -149,18 +149,25 @@ final class JsUiNetworkLoader {
     JsUiNetworkCacheStore? cacheStore,
     JsUiNetworkLogHandler? onLog,
     JsUiNetworkCacheBuster? cacheBuster,
+    bool cacheEnabled = true,
+    Set<String> uncachedResources = const <String>{},
   }) : _fetch = fetch,
        _cache = cache ?? <Uri, JsUiNetworkCacheEntry>{},
        _cacheStore = cacheStore,
        _onLog = onLog,
-       _cacheBuster = cacheBuster;
+       _cacheBuster = cacheBuster,
+       _cacheEnabled = cacheEnabled,
+       _uncachedResources = uncachedResources;
 
   final JsUiNetworkFetch? _fetch;
   final Map<Uri, JsUiNetworkCacheEntry> _cache;
   final JsUiNetworkCacheStore? _cacheStore;
   final JsUiNetworkLogHandler? _onLog;
   final JsUiNetworkCacheBuster? _cacheBuster;
+  final bool _cacheEnabled;
+  final Set<String> _uncachedResources;
   int _nextEventId = 0;
+  int _nextCacheBust = 0;
 
   /// Recursively loads an entry module and its relative static imports.
   ///
@@ -171,6 +178,7 @@ final class JsUiNetworkLoader {
     String? id,
     String version = '0.2.0',
     Uri? bundleRoot,
+    JsUiNetworkRefreshMode refreshMode = JsUiNetworkRefreshMode.conditional,
   }) async {
     final root = bundleRoot ?? _inferNetworkRoot(url);
     final modules = <String, String>{};
@@ -186,119 +194,12 @@ final class JsUiNetworkLoader {
       if (!visited.add(normalizedUrl)) {
         return;
       }
-      final cached = await _cachedEntry(normalizedUrl);
-      final eventId = _nextLogId();
-      final startedAt = DateTime.now();
-      final stopwatch = Stopwatch()..start();
-      final request = JsUiNetworkRequest(
-        uri: normalizedUrl,
-        headers: <String, String>{
-          if (cached?.etag != null) _httpHeaderIfNoneMatch: cached!.etag!,
-        },
-      );
-      _log(
-        JsUiNetworkLogEvent(
-          id: eventId,
-          type: 'network.request',
-          uri: normalizedUrl,
-          method: 'GET',
-          etag: cached?.etag,
-          timestamp: startedAt,
-        ),
-      );
-      try {
-        final response = await (_fetch ?? _defaultFetch)(request);
-        stopwatch.stop();
-        final etag = _header(response.headers, _httpHeaderEtag);
-        _log(
-          JsUiNetworkLogEvent(
-            id: eventId,
-            type: 'network.response',
-            uri: normalizedUrl,
-            method: 'GET',
-            statusCode: response.statusCode,
-            etag: etag,
-            durationMs: stopwatch.elapsedMilliseconds,
-            bodyBytes: utf8.encode(response.body).length,
-            timestamp: DateTime.now(),
-          ),
-        );
-        if (response.statusCode == _httpStatusNotModified) {
-          if (cached == null) {
-            throw JsUiNetworkException(
-              'quickjs_ui network resource returned 304 without cache',
-              uri: normalizedUrl,
-            );
-          }
-          _log(
-            JsUiNetworkLogEvent(
-              id: eventId,
-              type: 'network.cacheHit',
-              uri: normalizedUrl,
-              method: 'GET',
-              statusCode: response.statusCode,
-              etag: cached.etag,
-              fromCache: true,
-              durationMs: stopwatch.elapsedMilliseconds,
-              bodyBytes: utf8.encode(cached.body).length,
-              timestamp: DateTime.now(),
-            ),
-          );
-          final path = _relativePath(root, normalizedUrl);
-          modules[path] = cached.body;
-          for (final importPath in jsUiStaticImports(cached.body)) {
-            if (!jsUiIsRelativeImport(importPath)) {
-              continue;
-            }
-            await visit(normalizedUrl.resolve(importPath));
-          }
-          return;
-        }
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw JsUiNetworkException(
-            'quickjs_ui network resource failed with ${response.statusCode}',
-            uri: normalizedUrl,
-          );
-        }
-        final path = _relativePath(root, normalizedUrl);
-        modules[path] = response.body;
-        await _storeEntry(
-          normalizedUrl,
-          JsUiNetworkCacheEntry(body: response.body, etag: etag),
-        );
-        _log(
-          JsUiNetworkLogEvent(
-            id: eventId,
-            type: 'network.cacheStore',
-            uri: normalizedUrl,
-            method: 'GET',
-            statusCode: response.statusCode,
-            etag: etag,
-            durationMs: stopwatch.elapsedMilliseconds,
-            bodyBytes: utf8.encode(response.body).length,
-            timestamp: DateTime.now(),
-          ),
-        );
-        for (final importPath in jsUiStaticImports(response.body)) {
-          if (!jsUiIsRelativeImport(importPath)) {
-            continue;
-          }
+      final source = await _loadText(normalizedUrl, refreshMode: refreshMode);
+      modules[_relativePath(root, normalizedUrl)] = source;
+      for (final importPath in jsUiStaticImports(source)) {
+        if (jsUiIsRelativeImport(importPath)) {
           await visit(normalizedUrl.resolve(importPath));
         }
-      } catch (error) {
-        stopwatch.stop();
-        _log(
-          JsUiNetworkLogEvent(
-            id: eventId,
-            type: 'network.response',
-            uri: normalizedUrl,
-            method: 'GET',
-            durationMs: stopwatch.elapsedMilliseconds,
-            error: '$error',
-            timestamp: DateTime.now(),
-          ),
-        );
-        rethrow;
       }
     }
 
@@ -346,6 +247,12 @@ final class JsUiNetworkLoader {
     JsUiNetworkRefreshMode refreshMode = JsUiNetworkRefreshMode.conditional,
   }) async {
     final normalizedUri = uri.normalizePath();
+    if (_bypassCache(normalizedUri)) {
+      return _fetchText(
+        normalizedUri,
+        refreshMode: JsUiNetworkRefreshMode.force,
+      );
+    }
     final cached = await _cachedEntry(normalizedUri);
     if (refreshMode == JsUiNetworkRefreshMode.staleWhileRevalidate &&
         cached != null) {
@@ -380,7 +287,9 @@ final class JsUiNetworkLoader {
     Uri normalizedUri, {
     required JsUiNetworkRefreshMode refreshMode,
   }) async {
-    final cached = await _cachedEntry(normalizedUri);
+    final cached = refreshMode == JsUiNetworkRefreshMode.force
+        ? null
+        : await _cachedEntry(normalizedUri);
     final eventId = _nextLogId();
     final startedAt = DateTime.now();
     final stopwatch = Stopwatch()..start();
@@ -484,6 +393,7 @@ final class JsUiNetworkLoader {
   }
 
   Future<JsUiNetworkCacheEntry?> _cachedEntry(Uri uri) async {
+    if (_bypassCache(uri)) return null;
     final memoryEntry = _cache[uri];
     if (memoryEntry != null) {
       return memoryEntry;
@@ -496,6 +406,7 @@ final class JsUiNetworkLoader {
   }
 
   Future<void> _storeEntry(Uri uri, JsUiNetworkCacheEntry entry) async {
+    if (_bypassCache(uri)) return;
     _cache[uri] = entry;
     await _cacheStore?.write(uri, entry);
   }
@@ -510,13 +421,26 @@ final class JsUiNetworkLoader {
   }
 
   Uri _requestUri(Uri uri, {required JsUiNetworkRefreshMode refreshMode}) {
-    if (refreshMode != JsUiNetworkRefreshMode.force || _cacheBuster == null) {
+    if (refreshMode != JsUiNetworkRefreshMode.force) {
       return uri;
     }
     final queryParameters = Map<String, String>.from(uri.queryParameters);
-    queryParameters['_quickjs_ui_cache_bust'] = _cacheBuster(uri);
+    queryParameters['_quickjs_ui_cache_bust'] =
+        _cacheBuster?.call(uri) ??
+        '${DateTime.now().microsecondsSinceEpoch}-${_nextCacheBust++}';
     return uri.replace(queryParameters: queryParameters);
   }
+
+  bool _bypassCache(Uri uri) =>
+      !_cacheEnabled ||
+      _uncachedResources.contains(uri.toString()) ||
+      _uncachedResources.contains(uri.path) ||
+      _uncachedResources.any(
+        (resource) =>
+            !resource.contains('://') &&
+            !resource.startsWith('/') &&
+            uri.path.endsWith('/$resource'),
+      );
 }
 
 Future<JsUiNetworkResponse> _defaultFetch(

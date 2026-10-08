@@ -47,22 +47,67 @@ final class JsExtensionFlowReference {
 }
 
 /// 保存并查询当前宿主已安装扩展的内存注册表。
-final class JsExtensionRegistry {
+abstract interface class JsExtensionCatalog {
+  /// Enabled installations.
+  Iterable<JsExtensionInstallation> get installed;
+
+  /// Finds an installation.
+  JsExtensionInstallation? find(String id);
+
+  /// Finds services implementing a contract.
+  Iterable<JsExtensionInstallation> servicesForContract(String contract);
+
+  /// Finds an interaction flow.
+  JsExtensionFlowReference? findFlow(String id, String flowId);
+}
+
+/// Read-only access to a registry.
+final class JsExtensionLookup implements JsExtensionCatalog {
+  /// Creates a read-only lookup over an installation registry.
+  const JsExtensionLookup(this._registry);
+  final JsExtensionRegistry _registry;
+
+  /// Enabled installations.
+  @override
+  Iterable<JsExtensionInstallation> get installed => _registry.installed;
+
+  /// Finds an installation, including disabled ones.
+  @override
+  JsExtensionInstallation? find(String id) => _registry.find(id);
+
+  /// Finds services implementing a contract.
+  @override
+  Iterable<JsExtensionInstallation> servicesForContract(String contract) =>
+      _registry.servicesForContract(contract);
+
+  /// Finds a declared interaction flow.
+  @override
+  JsExtensionFlowReference? findFlow(String id, String flowId) =>
+      _registry.findFlow(id, flowId);
+}
+
+/// Low-level installation registry for independently managed sessions.
+final class JsExtensionRegistry implements JsExtensionCatalog {
+  final Map<String, JsExtensionSessionLifecycle> _lifecycles = {};
   final Map<String, JsExtensionInstallation> _installed =
       <String, JsExtensionInstallation>{};
 
   /// Enabled extensions currently registered with the host.
+  @override
   Iterable<JsExtensionInstallation> get installed =>
       _installed.values.where((item) => item.enabled);
 
   /// Finds an extension by [id], including disabled entries.
+  @override
   JsExtensionInstallation? find(String id) => _installed[id];
 
   /// Returns enabled services implementing [contract].
+  @override
   Iterable<JsExtensionInstallation> servicesForContract(String contract) =>
       installed.where((item) => item.extension.service?.contract == contract);
 
   /// Finds an enabled extension's declared [flowId].
+  @override
   JsExtensionFlowReference? findFlow(String extensionId, String flowId) {
     final item = _installed[extensionId];
     if (item == null || !item.enabled) return null;
@@ -80,23 +125,27 @@ final class JsExtensionRegistry {
     if (_installed.containsKey(extension.id)) {
       throw StateError('JS extension is already installed: ${extension.id}');
     }
+    _lifecycles[extension.id] = extension.session.claimLifecycle();
     _installed[extension.id] = extension;
   }
 
   /// Disables [id] while retaining its session and storage.
   Future<void> disable(String id) async {
-    final item = _require(id);
-    await item.session.disable();
+    _require(id);
+    await _lifecycles[id]!.disable();
   }
 
   /// Enables a previously disabled extension.
-  void enable(String id) => _require(id).session.enable();
+  void enable(String id) {
+    _require(id);
+    _lifecycles[id]!.enable();
+  }
 
   /// Unregisters and disposes [id], optionally clearing its storage.
   Future<void> uninstall(String id, {bool clearStorage = false}) async {
     final item = _installed.remove(id);
     if (item == null) return;
-    await item.session.dispose(clearStorage: clearStorage);
+    await _lifecycles.remove(id)!.dispose(clearStorage: clearStorage);
   }
 
   JsExtensionInstallation _require(String id) {

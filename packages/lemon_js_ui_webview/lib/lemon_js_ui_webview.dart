@@ -1,1 +1,1 @@
-export 'src/quickjs_ui_webview_plugin.dart';
+export 'src/quickjs_ui_webview_plugin.dart' hide webViewPageBridgeSource;

@@ -59,6 +59,23 @@ void main() {
     );
   });
 
+  test('session availability follows disable enable and disposal', () async {
+    final session = JsExtensionSession(
+      extension: _hybridExtension(JsExtensionManifest.parse(manifestSource)),
+    );
+    final changes = <bool>[];
+    session.uiEnabled.addListener(() => changes.add(session.uiEnabled.value));
+    expect(session.uiEnabled.value, isTrue);
+    await session.disable();
+    expect(session.uiEnabled.value, isFalse);
+    session.enable();
+    expect(session.uiEnabled.value, isTrue);
+    await session.dispose();
+    expect(session.uiEnabled.value, isFalse);
+    expect(changes, [false, true, false]);
+    expect(session.enable, throwsStateError);
+  });
+
   test('parses required and optional host capability versions', () {
     final source = manifestSource.replaceFirst(
       '"permissions": ["network", "storage"]',
@@ -246,6 +263,9 @@ export function submitLogin() { return true; }
     );
 
     expect(registry.servicesForContract('content-source/v1'), [installed]);
+    expect(() => installed.session.enable(), throwsStateError);
+    expect(() => installed.session.disable(), throwsStateError);
+    expect(() => installed.session.dispose(), throwsStateError);
     final flow = registry.findFlow('site.example1', 'authentication');
     expect(flow?.installed, same(installed));
     expect(flow?.route, 'authentication');
@@ -569,6 +589,60 @@ export function submitLogin() { return true; }
     expect((await store.load('site.example1'))?.record.version, '2.0.0');
   });
 
+  test('concurrent installs keep the winning persistent record', () async {
+    final store = JsExtensionMemoryStore();
+    final manager = JsExtensionManager(
+      store: store,
+      constraints: _extensionConstraints(),
+    );
+    addTearDown(manager.dispose);
+    Future<bool> install() async {
+      try {
+        await manager.install(
+          _hybridPackage(manifestSource),
+          grantedPermissions: ['network', 'storage'],
+        );
+        return true;
+      } on StateError {
+        return false;
+      }
+    }
+
+    expect(await Future.wait([install(), install()]), [true, false]);
+    expect(await store.load('site.example1'), isNotNull);
+    expect(manager.registry.find('site.example1'), isNotNull);
+  });
+
+  test('failed uninstall rebuilds a usable installation', () async {
+    final store = JsExtensionMemoryStore();
+    var failClose = true;
+    final manager = JsExtensionManager(
+      store: store,
+      constraints: _extensionConstraints(),
+      runtimeFactory: ({required options, required features}) async =>
+          _FakeRuntime(
+            options,
+            features: features,
+            onClose: () {
+              if (failClose) {
+                failClose = false;
+                throw StateError('close failed');
+              }
+            },
+          ),
+    );
+    addTearDown(manager.dispose);
+    await manager.install(
+      _hybridPackage(manifestSource),
+      grantedPermissions: ['network', 'storage'],
+    );
+    await manager.call('site.example1', 'getHome');
+    await expectLater(manager.uninstall('site.example1'), throwsStateError);
+    expect(await store.load('site.example1'), isNotNull);
+    expect(manager.registry.find('site.example1'), isNotNull);
+    expect(await manager.call('site.example1', 'getHome'), 'getHome:0');
+  });
+
   test('manager rejects an update with a different extension id', () async {
     final store = JsExtensionMemoryStore();
     final manager = JsExtensionManager(
@@ -658,6 +732,7 @@ export function submitLogin() { return true; }
 
   test('failed KV migration restores the previous namespace', () async {
     final storage = JsMemoryKvStore();
+    JsExtensionSession? previousSession;
     await storage.set('token', 'old', namespace: 'site.example1');
     final manager = JsExtensionManager(
       store: JsExtensionMemoryStore(),
@@ -669,6 +744,11 @@ export function submitLogin() { return true; }
             features: features,
             onCall: (method, arguments) async {
               if (method == 'migrateStorage') {
+                expect(
+                  previousSession!.state,
+                  JsExtensionSessionState.disposed,
+                );
+                expect(previousSession.uiEnabled.value, isFalse);
                 await storage.set(
                   'token',
                   'partial',
@@ -681,6 +761,7 @@ export function submitLogin() { return true; }
           ),
     );
     await manager.install(_hybridPackage(manifestSource));
+    previousSession = manager.registry.find('site.example1')!.session;
     final next = manifestSource
         .replaceFirst('"version": "1.0.0"', '"version": "2.0.0"')
         .replaceFirst(
@@ -1069,11 +1150,17 @@ JsExtension _hybridExtension(JsExtensionManifest manifest) {
 typedef _CallHandler = Object? Function(String method, List<Object?> args);
 
 final class _FakeRuntime implements JsExtensionServiceRuntime {
-  _FakeRuntime(this.options, {required this.features, this.onCall});
+  _FakeRuntime(
+    this.options, {
+    required this.features,
+    this.onCall,
+    this.onClose,
+  });
 
   final JsOptions options;
   final List<JsFeatures> features;
   final _CallHandler? onCall;
+  final void Function()? onClose;
   bool closed = false;
   bool initialized = false;
 
@@ -1108,5 +1195,6 @@ final class _FakeRuntime implements JsExtensionServiceRuntime {
   @override
   Future<void> close() async {
     closed = true;
+    onClose?.call();
   }
 }

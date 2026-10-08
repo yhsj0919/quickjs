@@ -92,6 +92,21 @@ final class JsUiComponentRegistry {
 
   /// Performs the register operation.
   void register(String type, JsUiComponentBuilder builder) {
+    _requireUnregistered(type);
+    _components[type] = _JsUiComponentDefinition.builder(builder);
+  }
+
+  void _requireUnregistered(String type) {
+    if (_components.containsKey(type)) {
+      throw StateError('JSUI component already registered: $type');
+    }
+  }
+
+  /// Explicitly replaces an existing component builder.
+  void replace(String type, JsUiComponentBuilder builder) {
+    if (!_components.containsKey(type)) {
+      throw StateError('JSUI component is not registered: $type');
+    }
     _components[type] = _JsUiComponentDefinition.builder(builder);
   }
 
@@ -101,6 +116,7 @@ final class JsUiComponentRegistry {
     required T Function(JsUiNode node) createController,
     required JsUiLifecycleComponentBuilder<T> build,
   }) {
+    _requireUnregistered(type);
     _components[type] = _JsUiComponentDefinition.lifecycle(
       createController: createController,
       build: build,

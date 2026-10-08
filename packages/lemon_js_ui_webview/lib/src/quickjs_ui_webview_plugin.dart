@@ -87,27 +87,64 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
 
   late final native.WebViewController _controller;
   String? _bridgeId;
-  String? _loadedSource;
+  String? _configuredSource;
+  Map<String, Object?>? _activeSource;
+  bool _initialized = false;
+  Object? _initializationError;
+  bool _navigationFailed = false;
+  bool _documentReady = false;
+  int _documentGeneration = 0;
+  String? _expectedFinishUrl;
+  String? _appliedRules;
+  Future<void> _updates = Future<void>.value();
 
   @override
   void initState() {
     super.initState();
     _controller = native.WebViewController();
-    unawaited(_initialize());
+    _enqueue(() async {
+      try {
+        await _initialize();
+      } catch (error) {
+        if (!_initialized) _initializationError = error;
+        rethrow;
+      }
+    });
   }
 
   @override
   void didUpdateWidget(covariant _JsUiWebViewHost oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _registerBridge();
-    final source = _sourceIdentity(widget.node);
-    if (source != _loadedSource) {
-      unawaited(_load());
-    }
-    final rules = _rulesOf(widget.node);
-    if (rules != _rulesOf(oldWidget.node) && rules != null) {
-      unawaited(_applyRules(rules));
-    }
+    _enqueue(() async {
+      _requireInitialized();
+      _registerBridge();
+      final scriptsChanged = await _configurePage();
+      await _synchronizeDocument(scriptsChanged: scriptsChanged);
+    });
+  }
+
+  void _enqueue(Future<void> Function() operation) {
+    _run(operation).catchError((Object error) {
+      if (mounted) _dispatch('onError', {'message': '$error'});
+    });
+  }
+
+  Future<T> _run<T>(Future<T> Function() operation) {
+    final result = _updates.then((_) {
+      if (!mounted) throw StateError('WebView has been disposed');
+      return operation();
+    });
+    _updates = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace stack) {},
+    );
+    return result;
+  }
+
+  void _requireInitialized() {
+    final error = _initializationError;
+    if (error != null) throw error;
+    if (!_initialized) throw StateError('WebView initialization is incomplete');
   }
 
   @override
@@ -120,44 +157,37 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
   }
 
   Future<void> _initialize() async {
-    await _controller.setJavaScriptMode(
-      widget.node.props['javaScriptEnabled'] == false
-          ? native.JavaScriptMode.disabled
-          : native.JavaScriptMode.unrestricted,
-    );
     await _controller.addJavaScriptChannel(
       _channelName,
       onMessageReceived: _onJavaScriptMessage,
     );
-    final documentStartSupported = await _controller
-        .isUserScriptInjectionSupported(
-          native.WebViewUserScriptInjectionTime.documentStart,
-        );
-    if (documentStartSupported) {
-      await _controller.addUserScript(
-        native.WebViewUserScript(source: _pageBridgeSource(_channelName)),
-      );
-      final frameScripts = _frameScriptsOf(widget.node);
-      for (final source in frameScripts) {
-        await _controller.addUserScript(
-          native.WebViewUserScript(source: source, forMainFrameOnly: false),
-        );
-      }
-    }
     await _controller.setNavigationDelegate(
       native.NavigationDelegate(
         onProgress: (progress) => _dispatch('onProgress', <String, Object?>{
           'progress': progress,
         }, sample: true),
-        onPageStarted: (url) =>
-            _dispatch('onPageStarted', <String, Object?>{'url': url}),
-        onPageFinished: (url) async {
-          await _installBridge();
-          final rules = _rulesOf(widget.node);
-          if (rules != null) {
-            await _applyRules(rules);
-          }
-          _dispatch('onPageFinished', <String, Object?>{'url': url});
+        onPageStarted: (url) {
+          ++_documentGeneration;
+          _expectedFinishUrl = url;
+          _documentReady = false;
+          _appliedRules = null;
+          _dispatch('onPageStarted', {'url': url});
+        },
+        onPageFinished: (url) {
+          final generation = _documentGeneration;
+          _enqueue(() async {
+            _requireInitialized();
+            if (generation != _documentGeneration ||
+                (_expectedFinishUrl != null && url != _expectedFinishUrl)) {
+              return;
+            }
+            _documentReady = true;
+            if (widget.node.props['javaScriptEnabled'] != false) {
+              await _installBridge();
+              await _applyConfiguredRules();
+            }
+            _dispatch('onPageFinished', {'url': url});
+          });
         },
         onUrlChange: (change) {
           final url = change.url;
@@ -172,14 +202,58 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
         }),
       ),
     );
-    final userAgent = widget.node.props['userAgent'];
-    if (userAgent is String) {
-      await _controller.setUserAgent(userAgent);
-    }
-    await _controller.enableZoom(widget.node.props['zoomEnabled'] != false);
     _registerBridge();
     await _restoreInitialCookies();
-    await _load();
+    await _configurePage();
+    _initialized = true;
+    await _synchronizeDocument(scriptsChanged: false);
+  }
+
+  String? _scriptIdentity;
+  bool? _javaScriptEnabled;
+  bool? _zoomEnabled;
+  String? _userAgent;
+  Future<bool> _configurePage() async {
+    final node = widget.node;
+    final javaScriptEnabled = node.props['javaScriptEnabled'] != false;
+    final firstConfiguration = _javaScriptEnabled == null;
+    if (_javaScriptEnabled != javaScriptEnabled) {
+      await _controller.setJavaScriptMode(
+        javaScriptEnabled
+            ? native.JavaScriptMode.unrestricted
+            : native.JavaScriptMode.disabled,
+      );
+      _javaScriptEnabled = javaScriptEnabled;
+    }
+    final agent = node.props['userAgent'];
+    final userAgent = agent is String ? agent : null;
+    if (firstConfiguration || _userAgent != userAgent) {
+      await _controller.setUserAgent(userAgent);
+      _userAgent = userAgent;
+    }
+    final zoomEnabled = node.props['zoomEnabled'] != false;
+    if (_zoomEnabled != zoomEnabled) {
+      await _controller.enableZoom(zoomEnabled);
+      _zoomEnabled = zoomEnabled;
+    }
+    final scripts = _frameScriptsOf(node);
+    final identity = jsonEncode(scripts);
+    if (_scriptIdentity == identity) return false;
+    if (await _controller.isUserScriptInjectionSupported(
+      native.WebViewUserScriptInjectionTime.documentStart,
+    )) {
+      await _controller.removeAllUserScripts();
+      await _controller.addUserScript(
+        native.WebViewUserScript(source: webViewPageBridgeSource(_channelName)),
+      );
+      for (final source in scripts) {
+        await _controller.addUserScript(
+          native.WebViewUserScript(source: source, forMainFrameOnly: false),
+        );
+      }
+    }
+    _scriptIdentity = identity;
+    return true;
   }
 
   void _registerBridge() {
@@ -189,13 +263,13 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
       return;
     }
     final previous = _bridgeId;
+    if (bridgeId != null) {
+      widget.broker.register(bridgeId, this);
+    }
     if (previous != null) {
       widget.broker.unregister(previous, this);
     }
     _bridgeId = bridgeId;
-    if (bridgeId != null) {
-      widget.broker.register(bridgeId, this);
-    }
   }
 
   Future<void> _restoreInitialCookies() async {
@@ -213,36 +287,70 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
     }
   }
 
-  Future<void> _load() async {
-    final html = widget.node.props['html'];
+  Future<void> _synchronizeDocument({required bool scriptsChanged}) async {
+    final identity = _sourceIdentity(widget.node);
+    final sourceChanged = identity != _configuredSource;
+    if (sourceChanged) {
+      _configuredSource = identity;
+      _activeSource = Map<String, Object?>.of(widget.node.props);
+    }
+    final source = _activeSource;
+    if (source != null &&
+        (sourceChanged || scriptsChanged || _navigationFailed)) {
+      await _navigate(source);
+    } else {
+      await _applyConfiguredRules();
+    }
+  }
+
+  void _beginNavigation() {
+    ++_documentGeneration;
+    _expectedFinishUrl = null;
+    _documentReady = false;
+    _appliedRules = null;
+  }
+
+  Future<void> _navigate(Map<String, Object?> source) async {
+    _activeSource = Map<String, Object?>.of(source);
+    _beginNavigation();
+    _navigationFailed = true;
+    final html = source['html'];
     if (html is String) {
-      _loadedSource = _sourceIdentity(widget.node);
       await _controller.loadHtmlString(
         html,
-        baseUrl: widget.node.props['baseUrl'] as String?,
+        baseUrl: source['baseUrl'] as String?,
       );
+      _navigationFailed = false;
       return;
     }
-    final url = widget.node.props['url'];
+    final url = source['url'];
     if (url is! String || url.isEmpty) {
       return;
     }
-    _loadedSource = _sourceIdentity(widget.node);
     await _controller.loadRequest(
       Uri.parse(url),
-      headers: _stringStringMap(widget.node.props['headers']),
+      headers: _stringStringMap(source['headers']),
     );
+    _navigationFailed = false;
   }
 
   Future<void> _installBridge() {
-    return _controller.runJavaScript(_pageBridgeSource(_channelName));
+    return _controller.runJavaScript(webViewPageBridgeSource(_channelName));
   }
 
-  Future<void> _applyRules(Object rules) async {
+  Future<void> _applyConfiguredRules() async {
+    if (!_documentReady || widget.node.props['javaScriptEnabled'] == false) {
+      return;
+    }
+    final rules = _rulesOf(widget.node);
+    final identity = jsonEncode(rules);
+    if (_appliedRules == identity) return;
+    final generation = _documentGeneration;
     await _installBridge();
     await _controller.runJavaScriptReturningResult(
-      'window.__lemonWebView.applyRules(${jsonEncode(rules)})',
+      'window.__lemonWebView.setConfiguredRules($identity)',
     );
+    if (generation == _documentGeneration) _appliedRules = identity;
   }
 
   void _onJavaScriptMessage(native.JavaScriptMessage message) {
@@ -292,18 +400,33 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
   }
 
   @override
-  Future<Object?> execute(String method, Map<String, Object?> arguments) async {
+  Future<Object?> execute(String method, Map<String, Object?> arguments) {
+    return _run(() async {
+      _requireInitialized();
+      return _execute(method, arguments);
+    });
+  }
+
+  Future<Object?> _execute(
+    String method,
+    Map<String, Object?> arguments,
+  ) async {
     switch (method) {
       case 'reload':
+        _beginNavigation();
         await _controller.reload();
         return null;
       case 'stop':
         await _controller.runJavaScript('window.stop()');
         return null;
       case 'goBack':
+        if (!await _controller.canGoBack()) return null;
+        _beginNavigation();
         await _controller.goBack();
         return null;
       case 'goForward':
+        if (!await _controller.canGoForward()) return null;
+        _beginNavigation();
         await _controller.goForward();
         return null;
       case 'canGoBack':
@@ -317,6 +440,7 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
       case 'evaluate':
         return _evaluate(_requiredString(arguments, 'source'));
       case 'applyRules':
+        await _installBridge();
         return _controller.runJavaScriptReturningResult(
           'window.__lemonWebView.applyRules(${jsonEncode(arguments['rules'])})',
         );
@@ -369,16 +493,16 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
         await _controller.clearLocalStorage();
         return null;
       case 'loadUrl':
-        await _controller.loadRequest(
-          Uri.parse(_requiredString(arguments, 'url')),
-          headers: _stringStringMap(arguments['headers']),
-        );
+        await _navigate({
+          'url': _requiredString(arguments, 'url'),
+          'headers': _stringStringMap(arguments['headers']),
+        });
         return null;
       case 'loadHtml':
-        await _controller.loadHtmlString(
-          _requiredString(arguments, 'html'),
-          baseUrl: arguments['baseUrl'] as String?,
-        );
+        await _navigate({
+          'html': _requiredString(arguments, 'html'),
+          'baseUrl': arguments['baseUrl'] as String?,
+        });
         return null;
     }
     throw UnsupportedError('Unknown WebView command: $method');
@@ -401,11 +525,12 @@ final class _JsUiWebViewHostState extends State<_JsUiWebViewHost>
   }
 
   @override
-  Future<void> respond(Map<String, Object?> response) async {
+  Future<void> respond(Map<String, Object?> response) => _run(() async {
+    _requireInitialized();
     await _controller.runJavaScript(
       'window.__lemonWebView.resolveHostCall(${jsonEncode(response)})',
     );
-  }
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -427,13 +552,15 @@ final class _WebViewBroker {
       <String, Completer<Map<String, Object?>>>{};
 
   void register(String id, _WebViewEndpoint endpoint) {
+    if (_endpoints.containsKey(id) && !identical(_endpoints[id], endpoint)) {
+      throw StateError('WebView bridge "$id" is already registered');
+    }
     _endpoints[id] = endpoint;
   }
 
   void unregister(String id, _WebViewEndpoint endpoint) {
-    if (identical(_endpoints[id], endpoint)) {
-      _endpoints.remove(id);
-    }
+    if (!identical(_endpoints[id], endpoint)) return;
+    _endpoints.remove(id);
     _waiters
         .remove(id)
         ?.completeError(StateError('WebView bridge "$id" was disposed'));
@@ -481,17 +608,17 @@ final class _WebViewBroker {
     }
     final completer = Completer<Map<String, Object?>>();
     _waiters[id] = completer;
-    final result = await Future.any<Object?>(<Future<Object?>>[
-      completer.future,
-      context.cancelled.then<Object?>((_) {
-        context.throwIfCancelled();
-        return null;
-      }),
-    ]);
-    if (identical(_waiters[id], completer)) {
-      _waiters.remove(id);
+    try {
+      return await Future.any<Object?>(<Future<Object?>>[
+        completer.future,
+        context.cancelled.then<Object?>((_) {
+          context.throwIfCancelled();
+          return null;
+        }),
+      ]);
+    } finally {
+      if (identical(_waiters[id], completer)) _waiters.remove(id);
     }
-    return result;
   }
 
   Future<Object?> respond(
@@ -564,7 +691,9 @@ String? _sourceIdentity(JsUiNode node) {
     return 'html:${node.props['baseUrl']}:$html';
   }
   final url = node.props['url'];
-  return url is String ? 'url:$url' : null;
+  return url is String
+      ? 'url:$url:${jsonEncode(_stringStringMap(node.props['headers']))}'
+      : null;
 }
 
 Object? _rulesOf(JsUiNode node) {
@@ -581,13 +710,17 @@ List<String> _frameScriptsOf(JsUiNode node) {
       .toList();
 }
 
-String _pageBridgeSource(String channelName) =>
+/// Internal bridge source exposed only for protocol regression tests.
+@visibleForTesting
+String webViewPageBridgeSource(String channelName) =>
     '''
 (() => {
   if (window.__lemonWebView) return;
+  const documentId = 'document-' + Date.now() + '-' + Math.random();
   const exposed = new Map();
   const pending = new Map();
   const observedRules = new Map();
+  let configuredRules = [];
   let nextId = 1;
   let observer;
   let observerScheduled = false;
@@ -678,25 +811,45 @@ String _pageBridgeSource(String channelName) =>
     for (const operation of rule.operations || []) applyOperation(elements, operation);
     return { matched: elements.length, modified: elements.length };
   };
+  const observe = () => {
+    const rules = [...configuredRules.filter(rule => rule?.observe), ...observedRules.values()];
+    if (!rules.length) { observer?.disconnect(); return; }
+    if (!observer) {
+      observer = new MutationObserver(() => {
+        if (observerScheduled) return;
+        observerScheduled = true;
+        setTimeout(() => {
+          observerScheduled = false;
+          // Disconnect while applying our own mutations, then resume observing
+          // external page changes. Re-read the rules after asynchronous scheduling.
+          observer.disconnect();
+          try {
+            for (const rule of [...configuredRules.filter(rule => rule?.observe), ...observedRules.values()]) applyRule(rule);
+          } finally { observe(); }
+        }, 0);
+      });
+    }
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  };
+  const applyList = list => {
+    observer?.disconnect();
+    try {
+      const results = list.filter(Boolean).map(applyRule);
+      return JSON.stringify({ applied: results.length, results });
+    } finally { observe(); }
+  };
   window.__lemonWebView = {
+    documentId,
+    setConfiguredRules(rules) {
+      configuredRules = rules == null ? [] : (Array.isArray(rules) ? rules : [rules]);
+      return applyList(configuredRules);
+    },
     applyRules(rules) {
       const list = Array.isArray(rules) ? rules : [rules];
       for (const rule of list) {
         if (rule?.observe) observedRules.set(JSON.stringify(rule), rule);
       }
-      if (observedRules.size > 0 && !observer) {
-        observer = new MutationObserver(() => {
-          if (observerScheduled) return;
-          observerScheduled = true;
-          setTimeout(() => {
-            observerScheduled = false;
-            for (const rule of observedRules.values()) applyRule(rule);
-          }, 0);
-        });
-        observer.observe(document.documentElement, { childList: true, subtree: true });
-      }
-      const results = list.filter(Boolean).map(applyRule);
-      return JSON.stringify({ applied: results.length, results });
+      return applyList(list);
     },
     expose(name, callback) { exposed.set(name, callback); },
     unexpose(name) { exposed.delete(name); },
@@ -707,11 +860,12 @@ String _pageBridgeSource(String channelName) =>
     },
     callHost(method, args) {
       const id = `page-\${nextId++}`;
-      send({ type: 'call', id, method, arguments: args });
+      send({ type: 'call', documentId, id, method, arguments: args });
       return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
     },
     notifyHost(name, payload) { send({ type: 'notify', name, payload }); },
     resolveHostCall(response) {
+      if (response.documentId !== documentId) return;
       const item = pending.get(response.id);
       if (!item) return;
       pending.delete(response.id);

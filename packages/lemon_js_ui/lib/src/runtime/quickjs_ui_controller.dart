@@ -17,7 +17,7 @@ import 'quickjs_ui_lifecycle.dart';
 import 'quickjs_ui_runtime.dart';
 
 /// Loads or rebuilds the JavaScript plugin for a page.
-typedef JsUiPluginLoader = Future<JsPlugin> Function();
+typedef JsUiPluginLoader = Future<JsPlugin> Function({bool forceRefresh});
 
 /// Controller for one quickjs_ui page instance.
 ///
@@ -32,20 +32,65 @@ final class JsUiController extends ChangeNotifier {
     JsConsoleSink? onConsole,
     JsUiDevOptions? devOptions,
     JsUiInspector? inspector,
-  }) : devOptions = devOptions ?? JsUiDevOptions.defaults,
+  }) : _devOptions = devOptions ?? JsUiDevOptions.defaults,
        inspector = inspector ?? JsUiInspector(),
-       _session = JsUiSession(
+       _sessionFactory = (() =>
+           JsUiSession(engine: engine, runtime: runtime, onConsole: onConsole)),
+       _currentSession = JsUiSession(
          engine: engine,
          runtime: runtime,
          onConsole: onConsole,
        ) {
-    _session.inspector = this.inspector;
+    _currentSession!.inspector = this.inspector;
   }
 
-  final JsUiSession _session;
+  JsUiSession? _currentSession;
+  JsUiSession get _session =>
+      _currentSession ??
+      (throw StateError('JsUiController has no loaded session'));
+  final JsUiSession Function() _sessionFactory;
+  Future<void>? _sessionCleanup;
+
+  /// Releases the current page and its runtime capabilities, keeping this
+  /// controller reusable for a later load.
+  Future<void> unload() {
+    _ensureActive();
+    ++_loadRequestId;
+    _stopTimerPump();
+    final oldSession = _currentSession;
+    _currentSession = null;
+    if (oldSession != null) _sessionCleanup = oldSession.dispose();
+    _loading = false;
+    _error = null;
+    _loadConfig = _JsUiLoadConfig();
+    _acceptPageReplacement();
+    notifyListeners();
+    return _sessionCleanup ?? Future<void>.value();
+  }
 
   /// Development and hot-reload behavior.
-  final JsUiDevOptions devOptions;
+  JsUiDevOptions get devOptions => _devOptions;
+  JsUiDevOptions _devOptions;
+
+  /// Updates diagnostics and reload options without recreating the page.
+  void updateDevOptions(JsUiDevOptions options) {
+    _ensureActive();
+    if (identical(_devOptions, options)) return;
+    _devOptions = options;
+    notifyListeners();
+  }
+
+  final Set<void Function(JsUiLifecycle)> _lifecycleListeners = {};
+
+  /// Registers renderer lifecycle coordination for an attached view.
+  @internal
+  void addLifecycleListener(void Function(JsUiLifecycle) listener) =>
+      _lifecycleListeners.add(listener);
+
+  /// Removes lifecycle coordination when a view detaches.
+  @internal
+  void removeLifecycleListener(void Function(JsUiLifecycle) listener) =>
+      _lifecycleListeners.remove(listener);
 
   /// Diagnostics collector for this page.
   final JsUiInspector inspector;
@@ -54,7 +99,7 @@ final class JsUiController extends ChangeNotifier {
   final JsUiCanvasSceneRegistry canvasSceneRegistry = JsUiCanvasSceneRegistry();
   JsUiError? _error;
   JsUiLoadMetrics? _lastLoadMetrics;
-  _JsUiLoadConfig _loadConfig = _JsUiLoadConfig.copy();
+  _JsUiLoadConfig _loadConfig = _JsUiLoadConfig();
   bool _loading = false;
   bool _disposed = false;
   bool _notifierDisposed = false;
@@ -65,22 +110,22 @@ final class JsUiController extends ChangeNotifier {
   Timer? _timerPump;
 
   /// Engine currently executing the page.
-  JsEngine? get engine => _session.engine;
+  JsEngine? get engine => _currentSession?.engine;
 
   /// Plugin currently loaded by the page.
-  JsPlugin? get plugin => _session.plugin;
+  JsPlugin? get plugin => _currentSession?.plugin;
 
   /// Host features installed for the current page.
-  List<JsFeatures> get features => _session.features;
+  List<JsFeatures> get features => _currentSession?.features ?? const [];
 
   /// Current immutable root props.
-  Map<String, Object?> get props => _session.props;
+  Map<String, Object?> get props => _currentSession?.props ?? const {};
 
   /// Current JavaScript page state.
-  Object? get state => _session.state;
+  Object? get state => _currentSession?.state;
 
   /// Most recently rendered UI tree.
-  JsUiNode? get node => _session.node;
+  JsUiNode? get node => _currentSession?.node;
 
   /// Most recent page error.
   JsUiError? get error => _error;
@@ -116,7 +161,8 @@ final class JsUiController extends ChangeNotifier {
     JsUiErrorContext errorContext = const JsUiErrorContext(),
     bool notifyLoading = true,
   }) async {
-    _loadConfig = _JsUiLoadConfig.copy(
+    _ensureActive();
+    _loadConfig = _JsUiLoadConfig(
       plugin: plugin,
       initialProps: initialProps,
       features: features,
@@ -124,17 +170,7 @@ final class JsUiController extends ChangeNotifier {
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
     );
-    final requestId = ++_loadRequestId;
-    await _loadPlugin(
-      plugin,
-      requestId: requestId,
-      initialProps: initialProps,
-      features: features,
-      grantedPermissions: grantedPermissions,
-      permissionPolicy: permissionPolicy,
-      errorContext: errorContext,
-      notifyLoading: notifyLoading,
-    );
+    return _loadPage(_loadConfig, notifyLoading: notifyLoading);
   }
 
   /// Loads a page plugin produced asynchronously by [loader].
@@ -148,7 +184,7 @@ final class JsUiController extends ChangeNotifier {
     bool notifyLoading = true,
   }) async {
     _ensureActive();
-    _loadConfig = _JsUiLoadConfig.copy(
+    _loadConfig = _JsUiLoadConfig(
       loader: loader,
       initialProps: initialProps,
       features: features,
@@ -156,6 +192,18 @@ final class JsUiController extends ChangeNotifier {
       permissionPolicy: permissionPolicy,
       errorContext: errorContext,
     );
+    return _loadPage(_loadConfig, notifyLoading: notifyLoading);
+  }
+
+  // One loading transaction: resolve the source, wait for cleanup, install the
+  // page, optionally restore state, and publish the result.
+  Future<void> _loadPage(
+    _JsUiLoadConfig config, {
+    bool notifyLoading = true,
+    bool forceRefresh = false,
+    bool preserveState = false,
+  }) async {
+    final savedState = preserveState ? state : null;
     final requestId = ++_loadRequestId;
     _loading = true;
     _error = null;
@@ -165,81 +213,55 @@ final class JsUiController extends ChangeNotifier {
 
     try {
       final resourceWatch = Stopwatch()..start();
-      final plugin = await loader();
+      final loader = config.loader;
+      final pagePlugin = loader == null
+          ? config.plugin
+          : await loader(forceRefresh: forceRefresh);
       resourceWatch.stop();
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
+      if (pagePlugin == null) {
+        throw StateError('JsUiController has no page to load');
+      }
       _stopTimerPump();
-      await _session.loadPlugin(
-        plugin,
-        initialProps: initialProps,
-        features: features,
-        grantedPermissions: grantedPermissions,
-        permissionPolicy: permissionPolicy,
+      if (_sessionCleanup != null) await _sessionCleanup;
+      if (_disposed || requestId != _loadRequestId) return;
+      _currentSession ??= _sessionFactory()..inspector = inspector;
+      final session = _session;
+      await session.loadPlugin(
+        pagePlugin,
+        initialProps: config.initialProps,
+        features: config.features,
+        grantedPermissions: config.grantedPermissions,
+        permissionPolicy: config.permissionPolicy,
       );
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _acceptPageReplacement();
-      final metrics = _session.lastLoadMetrics;
+      final metrics = session.lastLoadMetrics;
       _acceptLoadMetrics(
-        metrics?.withStage('resourceLoad', resourceWatch.elapsed),
+        loader == null
+            ? metrics
+            : metrics?.withStage('resourceLoad', resourceWatch.elapsed),
       );
+      if (savedState is Map) {
+        await session.setState({
+          for (final entry in savedState.entries) '${entry.key}': entry.value,
+        });
+        if (_disposed || requestId != _loadRequestId) return;
+      }
       _startTimerPump();
     } catch (error) {
       if (_disposed || requestId != _loadRequestId) {
         return;
       }
-      _recordError(error, kind: JsUiErrorKind.load, context: errorContext);
-    } finally {
-      if (!_disposed && requestId == _loadRequestId) {
-        _loading = false;
-        notifyListeners();
-      }
-    }
-  }
-
-  Future<void> _loadPlugin(
-    JsPlugin plugin, {
-    required int requestId,
-    required Map<String, Object?> initialProps,
-    required List<JsFeatures> features,
-    required Iterable<String> grantedPermissions,
-    required JsUiPermissionPolicy? permissionPolicy,
-    required JsUiErrorContext errorContext,
-    required bool notifyLoading,
-  }) async {
-    _ensureActive();
-    _loading = true;
-    _error = null;
-    if (notifyLoading) {
-      notifyListeners();
-    }
-
-    try {
-      _stopTimerPump();
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      await _session.loadPlugin(
-        plugin,
-        initialProps: initialProps,
-        features: features,
-        grantedPermissions: grantedPermissions,
-        permissionPolicy: permissionPolicy,
+      _recordError(
+        error,
+        kind: JsUiErrorKind.load,
+        context: config.errorContext,
       );
-      _acceptLoadMetrics(_session.lastLoadMetrics);
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      _acceptPageReplacement();
-      _startTimerPump();
-    } catch (error) {
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      _recordError(error, kind: JsUiErrorKind.load, context: errorContext);
     } finally {
       if (!_disposed && requestId == _loadRequestId) {
         _loading = false;
@@ -251,16 +273,17 @@ final class JsUiController extends ChangeNotifier {
   /// Dispatches one component [event] and renders any resulting state change.
   Future<void> dispatch(Map<String, Object?> event) async {
     _ensureActive();
+    final requestId = _loadRequestId;
     _error = null;
     try {
       await _session.dispatch(event);
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _startTimerPump();
       notifyListeners();
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _recordError(
@@ -275,14 +298,15 @@ final class JsUiController extends ChangeNotifier {
   /// Dispatches [events] in one serialized session operation.
   Future<void> dispatchBatch(Iterable<Map<String, Object?>> events) async {
     _ensureActive();
+    final requestId = _loadRequestId;
     _error = null;
     try {
       await _session.dispatchBatch(events);
-      if (_disposed) return;
+      if (_disposed || requestId != _loadRequestId) return;
       _startTimerPump();
       notifyListeners();
     } catch (error) {
-      if (_disposed) return;
+      if (_disposed || requestId != _loadRequestId) return;
       _recordError(error, kind: JsUiErrorKind.dispatch);
       notifyListeners();
     }
@@ -291,16 +315,17 @@ final class JsUiController extends ChangeNotifier {
   /// Merges [patch] into page state and renders the result.
   Future<void> setState(Map<String, Object?> patch) async {
     _ensureActive();
+    final requestId = _loadRequestId;
     _error = null;
     try {
       await _session.setState(patch);
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _startTimerPump();
       notifyListeners();
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _recordError(error, kind: JsUiErrorKind.state);
@@ -311,16 +336,17 @@ final class JsUiController extends ChangeNotifier {
   /// Renders the page again without changing its props or state.
   Future<void> refresh() async {
     _ensureActive();
+    final requestId = _loadRequestId;
     _error = null;
     try {
       await _session.refresh();
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _startTimerPump();
       notifyListeners();
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _recordError(error, kind: JsUiErrorKind.render);
@@ -335,6 +361,10 @@ final class JsUiController extends ChangeNotifier {
     bool render = true,
   }) async {
     _ensureActive();
+    final requestId = _loadRequestId;
+    for (final listener in _lifecycleListeners.toList()) {
+      listener(type);
+    }
     _error = null;
     try {
       final changed = await _session.lifecycle(
@@ -342,7 +372,7 @@ final class JsUiController extends ChangeNotifier {
         payload: payload,
         render: render,
       );
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _startTimerPump();
@@ -350,7 +380,7 @@ final class JsUiController extends ChangeNotifier {
         notifyListeners();
       }
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _recordError(error, kind: JsUiErrorKind.lifecycle, lifecycle: type.name);
@@ -365,6 +395,7 @@ final class JsUiController extends ChangeNotifier {
     bool render = true,
   }) async {
     _ensureActive();
+    final requestId = _loadRequestId;
     _error = null;
     try {
       final changed = await _session.routeLifecycle(
@@ -372,7 +403,7 @@ final class JsUiController extends ChangeNotifier {
         payload: payload,
         render: render,
       );
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _startTimerPump();
@@ -380,7 +411,7 @@ final class JsUiController extends ChangeNotifier {
         notifyListeners();
       }
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _recordError(error, kind: JsUiErrorKind.lifecycle, lifecycle: type.name);
@@ -402,7 +433,7 @@ final class JsUiController extends ChangeNotifier {
       state: state,
       node: node,
       plugin: plugin,
-      features: _session.features,
+      features: features,
       error: error,
     );
   }
@@ -429,7 +460,9 @@ final class JsUiController extends ChangeNotifier {
     notifyListeners();
     try {
       _stopTimerPump();
-      final currentPlugin = _session.plugin;
+      if (_sessionCleanup != null) await _sessionCleanup;
+      if (_disposed || requestId != _loadRequestId) return;
+      final currentPlugin = plugin;
       if (currentPlugin != null) {
         await _session.reload();
       } else {
@@ -468,62 +501,13 @@ final class JsUiController extends ChangeNotifier {
   }
 
   /// Reloads the page source and optionally restores its prior state.
-  Future<void> reload() async {
+  Future<void> reload({bool forceRefresh = false}) async {
     _ensureActive();
-    final config = _loadConfig;
-    final loader = config.loader;
-    if (loader == null) {
-      await restart();
-      return;
-    }
-    final savedState = devOptions.preserveStateOnReload ? state : null;
-    final requestId = ++_loadRequestId;
-    _loading = true;
-    _error = null;
-    notifyListeners();
-    try {
-      final plugin = await loader();
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      _stopTimerPump();
-      await _session.loadPlugin(
-        plugin,
-        initialProps: config.initialProps,
-        features: config.features,
-        grantedPermissions: config.grantedPermissions,
-        permissionPolicy: config.permissionPolicy,
-      );
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      _acceptPageReplacement();
-      _startTimerPump();
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      if (savedState is Map) {
-        await setState(
-          Map<String, Object?>.from(
-            savedState.map((key, value) => MapEntry('$key', value)),
-          ),
-        );
-      }
-    } catch (error) {
-      if (_disposed || requestId != _loadRequestId) {
-        return;
-      }
-      _recordError(
-        error,
-        kind: JsUiErrorKind.load,
-        context: config.errorContext,
-      );
-    } finally {
-      if (!_disposed && requestId == _loadRequestId) {
-        _loading = false;
-        notifyListeners();
-      }
-    }
+    return _loadPage(
+      _loadConfig,
+      forceRefresh: forceRefresh,
+      preserveState: devOptions.preserveStateOnReload,
+    );
   }
 
   @override
@@ -547,9 +531,13 @@ final class JsUiController extends ChangeNotifier {
       return currentClose;
     }
     _disposed = true;
+    _lifecycleListeners.clear();
     _stopTimerPump();
     canvasSceneRegistry.clear();
-    return _closeFuture = _session.dispose();
+    return _closeFuture = Future.wait([
+      ?_sessionCleanup,
+      ?_currentSession?.dispose(),
+    ]).then((_) {});
   }
 
   void _acceptPageReplacement() {
@@ -575,13 +563,14 @@ final class JsUiController extends ChangeNotifier {
   }
 
   Future<void> _pumpTimers() async {
-    if (_disposed || _loading || _timerPumpRunning || _session.plugin == null) {
+    if (_disposed || _loading || _timerPumpRunning || plugin == null) {
       return;
     }
+    final requestId = _loadRequestId;
     _timerPumpRunning = true;
     try {
       final result = await _session.pumpTimers();
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       if (result.changed) {
@@ -589,14 +578,14 @@ final class JsUiController extends ChangeNotifier {
       }
       _scheduleTimerPump(result.nextDelay);
     } catch (error) {
-      if (_disposed) {
+      if (_disposed || requestId != _loadRequestId) {
         return;
       }
       _recordError(error, kind: JsUiErrorKind.runtime);
       _stopTimerPump();
       notifyListeners();
     } finally {
-      if (!_disposed) {
+      if (!_disposed && requestId == _loadRequestId) {
         _timerPumpRunning = false;
       }
     }
@@ -636,35 +625,17 @@ final class JsUiController extends ChangeNotifier {
 }
 
 final class _JsUiLoadConfig {
-  factory _JsUiLoadConfig.copy({
-    JsUiPluginLoader? loader,
-    JsPlugin? plugin,
+  _JsUiLoadConfig({
+    this.loader,
+    this.plugin,
     Map<String, Object?> initialProps = const <String, Object?>{},
     List<JsFeatures> features = const <JsFeatures>[],
     Iterable<String> grantedPermissions = const <String>[],
-    JsUiPermissionPolicy? permissionPolicy,
-    JsUiErrorContext errorContext = const JsUiErrorContext(),
-  }) {
-    return _JsUiLoadConfig._(
-      loader: loader,
-      plugin: plugin,
-      initialProps: Map<String, Object?>.unmodifiable(initialProps),
-      features: List<JsFeatures>.unmodifiable(features),
-      grantedPermissions: Set<String>.unmodifiable(grantedPermissions),
-      permissionPolicy: permissionPolicy,
-      errorContext: errorContext,
-    );
-  }
-
-  const _JsUiLoadConfig._({
-    required this.loader,
-    required this.plugin,
-    required this.initialProps,
-    required this.features,
-    required this.grantedPermissions,
-    required this.permissionPolicy,
-    required this.errorContext,
-  });
+    this.permissionPolicy,
+    this.errorContext = const JsUiErrorContext(),
+  }) : initialProps = Map<String, Object?>.unmodifiable(initialProps),
+       features = List<JsFeatures>.unmodifiable(features),
+       grantedPermissions = Set<String>.unmodifiable(grantedPermissions);
 
   final JsUiPluginLoader? loader;
   final JsPlugin? plugin;

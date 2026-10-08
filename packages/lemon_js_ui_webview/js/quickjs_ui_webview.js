@@ -120,6 +120,7 @@ class WebBridge {
           response = { id: call.id, error: { code: error?.code ?? 'METHOD_FAILED', message: String(error?.message ?? error) } };
         }
       }
+      response.documentId = call.documentId;
       await host['quickjs_ui.webview.respond'](this.id, response);
     }
   }

@@ -32,6 +32,20 @@ final class _RouteCaptureObserver extends NavigatorObserver {
 }
 
 void main() {
+  test('diagnostics update notifies without replacing the page', () {
+    final controller = JsUiController();
+    addTearDown(controller.dispose);
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+    final revision = controller.pageRevision;
+    const options = JsUiDevOptions(logDiff: true, preserveStateOnReload: true);
+    controller.updateDevOptions(options);
+    expect(controller.devOptions, same(options));
+    expect(controller.pageRevision, revision);
+    expect(notifications, 1);
+    controller.updateDevOptions(options);
+    expect(notifications, 1);
+  });
   test('parses serializable ui nodes', () {
     final node = JsUiNode.fromMap(<String, Object?>{
       'type': 'Column',
@@ -465,7 +479,7 @@ export default Page({
   test('runtime helper is generated from JS helper source', () {
     final source = File('js/quickjs_ui.js').readAsStringSync();
 
-    expect(jsUiHelperModuleSource, source);
+    expect(jsUiHelperModuleSource.replaceAll('\r\n', '\n'), source.replaceAll('\r\n', '\n'));
   });
 
   test('dispatches page lifecycle hooks', () async {
@@ -4296,7 +4310,7 @@ export function dispose() { throw new Error('dispose failed'); }
     await tester.pump();
 
     expect(observer.pushed, hasLength(1));
-    expect(observer.pushed.single, isA<PageRouteBuilder<Object?>>());
+    expect(observer.pushed.single, isA<PageRoute<Object?>>());
     expect(observer.pushed.single.settings.name, 'native.detail');
   });
 
@@ -4372,7 +4386,7 @@ export function dispose() { throw new Error('dispose failed'); }
     addTearDown(controller.dispose);
     var version = 0;
 
-    Future<JsPlugin> loadVersionedPlugin() async {
+    Future<JsPlugin> loadVersionedPlugin({bool forceRefresh = false}) async {
       version += 1;
       return JsUiPagePlugin.source(
         id: 'quickjs_ui_reload_source',
@@ -4474,7 +4488,7 @@ export default Page({
     final controller = JsUiController();
     addTearDown(controller.dispose);
 
-    await controller.load(() async {
+    await controller.load(({bool forceRefresh = false}) async {
       loadCount += 1;
       if (loadCount > 1) {
         throw const FormatException('reload failed');
@@ -4487,6 +4501,27 @@ export default Page({
     expect(controller.error?.source, 'network');
     expect(controller.error?.resource, 'https://example.test/page.mjs');
     expect(controller.error?.schemaPath, 'root');
+  });
+
+  test('force reload selects the cache-bypassing source loader', () async {
+    final controller = JsUiController();
+    addTearDown(controller.dispose);
+    var normalLoads = 0;
+    var forcedLoads = 0;
+    await controller.load(({bool forceRefresh = false}) async {
+      if (forceRefresh) {
+        forcedLoads += 1;
+      } else {
+        normalLoads += 1;
+      }
+      return _counterPlugin();
+    });
+    await controller.reload();
+    await controller.reload(forceRefresh: true);
+
+    expect(normalLoads, 2);
+    expect(forcedLoads, 1);
+    expect(controller.error, isNull);
   });
 
   test('page replacement reuses one runtime mount slot', () async {
@@ -4637,7 +4672,7 @@ export default Page({ build() { return Text('second'); } });
     final controller = JsUiController();
     addTearDown(controller.dispose);
 
-    await controller.load(() async {
+    await controller.load(({bool forceRefresh = false}) async {
       attempts += 1;
       if (attempts == 1) {
         return JsPlugin(

@@ -4,6 +4,11 @@
 插件。它基于 `webview_all` 提供 WebView 组件，并在 QuickJS、Flutter 宿主和网页
 JavaScript 之间建立显式桥接。
 
+配置初始化和后续更新使用同一条串行路径。修改 JS 开关、User-Agent 或缩放设置
+会更新原生控制器；同一 URL 修改请求 headers 会重新加载。修改 frameScripts 会
+替换文档注入脚本并重新加载页面。initialCookies 仅在初次加载前恢复，后续使用
+桥接 cookie 方法修改。重复 bridgeId 会报错，取消监听后可重新监听。
+
 主要能力：
 
 - 加载 URL 或 HTML；
@@ -20,9 +25,9 @@ JavaScript 之间建立显式桥接。
 
 ```yaml
 dependencies:
-  lemon_js: ^0.3.0
-  lemon_js_ui: ^0.2.1
-  lemon_js_ui_webview: ^0.1.0
+  lemon_js: ^0.3.1
+  lemon_js_ui: ^0.3.1
+  lemon_js_ui_webview: ^0.3.1
 ```
 
 ```dart
@@ -199,3 +204,11 @@ Bridge 提供：`evaluate`、`apply`、`callPage`、`reload`、`stop`、`goBack`
 
 - [QuickJS 页面](../../examples/lemon_js_example/assets/quickjs_ui/webview_plugin_page.mjs)
 - [Flutter 宿主页面](../../examples/lemon_js_example/lib/pages/quickjs_ui/getting_started/quickjs_ui_webview_plugin_page.dart)
+
+## 文档更新与命令顺序
+
+WebView 初始化、配置更新、导航命令和页面加载完成处理按顺序执行；初始化失败会报告错误，后续命令不会在未初始化的控制器上继续执行。
+
+`url` / `html` 未改变时，组件重建不会覆盖 `loadUrl` / `loadHtml` 打开的页面。更新 `frameScripts` 会重新加载当前显式指定的文档。配置中的 `rules` 每个文档、每次规则变化只应用一次；需要主动重复执行时调用 `applyRules`。`observe` 规则仍按其观察语义运行。
+
+配置中的观察规则随 `rules` 整体替换；传入空列表或移除 `rules` 会撤销这些观察规则。命令 `applyRules` 注册的观察规则独立保留到文档结束。观察器应用规则期间暂停监听自身产生的 DOM 修改，避免自触发循环。

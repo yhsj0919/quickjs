@@ -72,6 +72,8 @@ final class JsUiView extends StatefulWidget {
     JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     JsUiResourceCache? resourceCache,
+    bool cacheEnabled = true,
+    Set<String> uncachedResources = const <String>{},
     JsUiPerformanceController? performanceController,
   }) {
     return JsUiView._(
@@ -92,6 +94,8 @@ final class JsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      cacheEnabled: cacheEnabled,
+      uncachedResources: uncachedResources,
       performanceController: performanceController,
     );
   }
@@ -119,6 +123,8 @@ final class JsUiView extends StatefulWidget {
     JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     JsUiResourceCache? resourceCache,
+    bool cacheEnabled = true,
+    Set<String> uncachedResources = const <String>{},
     JsUiPerformanceController? performanceController,
   }) {
     return JsUiView._(
@@ -140,6 +146,8 @@ final class JsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      cacheEnabled: cacheEnabled,
+      uncachedResources: uncachedResources,
       performanceController: performanceController,
     );
   }
@@ -167,6 +175,8 @@ final class JsUiView extends StatefulWidget {
     JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     JsUiResourceCache? resourceCache,
+    bool cacheEnabled = true,
+    Set<String> uncachedResources = const <String>{},
     JsUiPerformanceController? performanceController,
   }) {
     return JsUiView._(
@@ -188,6 +198,8 @@ final class JsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      cacheEnabled: cacheEnabled,
+      uncachedResources: uncachedResources,
       performanceController: performanceController,
     );
   }
@@ -219,6 +231,8 @@ final class JsUiView extends StatefulWidget {
     JsUiEmptyBuilder? emptyBuilder,
     VoidCallback? onFirstRender,
     JsUiResourceCache? resourceCache,
+    bool cacheEnabled = true,
+    Set<String> uncachedResources = const <String>{},
     JsUiPerformanceController? performanceController,
   }) {
     return JsUiView._(
@@ -243,6 +257,8 @@ final class JsUiView extends StatefulWidget {
       emptyBuilder: emptyBuilder,
       onFirstRender: onFirstRender,
       resourceCache: resourceCache,
+      cacheEnabled: cacheEnabled,
+      uncachedResources: uncachedResources,
       performanceController: performanceController,
     );
   }
@@ -271,6 +287,8 @@ final class JsUiView extends StatefulWidget {
     this.emptyBuilder,
     this.onFirstRender,
     this.resourceCache,
+    this.cacheEnabled = true,
+    this.uncachedResources = const <String>{},
     this.performanceController,
   }) : assert(runtime == null || controller == null),
        assert(onConsole == null || controller == null);
@@ -343,6 +361,13 @@ final class JsUiView extends StatefulWidget {
   /// cache for isolation, or one with `maxAge: Duration.zero` to disable it.
   final JsUiResourceCache? resourceCache;
 
+  /// Enables parsed resource and network response caching for this view.
+  final bool cacheEnabled;
+
+  /// Module paths or URLs always fetched without a cached response.
+  /// The parsed page bundle is not cached when this set is nonempty.
+  final Set<String> uncachedResources;
+
   /// Optional controller for adaptive rendering quality and metrics.
   final JsUiPerformanceController? performanceController;
   final _JsUiViewSource _source;
@@ -381,23 +406,51 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
     _ownsPerformanceController = widget.performanceController == null;
     _performanceController.addListener(_recordPerformance);
     _controller.addListener(_handleControllerChanged);
+    _controller.addLifecycleListener(_syncRendererLifecycle);
     _observedPageRevision = _controller.pageRevision;
     _eventIngress = JsUiEventIngress(_controller.dispatch);
     _renderer = _createRenderer();
     _scheduleLoad(immediate: true);
   }
 
+  bool _rendererShown = false;
+  bool _rendererPaused = false;
+  void _syncRendererLifecycle(JsUiLifecycle type) {
+    switch (type) {
+      case JsUiLifecycle.pause:
+        _rendererPaused = true;
+        _renderer.pause();
+      case JsUiLifecycle.resume:
+        _rendererPaused = false;
+        _renderer.resume();
+      case JsUiLifecycle.show:
+        _rendererShown = true;
+        _renderer.show();
+      case JsUiLifecycle.hide:
+        _rendererShown = false;
+        _renderer.hide();
+      default:
+        break;
+    }
+  }
+
   JsUiRenderer _createRenderer() {
-    final devOptions = _controller.devOptions;
-    return JsUiRenderer(
+    final renderer = JsUiRenderer(
       registry: _effectiveRegistry(),
       onEvent: _eventIngress.submit,
       onUiEvent: _eventIngress.submitEnvelope,
-      onDiffStats: devOptions.logDiff ? _controller.inspector.recordDiff : null,
+      onDiffStats: (stats) {
+        if (_controller.devOptions.logDiff) {
+          _controller.inspector.recordDiff(stats);
+        }
+      },
       canvasSceneRegistry: _controller.canvasSceneRegistry,
       performanceController: _performanceController,
       networkResourceBaseUri: _networkResourceBaseUri(),
     );
+    if (_rendererShown) renderer.show();
+    if (_rendererPaused) renderer.pause();
+    return renderer;
   }
 
   Uri? _networkResourceBaseUri() {
@@ -433,6 +486,7 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
 
   void _recordPerformance() {
     _controller.inspector.recordPerformance(_performanceController.snapshot);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -453,6 +507,7 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
         oldWidget.runtime != widget.runtime ||
         oldWidget.onConsole != widget.onConsole) {
       _controller.removeListener(_handleControllerChanged);
+      _controller.removeLifecycleListener(_syncRendererLifecycle);
       if (_ownsController) {
         _controller.dispose();
       }
@@ -461,6 +516,7 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
           JsUiController(runtime: widget.runtime, onConsole: widget.onConsole);
       _ownsController = widget.controller == null;
       _controller.addListener(_handleControllerChanged);
+      _controller.addLifecycleListener(_syncRendererLifecycle);
       _observedPageRevision = _controller.pageRevision;
       _eventIngress.dispose();
       _eventIngress = JsUiEventIngress(_controller.dispatch);
@@ -480,7 +536,14 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
         oldWidget.networkBundleRoot != widget.networkBundleRoot ||
         oldWidget.networkFetch != widget.networkFetch ||
         oldWidget.onNetworkLog != widget.onNetworkLog ||
+        oldWidget.controller != widget.controller ||
+        oldWidget.onConsole != widget.onConsole ||
         oldWidget.resourceCache != widget.resourceCache ||
+        oldWidget.cacheEnabled != widget.cacheEnabled ||
+        !_stringIterableSetEquals(
+          oldWidget.uncachedResources,
+          widget.uncachedResources,
+        ) ||
         oldWidget._source != widget._source ||
         oldWidget.initialProps != widget.initialProps ||
         oldWidget.features != widget.features ||
@@ -502,6 +565,7 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
     _loadCoordinator.dispose();
     _advanceGeneration();
     _controller.removeListener(_handleControllerChanged);
+    _controller.removeLifecycleListener(_syncRendererLifecycle);
     _performanceController.removeListener(_recordPerformance);
     if (_ownsPerformanceController) _performanceController.dispose();
     if (_ownsController) {
@@ -536,11 +600,9 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
     switch (signal) {
       case _JsUiAppLifecycleSignal.resumed:
         _controller.recordAppLifecycle('resume');
-        _renderer.resume();
         unawaited(_controller.lifecycle(JsUiLifecycle.resume));
       case _JsUiAppLifecycleSignal.paused:
         _controller.recordAppLifecycle('pause');
-        _renderer.pause();
         unawaited(_controller.lifecycle(JsUiLifecycle.pause));
       case _JsUiAppLifecycleSignal.detached:
         _controller.recordAppLifecycle('detach');
@@ -589,7 +651,7 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
         logicalSize: MediaQuery.sizeOf(context),
         devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
       );
-      _performanceController.updateReduceMotion(
+      _performanceController.updateSystemReduceMotion(
         MediaQuery.maybeOf(context)?.disableAnimations ?? false,
       );
       final rendered = _renderer.build(node, buildContext: context);
@@ -598,7 +660,12 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
         JsUiDiag.log('schema', node.toMap().toString());
       }
       _reportFirstRender();
-      return rendered;
+      return MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          disableAnimations: _performanceController.animationsDisabled,
+        ),
+        child: rendered,
+      );
     } catch (error, stackTrace) {
       return _buildError(
         context,
@@ -675,7 +742,7 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
     if (!_isCurrentGeneration(generation)) {
       return;
     }
-    _renderer.show();
+    _syncRendererLifecycle(JsUiLifecycle.show);
   }
 
   Future<void> _load() async {
@@ -727,42 +794,33 @@ final class _JsUiViewState extends State<JsUiView> with WidgetsBindingObserver {
     _loadCoordinator.schedule(_load, immediate: immediate);
   }
 
-  Future<JsPlugin> _loadPlugin() async {
-    final plugin = widget.plugin;
-    if (plugin != null) {
-      return plugin;
-    }
+  Future<JsPlugin> _loadPlugin({bool forceRefresh = false}) {
+    final cache = widget.resourceCache ?? JsUiResourceCache.shared;
     return switch (widget._source) {
-      _JsUiViewSource.plugin => throw StateError(
-        'JsUiView.plugin requires a plugin',
+      _JsUiViewSource.plugin => Future.value(widget.plugin!),
+      _JsUiViewSource.asset => cache.loadAsset(
+        path: widget._path!,
+        bundleRoot: widget.bundleRoot,
+        cacheEnabled: widget.cacheEnabled,
+        forceRefresh: forceRefresh,
+        uncachedResources: widget.uncachedResources,
       ),
-      _JsUiViewSource.asset => _loadAssetPlugin(widget._path!),
-      _JsUiViewSource.file => _loadFilePlugin(widget._path!),
-      _JsUiViewSource.network => _loadNetworkPlugin(widget.networkUrl!),
+      _JsUiViewSource.file => cache.loadFile(
+        path: widget._path!,
+        bundleRoot: widget.bundleRoot,
+        cacheEnabled: widget.cacheEnabled && widget.uncachedResources.isEmpty,
+        forceRefresh: forceRefresh,
+      ),
+      _JsUiViewSource.network => cache.loadNetwork(
+        url: widget.networkUrl!,
+        bundleRoot: widget.networkBundleRoot,
+        fetch: widget.networkFetch,
+        onLog: _handleNetworkLog,
+        cacheEnabled: widget.cacheEnabled,
+        forceRefresh: forceRefresh,
+        uncachedResources: widget.uncachedResources,
+      ),
     };
-  }
-
-  Future<JsPlugin> _loadAssetPlugin(String path) async {
-    return (widget.resourceCache ?? JsUiResourceCache.shared).loadAsset(
-      path: path,
-      bundleRoot: widget.bundleRoot,
-    );
-  }
-
-  Future<JsPlugin> _loadNetworkPlugin(Uri url) async {
-    return (widget.resourceCache ?? JsUiResourceCache.shared).loadNetwork(
-      url: url,
-      bundleRoot: widget.networkBundleRoot,
-      fetch: widget.networkFetch,
-      onLog: _handleNetworkLog,
-    );
-  }
-
-  Future<JsPlugin> _loadFilePlugin(String path) async {
-    return (widget.resourceCache ?? JsUiResourceCache.shared).loadFile(
-      path: path,
-      bundleRoot: widget.bundleRoot,
-    );
   }
 
   void _handleNetworkLog(JsUiNetworkLogEvent event) {

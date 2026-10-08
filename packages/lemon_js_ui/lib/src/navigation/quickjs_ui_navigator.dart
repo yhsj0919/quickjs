@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lemon_js/lemon_js.dart';
 
 import '../resource/quickjs_ui_resource_resolver.dart';
+import '../performance/quickjs_ui_effect_quality.dart';
 import '../runtime/quickjs_ui_controller.dart';
 import '../runtime/quickjs_ui_lifecycle.dart';
 import '../runtime/quickjs_ui_plugin.dart';
@@ -208,6 +209,7 @@ final class JsUiRouteRegistry {
     this.jsRoutes = const <String, JsUiRoute>{},
     this.jsRoutePolicy = const JsUiRoutePolicy(),
     this.options = const JsUiNavigationOptions(),
+    this.performanceController,
   });
 
   /// Native Flutter route builders keyed by route name.
@@ -221,6 +223,9 @@ final class JsUiRouteRegistry {
 
   /// Reliability limits for JSUI-internal navigation.
   final JsUiNavigationOptions options;
+
+  /// Host-owned animation policy shared by registered JSUI pages and transitions.
+  final JsUiPerformanceController? performanceController;
 
   /// Whether either route map contains [route].
   bool contains(String route) {
@@ -305,6 +310,7 @@ final class JsUiNavigator {
       _jsUiRoute<Object?>(
         settings: RouteSettings(name: title ?? path, arguments: initialProps),
         transition: transition,
+        policy: routeRegistry?.performanceController,
         builder: (context) => _JsUiRoutePage(
           title: title,
           path: path,
@@ -339,6 +345,7 @@ final class JsUiNavigator {
         _jsUiRoute<Object?>(
           settings: RouteSettings(name: route, arguments: params),
           transition: transition,
+          policy: registry.performanceController,
           builder: (context) => nativeBuilder(context, params),
         ),
       );
@@ -468,6 +475,7 @@ class _JsUiRouterState extends State<_JsUiRouter>
   void initState() {
     super.initState();
     _transitionController = AnimationController(vsync: this);
+    widget.registry.performanceController?.addListener(_animationPolicyChanged);
     _routes = _JsUiRouteStack(
       root: widget.root,
       initialProps: widget.initialProps,
@@ -479,6 +487,16 @@ class _JsUiRouterState extends State<_JsUiRouter>
   @override
   void didUpdateWidget(covariant _JsUiRouter oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.registry.performanceController !=
+        widget.registry.performanceController) {
+      oldWidget.registry.performanceController?.removeListener(
+        _animationPolicyChanged,
+      );
+      widget.registry.performanceController?.addListener(
+        _animationPolicyChanged,
+      );
+      _animationPolicyChanged();
+    }
     if (oldWidget.root.path != widget.root.path ||
         oldWidget.root.bundleRoot != widget.root.bundleRoot ||
         oldWidget.root.features != widget.root.features ||
@@ -499,6 +517,9 @@ class _JsUiRouterState extends State<_JsUiRouter>
 
   @override
   void dispose() {
+    widget.registry.performanceController?.removeListener(
+      _animationPolicyChanged,
+    );
     _clearRouteOperation();
     _clearPreparedNavigations();
     _transitionController.dispose();
@@ -559,6 +580,7 @@ class _JsUiRouterState extends State<_JsUiRouter>
           features: _featuresFor(entry),
           uiPlugins: entry.uiPlugins,
           controller: entry.controller,
+          performanceController: widget.registry.performanceController,
           loadingBuilder: (_) =>
               const Center(child: CircularProgressIndicator()),
           // Route lifecycle belongs to the entry itself. Visual transitions
@@ -865,6 +887,7 @@ class _JsUiRouterState extends State<_JsUiRouter>
             arguments: prepared.params,
           ),
           transition: prepared.transition,
+          policy: widget.registry.performanceController,
           builder: (context) => nativeBuilder(context, prepared.params),
         );
         if (prepared.action == 'replace') {
@@ -1182,12 +1205,22 @@ class _JsUiRouterState extends State<_JsUiRouter>
     }());
   }
 
+  void _animationPolicyChanged() {
+    if (widget.registry.performanceController?.animationsDisabled == true &&
+        _activeOperation != null) {
+      setState(_clearRouteOperation);
+    }
+  }
+
   void _startRouteOperation(_JsUiRouteOperation operation) {
     _clearRouteOperation();
     final effective = operation.transition;
     if (effective.kind == JsUiRouteTransitionKind.material ||
         effective.kind == JsUiRouteTransitionKind.none ||
-        effective.duration == Duration.zero) {
+        effective.duration == Duration.zero ||
+        (widget.registry.performanceController?.animationsDisabled ??
+            MediaQuery.maybeOf(context)?.disableAnimations ??
+            false)) {
       operation.disposeDepartingEntry();
       return;
     }
@@ -1692,53 +1725,78 @@ PageRoute<T> _jsUiRoute<T>({
   required RouteSettings settings,
   required WidgetBuilder builder,
   JsUiRouteTransition? transition,
-}) {
-  if (transition == null ||
-      transition.kind == JsUiRouteTransitionKind.material) {
-    return MaterialPageRoute<T>(settings: settings, builder: builder);
+  JsUiPerformanceController? policy,
+}) => _JsUiPolicyRoute<T>(
+  settings: settings,
+  builder: builder,
+  transition: transition,
+  policy: policy,
+);
+
+class _JsUiPolicyRoute<T> extends MaterialPageRoute<T> {
+  _JsUiPolicyRoute({
+    required super.settings,
+    required super.builder,
+    this.transition,
+    this.policy,
+  });
+  final JsUiRouteTransition? transition;
+  final JsUiPerformanceController? policy;
+  bool get _disabled => policy?.animationsDisabled ?? false;
+  @override
+  Duration get transitionDuration => _disabled
+      ? Duration.zero
+      : transition?.duration ?? super.transitionDuration;
+  @override
+  Duration get reverseTransitionDuration => _disabled
+      ? Duration.zero
+      : transition?.reverseDuration ?? transitionDuration;
+  @override
+  void install() {
+    super.install();
+    policy?.addListener(_policyChanged);
   }
-  return PageRouteBuilder<T>(
-    settings: settings,
-    transitionDuration: transition.duration,
-    reverseTransitionDuration:
-        transition.reverseDuration ?? transition.duration,
-    pageBuilder: (context, _, _) => builder(context),
-    transitionsBuilder: (context, animation, _, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: transition.curve,
-        reverseCurve: transition.curve,
+
+  void _policyChanged() {
+    if (!_disabled || controller == null) return;
+    if (controller!.status == AnimationStatus.forward) controller!.value = 1;
+    if (controller!.status == AnimationStatus.reverse) controller!.value = 0;
+  }
+
+  @override
+  void dispose() {
+    policy?.removeListener(_policyChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final reduce =
+        policy?.animationsDisabled ??
+        MediaQuery.maybeOf(context)?.disableAnimations ??
+        false;
+    if (reduce) return child;
+    final effect = transition;
+    if (effect == null || effect.kind == JsUiRouteTransitionKind.material) {
+      return super.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
       );
-      switch (transition.kind) {
-        case JsUiRouteTransitionKind.material:
-          return child;
-        case JsUiRouteTransitionKind.none:
-          return child;
-        case JsUiRouteTransitionKind.fade:
-          return FadeTransition(opacity: curved, child: child);
-        case JsUiRouteTransitionKind.slide:
-          final slide = SlideTransition(
-            position: Tween<Offset>(
-              begin: transition.beginOffset,
-              end: Offset.zero,
-            ).animate(curved),
-            child: child,
-          );
-          if (!transition.fade) {
-            return slide;
-          }
-          return FadeTransition(opacity: curved, child: slide);
-        case JsUiRouteTransitionKind.scale:
-          return ScaleTransition(
-            scale: Tween<double>(
-              begin: transition.beginScale,
-              end: 1,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-      }
-    },
-  );
+    }
+    return _buildJsRouteTransition(
+      transition: effect,
+      animation: animation,
+      reverse: false,
+      child: child,
+    );
+  }
 }
 
 Widget _buildJsRouteTransition({

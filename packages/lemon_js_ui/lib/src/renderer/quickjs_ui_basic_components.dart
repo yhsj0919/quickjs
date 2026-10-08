@@ -83,7 +83,7 @@ Widget _buildButton(
     enabled: event != null,
     builder: (buildContext, interaction) {
       final effectiveTransition =
-          MediaQuery.maybeOf(buildContext)?.disableAnimations ?? false
+          context.performanceController.animationsDisabled
           ? JsUiControlTransition(
               duration: Duration.zero,
               curve: transition.curve,
