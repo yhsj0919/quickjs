@@ -16,9 +16,6 @@ dependencies:
     sdk: flutter
   lemon_js: ^0.3.1
   lemon_js_ui: ^0.3.1
-  # 1.3.9 switched the Windows renderer to a free-threaded capture frame pool,
-  # which fails to register FrameArrived on some supported Windows 10 hosts.
-  # 1.3.8 still provides document-start scripts and async JavaScript calls.
   webview_all: ^1.4.4
 
 

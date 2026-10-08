@@ -15,7 +15,7 @@ export 'src/extension_manager.dart';
 export 'src/extension_package.dart';
 export 'src/extension_package_format.dart';
 export 'src/extension_registry.dart';
-export 'src/extension_session.dart';
+export 'src/extension_session.dart' hide JsExtensionSessionLifecycle;
 export 'src/extension_storage.dart';
 export 'src/extension_update.dart';
 export 'src/extension_view.dart';
