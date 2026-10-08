@@ -98,7 +98,9 @@ Widget _buildContainer(JsUiRenderContext context, JsUiNode node) {
           child: nodeChild,
         )
       : AnimatedContainer(
-          duration: animationDuration,
+          duration: context.performanceController.animationDuration(
+            animationDuration,
+          ),
           curve: curve,
           width: width,
           height: height,
@@ -179,7 +181,9 @@ Widget _buildPadding(JsUiRenderContext context, JsUiNode node) {
         ? Padding(padding: padding, child: child)
         : AnimatedPadding(
             padding: padding,
-            duration: animationDuration,
+            duration: context.performanceController.animationDuration(
+              animationDuration,
+            ),
             curve: JsUiProps.curve(node.props['animationCurve']),
             child: child,
           ),
@@ -362,7 +366,9 @@ Widget _buildSafeArea(JsUiRenderContext context, JsUiNode node) {
 Widget _buildAnimatedAlign(JsUiRenderContext context, JsUiNode node) {
   return AnimatedAlign(
     alignment: JsUiProps.alignment(node.props['alignment']) ?? Alignment.center,
-    duration: jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    duration: context.performanceController.animationDuration(
+      jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    ),
     curve: JsUiProps.curve(node.props['animationCurve']),
     widthFactor: JsUiProps.doubleValue(node.props['widthFactor']),
     heightFactor: JsUiProps.doubleValue(node.props['heightFactor']),
@@ -373,7 +379,9 @@ Widget _buildAnimatedAlign(JsUiRenderContext context, JsUiNode node) {
 Widget _buildAnimatedContainer(JsUiRenderContext context, JsUiNode node) {
   final decoration = context.boxDecoration(node.props);
   return AnimatedContainer(
-    duration: jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    duration: context.performanceController.animationDuration(
+      jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    ),
     curve: JsUiProps.curve(node.props['animationCurve']),
     width: JsUiProps.doubleValue(node.props['width']),
     height: JsUiProps.doubleValue(node.props['height']),
@@ -391,7 +399,9 @@ Widget _buildAnimatedContainer(JsUiRenderContext context, JsUiNode node) {
 Widget _buildAnimatedOpacity(JsUiRenderContext context, JsUiNode node) {
   return AnimatedOpacity(
     opacity: JsUiProps.opacity(node.props['opacity']),
-    duration: jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    duration: context.performanceController.animationDuration(
+      jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    ),
     curve: JsUiProps.curve(node.props['animationCurve']),
     child: context.child(node) ?? const SizedBox.shrink(),
   );
@@ -400,7 +410,9 @@ Widget _buildAnimatedOpacity(JsUiRenderContext context, JsUiNode node) {
 Widget _buildAnimatedPadding(JsUiRenderContext context, JsUiNode node) {
   return AnimatedPadding(
     padding: context.edgeInsets(node.props['padding']) ?? EdgeInsets.zero,
-    duration: jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    duration: context.performanceController.animationDuration(
+      jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
+    ),
     curve: JsUiProps.curve(node.props['animationCurve']),
     child: context.child(node) ?? const SizedBox.shrink(),
   );
@@ -423,11 +435,15 @@ Widget _buildHero(JsUiRenderContext context, JsUiNode node) {
 
 Widget _buildAnimatedSwitcher(JsUiRenderContext context, JsUiNode node) {
   return AnimatedSwitcher(
-    duration: jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
-    reverseDuration: JsUiProps.duration(
-      node.props['reverseDurationMs'],
-      name: 'reverse animation duration',
+    duration: context.performanceController.animationDuration(
+      jsUiAnimationDuration(node) ?? const Duration(milliseconds: 200),
     ),
+    reverseDuration: context.performanceController.animationsDisabled
+        ? Duration.zero
+        : JsUiProps.duration(
+            node.props['reverseDurationMs'],
+            name: 'reverse animation duration',
+          ),
     switchInCurve: JsUiProps.curve(node.props['switchInCurve']),
     switchOutCurve: JsUiProps.curve(node.props['switchOutCurve']),
     child: context.child(node),

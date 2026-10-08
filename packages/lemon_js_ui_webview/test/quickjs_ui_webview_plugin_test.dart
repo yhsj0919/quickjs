@@ -1,10 +1,49 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 import 'package:lemon_js_ui/lemon_js_ui_session.dart';
 import 'package:lemon_js_ui_webview/lemon_js_ui_webview.dart';
 
+class _CancellationContext implements JsHostMethodContext {
+  final _cancelled = Completer<void>();
+  final reason = StateError('cancelled');
+  void cancel() => _cancelled.complete();
+  @override
+  Future<void> get cancelled => _cancelled.future;
+  @override
+  bool get isCancelled => _cancelled.isCompleted;
+  @override
+  Object? get cancellationReason => isCancelled ? reason : null;
+  @override
+  void throwIfCancelled() {
+    if (isCancelled) throw reason;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('cancelled bridge listener can be registered again', () async {
+    final plugin = JsUiWebViewPlugin();
+    final method = plugin.plugin.features
+        .expand((f) => f.methods)
+        .firstWhere((m) => m.name == 'quickjs_ui.webview.nextCall');
+    final first = _CancellationContext();
+    final pending = Future<Object?>.sync(
+      () => method.callback(['test'], first),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final failed = expectLater(pending, throwsA(same(first.reason)));
+    first.cancel();
+    await failed;
+    final second = _CancellationContext();
+    final retry = Future<Object?>.sync(() => method.callback(['test'], second));
+    await Future<void>.delayed(Duration.zero);
+    final retryFailed = expectLater(retry, throwsA(same(second.reason)));
+    second.cancel();
+    await retryFailed;
+  });
 
   test('uses the stable quickjs_ui/webview module specifier', () {
     final plugin = JsUiWebViewPlugin();

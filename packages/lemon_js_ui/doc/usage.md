@@ -4,6 +4,26 @@
 
 更底层的运行栈与事件流说明见 [architecture.md](./architecture.md)。
 
+### 宿主运行时更新
+
+`controller.lifecycle(JsUiLifecycle.pause)` / `resume` 会同时通知已挂载页面的
+渲染组件和 JS Session；应用生命周期也使用这一入口。未挂载 View 时只通知 Session。
+
+诊断配置可运行时更新，无需重新加载页面：
+
+```dart
+controller.updateDevOptions(const JsUiDevOptions(
+  logDiff: true,
+  logResources: true,
+  preserveStateOnReload: true,
+));
+```
+
+资源缓存的容量或有效期设为零会禁用插件、网络响应及 AssetBundle 文本缓存。
+`invalidate` 同时移除插件和网络响应；强制刷新使用新的响应缓存，避免旧请求覆盖新响应。
+网络入口递归加载与 manifest 包加载使用相同刷新模式；`staleWhileRevalidate` 返回已有
+模块并在后台更新，更新后的模块供下一次加载使用。
+
 ## 0. 先配置代码提示
 
 开始编写页面前，先让编辑器认识 `quickjs_ui` 模块；否则 `Page()`、控件 props、事件回调和
@@ -1438,6 +1458,53 @@ JsUiView.asset(
 | 发布包 | `JsUiBundle.packageAsset(...)` | 生产分发、checksum 校验 |
 
 发布包格式（`main.mjs` + `manifest.json`）见 [quickjs_ui_package_format.md](../../../docs/quickjs_ui_package_format.md)。
+
+### 页面源码缓存
+
+`JsUiView.asset`、`file` 和 `network` 默认缓存解析后的页面模块图。
+可以对某个页面显式关闭缓存：
+
+```dart
+JsUiView.network(
+  url: Uri.parse('https://example.com/ui/main.mjs'),
+  cacheEnabled: false,
+);
+```
+
+网络页面可指定始终直取的模块 URL 或相对于页面根目录的路径：
+
+```dart
+JsUiView.network(
+  url: Uri.parse('https://example.com/ui/main.mjs'),
+  uncachedResources: const {'config/runtime.mjs'},
+);
+```
+
+这会跳过整页解析缓存，并仅对指定网络文件绕过响应缓存；其他网络文件仍可按
+ETag 验证。Asset 页面同样可以指定相对模块路径或完整 asset 路径，仅对命中的
+文件关闭 `AssetBundle` 文本缓存。本地文件本来就是直读；设置
+`uncachedResources` 时仍会跳过整页解析缓存。
+
+控制器的 `refresh()` 只重新渲染当前状态；`reload()` 重新加载页面源码，
+但可以复用缓存。需要强制从源头重读整个页面及依赖时使用：
+
+```dart
+await controller.reload(forceRefresh: true);
+```
+
+网络强制刷新会给每次请求添加缓存破坏参数，并不发送 `If-None-Match`。
+成功加载后，新模块图会替换旧的解析缓存。
+手动调用 `JsUiController.load` 时使用一个接收 `forceRefresh` 的加载器：
+
+```dart
+await controller.load(({bool forceRefresh = false}) async {
+  return cache.loadAsset(path: 'assets/page.mjs', forceRefresh: forceRefresh);
+});
+```
+
+`reload` 对所有页面来源统一应用 `preserveStateOnReload`；预构建插件使用原插件
+重新创建 Session，没有外部源码可重读。`restart` 始终重置页面状态。
+组件 `register` 拒绝重复名称，宿主要覆盖已有组件时显式调用 `replace`。
 
 生成 manifest：
 

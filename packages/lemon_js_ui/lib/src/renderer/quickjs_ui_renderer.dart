@@ -191,7 +191,8 @@ final class JsUiRenderer {
         registry.build(nodeContext, node, controller: controller),
       );
     }
-    final signature = '${node.structuralSignature}|theme=$themeSignature';
+    final signature =
+        '${node.structuralSignature}|theme=$themeSignature|motion=${performanceController.animationsDisabled}';
     final cached = _cache[key];
     if (cached != null && cached.signature == signature) {
       nextCache[key] = cached;

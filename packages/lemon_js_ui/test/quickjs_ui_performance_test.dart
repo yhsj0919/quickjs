@@ -59,10 +59,10 @@ void main() {
   test('reduced motion temporarily forces off without losing quality', () {
     final controller = JsUiPerformanceController(mode: JsUiPerformanceMode.low);
     expect(controller.quality, JsUiEffectQuality.low);
-    controller.updateReduceMotion(true);
+    controller.updateSystemReduceMotion(true);
     expect(controller.quality, JsUiEffectQuality.off);
     expect(controller.snapshot.reduceMotion, isTrue);
-    controller.updateReduceMotion(false);
+    controller.updateSystemReduceMotion(false);
     expect(controller.quality, JsUiEffectQuality.low);
     controller.dispose();
   });

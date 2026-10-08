@@ -12,7 +12,7 @@
 
 ```yaml
 dependencies:
-  lemon_js_ui_video_player: ^0.2.1
+  lemon_js_ui_video_player: ^0.3.1
 ```
 
 各平台应按 `video_player` 文档选择并配置实现。仓库 example 演示了将 FVP 作为桌面平台

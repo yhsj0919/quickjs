@@ -1,9 +1,11 @@
 # 更新日志 / Changelog
 
-## Unreleased
+## 0.3.1
 
 - 移除插件对 FVP 的直接依赖和自动注册；桌面后端与 Android 兼容版本均改由宿主应用选择。
 - Removed the direct FVP dependency and automatic registration; host applications now choose the desktop backend and Android compatibility version.
+- example 默认不再启用 `video_player_android: 2.7.1` override，仅在文档中保留按需兼容说明。
+- 要求 `lemon_js ^0.3.1` 与 `lemon_js_ui ^0.3.1`。
 
 ## 0.2.1
 

@@ -4,11 +4,15 @@
 只包含 Core 数据服务、只包含 JSUI 页面，或同时包含两者。Manager 负责安装、恢复、更新、
 启停、卸载、按 ID 调用和插件级 KV 隔离；插件管理页面由宿主业务层实现。
 
+Manager 独立拥有安装注册表；`manager.registry` 仅提供查询，不允许启停或卸载。
+已注册 Session 的生命周期由安装所有者控制，不能通过 `installation.session`
+绕过所有者启停或释放。独立创建、未注册的 Session 仍由创建者释放。
+
 ## 安装
 
 ```yaml
 dependencies:
-  lemon_js_extensions: ^0.2.1
+  lemon_js_extensions: ^0.3.1
 ```
 
 ```dart
@@ -212,3 +216,7 @@ Manager 只提供无 UI 的状态和管理 API，安装列表、权限确认和�
 - [混合插件设计](https://github.com/yhsj0919/quickjs/blob/master/docs/hybrid_plugin_design.md)
 
 完整可运行工程位于 GitHub；pub 包中保留最小 Dart 示例。
+
+## 禁用与页面释放
+
+禁用或卸载扩展会同时关闭 Core 运行时、撤下 `JsExtensionView` 页面并释放其 UI 运行时能力。重新启用后，页面从初始状态重新加载；宿主传入的 `JsUiController` 保持可复用，不会被视图销毁。

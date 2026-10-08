@@ -16,5 +16,5 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   LemonJsPlugin.register(with: registry.registrar(forPlugin: "LemonJsPlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
   VideoPlayerPlugin.register(with: registry.registrar(forPlugin: "VideoPlayerPlugin"))
-  WebViewFlutterPlugin.register(with: registry.registrar(forPlugin: "WebViewFlutterPlugin"))
+  WebviewAllWKWebViewPlugin.register(with: registry.registrar(forPlugin: "WebviewAllWKWebViewPlugin"))
 }

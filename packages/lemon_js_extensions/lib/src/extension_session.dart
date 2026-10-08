@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'package:lemon_js/lemon_js_internal.dart';
 
@@ -43,7 +44,65 @@ typedef JsExtensionRuntimeFactory =
     });
 
 /// 在 Core 与 JSUI 组件之间共享的扩展生命周期和能力边界。
+@internal
+final class JsExtensionSessionLifecycle {
+  JsExtensionSessionLifecycle._(this._session);
+  final JsExtensionSession _session;
+
+  /// Disables the owned session.
+  Future<void> disable() => _session._disable();
+
+  /// Enables the owned session.
+  void enable() => _session._enable();
+
+  /// Releases the owned session.
+  Future<void> dispose({bool clearStorage = false}) =>
+      _session._dispose(clearStorage: clearStorage);
+}
+
+/// Core and UI execution session for an extension.
 final class JsExtensionSession {
+  final ValueNotifier<bool> _uiEnabled = ValueNotifier<bool>(true);
+  final Set<Future<void> Function()> _uiRevokers = {};
+
+  /// Whether extension UI routes may remain mounted.
+  ValueListenable<bool> get uiEnabled => _uiEnabled;
+
+  /// Attaches a page capability revoker for the lifetime of a route view.
+  @internal
+  void addUiRevoker(Future<void> Function() revoker) =>
+      _uiRevokers.add(revoker);
+
+  /// Detaches a route view's capability revoker.
+  @internal
+  void removeUiRevoker(Future<void> Function() revoker) =>
+      _uiRevokers.remove(revoker);
+
+  Future<void> _revokeUi() async {
+    _uiEnabled.value = false;
+    await Future.wait(_uiRevokers.toList().map((revoke) => revoke()));
+  }
+
+  bool _managedLifecycle = false;
+
+  /// Transfers lifecycle ownership to the installation registry once.
+  @internal
+  JsExtensionSessionLifecycle claimLifecycle() {
+    if (_managedLifecycle) {
+      throw StateError('Extension session lifecycle already owned');
+    }
+    _managedLifecycle = true;
+    return JsExtensionSessionLifecycle._(this);
+  }
+
+  void _requireStandaloneLifecycle() {
+    if (_managedLifecycle) {
+      throw StateError(
+        'Use the installation owner to change extension lifecycle',
+      );
+    }
+  }
+
   /// 创建扩展 Session。
   ///
   /// [maxPendingTasks] 限制 Core service 执行队列中等待的任务数；当前正在
@@ -220,26 +279,42 @@ final class JsExtensionSession {
   }
 
   /// 禁用 Session 并关闭当前 Core service Runtime。
-  Future<void> disable() async {
+  Future<void> disable() {
+    _requireStandaloneLifecycle();
+    return _disable();
+  }
+
+  Future<void> _disable() async {
     if (_state == JsExtensionSessionState.disposed) return;
     _state = JsExtensionSessionState.disabled;
-    await _closeRuntime();
+    await Future.wait([_revokeUi(), _closeRuntime()]);
   }
 
   /// 重新启用已禁用或故障的 Session。
   void enable() {
+    _requireStandaloneLifecycle();
+    _enable();
+  }
+
+  void _enable() {
     if (_state == JsExtensionSessionState.disposed) {
       throw StateError('Extension session "$id" is disposed');
     }
     _state = JsExtensionSessionState.inactive;
+    _uiEnabled.value = true;
   }
 
   /// 永久释放 Session；[clearStorage] 为真时同时清空扩展命名空间。
-  Future<void> dispose({bool clearStorage = false}) async {
+  Future<void> dispose({bool clearStorage = false}) {
+    _requireStandaloneLifecycle();
+    return _dispose(clearStorage: clearStorage);
+  }
+
+  Future<void> _dispose({bool clearStorage = false}) async {
     if (_state == JsExtensionSessionState.disposed) return;
     _state = JsExtensionSessionState.disposed;
     try {
-      await _closeRuntime();
+      await Future.wait([_revokeUi(), _closeRuntime()]);
       if (clearStorage) await storage.clear(namespace: id);
     } finally {
       _ownedHttpSession?.close();

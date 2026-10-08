@@ -55,11 +55,15 @@ final class JsUiBundle {
     String version = '0.2.0',
     String? bundleRoot,
     AssetBundle? bundle,
+    bool cache = true,
+    Set<String> uncachedResources = const <String>{},
   }) async {
     final resolved = _resolveAssetPath(path, bundleRoot: bundleRoot);
     final resolver = JsUiResourceResolver.asset(
       bundle: bundle,
       basePath: '${resolved.root}/',
+      cache: cache,
+      uncachedResources: uncachedResources,
     );
     return loadEntry(
       id: id ?? _bundleIdFromAssetPath(path),

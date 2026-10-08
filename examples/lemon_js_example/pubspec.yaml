@@ -18,7 +18,7 @@ resolution: workspace
 # versions available, run `flutter pub outdated`.
 dependencies:
   # Example-only desktop compatibility backend for video_player.
-  fvp: ^0.38.1
+  fvp: ^0.39.0
   flutter:
     sdk: flutter
 
@@ -35,22 +35,15 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.9
+  cupertino_icons: ^2.0.0
   web: ^1.1.1
 
 dependency_overrides:
   # Hvigor requires OHOS plugin source paths to stay relative to this project.
   integration_test:
     path: ../../build/ohos-sdk-packages/integration_test
-  # OHOS support is not published on pub.dev yet. Use the CPF Flutter port so
-  # SharedPreferencesAsync is registered instead of failing during login.
-  shared_preferences:
-    git:
-      url: https://gitcode.com/CPF-Flutter/flutter_packages.git
-      path: packages/shared_preferences/shared_preferences
-      ref: br_shared_preferences-v2.5.4_ohos_dev
-  # 某些 Android 开发板使用较新的后端版本时会出现视频绿屏，暂时固定为 2.7.1。
-  video_player_android: 2.7.1
+  # 特定 Android 开发板的视频绿屏回退方案，按需启用；见 README。
+  # video_player_android: 2.7.1
 
 dev_dependencies:
   integration_test:

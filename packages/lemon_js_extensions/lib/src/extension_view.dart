@@ -1,11 +1,12 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:lemon_js/lemon_js.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 import 'extension_session.dart';
 
 /// 渲染统一扩展中某个已声明 JSUI 路由的组件。
-final class JsExtensionView extends StatelessWidget {
+final class JsExtensionView extends StatefulWidget {
   /// Creates a view for a declared extension [route].
   const JsExtensionView.route({
     super.key,
@@ -52,22 +53,85 @@ final class JsExtensionView extends StatelessWidget {
   final VoidCallback? onFirstRender;
 
   @override
-  Widget build(BuildContext context) {
-    final ui = session.extension.ui;
-    if (ui == null) {
-      throw StateError('Extension "${session.id}" has no UI component');
+  State<JsExtensionView> createState() => _JsExtensionViewState();
+}
+
+class _JsExtensionViewState extends State<JsExtensionView> {
+  late JsPlugin _plugin;
+  late List<JsFeatures> _features;
+  late JsUiController _controller;
+  bool _ownsController = false;
+  @override
+  void initState() {
+    super.initState();
+    _attach();
+    if (widget.session.uiEnabled.value) _prepare();
+  }
+
+  void _attach() {
+    _controller = widget.controller ?? JsUiController();
+    _ownsController = widget.controller == null;
+    widget.session.uiEnabled.addListener(_availabilityChanged);
+    widget.session.addUiRevoker(_revokePage);
+  }
+
+  Future<void> _revokePage() => _controller.unload();
+
+  void _availabilityChanged() {
+    if (!mounted) return;
+    if (widget.session.uiEnabled.value) _prepare();
+    setState(() {});
+  }
+
+  void _detach(JsExtensionView source) {
+    source.session.uiEnabled.removeListener(_availabilityChanged);
+    source.session.removeUiRevoker(_revokePage);
+    if (_ownsController) {
+      _controller.dispose();
+    } else if (!_controller.isDisposed) {
+      _controller.unload();
     }
-    final routeManifest = ui.routes[route];
+  }
+
+  @override
+  void dispose() {
+    _detach(widget);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant JsExtensionView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session ||
+        oldWidget.controller != widget.controller) {
+      _detach(oldWidget);
+      _attach();
+    }
+    if (oldWidget.session != widget.session ||
+        oldWidget.route != widget.route ||
+        !listEquals(oldWidget.routeFeatures, widget.routeFeatures)) {
+      if (widget.session.uiEnabled.value) _prepare();
+    }
+  }
+
+  void _prepare() {
+    final ui = widget.session.extension.ui;
+    if (ui == null) {
+      throw StateError('Extension "${widget.session.id}" has no UI component');
+    }
+    final routeManifest = ui.routes[widget.route];
     if (routeManifest == null) {
-      throw StateError('Extension "${session.id}" has no UI route "$route"');
+      throw StateError(
+        'Extension "${widget.session.id}" has no UI route "${widget.route}"',
+      );
     }
     final bundle = ui.bundle;
     final entrySpecifier = JsUiResourceResolver.moduleSpecifier(
       bundle.id,
       routeManifest.entry,
     );
-    final adapterSpecifier = '${bundle.id}/__extension_route__$route';
-    final plugin = JsPlugin(
+    final adapterSpecifier = '${bundle.id}/__extension_route__${widget.route}';
+    _plugin = JsPlugin(
       manifest: JsPluginManifest(
         id: bundle.id,
         version: bundle.version,
@@ -90,18 +154,29 @@ final class JsExtensionView extends StatelessWidget {
         ),
       ],
     );
+    _features = widget.session.featuresForRoute(
+      widget.route,
+      routeFeatures: widget.routeFeatures,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.session.uiEnabled.value) {
+      return widget.placeholder ?? const SizedBox.shrink();
+    }
     return JsUiView.plugin(
-      plugin,
-      initialProps: initialProps,
-      features: session.featuresForRoute(route, routeFeatures: routeFeatures),
-      uiPlugins: ui.plugins,
-      grantedPermissions: session.grantedPermissions,
-      controller: controller,
-      placeholder: placeholder,
-      loadingBuilder: loadingBuilder,
-      errorBuilder: errorBuilder,
-      emptyBuilder: emptyBuilder,
-      onFirstRender: onFirstRender,
+      _plugin,
+      initialProps: widget.initialProps,
+      features: _features,
+      uiPlugins: widget.session.extension.ui!.plugins,
+      grantedPermissions: widget.session.grantedPermissions,
+      controller: _controller,
+      placeholder: widget.placeholder,
+      loadingBuilder: widget.loadingBuilder,
+      errorBuilder: widget.errorBuilder,
+      emptyBuilder: widget.emptyBuilder,
+      onFirstRender: widget.onFirstRender,
     );
   }
 }

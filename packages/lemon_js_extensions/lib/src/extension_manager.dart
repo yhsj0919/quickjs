@@ -290,7 +290,6 @@ final class JsExtensionManager {
   JsExtensionManager({
     JsExtensionStore? store,
     required Iterable<JsExtensionConstraint> constraints,
-    JsExtensionRegistry? registry,
     JsKvStore? storage,
     this.maxPendingTasks = 64,
     this.callTimeout = const Duration(seconds: 30),
@@ -300,7 +299,7 @@ final class JsExtensionManager {
   }) : store = store ?? JsExtensionDefaultStore(),
        constraints = JsExtensionConstraints(constraints),
        features = features ?? JsExtensionFeatures.defaults(),
-       registry = registry ?? JsExtensionRegistry(),
+       _registry = JsExtensionRegistry(),
        storage = storage ?? JsSharedPreferencesKvStore() {
     if (maxPendingTasks < 1 || callTimeout <= Duration.zero) {
       throw ArgumentError(
@@ -308,7 +307,7 @@ final class JsExtensionManager {
       );
     }
     _installer = JsExtensionInstaller(
-      registry: this.registry,
+      registry: _registry,
       storage: this.storage,
     );
   }
@@ -320,7 +319,10 @@ final class JsExtensionManager {
   final JsExtensionConstraints constraints;
 
   /// Registry that owns active extension sessions.
-  final JsExtensionRegistry registry;
+  final JsExtensionRegistry _registry;
+
+  /// Read-only access to installed services and flows.
+  JsExtensionLookup get registry => JsExtensionLookup(_registry);
 
   /// Namespaced key-value storage shared by installed extensions.
   final JsKvStore storage;
@@ -342,6 +344,18 @@ final class JsExtensionManager {
   late final JsExtensionInstaller _installer;
   final Map<String, JsExtensionManagerEntry> _managed =
       <String, JsExtensionManagerEntry>{};
+  Future<void> _mutations = Future<void>.value();
+
+  // Installation records and live sessions change together. Keep management
+  // operations ordered; a failed operation must not poison the next one.
+  Future<T> _serializeMutation<T>(Future<T> Function() operation) {
+    final result = _mutations.then((_) => operation());
+    _mutations = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace stack) {},
+    );
+    return result;
+  }
 
   /// Immutable snapshot of all managed extensions.
   List<JsExtensionManagerEntry> get extensions =>
@@ -375,7 +389,7 @@ final class JsExtensionManager {
 
   /// Finds a registered business flow by extension and flow identifier.
   JsExtensionFlowReference? findFlow(String pluginId, String flowId) =>
-      registry.findFlow(pluginId, flowId);
+      _registry.findFlow(pluginId, flowId);
 
   /// 解析安装包并报告其能力在当前宿主中的可用性，不写入安装状态。
   Future<JsExtensionCapabilityReport> inspectPackage(
@@ -388,13 +402,15 @@ final class JsExtensionManager {
 
   /// Rebuilds manager state from every extension in [store].
   Future<void> restore() async {
-    for (final current in _managed.values.toList()) {
-      if (current.installed != null) await registry.uninstall(current.id);
-    }
-    _managed.clear();
-    for (final stored in await store.loadAll()) {
-      await _restoreOne(stored);
-    }
+    return _serializeMutation(() async {
+      for (final current in _managed.values.toList()) {
+        if (current.installed != null) await _registry.uninstall(current.id);
+      }
+      _managed.clear();
+      for (final stored in await store.loadAll()) {
+        await _restoreOne(stored);
+      }
+    });
   }
 
   /// Installs, persists, and activates [package].
@@ -402,40 +418,42 @@ final class JsExtensionManager {
     JsExtensionPackage package, {
     Iterable<String> grantedPermissions = const <String>[],
   }) async {
-    final extension = await JsExtension.load(package);
-    constraints.validate(extension.manifest);
-    _requireCapabilities(extension.manifest.capabilities);
-    if (_managed.containsKey(extension.id) ||
-        registry.find(extension.id) != null ||
-        await store.load(extension.id) != null) {
-      throw StateError('Extension is already installed: ${extension.id}');
-    }
-    final now = DateTime.now().toUtc();
-    final record = JsExtensionInstallRecord(
-      id: extension.id,
-      name: extension.manifest.name,
-      description: extension.manifest.description,
-      version: extension.version,
-      versionCode: extension.manifest.versionCode,
-      storageVersion: extension.manifest.storageVersion,
-      compatibilityCode: extension.manifest.compatibilityCode,
-      icon: extension.manifest.icon,
-      homepage: extension.manifest.homepage,
-      updateUrl: extension.manifest.updateUrl,
-      downloadUrl: extension.manifest.downloadUrl,
-      state: JsExtensionInstallState.enabled,
-      grantedPermissions: grantedPermissions.toSet().toList(growable: false),
-      installedAt: now,
-      updatedAt: now,
-    );
-    final stored = JsExtensionStoreEntry(record: record, package: package);
-    await store.save(stored);
-    try {
-      return await _activate(stored, extension);
-    } catch (_) {
-      await store.remove(extension.id);
-      rethrow;
-    }
+    return _serializeMutation(() async {
+      final extension = await JsExtension.load(package);
+      constraints.validate(extension.manifest);
+      _requireCapabilities(extension.manifest.capabilities);
+      if (_managed.containsKey(extension.id) ||
+          _registry.find(extension.id) != null ||
+          await store.load(extension.id) != null) {
+        throw StateError('Extension is already installed: ${extension.id}');
+      }
+      final now = DateTime.now().toUtc();
+      final record = JsExtensionInstallRecord(
+        id: extension.id,
+        name: extension.manifest.name,
+        description: extension.manifest.description,
+        version: extension.version,
+        versionCode: extension.manifest.versionCode,
+        storageVersion: extension.manifest.storageVersion,
+        compatibilityCode: extension.manifest.compatibilityCode,
+        icon: extension.manifest.icon,
+        homepage: extension.manifest.homepage,
+        updateUrl: extension.manifest.updateUrl,
+        downloadUrl: extension.manifest.downloadUrl,
+        state: JsExtensionInstallState.enabled,
+        grantedPermissions: grantedPermissions.toSet().toList(growable: false),
+        installedAt: now,
+        updatedAt: now,
+      );
+      final stored = JsExtensionStoreEntry(record: record, package: package);
+      await store.save(stored);
+      try {
+        return await _activate(stored, extension);
+      } catch (_) {
+        await store.remove(extension.id);
+        rethrow;
+      }
+    });
   }
 
   /// Replaces an installed extension with [package].
@@ -446,153 +464,168 @@ final class JsExtensionManager {
     bool allowDowngrade = false,
     bool allowSameVersion = false,
   }) async {
-    final previous = await store.load(id);
-    if (previous == null || !_managed.containsKey(id)) {
-      throw StateError('Extension is not installed: $id');
-    }
-    final extension = await JsExtension.load(package);
-    constraints.validate(extension.manifest);
-    _requireCapabilities(extension.manifest.capabilities);
-    if (extension.id != id) {
-      throw ArgumentError(
-        'Updated extension id does not match: ${extension.id}',
-      );
-    }
-    if (extension.manifest.compatibilityCode !=
-        previous.record.compatibilityCode) {
-      throw const FormatException(
-        'Updated extension compatibilityCode does not match installed record',
-      );
-    }
-    final nextCode = extension.manifest.versionCode;
-    final currentCode = previous.record.versionCode;
-    if (nextCode < currentCode && !allowDowngrade) {
-      throw StateError(
-        'Extension downgrade is not allowed: $nextCode < $currentCode',
-      );
-    }
-    if (nextCode == currentCode && !allowSameVersion) {
-      throw StateError('Extension versionCode is already installed: $nextCode');
-    }
-    Map<String, Object?>? storageSnapshot;
-    final nextStorageVersion = extension.manifest.storageVersion;
-    final currentStorageVersion = previous.record.storageVersion;
-    if (nextStorageVersion != currentStorageVersion) {
-      storageSnapshot = await _snapshotStorage(id);
-      try {
-        await _runStorageMigration(
-          extension,
-          fromVersion: currentStorageVersion,
-          toVersion: nextStorageVersion,
-          grantedPermissions:
-              grantedPermissions ?? previous.record.grantedPermissions,
+    return _serializeMutation(() async {
+      final previous = await store.load(id);
+      if (previous == null || !_managed.containsKey(id)) {
+        throw StateError('Extension is not installed: $id');
+      }
+      final extension = await JsExtension.load(package);
+      constraints.validate(extension.manifest);
+      _requireCapabilities(extension.manifest.capabilities);
+      if (extension.id != id) {
+        throw ArgumentError(
+          'Updated extension id does not match: ${extension.id}',
         );
+      }
+      if (extension.manifest.compatibilityCode !=
+          previous.record.compatibilityCode) {
+        throw const FormatException(
+          'Updated extension compatibilityCode does not match installed record',
+        );
+      }
+      final nextCode = extension.manifest.versionCode;
+      final currentCode = previous.record.versionCode;
+      if (nextCode < currentCode && !allowDowngrade) {
+        throw StateError(
+          'Extension downgrade is not allowed: $nextCode < $currentCode',
+        );
+      }
+      if (nextCode == currentCode && !allowSameVersion) {
+        throw StateError(
+          'Extension versionCode is already installed: $nextCode',
+        );
+      }
+      Map<String, Object?>? storageSnapshot;
+      final nextStorageVersion = extension.manifest.storageVersion;
+      final currentStorageVersion = previous.record.storageVersion;
+      try {
+        // Stop old Core/UI writers before taking the migration snapshot.
+        await _registry.uninstall(id);
+        _managed.remove(id);
+        if (nextStorageVersion != currentStorageVersion) {
+          storageSnapshot = await _snapshotStorage(id);
+          await _runStorageMigration(
+            extension,
+            fromVersion: currentStorageVersion,
+            toVersion: nextStorageVersion,
+            grantedPermissions:
+                grantedPermissions ?? previous.record.grantedPermissions,
+          );
+        }
+        final record = previous.record.copyWith(
+          version: extension.version,
+          versionCode: extension.manifest.versionCode,
+          storageVersion: nextStorageVersion,
+          grantedPermissions: grantedPermissions?.toSet().toList(
+            growable: false,
+          ),
+          updatedAt: DateTime.now().toUtc(),
+        );
+        final replacement = JsExtensionStoreEntry(
+          record: record,
+          package: package,
+        );
+        await store.save(replacement);
+        return await _activate(replacement, extension);
       } catch (_) {
-        await _restoreStorage(id, storageSnapshot);
+        await store.save(previous);
+        if (storageSnapshot != null) {
+          await _restoreStorage(id, storageSnapshot);
+        }
+        if (_registry.find(id) == null) {
+          await _restoreOne(previous);
+        }
         rethrow;
       }
-    }
-    final record = previous.record.copyWith(
-      version: extension.version,
-      versionCode: extension.manifest.versionCode,
-      storageVersion: nextStorageVersion,
-      grantedPermissions: grantedPermissions?.toSet().toList(growable: false),
-      updatedAt: DateTime.now().toUtc(),
-    );
-    final replacement = JsExtensionStoreEntry(record: record, package: package);
-    try {
-      await store.save(replacement);
-      await registry.uninstall(id);
-      return await _activate(replacement, extension);
-    } catch (_) {
-      await store.save(previous);
-      if (storageSnapshot != null) {
-        await _restoreStorage(id, storageSnapshot);
-      }
-      if (registry.find(id) == null) {
-        await _restoreOne(previous);
-      }
-      rethrow;
-    }
+    });
   }
 
   /// Disables the installed extension identified by [id].
   Future<void> disable(String id) async {
-    final stored = await _requireStored(id);
-    await registry.disable(id);
-    final record = stored.record.copyWith(
-      state: JsExtensionInstallState.disabled,
-      updatedAt: DateTime.now().toUtc(),
-    );
-    try {
-      await store.save(
-        JsExtensionStoreEntry(record: record, package: stored.package),
+    return _serializeMutation(() async {
+      final stored = await _requireStored(id);
+      await _registry.disable(id);
+      final record = stored.record.copyWith(
+        state: JsExtensionInstallState.disabled,
+        updatedAt: DateTime.now().toUtc(),
       );
-    } catch (_) {
-      registry.enable(id);
-      rethrow;
-    }
-    _managed[id] = JsExtensionManagerEntry(
-      record: record,
-      state: JsExtensionManagerState.disabled,
-      installed: registry.find(id),
-    );
+      try {
+        await store.save(
+          JsExtensionStoreEntry(record: record, package: stored.package),
+        );
+      } catch (_) {
+        _registry.enable(id);
+        rethrow;
+      }
+      _managed[id] = JsExtensionManagerEntry(
+        record: record,
+        state: JsExtensionManagerState.disabled,
+        installed: _registry.find(id),
+      );
+    });
   }
 
   /// Enables the installed extension identified by [id].
   Future<void> enable(String id) async {
-    final stored = await _requireStored(id);
-    final current = _managed[id];
-    if (current?.state == JsExtensionManagerState.broken) {
-      final enabled = stored.copyWithState(JsExtensionInstallState.enabled);
-      await store.save(enabled);
-      await _restoreOne(enabled);
-      return;
-    }
-    registry.enable(id);
-    final record = stored.record.copyWith(
-      state: JsExtensionInstallState.enabled,
-      updatedAt: DateTime.now().toUtc(),
-    );
-    try {
-      await store.save(
-        JsExtensionStoreEntry(record: record, package: stored.package),
+    return _serializeMutation(() async {
+      final stored = await _requireStored(id);
+      final current = _managed[id];
+      if (current?.state == JsExtensionManagerState.broken) {
+        final enabled = stored.copyWithState(JsExtensionInstallState.enabled);
+        await store.save(enabled);
+        await _restoreOne(enabled);
+        return;
+      }
+      _registry.enable(id);
+      final record = stored.record.copyWith(
+        state: JsExtensionInstallState.enabled,
+        updatedAt: DateTime.now().toUtc(),
       );
-    } catch (_) {
-      await registry.disable(id);
-      rethrow;
-    }
-    _managed[id] = JsExtensionManagerEntry(
-      record: record,
-      state: JsExtensionManagerState.enabled,
-      installed: registry.find(id),
-    );
+      try {
+        await store.save(
+          JsExtensionStoreEntry(record: record, package: stored.package),
+        );
+      } catch (_) {
+        await _registry.disable(id);
+        rethrow;
+      }
+      _managed[id] = JsExtensionManagerEntry(
+        record: record,
+        state: JsExtensionManagerState.enabled,
+        installed: _registry.find(id),
+      );
+    });
   }
 
   /// Uninstalls [id], optionally deleting its namespaced key-value data.
   Future<void> uninstall(String id, {bool clearStorage = false}) async {
-    final stored = await store.load(id);
-    if (stored == null) {
-      _managed.remove(id);
-      await registry.uninstall(id, clearStorage: clearStorage);
-      return;
-    }
-    await store.remove(id);
-    try {
-      await registry.uninstall(id, clearStorage: clearStorage);
-      _managed.remove(id);
-    } catch (_) {
-      await store.save(stored);
-      rethrow;
-    }
+    return _serializeMutation(() async {
+      final stored = await store.load(id);
+      if (stored == null) {
+        _managed.remove(id);
+        await _registry.uninstall(id, clearStorage: clearStorage);
+        return;
+      }
+      await store.remove(id);
+      try {
+        await _registry.uninstall(id, clearStorage: clearStorage);
+        _managed.remove(id);
+      } catch (_) {
+        await store.save(stored);
+        await _restoreOne(stored);
+        rethrow;
+      }
+    });
   }
 
   /// Releases active sessions without removing persisted installations.
   Future<void> dispose() async {
-    for (final item in _managed.values.toList()) {
-      if (item.installed != null) await registry.uninstall(item.id);
-    }
-    _managed.clear();
+    return _serializeMutation(() async {
+      for (final item in _managed.values.toList()) {
+        if (item.installed != null) await _registry.uninstall(item.id);
+      }
+      _managed.clear();
+    });
   }
 
   /// 重建指定插件的 Core Runtime；内存状态会丢失，且不会自动重放业务调用。
@@ -697,7 +730,7 @@ final class JsExtensionManager {
       runtimeFactory: runtimeFactory,
     );
     if (stored.record.state == JsExtensionInstallState.disabled) {
-      await registry.disable(extension.id);
+      await _registry.disable(extension.id);
     }
     final managed = JsExtensionManagerEntry(
       record: stored.record,

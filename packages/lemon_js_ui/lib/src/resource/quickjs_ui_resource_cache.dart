@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:lemon_js/lemon_js.dart';
 
 import 'quickjs_ui_bundle.dart';
+import 'quickjs_ui_network_cache_store.dart';
 import 'quickjs_ui_network_loader.dart';
 
 /// Bounded cache for parsed dynamic-UI bundles.
@@ -40,6 +41,9 @@ final class JsUiResourceCache {
   final LinkedHashMap<String, _ResourceCacheEntry> _entries =
       LinkedHashMap<String, _ResourceCacheEntry>();
   final Map<String, Future<JsPlugin>> _pending = <String, Future<JsPlugin>>{};
+  final Map<String, Object> _pendingTokens = <String, Object>{};
+  final LinkedHashMap<String, Map<Uri, JsUiNetworkCacheEntry>>
+  _networkResponses = LinkedHashMap<String, Map<Uri, JsUiNetworkCacheEntry>>();
   int _totalBytes = 0;
 
   /// Number of completed entries currently retained.
@@ -57,6 +61,9 @@ final class JsUiResourceCache {
     required String path,
     String? bundleRoot,
     AssetBundle? bundle,
+    bool cacheEnabled = true,
+    bool forceRefresh = false,
+    Set<String> uncachedResources = const <String>{},
   }) {
     final assetBundle = bundle ?? rootBundle;
     final key = 'asset:${identityHashCode(assetBundle)}:$bundleRoot:$path';
@@ -66,12 +73,21 @@ final class JsUiResourceCache {
         path: path,
         bundleRoot: bundleRoot,
         bundle: assetBundle,
+        cache: cacheEnabled && isEnabled && !forceRefresh,
+        uncachedResources: uncachedResources,
       )).toPlugin(),
+      cacheEnabled: cacheEnabled && uncachedResources.isEmpty,
+      forceRefresh: forceRefresh,
     );
   }
 
   /// Loads and caches a plugin recursively sourced from local files.
-  Future<JsPlugin> loadFile({required String path, String? bundleRoot}) {
+  Future<JsPlugin> loadFile({
+    required String path,
+    String? bundleRoot,
+    bool cacheEnabled = true,
+    bool forceRefresh = false,
+  }) {
     final key = 'file:$bundleRoot:$path';
     return _load(
       key,
@@ -79,6 +95,8 @@ final class JsUiResourceCache {
         path: path,
         bundleRoot: bundleRoot,
       )).toPlugin(),
+      cacheEnabled: cacheEnabled,
+      forceRefresh: forceRefresh,
     );
   }
 
@@ -88,36 +106,78 @@ final class JsUiResourceCache {
     Uri? bundleRoot,
     JsUiNetworkFetch? fetch,
     JsUiNetworkLogHandler? onLog,
+    bool cacheEnabled = true,
+    bool forceRefresh = false,
+    Set<String> uncachedResources = const <String>{},
   }) {
     final key = 'network:${identityHashCode(fetch)}:$bundleRoot:$url';
+    final useCache = cacheEnabled && isEnabled;
+    final previousResponses = _networkResponses.remove(key);
+    final responseCache = useCache
+        ? (forceRefresh
+              ? <Uri, JsUiNetworkCacheEntry>{}
+              : previousResponses ?? <Uri, JsUiNetworkCacheEntry>{})
+        : <Uri, JsUiNetworkCacheEntry>{};
+    if (useCache) _networkResponses[key] = responseCache;
     return _load(
       key,
-      () async => (await JsUiNetworkLoader(
-        fetch: fetch,
-        onLog: onLog,
-      ).load(url: url, bundleRoot: bundleRoot)).toPlugin(),
-    );
+      () async =>
+          (await JsUiNetworkLoader(
+                fetch: fetch,
+                cache: responseCache,
+                onLog: onLog,
+                cacheEnabled: useCache,
+                uncachedResources: uncachedResources,
+              ).load(
+                url: url,
+                bundleRoot: bundleRoot,
+                refreshMode: forceRefresh
+                    ? JsUiNetworkRefreshMode.force
+                    : JsUiNetworkRefreshMode.conditional,
+              ))
+              .toPlugin(),
+      cacheEnabled: cacheEnabled && uncachedResources.isEmpty,
+      forceRefresh: forceRefresh,
+    ).whenComplete(_evictNetworkResponses);
   }
 
   /// Removes every cached variant whose source path or URL matches [resource].
   /// Active pages are unaffected because they already own their plugin value.
   void invalidate(String resource) {
-    final keys = _entries.keys
-        .where((key) => key.endsWith(':$resource'))
-        .toList(growable: false);
+    final keys = <String>{
+      ..._entries.keys,
+      ..._pending.keys,
+      ..._networkResponses.keys,
+    }.where((key) => key.endsWith(':$resource')).toList(growable: false);
     for (final key in keys) {
+      _networkResponses.remove(key);
+      _pendingTokens.remove(key);
+      _pending.remove(key);
       _remove(key);
     }
   }
 
   /// Removes all completed entries while leaving active pages untouched.
   void clear() {
+    _pendingTokens.clear();
+    _pending.clear();
     _entries.clear();
+    _networkResponses.clear();
     _totalBytes = 0;
   }
 
-  Future<JsPlugin> _load(String key, Future<JsPlugin> Function() loader) {
-    if (!isEnabled) return loader();
+  Future<JsPlugin> _load(
+    String key,
+    Future<JsPlugin> Function() loader, {
+    required bool cacheEnabled,
+    required bool forceRefresh,
+  }) {
+    if (!isEnabled || !cacheEnabled || forceRefresh) {
+      _pendingTokens.remove(key);
+      _pending.remove(key);
+      _remove(key);
+      if (!isEnabled || !cacheEnabled) return loader();
+    }
     final now = DateTime.now();
     final cached = _entries.remove(key);
     if (cached != null) {
@@ -130,10 +190,13 @@ final class JsUiResourceCache {
     }
     final pending = _pending[key];
     if (pending != null) return pending;
-    final future = loader()
+    final token = Object();
+    _pendingTokens[key] = token;
+    late final Future<JsPlugin> future;
+    future = loader()
         .then((plugin) {
           final size = _pluginSize(plugin);
-          if (size <= maxBytes) {
+          if (size <= maxBytes && identical(_pendingTokens[key], token)) {
             _entries[key] = _ResourceCacheEntry(
               plugin: plugin,
               sizeBytes: size,
@@ -147,7 +210,10 @@ final class JsUiResourceCache {
         .whenComplete(() {
           // Returning Map.remove's Future here would make whenComplete await
           // the same in-flight operation and create a self-wait cycle.
-          _pending.remove(key);
+          if (identical(_pending[key], future)) _pending.remove(key);
+          if (identical(_pendingTokens[key], token)) {
+            _pendingTokens.remove(key);
+          }
         });
     _pending[key] = future;
     return future;
@@ -156,6 +222,22 @@ final class JsUiResourceCache {
   void _evict() {
     while (_entries.length > maxEntries || _totalBytes > maxBytes) {
       _remove(_entries.keys.first);
+    }
+  }
+
+  void _evictNetworkResponses() {
+    var bytes = 0;
+    for (final cache in _networkResponses.values) {
+      for (final entry in cache.values) {
+        bytes += utf8.encode(entry.body).length;
+      }
+    }
+    while (_networkResponses.isNotEmpty &&
+        (_networkResponses.length > maxEntries || bytes > maxBytes)) {
+      final removed = _networkResponses.remove(_networkResponses.keys.first)!;
+      for (final entry in removed.values) {
+        bytes -= utf8.encode(entry.body).length;
+      }
     }
   }
 

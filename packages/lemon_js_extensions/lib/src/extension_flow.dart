@@ -119,7 +119,7 @@ final class JsExtensionFlowRunner {
   const JsExtensionFlowRunner({required this.registry, required this.launch});
 
   /// Registry used to resolve extensions and declared flows.
-  final JsExtensionRegistry registry;
+  final JsExtensionCatalog registry;
 
   /// Host callback that presents a flow to the user.
   final JsExtensionFlowLauncher launch;

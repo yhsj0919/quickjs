@@ -39,18 +39,32 @@ enum JsUiPerformanceMode {
   off,
 }
 
-/// Host-owned performance controller for renderer-local effect degradation.
-///
-/// Auto mode uses Flutter frame timings and hysteresis. It never rebuilds the
-/// JavaScript page or sends per-frame data over the bridge.
+/// Selects whether animation follows the system or an explicit host setting.
+enum JsUiMotionMode {
+  /// Follows the system accessibility setting.
+  system,
+
+  /// Allows motion regardless of the system setting.
+  enabled,
+
+  /// Shows static states instead of animated effects.
+  reduced,
+}
+
+/// Host-owned policy for effect quality and animation playback.
 final class JsUiPerformanceController extends ChangeNotifier {
   /// Creates a performance controller with optional automatic-mode thresholds.
   JsUiPerformanceController({
-    this.mode = JsUiPerformanceMode.high,
+    JsUiPerformanceMode mode = JsUiPerformanceMode.high,
+    JsUiMotionMode motion = JsUiMotionMode.system,
     Duration? targetFrameBudget,
     this.degradeAfterFrames = 24,
     this.upgradeAfterFrames = 240,
-  }) : _targetFrameBudget =
+  }) : _mode = mode,
+       // Keep the public parameter named motion.
+       // ignore: prefer_initializing_formals
+       _motion = motion,
+       _targetFrameBudget =
            targetFrameBudget ?? const Duration(microseconds: 8333),
        _hasExplicitFrameBudget = targetFrameBudget != null,
        assert(degradeAfterFrames > 0),
@@ -58,7 +72,28 @@ final class JsUiPerformanceController extends ChangeNotifier {
        _quality = _qualityForMode(mode);
 
   /// The configured automatic or fixed quality mode.
-  final JsUiPerformanceMode mode;
+  JsUiPerformanceMode get mode => _mode;
+  JsUiPerformanceMode _mode;
+
+  /// The configured host motion policy.
+  JsUiMotionMode get motion => _motion;
+  JsUiMotionMode _motion;
+
+  /// Updates host policy without reloading the JavaScript page.
+  void update({JsUiPerformanceMode? mode, JsUiMotionMode? motion}) {
+    if ((mode == null || mode == _mode) &&
+        (motion == null || motion == _motion)) {
+      return;
+    }
+    if (mode != null && mode != _mode) {
+      _mode = mode;
+      _quality = _qualityForMode(mode);
+      _slowFrames = 0;
+      _stableFrames = 0;
+    }
+    if (motion != null) _motion = motion;
+    _recordPolicyChange('host policy updated');
+  }
 
   /// Consecutive slow frames required before automatic degradation.
   final int degradeAfterFrames;
@@ -97,7 +132,7 @@ final class JsUiPerformanceController extends ChangeNotifier {
 
   /// The effective quality after applying mode and reduced-motion settings.
   JsUiEffectQuality get quality =>
-      _reduceMotion ? JsUiEffectQuality.off : _quality;
+      reduceMotion ? JsUiEffectQuality.off : _quality;
 
   /// Target duration used to classify sampled frames.
   Duration get targetFrameBudget => _targetFrameBudget;
@@ -106,7 +141,18 @@ final class JsUiPerformanceController extends ChangeNotifier {
   double? get refreshRate => _refreshRate;
 
   /// Whether system reduced-motion disables optional effects.
-  bool get reduceMotion => _reduceMotion;
+  bool get reduceMotion => switch (_motion) {
+    JsUiMotionMode.system => _reduceMotion,
+    JsUiMotionMode.enabled => false,
+    JsUiMotionMode.reduced => true,
+  };
+
+  /// Whether animations should resolve to static states.
+  bool get animationsDisabled => quality == JsUiEffectQuality.off;
+
+  /// Resolves component durations using the current animation policy.
+  Duration animationDuration(Duration requested) =>
+      animationsDisabled ? Duration.zero : requested;
 
   /// Whether Flutter frame timing collection is active.
   bool get isStarted => _started;
@@ -204,13 +250,21 @@ final class JsUiPerformanceController extends ChangeNotifier {
     );
   }
 
-  /// Enables or disables reduced-motion effect suppression.
-  void updateReduceMotion(bool value) {
+  /// Supplies platform accessibility input; hosts configure [update] instead.
+  @internal
+  void updateSystemReduceMotion(bool value) {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
-    _lastTransitionReason = value
-        ? 'system reduced motion enabled'
-        : 'system reduced motion disabled';
+    if (_motion != JsUiMotionMode.system) return;
+    _recordPolicyChange(
+      value
+          ? 'system reduced motion enabled'
+          : 'system reduced motion disabled',
+    );
+  }
+
+  void _recordPolicyChange(String reason) {
+    _lastTransitionReason = reason;
     _session?.addQualityChange(
       timestamp: DateTime.now(),
       quality: quality.name,
@@ -225,7 +279,7 @@ final class JsUiPerformanceController extends ChangeNotifier {
     quality: quality,
     refreshRate: _refreshRate,
     targetFrameBudget: _targetFrameBudget,
-    reduceMotion: _reduceMotion,
+    reduceMotion: reduceMotion,
     buildP50Ms: _percentile(_buildSamplesMs, 0.50),
     buildP90Ms: _percentile(_buildSamplesMs, 0.90),
     buildP99Ms: _percentile(_buildSamplesMs, 0.99),

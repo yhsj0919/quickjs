@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js_ui/lemon_js_ui.dart';
 
 void main() {
+  test(
+    'recursive load returns stale modules before background fetch completes',
+    () async {
+      final pending = Completer<JsUiNetworkResponse>();
+      var calls = 0;
+      final loader = JsUiNetworkLoader(
+        fetch: (request) {
+          calls++;
+          if (calls == 1) {
+            return Future.value(
+              const JsUiNetworkResponse(
+                body: 'export default 1;',
+                headers: {'etag': 'v1'},
+              ),
+            );
+          }
+          return pending.future;
+        },
+      );
+      final url = Uri.parse('https://example.com/main.mjs');
+      await loader.load(url: url);
+      final stale = await loader
+          .load(
+            url: url,
+            refreshMode: JsUiNetworkRefreshMode.staleWhileRevalidate,
+          )
+          .timeout(const Duration(seconds: 2));
+      expect(stale.modules[stale.entry], 'export default 1;');
+      pending.complete(
+        const JsUiNetworkResponse(
+          body: 'export default 2;',
+          headers: {'etag': 'v2'},
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      final updated = await loader.load(url: url);
+      expect(updated.modules[updated.entry], 'export default 2;');
+    },
+  );
   group('quickjs_ui network inspector', () {
     test('default network loader decodes modules as UTF-8', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -164,6 +204,70 @@ void main() {
         containsPair('_quickjs_ui_cache_bust', 'dev'),
       );
       expect(requests[3].headers, isNot(contains('if-none-match')));
+    });
+
+    test('uncached module bypasses response cache independently', () async {
+      final requests = <JsUiNetworkRequest>[];
+      final loader = JsUiNetworkLoader(
+        uncachedResources: const <String>{'pages/main.mjs'},
+        fetch: (request) async {
+          requests.add(request);
+          return const JsUiNetworkResponse(
+            body: 'export default 1;',
+            headers: <String, String>{'etag': '"v1"'},
+          );
+        },
+      );
+      final url = Uri.parse('https://example.com/ui/pages/main.mjs');
+      await loader.load(url: url);
+      await loader.load(url: url);
+
+      expect(requests, hasLength(2));
+      expect(
+        requests.every(
+          (request) => !request.headers.containsKey('if-none-match'),
+        ),
+        isTrue,
+      );
+      expect(
+        requests[0].uri.queryParameters,
+        contains('_quickjs_ui_cache_bust'),
+      );
+      expect(requests[1].uri, isNot(requests[0].uri));
+    });
+
+    test('other modules still use ETag when one module is uncached', () async {
+      final requests = <JsUiNetworkRequest>[];
+      final loader = JsUiNetworkLoader(
+        uncachedResources: const <String>{'pages/live.mjs'},
+        fetch: (request) async {
+          requests.add(request);
+          if (request.uri.path.endsWith('/main.mjs')) {
+            if (request.headers['if-none-match'] == '"main-v1"') {
+              return const JsUiNetworkResponse(body: '', statusCode: 304);
+            }
+            return const JsUiNetworkResponse(
+              body: "import './live.mjs'; export default 1;",
+              headers: <String, String>{'etag': '"main-v1"'},
+            );
+          }
+          return const JsUiNetworkResponse(
+            body: 'export const live = true;',
+            headers: <String, String>{'etag': '"live-v1"'},
+          );
+        },
+      );
+      final url = Uri.parse('https://example.com/ui/pages/main.mjs');
+      await loader.load(url: url);
+      await loader.load(url: url);
+
+      expect(requests, hasLength(4));
+      expect(requests[2].headers['if-none-match'], '"main-v1"');
+      expect(requests[3].headers, isNot(contains('if-none-match')));
+      expect(
+        requests[3].uri.queryParameters,
+        contains('_quickjs_ui_cache_bust'),
+      );
     });
 
     test(

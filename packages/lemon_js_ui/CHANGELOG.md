@@ -1,5 +1,15 @@
 # 更新日志 / Changelog
 
+## 0.3.1
+
+- 页面替换或卸载后，忽略旧事件、生命周期和计时器任务的迟到结果及错误。
+- 简化加载与 Session 生命周期，保留显式 reload、restart 和 unload 行为。
+- 新增显式缓存开关、指定资源绕过缓存，以及 `reload(forceRefresh: true)` 强制刷新；修复缓存失效与并发加载的处理。
+- 动画和效果降级统一通过 `JsUiPerformanceController` 初始化及 `update(mode: ..., motion: ...)` 动态更新，Renderer 替换后保留显示和暂停状态。
+- 组件 `register` 拒绝同名覆盖，需要覆盖时显式调用 `replace`。
+- **API 调整：** 删除独立的强制刷新 loader 入口，`JsUiPluginLoader` 统一接收命名参数 `forceRefresh`；删除 `updateReduceMotion`，改用 `update(motion: ...)`。升级说明见 [使用文档](doc/usage.md) 和 [动画配置](doc/canvas_and_animation.md)。
+- 要求 `lemon_js ^0.3.1`。
+
 ## 0.2.1
 
 - 升级 `archive` 依赖，并要求 `lemon_js ^0.2.1`。

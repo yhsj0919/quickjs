@@ -1,5 +1,10 @@
 # 更新日志 / Changelog
 
+## 0.3.1
+
+- 统一各插件包的发布版本为 `0.3.1`。
+- `shared_preferences` 使用 pub.dev 的 `^2.5.6`，移除 Git 版本覆盖；KV 存储继续使用无本地缓存的 `SharedPreferencesAsync`。
+
 ## 0.3.0
 
 ### 中文
