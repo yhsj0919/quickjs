@@ -1,6 +1,8 @@
 // Internal implementation library; not exported as stable package API.
 // ignore_for_file: public_member_api_docs
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../schema/quickjs_ui_node.dart';
@@ -185,9 +187,18 @@ Widget _buildGridView(JsUiRenderContext context, JsUiNode node) {
 
 Widget _buildPageView(JsUiRenderContext context, JsUiNode node) {
   final onPageChanged = JsUiProps.event(node.props['onPageChanged']);
+  final autoPlayInterval =
+      JsUiProps.duration(node.props['autoPlayIntervalMs']) ??
+      const Duration(seconds: 3);
+  if (autoPlayInterval <= Duration.zero) {
+    throw const FormatException('PageView autoPlayIntervalMs must be positive');
+  }
   final pageView = _JsUiPageView(
     page: JsUiProps.intValue(node.props['page']),
     initialPage: JsUiProps.intValue(node.props['initialPage']) ?? 0,
+    loop: JsUiProps.boolValue(node.props['loop']) ?? false,
+    autoPlay: JsUiProps.boolValue(node.props['autoPlay']) ?? false,
+    autoPlayInterval: autoPlayInterval,
     duration:
         JsUiProps.duration(node.props['scrollDurationMs']) ??
         const Duration(milliseconds: 300),
@@ -222,6 +233,9 @@ final class _JsUiPageView extends StatefulWidget {
   const _JsUiPageView({
     required this.page,
     required this.initialPage,
+    required this.loop,
+    required this.autoPlay,
+    required this.autoPlayInterval,
     required this.duration,
     required this.curve,
     required this.scrollDirection,
@@ -233,6 +247,9 @@ final class _JsUiPageView extends StatefulWidget {
 
   final int? page;
   final int initialPage;
+  final bool loop;
+  final bool autoPlay;
+  final Duration autoPlayInterval;
   final Duration duration;
   final Curve curve;
   final Axis scrollDirection;
@@ -245,8 +262,78 @@ final class _JsUiPageView extends StatefulWidget {
   State<_JsUiPageView> createState() => _JsUiPageViewState();
 }
 
-final class _JsUiPageViewState extends State<_JsUiPageView> {
-  late final PageController _controller;
+final class _JsUiPageViewState extends State<_JsUiPageView>
+    with WidgetsBindingObserver {
+  late PageController _controller;
+  late int _logicalPage;
+  late int _reportedPage;
+  int? _programmaticTarget;
+  Timer? _autoPlayTimer;
+  bool _foreground = true;
+
+  void _scheduleAutoPlay() {
+    _autoPlayTimer?.cancel();
+    if (!mounted ||
+        !widget.autoPlay ||
+        !_foreground ||
+        widget.children.length < 2 ||
+        !_controller.hasClients ||
+        _controller.position.isScrollingNotifier.value) {
+      return;
+    }
+    if (!_loops && _logicalPage == widget.children.length - 1) return;
+    _autoPlayTimer = Timer(widget.autoPlayInterval, () {
+      if (!mounted || !_controller.hasClients) return;
+      final target =
+          (_controller.page ?? _controller.initialPage.toDouble()).round() + 1;
+      _moveTo(target);
+    });
+  }
+
+  void _moveTo(int target) {
+    if (_controller.page == target) return;
+    _autoPlayTimer?.cancel();
+    _programmaticTarget = widget.children.isEmpty
+        ? 0
+        : target % widget.children.length;
+    if (widget.duration <= Duration.zero || widget.children.isEmpty) {
+      _controller.jumpToPage(target);
+    } else {
+      _controller.animateToPage(
+        target,
+        duration: widget.duration,
+        curve: widget.curve,
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _scheduleAutoPlay();
+  }
+
+  void _reportPage() {
+    if (_reportedPage == _logicalPage) return;
+    _reportedPage = _logicalPage;
+    widget.onPageChanged?.call(_logicalPage);
+  }
+
+  bool get _loops => widget.loop && widget.children.length > 1;
+
+  int _initialVirtualPage(int page) => _loops
+      ? (1000000 ~/ widget.children.length) * widget.children.length + page
+      : page;
+
+  int _nearestVirtualPage(int page) {
+    if (!_loops) return page;
+    final current = (_controller.page ?? _controller.initialPage.toDouble())
+        .round();
+    final count = widget.children.length;
+    final forward = (page - current % count) % count;
+    final delta = forward > count / 2 ? forward - count : forward;
+    return current + delta;
+  }
 
   int _boundedPage(int page) =>
       widget.children.isEmpty ? 0 : page.clamp(0, widget.children.length - 1);
@@ -254,49 +341,98 @@ final class _JsUiPageViewState extends State<_JsUiPageView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _foreground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    _logicalPage = _boundedPage(widget.page ?? widget.initialPage);
+    _reportedPage = _logicalPage;
     _controller = PageController(
-      initialPage: _boundedPage(widget.page ?? widget.initialPage),
+      initialPage: _initialVirtualPage(_logicalPage),
+      keepPage: false,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleAutoPlay());
   }
 
   @override
   void didUpdateWidget(covariant _JsUiPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.page != null &&
-        (widget.page != oldWidget.page ||
-            widget.children.length != oldWidget.children.length)) {
+    final structureChanged =
+        widget.loop != oldWidget.loop ||
+        widget.children.length != oldWidget.children.length;
+    if (structureChanged) {
+      final previous = _controller;
+      _logicalPage = _boundedPage(widget.page ?? _logicalPage);
+      _reportedPage = _logicalPage;
+      _programmaticTarget = null;
+      _controller = PageController(
+        initialPage: _initialVirtualPage(_logicalPage),
+        keepPage: false,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleAutoPlay());
+      return;
+    }
+    if (widget.page != null && widget.page != oldWidget.page) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_controller.hasClients || widget.page == null) return;
-        final target = _boundedPage(widget.page!);
-        if (_controller.page == target) return;
-        if (widget.duration <= Duration.zero || widget.children.isEmpty) {
-          _controller.jumpToPage(target);
-        } else {
-          _controller.animateToPage(
-            target,
-            duration: widget.duration,
-            curve: widget.curve,
-          );
-        }
+        final target = _nearestVirtualPage(_boundedPage(widget.page!));
+        _moveTo(target);
       });
+    }
+    if (widget.autoPlay != oldWidget.autoPlay ||
+        widget.autoPlayInterval != oldWidget.autoPlayInterval) {
+      _autoPlayTimer?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleAutoPlay());
     }
   }
 
   @override
   void dispose() {
+    _autoPlayTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => PageView(
-    controller: _controller,
-    scrollDirection: widget.scrollDirection,
-    pageSnapping: widget.pageSnapping,
-    physics: widget.physics,
-    onPageChanged: widget.onPageChanged,
-    children: widget.children,
-  );
+  Widget build(BuildContext context) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification.depth != 0) return false;
+          if (notification is ScrollStartNotification) _autoPlayTimer?.cancel();
+          if (notification is ScrollStartNotification &&
+              notification.dragDetails != null) {
+            _programmaticTarget = null;
+          }
+          if (notification is ScrollEndNotification) {
+            _programmaticTarget = null;
+            _reportPage();
+            scheduleMicrotask(_scheduleAutoPlay);
+          }
+          return false;
+        },
+        child: PageView.builder(
+          key: ObjectKey(_controller),
+          controller: _controller,
+          scrollDirection: widget.scrollDirection,
+          pageSnapping: widget.pageSnapping,
+          physics: widget.physics,
+          onPageChanged: (index) {
+            if (widget.children.isEmpty) return;
+            final logical = index % widget.children.length;
+            _logicalPage = logical;
+            if (_programmaticTarget == null || logical == _programmaticTarget) {
+              _reportPage();
+            }
+          },
+          itemCount: _loops ? null : widget.children.length,
+          itemBuilder: (context, index) => KeyedSubtree(
+            key: ValueKey(index),
+            child: widget.children[index % widget.children.length],
+          ),
+        ),
+      );
 }
 
 ScrollPhysics? _scrollPhysics(Object? value) => switch (value) {
