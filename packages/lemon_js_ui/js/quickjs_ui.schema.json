@@ -1279,7 +1279,7 @@
     "inkWell": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "InkWell" } } }] },
     "floatingActionButton": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "FloatingActionButton" } } }] },
     "gridView": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "GridView" } } }] },
-    "pageView": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "PageView" } } }] },
+    "pageView": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "PageView" }, "page": { "type": "integer" }, "initialPage": { "type": "integer" } } }] },
     "refreshIndicator": { "allOf": [{ "$ref": "#/$defs/baseNode" }, { "type": "object", "properties": { "type": { "const": "RefreshIndicator" } } }] }
   }
 }
