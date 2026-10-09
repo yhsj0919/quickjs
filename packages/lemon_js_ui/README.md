@@ -6,6 +6,24 @@ JavaScript 中，Flutter 将 JS 返回的 Schema 渲染成原生 Widget。它适
 
 支持 Android、iOS、macOS、Linux、Windows 和 Web。
 
+`PageView` 支持通过 `page`（从 0 开始）受控翻页。修改状态中的页码会平滑切换，
+滑动后的 `onPageChanged` 事件携带 `event.index`，可用于同步状态：
+
+```js
+PageView({
+  page: state.page,
+  onPageChanged: actions.pageChanged(),
+  children: [Text({data: '第一页'}), Text({data: '第二页'})]
+})
+// methods: { pageChanged(state, data, props, event) { return {page: event.index}; } }
+```
+
+不传 `page` 时可自由滑动；`initialPage` 仅设置首次挂载时的页码，默认 0。
+`page` 优先于 `initialPage`，越界页码会限制到有效范围。设置 `physics: 'never'`
+可禁用手势翻页，同时仍可通过 `page` 切换。
+受控翻页动画默认 300 毫秒，通过 `scrollDurationMs` 和 `scrollCurve` 配置；
+设置 `scrollDurationMs: 0` 可立即跳转。首次挂载直接定位，不播放动画。
+
 ## 安装
 
 ```yaml

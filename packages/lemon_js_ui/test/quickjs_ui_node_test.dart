@@ -479,7 +479,10 @@ export default Page({
   test('runtime helper is generated from JS helper source', () {
     final source = File('js/quickjs_ui.js').readAsStringSync();
 
-    expect(jsUiHelperModuleSource.replaceAll('\r\n', '\n'), source.replaceAll('\r\n', '\n'));
+    expect(
+      jsUiHelperModuleSource.replaceAll('\r\n', '\n'),
+      source.replaceAll('\r\n', '\n'),
+    );
   });
 
   test('dispatches page lifecycle hooks', () async {
@@ -2004,7 +2007,9 @@ export default Page({
     expect((wrap as Wrap).direction, Axis.horizontal);
   });
 
-  test('ListView defaults vertical and PageView defaults horizontal', () {
+  testWidgets('ListView defaults vertical and PageView defaults horizontal', (
+    tester,
+  ) async {
     final registry = JsUiComponentRegistry.defaults();
     final context = JsUiRenderContext(
       buildNode: (_) => const SizedBox.shrink(),
@@ -2027,8 +2032,151 @@ export default Page({
 
     expect(list, isA<JsUiScrollableList>());
     expect((list as JsUiScrollableList).axis, Axis.vertical);
-    expect(page, isA<PageView>());
-    expect((page as PageView).scrollDirection, Axis.horizontal);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: page)));
+    expect(
+      tester.widget<PageView>(find.byType(PageView)).scrollDirection,
+      Axis.horizontal,
+    );
+  });
+
+  testWidgets(
+    'PageView supports controlled pages and preserves its controller',
+    (tester) async {
+      final events = <Map<String, Object?>>[];
+      Future<void> render({
+        int? page,
+        int initialPage = 0,
+        int count = 3,
+      }) async {
+        final node = JsUiNode.fromMap(<String, Object?>{
+          'type': 'PageView',
+          'page': ?page,
+          'initialPage': initialPage,
+          'onPageChanged': <String, Object?>{'method': 'pageChanged'},
+          'children': <Object?>[
+            for (var i = 0; i < count; i++)
+              <String, Object?>{'type': 'Text', 'data': 'page $i'},
+          ],
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: JsUiRenderer(onEvent: events.add).build(node)),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await render(page: 1, initialPage: 2);
+      final controller = tester
+          .widget<PageView>(find.byType(PageView))
+          .controller!;
+      expect(controller.page, 1);
+      await render(page: 2);
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller,
+        same(controller),
+      );
+      expect(controller.page, 2);
+      expect(events.last, containsPair('index', 2));
+      await tester.drag(find.byType(PageView), const Offset(800, 0));
+      await tester.pumpAndSettle();
+      expect(controller.page, 1);
+      expect(events.last, containsPair('index', 1));
+      await render(page: 1);
+      expect(controller.page, 1);
+      await render(page: 99, count: 2);
+      expect(controller.page, 1);
+      await render(page: -1);
+      expect(controller.page, 0);
+      await render(count: 0, page: 2);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('PageView animates, retargets and supports instant changes', (
+    tester,
+  ) async {
+    Future<void> render(int page, {int duration = 300}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: JsUiRenderer(onEvent: (_) {}).build(
+              JsUiNode.fromMap(<String, Object?>{
+                'type': 'PageView',
+                'page': page,
+                'scrollDurationMs': duration,
+                'scrollCurve': 'linear',
+                'physics': 'never',
+                'children': <Object?>[
+                  for (var i = 0; i < 3; i++)
+                    <String, Object?>{'type': 'Text', 'data': 'page $i'},
+                ],
+              }),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await render(0);
+    final controller = tester
+        .widget<PageView>(find.byType(PageView))
+        .controller!;
+    await render(2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(controller.page, greaterThan(0));
+    expect(controller.page, lessThan(2));
+    // An unrelated rebuild must not restart the current animation.
+    await render(2);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(controller.page, closeTo(2, 0.001));
+    await render(0);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await render(1);
+    await tester.pumpAndSettle();
+    expect(controller.page, 1);
+    await render(0, duration: 0);
+    await tester.pump();
+    expect(controller.page, 0);
+    await render(2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PageView initialPage is used only on mount', (tester) async {
+    Future<void> render(int initialPage) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: JsUiRenderer(onEvent: (_) {}).build(
+              JsUiNode.fromMap(<String, Object?>{
+                'type': 'PageView',
+                'initialPage': initialPage,
+                'children': <Object?>[
+                  for (var i = 0; i < 3; i++)
+                    <String, Object?>{'type': 'Text', 'data': 'page $i'},
+                ],
+              }),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await render(1);
+    final controller = tester
+        .widget<PageView>(find.byType(PageView))
+        .controller!;
+    expect(controller.page, 1);
+    await render(2);
+    expect(controller.page, 1);
   });
 
   testWidgets('renders TextField events and controlled value', (tester) async {

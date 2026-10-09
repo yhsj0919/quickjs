@@ -185,7 +185,13 @@ Widget _buildGridView(JsUiRenderContext context, JsUiNode node) {
 
 Widget _buildPageView(JsUiRenderContext context, JsUiNode node) {
   final onPageChanged = JsUiProps.event(node.props['onPageChanged']);
-  final pageView = PageView(
+  final pageView = _JsUiPageView(
+    page: JsUiProps.intValue(node.props['page']),
+    initialPage: JsUiProps.intValue(node.props['initialPage']) ?? 0,
+    duration:
+        JsUiProps.duration(node.props['scrollDurationMs']) ??
+        const Duration(milliseconds: 300),
+    curve: JsUiProps.curve(node.props['scrollCurve'] ?? 'easeOut'),
     scrollDirection: node.props['scrollDirection'] == null
         ? Axis.horizontal
         : JsUiProps.axis(node.props['scrollDirection']),
@@ -209,6 +215,87 @@ Widget _buildPageView(JsUiRenderContext context, JsUiNode node) {
       node: node,
       child: withGestures,
     ),
+  );
+}
+
+final class _JsUiPageView extends StatefulWidget {
+  const _JsUiPageView({
+    required this.page,
+    required this.initialPage,
+    required this.duration,
+    required this.curve,
+    required this.scrollDirection,
+    required this.pageSnapping,
+    required this.physics,
+    required this.onPageChanged,
+    required this.children,
+  });
+
+  final int? page;
+  final int initialPage;
+  final Duration duration;
+  final Curve curve;
+  final Axis scrollDirection;
+  final bool pageSnapping;
+  final ScrollPhysics? physics;
+  final ValueChanged<int>? onPageChanged;
+  final List<Widget> children;
+
+  @override
+  State<_JsUiPageView> createState() => _JsUiPageViewState();
+}
+
+final class _JsUiPageViewState extends State<_JsUiPageView> {
+  late final PageController _controller;
+
+  int _boundedPage(int page) =>
+      widget.children.isEmpty ? 0 : page.clamp(0, widget.children.length - 1);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController(
+      initialPage: _boundedPage(widget.page ?? widget.initialPage),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _JsUiPageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.page != null &&
+        (widget.page != oldWidget.page ||
+            widget.children.length != oldWidget.children.length)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_controller.hasClients || widget.page == null) return;
+        final target = _boundedPage(widget.page!);
+        if (_controller.page == target) return;
+        if (widget.duration <= Duration.zero || widget.children.isEmpty) {
+          _controller.jumpToPage(target);
+        } else {
+          _controller.animateToPage(
+            target,
+            duration: widget.duration,
+            curve: widget.curve,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PageView(
+    controller: _controller,
+    scrollDirection: widget.scrollDirection,
+    pageSnapping: widget.pageSnapping,
+    physics: widget.physics,
+    onPageChanged: widget.onPageChanged,
+    children: widget.children,
   );
 }
 
