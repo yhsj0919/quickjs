@@ -195,6 +195,7 @@ Widget _buildPageView(JsUiRenderContext context, JsUiNode node) {
   }
   final pageView = _JsUiPageView(
     page: JsUiProps.intValue(node.props['page']),
+    pageCommandToken: JsUiProps.intValue(node.props['pageCommandToken']) ?? 0,
     initialPage: JsUiProps.intValue(node.props['initialPage']) ?? 0,
     loop: JsUiProps.boolValue(node.props['loop']) ?? false,
     autoPlay: JsUiProps.boolValue(node.props['autoPlay']) ?? false,
@@ -232,6 +233,7 @@ Widget _buildPageView(JsUiRenderContext context, JsUiNode node) {
 final class _JsUiPageView extends StatefulWidget {
   const _JsUiPageView({
     required this.page,
+    required this.pageCommandToken,
     required this.initialPage,
     required this.loop,
     required this.autoPlay,
@@ -246,6 +248,7 @@ final class _JsUiPageView extends StatefulWidget {
   });
 
   final int? page;
+  final int pageCommandToken;
   final int initialPage;
   final bool loop;
   final bool autoPlay;
@@ -267,6 +270,9 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
   late PageController _controller;
   late int _logicalPage;
   late int _reportedPage;
+  // Counts retain repeated indices across multiple loop cycles without an
+  // unbounded event list. An echo may arrive after several newer reports.
+  final Map<int, int> _pendingPageAcknowledgements = {};
   int? _programmaticTarget;
   Timer? _autoPlayTimer;
   bool _foreground = true;
@@ -323,7 +329,25 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
   void _reportPage() {
     if (_reportedPage == _logicalPage) return;
     _reportedPage = _logicalPage;
+    if (widget.page != null && widget.onPageChanged != null) {
+      _pendingPageAcknowledgements.update(
+        _logicalPage,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
     widget.onPageChanged?.call(_logicalPage);
+  }
+
+  bool _consumePageAcknowledgement(int page) {
+    final count = _pendingPageAcknowledgements[page];
+    if (count == null) return false;
+    if (count == 1) {
+      _pendingPageAcknowledgements.remove(page);
+    } else {
+      _pendingPageAcknowledgements[page] = count - 1;
+    }
+    return true;
   }
 
   bool get _loops => widget.loop && widget.children.length > 1;
@@ -368,6 +392,7 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
         widget.loop != oldWidget.loop ||
         widget.children.length != oldWidget.children.length;
     if (structureChanged) {
+      _pendingPageAcknowledgements.clear();
       final previous = _controller;
       _logicalPage = _boundedPage(widget.page ?? _logicalPage);
       _reportedPage = _logicalPage;
@@ -380,11 +405,19 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
       WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleAutoPlay());
       return;
     }
-    // onPageChanged fires before scrolling settles. Echoing that index is
-    // acknowledgement, not a new request to restart the current animation.
+    if (widget.page == null) _pendingPageAcknowledgements.clear();
+    final explicitCommand =
+        widget.pageCommandToken != oldWidget.pageCommandToken;
+    final pageUpdated = widget.page != oldWidget.page;
+    final acknowledgement =
+        widget.page != null &&
+        pageUpdated &&
+        !explicitCommand &&
+        _consumePageAcknowledgement(_boundedPage(widget.page!));
     if (widget.page != null &&
-        widget.page != oldWidget.page &&
-        _boundedPage(widget.page!) != _reportedPage) {
+        (pageUpdated || explicitCommand) &&
+        !acknowledgement &&
+        (explicitCommand || _boundedPage(widget.page!) != _reportedPage)) {
       final requestedPage = widget.page!;
       final controller = _controller;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -392,7 +425,8 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
             !identical(controller, _controller) ||
             !_controller.hasClients ||
             widget.page != requestedPage ||
-            _boundedPage(requestedPage) == _reportedPage) {
+            (!explicitCommand &&
+                _boundedPage(requestedPage) == _reportedPage)) {
           return;
         }
         final target = _nearestVirtualPage(_boundedPage(requestedPage));
