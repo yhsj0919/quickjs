@@ -13,6 +13,7 @@ import '../pages/quickjs_ui/lab/quickjs_ui_snappable_dust_page.dart';
 import '../pages/quickjs_ui/lab/quickjs_ui_starfield_page.dart';
 import '../pages/quickjs_ui/lab/quickjs_ui_universal_effects_page.dart';
 import 'catalog_helpers.dart';
+import '../pages/quickjs_ui/lab/quickjs_ui_page_view_lab_page.dart';
 
 // Repository rule: append newly created demos to the end of this list.
 final List<ExamplePageSpec> jsUiLabExamplePages = [
@@ -80,5 +81,10 @@ final List<ExamplePageSpec> jsUiLabExamplePages = [
     title: '综合性能 · 自适应效果质量',
     description: '综合测试 Canvas、Snapshot、滤镜与组件动画，并展示自动降级指标。',
     builder: (_) => const JsUiAdaptivePerformanceLabPage(),
+  ),
+  jsUiLabSpec(
+    title: 'PageView · 循环与翻页对照',
+    description: '原生与 JSUI 对照，测试首尾动画、手动翻页、页码回写和自动播放启停。',
+    builder: (_) => const JsUiPageViewLabPage(),
   ),
 ];
