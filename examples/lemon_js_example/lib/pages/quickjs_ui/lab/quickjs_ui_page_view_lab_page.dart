@@ -26,6 +26,7 @@ class _JsUiPageViewLabPageState extends State<JsUiPageViewLabPage> {
   bool _playing = false;
   String _curve = 'easeOut';
   int _page = 0;
+  int _pageCommandToken = 0;
   int _observed = 0;
   int _generation = 0;
 
@@ -105,11 +106,12 @@ class _JsUiPageViewLabPageState extends State<JsUiPageViewLabPage> {
         curve: _curve == 'linear' ? Curves.linear : Curves.easeOut,
       );
     } else {
-      setState(
-        () => _page = _loop
+      setState(() {
+        _page = _loop
             ? (_observed + 1) % _count
-            : (_observed + 1).clamp(0, _count - 1),
-      );
+            : (_observed + 1).clamp(0, _count - 1);
+        _pageCommandToken++;
+      });
     }
   }
 
@@ -160,6 +162,7 @@ class _JsUiPageViewLabPageState extends State<JsUiPageViewLabPage> {
                     'type': 'PageView',
                     'loop': _loop,
                     'page': _page,
+                    'pageCommandToken': _pageCommandToken,
                     'autoPlay': _playing,
                     'autoPlayIntervalMs': 3000,
                     'scrollDurationMs': 300,
