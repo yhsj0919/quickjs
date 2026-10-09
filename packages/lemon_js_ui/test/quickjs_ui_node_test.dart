@@ -2383,6 +2383,139 @@ export default Page({
     },
   );
 
+  testWidgets('PageView feedback preserves manual drag activity', (
+    tester,
+  ) async {
+    for (final native in [true, false]) {
+      var page = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, update) {
+                if (native) {
+                  return PageView(
+                    onPageChanged: (index) => update(() => page = index),
+                    children: const [Text('0'), Text('1'), Text('2')],
+                  );
+                }
+                return JsUiRenderer(
+                  onEvent: (event) =>
+                      update(() => page = event['index']! as int),
+                ).build(
+                  JsUiNode.fromMap({
+                    'type': 'PageView',
+                    'page': page,
+                    'onPageChanged': {'method': 'changed'},
+                    'children': [
+                      for (var i = 0; i < 3; i++)
+                        {'type': 'Text', 'data': '$i'},
+                    ],
+                  }),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await gesture.moveBy(const Offset(-500, 0));
+      await tester.pump();
+      await tester.pump();
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(PageView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(
+        scrollable.position.activity.runtimeType.toString(),
+        'DragScrollActivity',
+        reason: 'native=$native: state feedback must not take over a gesture',
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  testWidgets(
+    'PageView automatic feedback does not restart animations or duplicate advances',
+    (tester) async {
+      var page = 0;
+      var playing = true;
+      late StateSetter update;
+      final events = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return JsUiRenderer(
+                  onEvent: (event) {
+                    events.add(event['index']! as int);
+                    setState(() => page = event['index']! as int);
+                  },
+                ).build(
+                  JsUiNode.fromMap({
+                    'type': 'PageView',
+                    'page': page,
+                    'loop': true,
+                    'autoPlay': playing,
+                    'autoPlayIntervalMs': 1000,
+                    'scrollDurationMs': 300,
+                    'scrollCurve': 'linear',
+                    'onPageChanged': {'method': 'changed'},
+                    'children': [
+                      for (var i = 0; i < 3; i++)
+                        {'type': 'Text', 'data': '$i'},
+                    ],
+                  }),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      final controller = tester
+          .widget<PageView>(find.byType(PageView))
+          .controller!;
+      final start = controller.page!;
+      for (var turn = 1; turn <= 6; turn++) {
+        await tester.pump(const Duration(milliseconds: 1000));
+        await tester.pump();
+        final scrollable = tester.state<ScrollableState>(
+          find.descendant(
+            of: find.byType(PageView),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        final activity = scrollable.position.activity;
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump();
+        expect(
+          scrollable.position.activity,
+          same(activity),
+          reason: 'feedback must preserve the active animation',
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+        expect(controller.page, start + turn);
+        expect(page, turn % 3);
+        expect(events.length, turn);
+      }
+      update(() => playing = false);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 5));
+      expect(controller.page, start + 6);
+      expect(events.length, 6);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets('PageView initialPage is used only on mount', (tester) async {
     Future<void> render(int initialPage) async {
       await tester.pumpWidget(

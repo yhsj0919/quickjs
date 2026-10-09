@@ -283,7 +283,14 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
     }
     if (!_loops && _logicalPage == widget.children.length - 1) return;
     _autoPlayTimer = Timer(widget.autoPlayInterval, () {
-      if (!mounted || !_controller.hasClients) return;
+      _autoPlayTimer = null;
+      if (!mounted ||
+          !widget.autoPlay ||
+          !_foreground ||
+          !_controller.hasClients ||
+          _controller.position.isScrollingNotifier.value) {
+        return;
+      }
       final target =
           (_controller.page ?? _controller.initialPage.toDouble()).round() + 1;
       _moveTo(target);
@@ -373,10 +380,22 @@ final class _JsUiPageViewState extends State<_JsUiPageView>
       WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleAutoPlay());
       return;
     }
-    if (widget.page != null && widget.page != oldWidget.page) {
+    // onPageChanged fires before scrolling settles. Echoing that index is
+    // acknowledgement, not a new request to restart the current animation.
+    if (widget.page != null &&
+        widget.page != oldWidget.page &&
+        _boundedPage(widget.page!) != _reportedPage) {
+      final requestedPage = widget.page!;
+      final controller = _controller;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_controller.hasClients || widget.page == null) return;
-        final target = _nearestVirtualPage(_boundedPage(widget.page!));
+        if (!mounted ||
+            !identical(controller, _controller) ||
+            !_controller.hasClients ||
+            widget.page != requestedPage ||
+            _boundedPage(requestedPage) == _reportedPage) {
+          return;
+        }
+        final target = _nearestVirtualPage(_boundedPage(requestedPage));
         _moveTo(target);
       });
     }
