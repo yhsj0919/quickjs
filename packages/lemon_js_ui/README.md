@@ -24,6 +24,28 @@ PageView({
 受控翻页动画默认 300 毫秒，通过 `scrollDurationMs` 和 `scrollCurve` 配置；
 设置 `scrollDurationMs: 0` 可立即跳转。首次挂载直接定位，不播放动画。
 
+设置 `loop: true` 开启循环翻页：首尾之间保留滑动动画，受控切换选择距离最近的
+同索引页面。`page`、`initialPage` 和 `onPageChanged` 的 `event.index` 始终使用
+真实子项索引（从 0 开始）。空列表和单页不循环。
+受控动画经过中间页时不会回传中间索引；手动滑动打断动画后以实际页码回调，
+下游在 `onPageChanged` 中同步 `page` 即可。
+
+`autoPlay: true` 启动自动翻页，切换为 `false` 暂停后续自动翻页（当前动画正常完成），
+再切换为 `true` 重新启动。`autoPlayIntervalMs` 默认 3000，必须大于 0，
+从页面停稳后计时。手动滑动和进入后台会暂停计时，停稳或返回前台后重新计时。
+与 `loop: true` 搭配可持续循环；未开启循环时自动播放到末页停止。
+
+```js
+PageView({
+  loop: true,
+  autoPlay: state.playing,
+  autoPlayIntervalMs: 3000,
+  page: state.page,
+  onPageChanged: actions.pageChanged(),
+  children: [Text({data: '第一页'}), Text({data: '第二页'})]
+})
+```
+
 ## 安装
 
 ```yaml

@@ -1163,6 +1163,12 @@ export type GridViewProps = AccessibilityProps & ScrollableProps & {
 
 export type PageViewProps = AccessibilityProps & ScrollableProps & {
   children?: JsUiNode[];
+  /** Seamless looping; page and onPageChanged.index remain logical child indices. Defaults to false. */
+  loop?: boolean;
+  /** Start/resume automatic paging with true; pause with false. Defaults to false. */
+  autoPlay?: boolean;
+  /** Delay after scrolling settles, in milliseconds. Must be positive; defaults to 3000. */
+  autoPlayIntervalMs?: number;
   /** Controlled zero-based page. Animates on updates; out-of-range values are clamped.
    * scrollDurationMs defaults to 300 (0 jumps instantly); scrollCurve defaults to easeOut. */
   page?: number;

@@ -2085,9 +2085,15 @@ export default Page({
       await render(page: 1);
       expect(controller.page, 1);
       await render(page: 99, count: 2);
-      expect(controller.page, 1);
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller!.page,
+        1,
+      );
       await render(page: -1);
-      expect(controller.page, 0);
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller!.page,
+        0,
+      );
       await render(count: 0, page: 2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -2148,6 +2154,234 @@ export default Page({
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'PageView loops across both seams with animation and logical events',
+    (tester) async {
+      final events = <Map<String, Object?>>[];
+      Future<void> render({int? page, int count = 3, bool loop = true}) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: JsUiRenderer(onEvent: events.add).build(
+                JsUiNode.fromMap(<String, Object?>{
+                  'type': 'PageView',
+                  'loop': loop,
+                  'page': ?page,
+                  'scrollCurve': 'linear',
+                  'onPageChanged': <String, Object?>{'method': 'changed'},
+                  'children': <Object?>[
+                    for (var i = 0; i < count; i++)
+                      <String, Object?>{
+                        'type': 'Text',
+                        'key': 'child$i',
+                        'data': 'page $i',
+                      },
+                  ],
+                }),
+              ),
+            ),
+          ),
+        );
+      }
+
+      await render(page: 2);
+      final controller = tester
+          .widget<PageView>(find.byType(PageView))
+          .controller!;
+      final start = controller.page!;
+      await render(page: 0);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(controller.page, greaterThan(start));
+      expect(controller.page, lessThan(start + 1));
+      await tester.pumpAndSettle();
+      expect(controller.page, start + 1);
+      expect(events.last, containsPair('index', 0));
+      await render(page: 2);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(controller.page, greaterThan(start));
+      expect(controller.page, lessThan(start + 1));
+      await tester.pumpAndSettle();
+      expect(controller.page, start);
+      expect(events.last, containsPair('index', 2));
+      await render();
+      await tester.drag(find.byType(PageView), const Offset(-800, 0));
+      await tester.pumpAndSettle();
+      expect(controller.page, start + 1);
+      expect(events.last, containsPair('index', 0));
+      await tester.drag(find.byType(PageView), const Offset(800, 0));
+      await tester.pumpAndSettle();
+      expect(controller.page, start);
+      expect(events.last, containsPair('index', 2));
+      await render(count: 2);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+                .widget<PageView>(find.byType(PageView))
+                .controller!
+                .page!
+                .round() %
+            2,
+        1,
+      );
+      await render(count: 2, loop: false);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller!.page,
+        1,
+      );
+      await render(count: 1);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller!.page,
+        0,
+      );
+      await render(count: 0);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'PageView manual interruption and controlled feedback keep logical indices aligned',
+    (tester) async {
+      var page = 0;
+      late StateSetter update;
+      final events = <Map<String, Object?>>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return JsUiRenderer(
+                  onEvent: (event) {
+                    events.add(event);
+                    setState(() => page = event['index']! as int);
+                  },
+                ).build(
+                  JsUiNode.fromMap(<String, Object?>{
+                    'type': 'PageView',
+                    'page': page,
+                    'loop': true,
+                    'scrollDurationMs': 1000,
+                    'scrollCurve': 'linear',
+                    'onPageChanged': <String, Object?>{'method': 'changed'},
+                    'children': <Object?>[
+                      for (var i = 0; i < 5; i++)
+                        <String, Object?>{'type': 'Text', 'data': 'page $i'},
+                    ],
+                  }),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      final controller = tester
+          .widget<PageView>(find.byType(PageView))
+          .controller!;
+      update(() => page = 2);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(events, isEmpty);
+      await tester.drag(find.byType(PageView), const Offset(-800, 0));
+      await tester.pumpAndSettle();
+      expect(events, isNotEmpty);
+      expect(page, controller.page!.round() % 5);
+      expect(events.last['index'], page);
+      final stopped = controller.page;
+      await tester.pump(const Duration(seconds: 2));
+      expect(controller.page, stopped);
+      update(() => page = (page + 2) % 5);
+      await tester.pumpAndSettle();
+      expect(controller.page!.round() % 5, page);
+      expect(events.last['index'], page);
+    },
+  );
+
+  testWidgets(
+    'PageView autoPlay pauses resumes and waits for manual scrolling',
+    (tester) async {
+      Future<void> render(
+        bool playing, {
+        bool loop = true,
+        int count = 3,
+      }) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: JsUiRenderer(onEvent: (_) {}).build(
+                JsUiNode.fromMap(<String, Object?>{
+                  'type': 'PageView',
+                  'loop': loop,
+                  'autoPlay': playing,
+                  'autoPlayIntervalMs': 1000,
+                  'scrollDurationMs': 100,
+                  'children': <Object?>[
+                    for (var i = 0; i < count; i++)
+                      <String, Object?>{'type': 'Text', 'data': 'page $i'},
+                  ],
+                }),
+              ),
+            ),
+          ),
+        );
+      }
+
+      Future<void> advance() async {
+        await tester.pump(const Duration(milliseconds: 1000));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+      }
+
+      await render(true);
+      final controller = tester
+          .widget<PageView>(find.byType(PageView))
+          .controller!;
+      final start = controller.page!;
+      await advance();
+      expect(controller.page, start + 1);
+      await render(false);
+      await tester.pump(const Duration(seconds: 3));
+      expect(controller.page, start + 1);
+      await render(true);
+      await advance();
+      expect(controller.page, start + 2);
+      await advance();
+      expect(controller.page, start + 3);
+      await tester.drag(find.byType(PageView), const Offset(-800, 0));
+      await tester.pumpAndSettle();
+      final manual = controller.page!;
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(controller.page, manual);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(seconds: 3));
+      expect(controller.page, manual);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await advance();
+      expect(controller.page, manual + 1);
+      await render(true, loop: false, count: 2);
+      await advance();
+      final finite = tester.widget<PageView>(find.byType(PageView)).controller!;
+      expect(finite.page, 1);
+      await tester.pump(const Duration(seconds: 3));
+      expect(finite.page, 1);
+      await render(true, count: 1);
+      await tester.pump(const Duration(seconds: 3));
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller!.page,
+        0,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('PageView initialPage is used only on mount', (tester) async {
     Future<void> render(int initialPage) async {
