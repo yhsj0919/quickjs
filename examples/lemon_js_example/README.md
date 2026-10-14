@@ -60,3 +60,9 @@ OHOS 版 `shared_preferences` 尚未正式发布到 pub.dev，本 example 已在
 - [WebView 插件 Flutter 页面](lib/pages/quickjs_ui/getting_started/quickjs_ui_webview_plugin_page.dart)
 
 包的最小接入方式请分别查看仓库根目录下 `packages/*/README.md`。
+
+## Vue iframe 插件预览
+
+使用 `flutter build web --release --target lib/preview_main.dart --no-web-resources-cdn`
+构建专用播放器。Vue 组件和部署说明见 [integrations/vue](../../integrations/vue/README.md)。
+该入口通过 iframe 通信加载 MJS，不进入示例菜单。
