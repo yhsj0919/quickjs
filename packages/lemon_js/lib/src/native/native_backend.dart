@@ -1,11 +1,11 @@
 import '../backend/backend.dart';
 import '../runtime/runtime_base.dart';
 import '../runtime/runtime_options.dart';
-import 'native_worker.dart';
+import 'native_runtime.dart';
 
 /// mobile / desktop 平台使用的 FFI backend。
 ///
-/// 每次创建 runtime 都会启动一个持有 QuickJS 指针的 Dart isolate worker。
+/// Runtime 默认在当前 isolate 执行，也可显式使用独立 worker。
 class NativeJsBackend implements JsBackend {
   String _engineVersion = 'unknown';
 
@@ -14,7 +14,12 @@ class NativeJsBackend implements JsBackend {
 
   @override
   Future<JsJsRuntimeBase> createRuntime(JsOptions options) async {
-    final runtime = await NativeJsWorkerRuntime.create(options: options);
+    if (options.execution == JsExecution.workerIsolate) {
+      final runtime = await NativeJsWorkerRuntime.create(options: options);
+      _engineVersion = runtime.engineVersion;
+      return runtime;
+    }
+    final runtime = await NativeJsLocalRuntime.create(options: options);
     _engineVersion = runtime.engineVersion;
     return runtime;
   }

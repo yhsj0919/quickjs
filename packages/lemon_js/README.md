@@ -65,7 +65,8 @@ final result = await engine.run('''
 print(result); // 42
 ```
 
-`injectFunction()` 临时注入的 Dart 函数在 JS 中返回 Promise；同名注入会替换旧回调，
+原生当前 isolate 模式中，`injectFunction()` 保留 Dart 回调的返回方式：普通值直接返回，
+Future 转为 Promise。worker 与 Web 后端的调用跨越消息边界，返回 Promise。同名注入会替换旧回调，
 `restart()` 后不会恢复。需要随引擎重建恢复的正式宿主能力应通过创建参数 `methods` 配置。
 参数和结果支持 JSON 值以及
 `Uint8List`/`Uint8Array`。
@@ -143,8 +144,9 @@ final result = await engine.callPluginExport(plugin, 'getHome', const []);
 `JsException.kind` 或具体异常类型区分超时、取消、队列已满、runtime 关闭、崩溃、
 内存不足和栈溢出。
 
-长同步 JavaScript 不会阻塞 Flutter UI isolate，但会阻塞同一 QuickJS runtime 的后续
-任务。`restart()` 会重建底层 runtime，因此 JS 全局变量和模块临时状态会丢失。
+原生 runtime 默认在当前 isolate 执行，长同步 JavaScript 会占用该 isolate。
+需要后台执行时，创建参数使用 `JsOptions(execution: JsExecution.workerIsolate)`。
+`restart()` 会重建底层 runtime，因此 JS 全局变量和模块临时状态会丢失。
 
 ## 示例与文档
 
@@ -155,5 +157,6 @@ final result = await engine.callPluginExport(plugin, 'getHome', const []);
 - [Class binding 生命周期](https://github.com/yhsj0919/quickjs/blob/master/docs/class_binding_lifecycle.md)
 - [性能排查](https://github.com/yhsj0919/quickjs/blob/master/docs/performance_troubleshooting.md)
 - [pub 包最小示例](example/main.dart)
+- [执行方式与同步调用](../../docs/runtime_execution.md)
 
 完整示例保留在 GitHub 仓库，pub 包 README 只覆盖最小接入和主要能力。

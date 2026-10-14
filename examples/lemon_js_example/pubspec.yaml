@@ -39,9 +39,8 @@ dependencies:
   web: ^1.1.1
 
 dependency_overrides:
-  # Hvigor requires OHOS plugin source paths to stay relative to this project.
   integration_test:
-    path: ../../build/ohos-sdk-packages/integration_test
+    sdk: flutter
   # 特定 Android 开发板的视频绿屏回退方案，按需启用；见 README。
   # video_player_android: 2.7.1
 

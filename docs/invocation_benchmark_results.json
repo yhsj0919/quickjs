@@ -1,0 +1,149 @@
+{
+  "buildMode": "release",
+  "results": [
+    {
+      "method": "row",
+      "batchSize": 1,
+      "async": false,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 23.489,
+      "p90Ms": 25.048,
+      "minMs": 23.121,
+      "maxMs": 25.635,
+      "medianUsPerRow": 23.489
+    },
+    {
+      "method": "row",
+      "batchSize": 1,
+      "async": true,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 29.976,
+      "p90Ms": 31.39,
+      "minMs": 28.724,
+      "maxMs": 31.548,
+      "medianUsPerRow": 29.976
+    },
+    {
+      "method": "row",
+      "batchSize": 20,
+      "async": false,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 20.165,
+      "p90Ms": 21.665,
+      "minMs": 19.751,
+      "maxMs": 21.96,
+      "medianUsPerRow": 20.165
+    },
+    {
+      "method": "row",
+      "batchSize": 20,
+      "async": true,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 22.953,
+      "p90Ms": 25.212,
+      "minMs": 21.949,
+      "maxMs": 25.745,
+      "medianUsPerRow": 22.953
+    },
+    {
+      "method": "row",
+      "batchSize": 100,
+      "async": false,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 19.4,
+      "p90Ms": 20.681,
+      "minMs": 18.893,
+      "maxMs": 21.519,
+      "medianUsPerRow": 19.4
+    },
+    {
+      "method": "row",
+      "batchSize": 100,
+      "async": true,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 21.245,
+      "p90Ms": 22.46,
+      "minMs": 20.637,
+      "maxMs": 22.489,
+      "medianUsPerRow": 21.245
+    },
+    {
+      "method": "hostRow",
+      "batchSize": 1,
+      "async": false,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 41.59,
+      "p90Ms": 42.591,
+      "minMs": 40.816,
+      "maxMs": 43.096,
+      "medianUsPerRow": 41.59
+    },
+    {
+      "method": "hostRow",
+      "batchSize": 1,
+      "async": true,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 50.2,
+      "p90Ms": 52.267,
+      "minMs": 46.997,
+      "maxMs": 53.254,
+      "medianUsPerRow": 50.2
+    },
+    {
+      "method": "hostRow",
+      "batchSize": 20,
+      "async": false,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 40.051,
+      "p90Ms": 42.163,
+      "minMs": 38.396,
+      "maxMs": 42.591,
+      "medianUsPerRow": 40.051
+    },
+    {
+      "method": "hostRow",
+      "batchSize": 20,
+      "async": true,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 42.62,
+      "p90Ms": 47.672,
+      "minMs": 41.0,
+      "maxMs": 61.795,
+      "medianUsPerRow": 42.62
+    },
+    {
+      "method": "hostRow",
+      "batchSize": 100,
+      "async": false,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 37.149,
+      "p90Ms": 38.911,
+      "minMs": 35.353,
+      "maxMs": 39.869,
+      "medianUsPerRow": 37.149
+    },
+    {
+      "method": "hostRow",
+      "batchSize": 100,
+      "async": true,
+      "rowsPerSample": 1000,
+      "samples": 15,
+      "medianMs": 38.644,
+      "p90Ms": 40.847,
+      "minMs": 37.959,
+      "maxMs": 41.012,
+      "medianUsPerRow": 38.644
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+// Shared execution core with current-isolate and explicit worker transports.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -42,6 +43,7 @@ const String _pendingSentinel = '\u001eQuickJS_PENDING';
 
 const String _readyMessage = 'ready';
 const String _evalMessage = 'eval';
+const String _invokeMessage = 'invoke';
 const String _createContextMessage = 'createContext';
 const String _disposeContextMessage = 'disposeContext';
 const String _evalContextMessage = 'evalContext';
@@ -68,165 +70,60 @@ const String _errorMessage = 'error';
 const String _responseMessage = 'response';
 
 typedef _WorkerReady = ({SendPort sendPort, String engineVersion});
-typedef _JsCallback = Future<Object?> Function(List<Object?> args);
+typedef _JsCallback = FutureOr<Object?> Function(List<Object?> args);
 
-SendPort? _nativeHostCallbackSendPort;
-int _nativeNextHostCallbackRequestId = 1;
-
-int _nativeHostCallback(int callbackId, Pointer<Utf8> argsJson) {
-  final sendPort = _nativeHostCallbackSendPort;
-  if (sendPort == null) {
-    return -1;
-  }
-  final requestId = _nativeNextHostCallbackRequestId++;
-  sendPort.send(<String, Object?>{
-    _messageTypeKey: _callbackRequestMessage,
-    _messageCallbackRequestIdKey: requestId,
-    _messageCallbackIdKey: callbackId,
-    _messageArgsJsonKey: argsJson.toDartString(),
-  });
-  return requestId;
+abstract class _NativeTransport {
+  Pointer<Int32> get cancelFlag;
+  String get engineVersion;
+  void send(Map<String, Object?> message);
+  void listen(void Function(dynamic) listener);
+  Future<void> close();
 }
 
-int _nativeHostStreamPull(int streamId) {
-  final sendPort = _nativeHostCallbackSendPort;
-  if (sendPort == null) {
-    return -1;
-  }
-  final requestId = _nativeNextHostCallbackRequestId++;
-  sendPort.send(<String, Object?>{
-    _messageTypeKey: _streamPullRequestMessage,
-    _messagePullRequestIdKey: requestId,
-    _messageStreamIdKey: streamId,
-  });
-  return requestId;
-}
-
-void _nativeHostStreamCancel(int streamId) {
-  final sendPort = _nativeHostCallbackSendPort;
-  sendPort?.send(<String, Object?>{
-    _messageTypeKey: _streamCancelRequestMessage,
-    _messageStreamIdKey: streamId,
-  });
-}
-
-int _nativeHostSinkAction(
-  int sinkId,
-  Pointer<Utf8> action,
-  Pointer<Utf8> payloadJson,
-) {
-  final sendPort = _nativeHostCallbackSendPort;
-  if (sendPort == null) {
-    return -1;
-  }
-  final requestId = _nativeNextHostCallbackRequestId++;
-  sendPort.send(<String, Object?>{
-    _messageTypeKey: _sinkActionRequestMessage,
-    _messageActionRequestIdKey: requestId,
-    _messageSinkIdKey: sinkId,
-    _messageSinkActionKey: action.toDartString(),
-    if (payloadJson != nullptr)
-      _messagePayloadJsonKey: payloadJson.toDartString(),
-  });
-  return requestId;
-}
-
-final Pointer<NativeFunction<JsHostCallbackNative>> _nativeHostCallbackPointer =
-    Pointer.fromFunction<JsHostCallbackNative>(_nativeHostCallback, -1);
-
-final Pointer<NativeFunction<JsHostStreamPullNative>>
-_nativeHostStreamPullPointer = Pointer.fromFunction<JsHostStreamPullNative>(
-  _nativeHostStreamPull,
-  -1,
-);
-
-final Pointer<NativeFunction<JsHostStreamCancelNative>>
-_nativeHostStreamCancelPointer = Pointer.fromFunction<JsHostStreamCancelNative>(
-  _nativeHostStreamCancel,
-);
-
-final Pointer<NativeFunction<JsHostSinkActionNative>>
-_nativeHostSinkActionPointer = Pointer.fromFunction<JsHostSinkActionNative>(
-  _nativeHostSinkAction,
-  -1,
-);
-
-/// native 平台的 QuickJS runtime。
-///
-/// 这个对象运行在调用方 isolate 中，只持有 worker isolate 的端口和 pending Future。
-/// 真正的 `JsRuntime*` 指针只存在于 [_nativeJsWorkerMain]。
-final class NativeJsWorkerRuntime
-    implements JsJsRuntimeBase, JsMultiContextRuntimeBase, JsTimerRuntimeBase {
-  NativeJsWorkerRuntime._(
-    this._isolate,
-    this._receivePort,
-    this._errorPort,
-    this._exitPort,
-    this._sendPort,
-    this._errorSubscription,
-    this._exitSubscription,
-    this._cancelFlag,
+final class _WorkerTransport implements _NativeTransport {
+  _WorkerTransport(
+    this.isolate,
+    this.receivePort,
+    this.errorPort,
+    this.exitPort,
+    this.sendPort,
+    this.errorSubscription,
+    this.exitSubscription,
+    this.cancelFlag,
     this.engineVersion,
   );
-
-  final Isolate _isolate;
-  final ReceivePort _receivePort;
-  final ReceivePort _errorPort;
-  final ReceivePort _exitPort;
-  final SendPort _sendPort;
-  final StreamSubscription<dynamic> _errorSubscription;
-  final StreamSubscription<dynamic> _exitSubscription;
-  final Pointer<Int32> _cancelFlag;
+  final Isolate isolate;
+  final ReceivePort receivePort, errorPort, exitPort;
+  final SendPort sendPort;
+  final StreamSubscription<dynamic> errorSubscription, exitSubscription;
+  StreamSubscription<dynamic>? responseSubscription;
+  @override
+  final Pointer<Int32> cancelFlag;
+  @override
   final String engineVersion;
-  final Map<int, Completer<Object?>> _pending = <int, Completer<Object?>>{};
-  final Map<int, _JsCallback> _callbacks = <int, _JsCallback>{};
-  final Map<int, Set<int>> _contextCallbackIds = <int, Set<int>>{};
-  final Map<int, int> _callbackContextIds = <int, int>{};
-  final Map<int, Set<int>> _contextStreamIds = <int, Set<int>>{};
-  final Map<int, Set<int>> _contextSinkIds = <int, Set<int>>{};
-  late final JsDartStreamRegistry _streamRegistry = JsDartStreamRegistry(
-    (pullRequestId, payloadJson) {
-      _sendPort.send(<String, Object?>{
-        _messageTypeKey: _streamPullResponseMessage,
-        _messagePullRequestIdKey: int.parse(pullRequestId),
-        _messageSuccessKey: true,
-        _messagePayloadJsonKey: payloadJson,
-      });
-    },
-    (pullRequestId, message) {
-      _sendPort.send(<String, Object?>{
-        _messageTypeKey: _streamPullResponseMessage,
-        _messagePullRequestIdKey: int.parse(pullRequestId),
-        _messageSuccessKey: false,
-        _messagePayloadJsonKey: message,
-      });
-    },
-  );
-  late final JsJsSinkRegistry _sinkRegistry = JsJsSinkRegistry(
-    (actionRequestId) {
-      _sendPort.send(<String, Object?>{
-        _messageTypeKey: _sinkActionResponseMessage,
-        _messageActionRequestIdKey: int.parse(actionRequestId),
-        _messageSuccessKey: true,
-        _messagePayloadJsonKey: '',
-      });
-    },
-    (actionRequestId, message) {
-      _sendPort.send(<String, Object?>{
-        _messageTypeKey: _sinkActionResponseMessage,
-        _messageActionRequestIdKey: int.parse(actionRequestId),
-        _messageSuccessKey: false,
-        _messagePayloadJsonKey: message,
-      });
-    },
-  );
-  StreamSubscription<dynamic>? _responseSubscription;
-  int _nextRequestId = 1;
-  bool _closed = false;
-  bool _asyncRunning = false;
-  bool _portsClosed = false;
-  Future<void>? _disposeFuture;
+  @override
+  void send(Map<String, Object?> message) => sendPort.send(message);
+  @override
+  void listen(void Function(dynamic) listener) {
+    responseSubscription = receivePort.listen(listener);
+  }
 
+  @override
+  Future<void> close() async {
+    isolate.kill(priority: Isolate.immediate);
+    await responseSubscription?.cancel();
+    await errorSubscription.cancel();
+    await exitSubscription.cancel();
+    receivePort.close();
+    errorPort.close();
+    exitPort.close();
+    calloc.free(cancelFlag);
+  }
+}
+
+/// Explicit background-isolate transport for the shared native executor.
+final class NativeJsWorkerRuntime extends _NativeRuntime {
+  NativeJsWorkerRuntime._(super.transport);
   static Future<NativeJsWorkerRuntime> create({
     JsOptions options = const JsOptions(),
   }) async {
@@ -314,15 +211,17 @@ final class NativeJsWorkerRuntime
       readyPort.close();
 
       runtime = NativeJsWorkerRuntime._(
-        isolate,
-        responsePort,
-        errorPort,
-        exitPort,
-        workerReady.sendPort,
-        errorSubscription,
-        exitSubscription,
-        cancelFlag,
-        workerReady.engineVersion,
+        _WorkerTransport(
+          isolate,
+          responsePort,
+          errorPort,
+          exitPort,
+          workerReady.sendPort,
+          errorSubscription,
+          exitSubscription,
+          cancelFlag,
+          workerReady.engineVersion,
+        ),
       );
       runtime._listenResponses();
       return runtime;
@@ -341,6 +240,119 @@ final class NativeJsWorkerRuntime
       rethrow;
     }
   }
+}
+
+abstract class _NativeRuntime
+    implements
+        JsJsRuntimeBase,
+        JsMultiContextRuntimeBase,
+        JsTimerRuntimeBase,
+        JsInvocationRuntimeBase,
+        JsMultiContextInvocationRuntimeBase {
+  _NativeRuntime(this._transport);
+  final _NativeTransport _transport;
+  String get engineVersion => _transport.engineVersion;
+  final Map<int, Completer<Object?>> _pending = <int, Completer<Object?>>{};
+  final Map<int, _JsCallback> _callbacks = <int, _JsCallback>{};
+  final Map<int, Set<int>> _contextCallbackIds = <int, Set<int>>{};
+  final Map<int, int> _callbackContextIds = <int, int>{};
+  final Map<int, Set<int>> _contextStreamIds = <int, Set<int>>{};
+  final Map<int, Set<int>> _contextSinkIds = <int, Set<int>>{};
+  late final JsDartStreamRegistry _streamRegistry = JsDartStreamRegistry(
+    (pullRequestId, payloadJson) {
+      _transport.send(<String, Object?>{
+        _messageTypeKey: _streamPullResponseMessage,
+        _messagePullRequestIdKey: int.parse(pullRequestId),
+        _messageSuccessKey: true,
+        _messagePayloadJsonKey: payloadJson,
+      });
+    },
+    (pullRequestId, message) {
+      _transport.send(<String, Object?>{
+        _messageTypeKey: _streamPullResponseMessage,
+        _messagePullRequestIdKey: int.parse(pullRequestId),
+        _messageSuccessKey: false,
+        _messagePayloadJsonKey: message,
+      });
+    },
+  );
+  late final JsJsSinkRegistry _sinkRegistry = JsJsSinkRegistry(
+    (actionRequestId) {
+      _transport.send(<String, Object?>{
+        _messageTypeKey: _sinkActionResponseMessage,
+        _messageActionRequestIdKey: int.parse(actionRequestId),
+        _messageSuccessKey: true,
+        _messagePayloadJsonKey: '',
+      });
+    },
+    (actionRequestId, message) {
+      _transport.send(<String, Object?>{
+        _messageTypeKey: _sinkActionResponseMessage,
+        _messageActionRequestIdKey: int.parse(actionRequestId),
+        _messageSuccessKey: false,
+        _messagePayloadJsonKey: message,
+      });
+    },
+  );
+  int _nextRequestId = 1;
+  @override
+  Future<String> invoke(
+    String requestJson, {
+    bool awaitResult = false,
+    Duration? timeout,
+  }) => _invokeRequest(null, requestJson, awaitResult, timeout);
+
+  @override
+  Future<String> invokeContext(
+    int contextId,
+    String requestJson, {
+    bool awaitResult = false,
+    Duration? timeout,
+  }) => _invokeRequest(contextId, requestJson, awaitResult, timeout);
+
+  Future<String> _invokeRequest(
+    int? contextId,
+    String requestJson,
+    bool awaitResult,
+    Duration? timeout,
+  ) {
+    Future<String> send() => _sendRequest<String>(_invokeMessage, {
+      _messageContextIdKey: ?contextId,
+      _messageArgsJsonKey: requestJson,
+      'awaitResult': awaitResult,
+      if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
+    });
+    return contextId == null && awaitResult ? _runRootAsync(send) : send();
+  }
+
+  Future<String> _runRootAsync(Future<String> Function() action) async {
+    if (_closed) throw JsRuntimeClosedException();
+    _transport.cancelFlag.value = 0;
+    _asyncRunning = true;
+    try {
+      return await action();
+    } finally {
+      _asyncRunning = false;
+    }
+  }
+
+  @override
+  String invokeSync(String requestJson, {Duration? timeout}) =>
+      throw UnsupportedError(
+        'Synchronous calls require current-isolate execution',
+      );
+  @override
+  String invokeContextSync(
+    int contextId,
+    String requestJson, {
+    Duration? timeout,
+  }) => throw UnsupportedError(
+    'Synchronous calls require current-isolate execution',
+  );
+  bool _closed = false;
+  bool _asyncRunning = false;
+  bool _portsClosed = false;
+  Future<void>? _disposeFuture;
 
   /// Creates an additional native JSContext in this worker's shared JSRuntime.
   @override
@@ -417,7 +429,7 @@ final class NativeJsWorkerRuntime
     int contextId,
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
+    FutureOr<Object?> Function(List<Object?> args) callback,
   ) async {
     if (_closed) throw JsRuntimeClosedException();
     _callbacks[callbackId] = callback;
@@ -489,7 +501,7 @@ final class NativeJsWorkerRuntime
       throw JsRuntimeClosedException();
     }
     // 每次 eval 开始前清空取消标记，避免上一次 stop 影响后续任务。
-    _cancelFlag.value = 0;
+    _transport.cancelFlag.value = 0;
     final result = await _sendRequest<String>(_evalMessage, <String, Object?>{
       _messageCodeKey: code,
       _messageSourceNameKey: name,
@@ -507,9 +519,7 @@ final class NativeJsWorkerRuntime
     if (_closed) {
       throw JsRuntimeClosedException();
     }
-    _cancelFlag.value = 0;
-    _asyncRunning = true;
-    try {
+    return _runRootAsync(() async {
       final result =
           await _sendRequest<String>(_evalAsyncMessage, <String, Object?>{
             _messageCodeKey: code,
@@ -517,9 +527,7 @@ final class NativeJsWorkerRuntime
             if (timeout != null) _messageTimeoutMsKey: timeout.inMilliseconds,
           });
       return result;
-    } finally {
-      _asyncRunning = false;
-    }
+    });
   }
 
   @override
@@ -532,7 +540,7 @@ final class NativeJsWorkerRuntime
     if (_closed) {
       throw JsRuntimeClosedException();
     }
-    _cancelFlag.value = 0;
+    _transport.cancelFlag.value = 0;
     final result =
         await _sendRequest<String>(_evalModuleMessage, <String, Object?>{
           _messageCodeKey: source,
@@ -547,7 +555,7 @@ final class NativeJsWorkerRuntime
   Future<void> bindCallback(
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
+    FutureOr<Object?> Function(List<Object?> args) callback,
   ) async {
     if (_closed) {
       throw JsRuntimeClosedException();
@@ -588,11 +596,13 @@ final class NativeJsWorkerRuntime
     }
     if (_asyncRunning) {
       _closed = true;
-      _cancelFlag.value = 1;
+      _transport.cancelFlag.value = 1;
       _streamRegistry.dispose();
       _sinkRegistry.dispose();
       _failAll(JsCancelledException());
-      _disposeFuture = _closePorts();
+      _disposeFuture = _sendRequest<void>(
+        _disposeMessage,
+      ).whenComplete(_closePorts);
       return _disposeFuture!;
     }
     _closed = true;
@@ -606,29 +616,13 @@ final class NativeJsWorkerRuntime
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop() {
     if (_closed) {
-      return;
-    }
-    if (_asyncRunning) {
-      _closed = true;
-      _cancelFlag.value = 1;
-      _streamRegistry.dispose();
-      _sinkRegistry.dispose();
-      _failAll(JsCancelledException());
-      await _closePorts();
-      return;
+      return _disposeFuture ?? Future<void>.value();
     }
     // C interrupt handler 会读取这个标记并中断正在执行的 JS。
-    _cancelFlag.value = 1;
-    final pending = _pending.values.map((completer) => completer.future);
-    await Future.wait<void>([
-      for (final future in pending) future.then<void>((_) {}, onError: (_) {}),
-    ]);
-    _closed = true;
-    _streamRegistry.dispose();
-    _sinkRegistry.dispose();
-    await _closePorts();
+    _transport.cancelFlag.value = 1;
+    return dispose();
   }
 
   /// 仅供测试使用：让 worker isolate 抛出未捕获错误，模拟 worker crash。
@@ -643,11 +637,14 @@ final class NativeJsWorkerRuntime
     String type, [
     Map<String, Object?> payload = const <String, Object?>{},
   ]) {
+    if (_closed && type != _disposeMessage) {
+      return Future<T>.error(JsRuntimeClosedException());
+    }
     final requestId = _nextRequestId++;
     final completer = Completer<Object?>();
     _pending[requestId] = completer;
     // 所有 worker 命令都带 requestId，响应回来后用它完成对应 Future。
-    _sendPort.send(<String, Object?>{
+    _transport.send(<String, Object?>{
       _messageTypeKey: type,
       _messageIdKey: requestId,
       ...payload,
@@ -656,7 +653,7 @@ final class NativeJsWorkerRuntime
   }
 
   void _listenResponses() {
-    _responseSubscription = _receivePort.listen(_handleWorkerMessage);
+    _transport.listen(_handleWorkerMessage);
   }
 
   void _handleWorkerFailure(Object error) {
@@ -756,7 +753,7 @@ final class NativeJsWorkerRuntime
   ) async {
     final callback = _callbacks[callbackId];
     if (callback == null) {
-      _sendPort.send(<String, Object?>{
+      _transport.send(<String, Object?>{
         _messageTypeKey: _callbackResponseMessage,
         _messageCallbackRequestIdKey: callbackRequestId,
         _messageSuccessKey: false,
@@ -765,23 +762,26 @@ final class NativeJsWorkerRuntime
       return;
     }
 
+    final contextId = _callbackContextIds[callbackId];
     try {
       final decoded = jsonDecode(argsJson);
       final args = decoded is List
           ? [for (final item in decoded) decodeCallbackWireValue(item)]
           : <Object?>[];
       final result = await callback(args);
+      if (!_isCallbackContextLive(contextId)) return;
       final encodedResult = result is Stream
-          ? _encodeContextStream(callbackId, result.cast<Object?>())
+          ? _encodeContextStream(contextId, result.cast<Object?>())
           : _streamRegistry.encodeCallbackResult(result);
-      _sendPort.send(<String, Object?>{
+      _transport.send(<String, Object?>{
         _messageTypeKey: _callbackResponseMessage,
         _messageCallbackRequestIdKey: callbackRequestId,
         _messageSuccessKey: true,
         _messagePayloadJsonKey: jsonEncode(encodedResult),
       });
     } catch (error) {
-      _sendPort.send(<String, Object?>{
+      if (!_isCallbackContextLive(contextId)) return;
+      _transport.send(<String, Object?>{
         _messageTypeKey: _callbackResponseMessage,
         _messageCallbackRequestIdKey: callbackRequestId,
         _messageSuccessKey: false,
@@ -790,9 +790,12 @@ final class NativeJsWorkerRuntime
     }
   }
 
-  Object _encodeContextStream(int callbackId, Stream<Object?> stream) {
+  bool _isCallbackContextLive(int? contextId) =>
+      !_closed &&
+      (contextId == null || _contextCallbackIds.containsKey(contextId));
+
+  Object _encodeContextStream(int? contextId, Stream<Object?> stream) {
     final streamId = _streamRegistry.register(stream);
-    final contextId = _callbackContextIds[callbackId];
     if (contextId != null) {
       _contextStreamIds.putIfAbsent(contextId, () => <int>{}).add(streamId);
     }
@@ -811,77 +814,375 @@ final class NativeJsWorkerRuntime
   }
 
   Future<void> _closePorts() async {
-    if (_portsClosed) {
-      return;
-    }
+    if (_portsClosed) return;
     _portsClosed = true;
-    // 端口和 cancelFlag 只释放一次，避免 stop/dispose/crash 并发收尾时 double free。
-    _isolate.kill(priority: Isolate.immediate);
-    await _responseSubscription?.cancel();
-    await _errorSubscription.cancel();
-    await _exitSubscription.cancel();
-    _receivePort.close();
-    _errorPort.close();
-    _exitPort.close();
-    calloc.free(_cancelFlag);
+    _callbacks.clear();
+    _callbackContextIds.clear();
+    _contextCallbackIds.clear();
+    _contextStreamIds.clear();
+    _contextSinkIds.clear();
+    await _transport.close();
   }
 }
 
-/// worker isolate 入口。
-///
-/// 这里创建并持有 QuickJS runtime，监听主 isolate 发来的 eval / dispose 命令。
-void _nativeJsWorkerMain(Map<String, Object> ports) {
-  final readySendPort = ports['readyPort']! as SendPort;
-  final responseSendPort = ports['responsePort']! as SendPort;
-  final cancelFlag = Pointer<Int32>.fromAddress(
-    ports['cancelFlagAddress']! as int,
-  );
-  final memoryLimitBytes = ports[_messageMemoryLimitBytesKey] as int?;
-  final stackLimitBytes = ports[_messageStackLimitBytesKey] as int?;
-  final commandPort = ReceivePort();
+/// Runs QuickJS directly in the caller isolate.
+final class NativeJsLocalRuntime extends _NativeRuntime
+    implements JsSyncRuntimeBase, JsSyncMultiContextRuntimeBase {
+  NativeJsLocalRuntime._(_LocalTransport transport) : super(transport) {
+    transport.executor = _NativeExecutor(
+      transport.cancelFlag,
+      (message) => scheduleMicrotask(() => _handleWorkerMessage(message)),
+      transport.options,
+      immediateCallback: _invokeImmediateCallback,
+    );
+    _listenResponses();
+  }
+  static Future<NativeJsLocalRuntime> create({
+    JsOptions options = const JsOptions(),
+  }) async {
+    final transport = _LocalTransport(options);
+    try {
+      return NativeJsLocalRuntime._(transport);
+    } catch (_) {
+      calloc.free(transport.cancelFlag);
+      rethrow;
+    }
+  }
 
-  late final JsBindings bindings;
-  Pointer<JsRuntime> runtime = nullptr;
-  final contexts = <int, Pointer<JsContext>>{};
-  var nextContextId = 1;
-  var closed = false;
+  @override
+  bool get supportsSync => true;
+  _NativeExecutor get _executor => (_transport as _LocalTransport).executor;
+  int _invokeImmediateCallback(int id, String argsJson) {
+    try {
+      final callback = _callbacks[id];
+      if (_closed) throw JsRuntimeClosedException();
+      if (callback == null) {
+        throw StateError('QuickJS callback $id is not bound');
+      }
+      final args = (jsonDecode(argsJson) as List)
+          .map(decodeCallbackWireValue)
+          .toList();
+      final contextId = _callbackContextIds[id];
+      final result = callback(args);
+      if (result is Future<Object?>) {
+        final requestId = _executor.nextHostRequestId++;
+        unawaited(_completeImmediateAsync(requestId, contextId, result));
+        return requestId;
+      }
+      if (!_isCallbackContextLive(contextId)) throw JsRuntimeClosedException();
+      _setImmediateResult(
+        true,
+        jsonEncode(_encodeCallbackResult(contextId, result)),
+      );
+    } catch (error) {
+      _setImmediateResult(false, '$error');
+    }
+    return 0;
+  }
 
-  try {
+  Object? _encodeCallbackResult(int? contextId, Object? result) =>
+      result is Stream
+      ? _encodeContextStream(contextId, result.cast<Object?>())
+      : _streamRegistry.encodeCallbackResult(result);
+  Future<void> _completeImmediateAsync(
+    int requestId,
+    int? contextId,
+    Future<Object?> result,
+  ) async {
+    try {
+      final value = await result;
+      if (!_isCallbackContextLive(contextId)) return;
+      _resolveCallback(
+        _executor.bindings,
+        _executor.runtime,
+        requestId,
+        true,
+        jsonEncode(_encodeCallbackResult(contextId, value)),
+      );
+      _executor.pumpIdleJobs();
+    } catch (error) {
+      if (!_isCallbackContextLive(contextId)) return;
+      _resolveCallback(
+        _executor.bindings,
+        _executor.runtime,
+        requestId,
+        false,
+        '$error',
+      );
+      _executor.pumpIdleJobs();
+    }
+  }
+
+  void _setImmediateResult(bool success, String payload) {
+    final ptr = payload.toNativeUtf8();
+    try {
+      _executor.bindings.runtimeSetCallbackResult(
+        _executor.runtime,
+        success ? 1 : 0,
+        ptr,
+      );
+    } finally {
+      calloc.free(ptr);
+    }
+  }
+
+  @override
+  String evaluateSync(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) {
+    if (_closed) throw JsRuntimeClosedException();
+    if (_executor.inHostCallback) {
+      throw StateError(
+        'Reentrant synchronous JavaScript execution is not supported',
+      );
+    }
+    return _eval(
+      _executor.bindings,
+      _executor.runtime,
+      code,
+      name,
+      timeout?.inMilliseconds,
+    );
+  }
+
+  @override
+  String invokeSync(String requestJson, {Duration? timeout}) =>
+      _invokeSync(null, requestJson, timeout);
+  @override
+  String invokeContextSync(
+    int contextId,
+    String requestJson, {
+    Duration? timeout,
+  }) => _invokeSync(contextId, requestJson, timeout);
+
+  String _invokeSync(int? contextId, String requestJson, Duration? timeout) {
+    if (_closed) throw JsRuntimeClosedException();
+    if (_executor.inHostCallback) {
+      throw StateError(
+        'Reentrant synchronous JavaScript execution is not supported',
+      );
+    }
+    final context = contextId == null
+        ? nullptr.cast<JsContext>()
+        : _executor.contexts[contextId];
+    if (context == null) throw JsRuntimeClosedException();
+    return _invoke(
+      _executor.bindings,
+      _executor.runtime,
+      context,
+      requestJson,
+      timeout?.inMilliseconds,
+    );
+  }
+
+  @override
+  String evaluateContextSync(
+    int contextId,
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) {
+    if (_closed) throw JsRuntimeClosedException();
+    if (_executor.inHostCallback) {
+      throw StateError(
+        'Reentrant synchronous JavaScript execution is not supported',
+      );
+    }
+    final context = _executor.contexts[contextId];
+    if (context == null) throw JsRuntimeClosedException();
+    return _evalContext(
+      _executor.bindings,
+      context,
+      code,
+      name,
+      timeout?.inMilliseconds,
+    );
+  }
+}
+
+final class _LocalTransport implements _NativeTransport {
+  _LocalTransport(this.options);
+  final JsOptions options;
+  late final _NativeExecutor executor;
+  @override
+  final Pointer<Int32> cancelFlag = calloc<Int32>();
+  @override
+  String get engineVersion => executor.engineVersion;
+  @override
+  void listen(void Function(dynamic) listener) {}
+  @override
+  void send(Map<String, Object?> message) {
+    if (executor.inHostCallback) {
+      scheduleMicrotask(() => unawaited(executor.handle(message)));
+    } else {
+      unawaited(executor.handle(message));
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    cancelFlag.value = 1;
+    if (!executor.closed) {
+      await executor.handle({
+        _messageTypeKey: _disposeMessage,
+        _messageIdKey: -1,
+      });
+    }
+    await executor.whenIdle;
+    executor.releaseCallbacks();
+    calloc.free(cancelFlag);
+  }
+}
+
+/// Owns all QuickJS pointers in the isolate where it is created.
+final class _NativeExecutor {
+  _NativeExecutor(
+    this.cancelFlag,
+    this.emit,
+    JsOptions options, {
+    this.immediateCallback,
+  }) {
     bindings = JsBindings(JsBindings.open());
-    final engineVersion = bindings.version().toDartString();
     runtime = bindings.runtimeNew();
     if (runtime == nullptr) {
       throw StateError('Failed to create QuickJS runtime');
     }
-    if (memoryLimitBytes != null) {
-      bindings.runtimeSetMemoryLimit(runtime, memoryLimitBytes);
+    if (options.memoryLimitBytes case final int limit) {
+      bindings.runtimeSetMemoryLimit(runtime, limit);
     }
-    if (stackLimitBytes != null) {
-      bindings.runtimeSetStackLimit(runtime, stackLimitBytes);
+    if (options.stackLimitBytes case final int limit) {
+      bindings.runtimeSetStackLimit(runtime, limit);
     }
     bindings.runtimeSetCancelFlag(runtime, cancelFlag);
+    hostCallback = NativeCallable<JsHostCallbackNative>.isolateLocal((
+      int id,
+      Pointer<Utf8> args,
+    ) {
+      if (immediateCallback != null) {
+        inHostCallback = true;
+        try {
+          return immediateCallback!(id, args.toDartString());
+        } finally {
+          inHostCallback = false;
+        }
+      }
+      final requestId = nextHostRequestId++;
+      emit({
+        _messageTypeKey: _callbackRequestMessage,
+        _messageCallbackRequestIdKey: requestId,
+        _messageCallbackIdKey: id,
+        _messageArgsJsonKey: args.toDartString(),
+      });
+      return requestId;
+    }, exceptionalReturn: -1);
+    hostPull = NativeCallable<JsHostStreamPullNative>.isolateLocal((int id) {
+      final requestId = nextHostRequestId++;
+      emit({
+        _messageTypeKey: _streamPullRequestMessage,
+        _messagePullRequestIdKey: requestId,
+        _messageStreamIdKey: id,
+      });
+      return requestId;
+    }, exceptionalReturn: -1);
+    hostCancel = NativeCallable<JsHostStreamCancelNative>.isolateLocal((
+      int id,
+    ) {
+      emit({
+        _messageTypeKey: _streamCancelRequestMessage,
+        _messageStreamIdKey: id,
+      });
+    });
+    hostSink = NativeCallable<JsHostSinkActionNative>.isolateLocal((
+      int id,
+      Pointer<Utf8> action,
+      Pointer<Utf8> payload,
+    ) {
+      final requestId = nextHostRequestId++;
+      emit({
+        _messageTypeKey: _sinkActionRequestMessage,
+        _messageActionRequestIdKey: requestId,
+        _messageSinkIdKey: id,
+        _messageSinkActionKey: action.toDartString(),
+        _messagePayloadJsonKey: payload == nullptr
+            ? null
+            : payload.toDartString(),
+      });
+      return requestId;
+    }, exceptionalReturn: -1);
     bindings.runtimeSetStreamHandlers(
       runtime,
-      _nativeHostStreamPullPointer,
-      _nativeHostStreamCancelPointer,
-      _nativeHostSinkActionPointer,
+      hostPull.nativeFunction,
+      hostCancel.nativeFunction,
+      hostSink.nativeFunction,
     );
-    _nativeHostCallbackSendPort = responseSendPort;
-    readySendPort.send(<String, Object?>{
-      _messageTypeKey: _readyMessage,
-      'sendPort': commandPort.sendPort,
-      'engineVersion': engineVersion,
+  }
+  final Pointer<Int32> cancelFlag;
+  final void Function(Map<String, Object?>) emit;
+  final int Function(int, String)? immediateCallback;
+  late final JsBindings bindings;
+  Pointer<JsRuntime> runtime = nullptr;
+  final contexts = <int, Pointer<JsContext>>{};
+  int nextContextId = 1, nextHostRequestId = 1;
+  bool closed = false;
+  bool inHostCallback = false;
+  int activeAsyncCalls = 0;
+  Completer<void>? _idle;
+  final Map<int, Map<Completer<void>, Timer>> _polls = {};
+  Future<void> get whenIdle => activeAsyncCalls == 0
+      ? Future<void>.value()
+      : (_idle ??= Completer<void>()).future;
+  Future<void> waitForPoll(int contextId) {
+    final completion = Completer<void>();
+    final polls = _polls.putIfAbsent(contextId, () => {});
+    polls[completion] = Timer(Duration.zero, () {
+      polls.remove(completion);
+      if (polls.isEmpty) _polls.remove(contextId);
+      completion.complete();
     });
-  } catch (error) {
-    readySendPort.send(<String, Object?>{
-      _messageTypeKey: _errorMessage,
-      'error': '$error',
-    });
-    commandPort.close();
-    return;
+    return completion.future;
   }
 
-  commandPort.listen((dynamic message) async {
+  void cancelPolls(int contextId) {
+    final polls = _polls.remove(contextId);
+    if (polls == null) return;
+    for (final entry in polls.entries) {
+      entry.value.cancel();
+      entry.key.complete();
+    }
+  }
+
+  void finishAsyncCall() {
+    activeAsyncCalls--;
+    if (activeAsyncCalls == 0) {
+      _idle?.complete();
+      _idle = null;
+    }
+    pumpIdleJobs();
+  }
+
+  void pumpIdleJobs() {
+    if (!closed && activeAsyncCalls == 0) bindings.runtimePumpJobs(runtime);
+  }
+
+  late final NativeCallable<JsHostCallbackNative> hostCallback;
+  late final NativeCallable<JsHostStreamPullNative> hostPull;
+  late final NativeCallable<JsHostStreamCancelNative> hostCancel;
+  late final NativeCallable<JsHostSinkActionNative> hostSink;
+  bool _callbacksReleased = false;
+  String get engineVersion => bindings.version().toDartString();
+  void releaseCallbacks() {
+    if (_callbacksReleased) return;
+    _callbacksReleased = true;
+    hostCallback.close();
+    hostPull.close();
+    hostCancel.close();
+    hostSink.close();
+  }
+
+  Future<void> handle(dynamic message) async {
+    if (closed && message is Map && !message.containsKey(_messageIdKey)) return;
     if (message case {
       _messageTypeKey: _callbackResponseMessage,
       _messageCallbackRequestIdKey: final int callbackRequestId,
@@ -895,6 +1196,7 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
         success,
         payloadJson,
       );
+      pumpIdleJobs();
       return;
     }
     if (message case {
@@ -910,6 +1212,7 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
         success,
         payloadJson,
       );
+      pumpIdleJobs();
       return;
     }
     if (message case {
@@ -925,6 +1228,7 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
         success,
         payloadJson,
       );
+      pumpIdleJobs();
       return;
     }
 
@@ -947,15 +1251,59 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
             }
             final contextId = nextContextId++;
             contexts[contextId] = context;
-            _sendOk(responseSendPort, requestId, contextId);
+            _sendOk(emit, requestId, contextId);
           case _disposeContextMessage:
             final contextId = message[_messageContextIdKey] as int;
+            cancelPolls(contextId);
             final context = contexts.remove(contextId);
             if (context == null) {
               throw StateError('Unknown QuickJS context: $contextId');
             }
             bindings.contextFree(context);
-            _sendOk(responseSendPort, requestId, null);
+            _sendOk(emit, requestId, null);
+          case _invokeMessage:
+            final contextId = message[_messageContextIdKey] as int?;
+            final context = contextId == null
+                ? nullptr.cast<JsContext>()
+                : contexts[contextId];
+            if (context == null) throw JsRuntimeClosedException();
+            final request = message[_messageArgsJsonKey] as String;
+            final timeoutMs = message[_messageTimeoutMsKey] as int?;
+            late final String result;
+            if (message['awaitResult'] == true) {
+              activeAsyncCalls++;
+              try {
+                result = contextId == null
+                    ? await _evalAsync(
+                        bindings,
+                        runtime,
+                        '',
+                        '<call>',
+                        timeoutMs,
+                        cancelFlag,
+                        () => waitForPoll(0),
+                        invocation: request,
+                        isAlive: () => !closed,
+                      )
+                    : await _evalContextAsync(
+                        bindings,
+                        context,
+                        runtime,
+                        '',
+                        '<call>',
+                        timeoutMs,
+                        cancelFlag,
+                        () => contexts[contextId] == context,
+                        () => waitForPoll(contextId),
+                        invocation: request,
+                      );
+              } finally {
+                finishAsyncCall();
+              }
+            } else {
+              result = _invoke(bindings, runtime, context, request, timeoutMs);
+            }
+            _sendOk(emit, requestId, result);
           case _evalContextMessage:
             final contextId = message[_messageContextIdKey] as int;
             final context = contexts[contextId];
@@ -973,22 +1321,31 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
               name,
               timeoutMs,
             );
-            _sendOk(responseSendPort, requestId, result);
+            _sendOk(emit, requestId, result);
           case _evalContextAsyncMessage:
             final contextId = message[_messageContextIdKey] as int;
             final context = contexts[contextId];
             if (context == null) {
               throw StateError('Unknown QuickJS context: $contextId');
             }
-            final result = await _evalContextAsync(
-              bindings,
-              context,
-              message[_messageCodeKey] as String,
-              message[_messageSourceNameKey] as String? ?? '<context-run>',
-              message[_messageTimeoutMsKey] as int?,
-              cancelFlag,
-            );
-            _sendOk(responseSendPort, requestId, result);
+            activeAsyncCalls++;
+            late final String result;
+            try {
+              result = await _evalContextAsync(
+                bindings,
+                context,
+                runtime,
+                message[_messageCodeKey] as String,
+                message[_messageSourceNameKey] as String? ?? '<context-run>',
+                message[_messageTimeoutMsKey] as int?,
+                cancelFlag,
+                () => contexts[contextId] == context,
+                () => waitForPoll(contextId),
+              );
+            } finally {
+              finishAsyncCall();
+            }
+            _sendOk(emit, requestId, result);
           case _evalModuleContextMessage:
             final contextId = message[_messageContextIdKey] as int;
             final context = contexts[contextId];
@@ -1002,7 +1359,7 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
               message[_messageModuleNameKey] as String,
               message[_messageModulesKey] as String? ?? '',
             );
-            _sendOk(responseSendPort, requestId, result);
+            _sendOk(emit, requestId, result);
           case _pumpContextTimersMessage:
             final contextId = message[_messageContextIdKey] as int;
             final context = contexts[contextId];
@@ -1013,19 +1370,19 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
             if (delay < -1) {
               throw StateError('QuickJS timer pending job failed');
             }
-            _sendOk(responseSendPort, requestId, delay < 0 ? null : delay);
+            _sendOk(emit, requestId, delay < 0 ? null : delay);
           case _pumpTimersMessage:
             final delay = bindings.runtimePumpTimers(runtime);
             if (delay < -1) {
               throw StateError('QuickJS timer pending job failed');
             }
-            _sendOk(responseSendPort, requestId, delay < 0 ? null : delay);
+            _sendOk(emit, requestId, delay < 0 ? null : delay);
           case _evalMessage:
             final code = message[_messageCodeKey] as String;
             final name = message[_messageSourceNameKey] as String? ?? '<eval>';
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
             final result = _eval(bindings, runtime, code, name, timeoutMs);
-            _sendOk(responseSendPort, requestId, result);
+            _sendOk(emit, requestId, result);
           case _evalModuleMessage:
             final source = message[_messageCodeKey] as String;
             final name = message[_messageModuleNameKey] as String;
@@ -1037,25 +1394,39 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
               name,
               modules,
             );
-            _sendOk(responseSendPort, requestId, result);
+            _sendOk(emit, requestId, result);
           case _evalAsyncMessage:
             final code = message[_messageCodeKey] as String;
             final name = message[_messageSourceNameKey] as String? ?? '<run>';
             final timeoutMs = message[_messageTimeoutMsKey] as int?;
-            final result = await _evalAsync(
-              bindings,
-              runtime,
-              code,
-              name,
-              timeoutMs,
-              cancelFlag,
-            );
-            _sendOk(responseSendPort, requestId, result);
+            activeAsyncCalls++;
+            late final String result;
+            try {
+              result = await _evalAsync(
+                bindings,
+                runtime,
+                code,
+                name,
+                timeoutMs,
+                cancelFlag,
+                () => waitForPoll(0),
+                isAlive: () => !closed,
+              );
+            } finally {
+              finishAsyncCall();
+            }
+            _sendOk(emit, requestId, result);
           case _bindCallbackMessage:
             final callbackId = message[_messageCallbackIdKey] as int;
             final name = message[_messageCallbackNameKey] as String;
-            _bindCallback(bindings, runtime, callbackId, name);
-            _sendOk(responseSendPort, requestId, null);
+            _bindCallback(
+              bindings,
+              runtime,
+              callbackId,
+              name,
+              hostCallback.nativeFunction,
+            );
+            _sendOk(emit, requestId, null);
           case _bindContextCallbackMessage:
             final contextId = message[_messageContextIdKey] as int;
             final context = contexts[contextId];
@@ -1067,13 +1438,14 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
               context,
               message[_messageCallbackIdKey] as int,
               message[_messageCallbackNameKey] as String,
+              hostCallback.nativeFunction,
             );
-            _sendOk(responseSendPort, requestId, null);
+            _sendOk(emit, requestId, null);
           case _bindSinkMessage:
             final sinkId = message[_messageSinkIdKey] as int;
             final name = message[_messageCallbackNameKey] as String;
             _bindSink(bindings, runtime, sinkId, name);
-            _sendOk(responseSendPort, requestId, null);
+            _sendOk(emit, requestId, null);
           case _bindContextSinkMessage:
             final contextId = message[_messageContextIdKey] as int;
             final context = contexts[contextId];
@@ -1086,24 +1458,61 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
               message[_messageSinkIdKey] as int,
               message[_messageCallbackNameKey] as String,
             );
-            _sendOk(responseSendPort, requestId, null);
+            _sendOk(emit, requestId, null);
           case _disposeMessage:
             // runtime 必须在持有它的 worker isolate 中释放。
             closed = true;
+            for (final contextId in _polls.keys.toList()) {
+              cancelPolls(contextId);
+            }
+            for (final context in contexts.values) {
+              bindings.contextFree(context);
+            }
             contexts.clear();
             bindings.runtimeFree(runtime);
-            _nativeHostCallbackSendPort = null;
             runtime = nullptr;
-            _sendOk(responseSendPort, requestId, null);
-            commandPort.close();
+            _sendOk(emit, requestId, null);
+
           default:
             throw StateError('Unknown QuickJS worker command: $type');
         }
       } catch (error) {
-        _sendError(responseSendPort, requestId, error);
+        _sendError(emit, requestId, error);
       }
     }
-  });
+  }
+}
+
+void _nativeJsWorkerMain(Map<String, Object> ports) {
+  final ready = ports['readyPort']! as SendPort;
+  final response = ports['responsePort']! as SendPort;
+  final commands = ReceivePort();
+  try {
+    final executor = _NativeExecutor(
+      Pointer<Int32>.fromAddress(ports['cancelFlagAddress']! as int),
+      response.send,
+      JsOptions(
+        memoryLimitBytes: ports[_messageMemoryLimitBytesKey] as int?,
+        stackLimitBytes: ports[_messageStackLimitBytesKey] as int?,
+      ),
+    );
+    ready.send({
+      _messageTypeKey: _readyMessage,
+      'sendPort': commands.sendPort,
+      'engineVersion': executor.engineVersion,
+    });
+    commands.listen((dynamic message) async {
+      await executor.handle(message);
+      if (executor.closed) {
+        await executor.whenIdle;
+        executor.releaseCallbacks();
+        commands.close();
+      }
+    });
+  } catch (error) {
+    ready.send({_messageTypeKey: _errorMessage, 'error': '$error'});
+    commands.close();
+  }
 }
 
 void _bindSink(
@@ -1144,6 +1553,7 @@ void _bindCallback(
   Pointer<JsRuntime> runtime,
   int callbackId,
   String name,
+  Pointer<NativeFunction<JsHostCallbackNative>> callback,
 ) {
   final namePtr = name.toNativeUtf8();
   try {
@@ -1151,7 +1561,7 @@ void _bindCallback(
       runtime,
       callbackId,
       namePtr,
-      _nativeHostCallbackPointer,
+      callback,
     );
     if (result < 0) {
       throw StateError('QuickJS callback binding failed');
@@ -1166,6 +1576,7 @@ void _bindContextCallback(
   Pointer<JsContext> context,
   int callbackId,
   String name,
+  Pointer<NativeFunction<JsHostCallbackNative>> callback,
 ) {
   final namePtr = name.toNativeUtf8();
   try {
@@ -1173,7 +1584,7 @@ void _bindContextCallback(
       context,
       callbackId,
       namePtr,
-      _nativeHostCallbackPointer,
+      callback,
     );
     if (result < 0) {
       throw StateError('QuickJS context callback binding failed');
@@ -1322,6 +1733,7 @@ String _eval(
   String name,
   int? timeoutMs,
 ) {
+  if (timeoutMs != null && timeoutMs <= 0) throw const JsTimeoutException();
   final codePtr = code.toNativeUtf8();
   final namePtr = name.toNativeUtf8();
   final resultPtr = bindings.evalTimeoutNamed(
@@ -1332,26 +1744,29 @@ String _eval(
   );
   calloc.free(codePtr);
   calloc.free(namePtr);
-  if (resultPtr == nullptr) {
-    throw StateError('QuickJS eval returned null');
-  }
+  return _takeResult(bindings, resultPtr);
+}
+
+String _invoke(
+  JsBindings bindings,
+  Pointer<JsRuntime> runtime,
+  Pointer<JsContext> context,
+  String request,
+  int? timeoutMs,
+) {
+  final pointer = request.toNativeUtf8();
   try {
-    final result = resultPtr.toDartString();
-    // C bridge 用不可见前缀区分普通字符串结果和特殊错误。
-    if (result == _cancelledSentinel) {
-      throw JsCancelledException();
-    }
-    if (result == _timeoutSentinel) {
-      throw const JsTimeoutException();
-    }
-    if (result.startsWith(_exceptionSentinel)) {
-      throw parseJsExceptionPayload(
-        result.substring(_exceptionSentinel.length),
-      );
-    }
-    return result;
+    return _takeResult(
+      bindings,
+      _executeAsyncStep(
+        bindings,
+        runtime,
+        timeoutMs,
+        () => bindings.invoke(runtime, context, pointer, 0),
+      ),
+    );
   } finally {
-    bindings.freeString(resultPtr);
+    calloc.free(pointer);
   }
 }
 
@@ -1362,6 +1777,7 @@ String _evalContext(
   String name,
   int? timeoutMs,
 ) {
+  if (timeoutMs != null && timeoutMs <= 0) throw const JsTimeoutException();
   final codePtr = code.toNativeUtf8();
   final namePtr = name.toNativeUtf8();
   final resultPtr = bindings.contextEvalTimeoutNamed(
@@ -1382,66 +1798,132 @@ Future<String> _evalAsync(
   String name,
   int? timeoutMs,
   Pointer<Int32> cancelFlag,
-) async {
-  final codePtr = code.toNativeUtf8();
-  final namePtr = name.toNativeUtf8();
-  final stopwatch = Stopwatch()..start();
-  Pointer<Utf8> resultPtr = bindings.evalAsyncStartNamed(
-    runtime,
-    codePtr,
-    namePtr,
-  );
-  calloc.free(codePtr);
-  calloc.free(namePtr);
-
-  while (true) {
-    if (cancelFlag.value != 0) {
-      throw JsCancelledException();
-    }
-    final result = _takeResult(bindings, resultPtr);
-    if (result != _pendingSentinel) {
-      return result;
-    }
-    if (timeoutMs != null && stopwatch.elapsedMilliseconds >= timeoutMs) {
-      throw const JsTimeoutException();
-    }
-    await Future<void>.delayed(Duration.zero);
-    if (cancelFlag.value != 0) {
-      throw JsCancelledException();
-    }
-    resultPtr = bindings.evalAsyncPoll(runtime);
-  }
-}
+  Future<void> Function() waitForPoll, {
+  String? invocation,
+  bool Function()? isAlive,
+}) => _nativeAsyncEvaluation(
+  bindings,
+  runtime,
+  nullptr,
+  code,
+  name,
+  timeoutMs,
+  cancelFlag,
+  isAlive ?? () => true,
+  waitForPoll,
+  invocation,
+);
 
 Future<String> _evalContextAsync(
   JsBindings bindings,
+  Pointer<JsContext> context,
+  Pointer<JsRuntime> runtime,
+  String code,
+  String name,
+  int? timeoutMs,
+  Pointer<Int32> cancelFlag,
+  bool Function() isAlive,
+  Future<void> Function() waitForPoll, {
+  String? invocation,
+}) => _nativeAsyncEvaluation(
+  bindings,
+  runtime,
+  context,
+  code,
+  name,
+  timeoutMs,
+  cancelFlag,
+  isAlive,
+  waitForPoll,
+  invocation,
+);
+
+Future<String> _nativeAsyncEvaluation(
+  JsBindings bindings,
+  Pointer<JsRuntime> runtime,
   Pointer<JsContext> context,
   String code,
   String name,
   int? timeoutMs,
   Pointer<Int32> cancelFlag,
+  bool Function() isAlive,
+  Future<void> Function() waitForPoll,
+  String? invocation,
 ) async {
-  final codePtr = code.toNativeUtf8();
-  final namePtr = name.toNativeUtf8();
+  final codePtr = (invocation ?? code).toNativeUtf8();
+  final namePtr = invocation == null
+      ? name.toNativeUtf8()
+      : nullptr.cast<Utf8>();
   final stopwatch = Stopwatch()..start();
-  Pointer<Utf8> resultPtr = bindings.contextEvalAsyncStartNamed(
-    context,
-    codePtr,
-    namePtr,
-  );
-  calloc.free(codePtr);
-  calloc.free(namePtr);
-
-  while (true) {
-    if (cancelFlag.value != 0) throw JsCancelledException();
-    final result = _takeResult(bindings, resultPtr);
-    if (result != _pendingSentinel) return result;
-    if (timeoutMs != null && stopwatch.elapsedMilliseconds >= timeoutMs) {
-      throw const JsTimeoutException();
+  Pointer<Utf8> resultPtr = nullptr;
+  try {
+    try {
+      resultPtr = _executeAsyncStep(
+        bindings,
+        runtime,
+        timeoutMs,
+        () => invocation != null
+            ? bindings.invoke(runtime, context, codePtr, 1)
+            : context == nullptr
+            ? bindings.evalAsyncStartNamed(runtime, codePtr, namePtr)
+            : bindings.contextEvalAsyncStartNamed(context, codePtr, namePtr),
+      );
+    } finally {
+      calloc.free(codePtr);
+      if (namePtr != nullptr) calloc.free(namePtr);
     }
-    await Future<void>.delayed(Duration.zero);
-    resultPtr = bindings.contextEvalAsyncPoll(context);
+    while (true) {
+      if (cancelFlag.value != 0 || !isAlive()) throw JsCancelledException();
+      final ownedResult = resultPtr;
+      resultPtr = nullptr;
+      final result = _takeResult(bindings, ownedResult);
+      if (result != _pendingSentinel) return result;
+      if (timeoutMs != null && stopwatch.elapsedMilliseconds >= timeoutMs) {
+        throw const JsTimeoutException();
+      }
+      await waitForPoll();
+      if (cancelFlag.value != 0 || !isAlive()) throw JsCancelledException();
+      resultPtr = _executeAsyncStep(
+        bindings,
+        runtime,
+        timeoutMs == null ? null : timeoutMs - stopwatch.elapsedMilliseconds,
+        () => context == nullptr
+            ? bindings.evalAsyncPoll(runtime)
+            : bindings.contextEvalAsyncPoll(context),
+      );
+    }
+  } on JsTimeoutException {
+    if (isAlive()) bindings.asyncReset(runtime, context);
+    rethrow;
+  } on JsCancelledException {
+    if (isAlive()) bindings.asyncReset(runtime, context);
+    rethrow;
+  } finally {
+    if (resultPtr != nullptr) bindings.freeString(resultPtr);
   }
+}
+
+Pointer<Utf8> _executeAsyncStep(
+  JsBindings bindings,
+  Pointer<JsRuntime> runtime,
+  int? remainingMs,
+  Pointer<Utf8> Function() action,
+) {
+  if (remainingMs != null && remainingMs <= 0) throw const JsTimeoutException();
+  bindings.runtimeBeginExecution(runtime, remainingMs ?? 0);
+  Pointer<Utf8> result = nullptr;
+  int status;
+  try {
+    result = action();
+  } finally {
+    status = bindings.runtimeEndExecution(runtime);
+  }
+  if (status != 0) {
+    if (result != nullptr) bindings.freeString(result);
+    if (status == 2) throw JsCancelledException();
+    throw const JsTimeoutException();
+  }
+  return result;
 }
 
 String _takeResult(JsBindings bindings, Pointer<Utf8> resultPtr) {
@@ -1467,8 +1949,12 @@ String _takeResult(JsBindings bindings, Pointer<Utf8> resultPtr) {
   }
 }
 
-void _sendOk(SendPort sendPort, int requestId, Object? result) {
-  sendPort.send(<String, Object?>{
+void _sendOk(
+  void Function(Map<String, Object?>) emit,
+  int requestId,
+  Object? result,
+) {
+  emit(<String, Object?>{
     _messageTypeKey: _responseMessage,
     _messageIdKey: requestId,
     'ok': true,
@@ -1476,13 +1962,17 @@ void _sendOk(SendPort sendPort, int requestId, Object? result) {
   });
 }
 
-void _sendError(SendPort sendPort, int requestId, Object error) {
+void _sendError(
+  void Function(Map<String, Object?>) emit,
+  int requestId,
+  Object error,
+) {
   // Dart 侧异常跨 isolate 发送时统一压成字符串，再由主 isolate 映射回异常类型。
   final message = switch (error) {
     JsThrownException() => '$_exceptionSentinel${_encodeJsException(error)}',
     _ => '$error',
   };
-  sendPort.send(<String, Object?>{
+  emit(<String, Object?>{
     _messageTypeKey: _responseMessage,
     _messageIdKey: requestId,
     'ok': false,

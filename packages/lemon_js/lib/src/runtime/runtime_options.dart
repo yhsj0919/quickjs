@@ -18,7 +18,8 @@ typedef JsModuleLoader = FutureOr<String?> Function(String name);
 
 /// 创建时注入的 Dart 宿主方法回调。
 ///
-/// JavaScript 通过返回 Promise 的桥接层调用该方法。回调接收已转换的参数和
+/// 当前 isolate 原生调用保留同步返回值，Future 转为 Promise；worker/Web 调用返回 Promise。
+/// 回调接收已转换的参数和
 /// 本次调用的生命周期上下文，可以返回结构化值编解码器支持的任意值。
 typedef JsHostMethodCallback =
     FutureOr<Object?> Function(List<Object?> args, JsHostMethodContext context);
@@ -304,11 +305,12 @@ final class JsHostMethod {
 
   /// Declared source of the method implementation.
   ///
-  /// This is inspector metadata and does not change callback behavior. All
-  /// current methods use the asynchronous callback bridge.
+  /// This is inspector metadata and does not change callback behavior. The execution backend
+  /// determines whether calls cross an isolate boundary.
   final JsHostMethodImplementation implementation;
 
-  /// Dart/Flutter implementation. JS receives a Promise for each call.
+  /// Dart/Flutter implementation. In-isolate native callbacks return values
+  /// directly; Future results become Promises.
   ///
   /// The per-call context is cancelled when the runtime restarts, is disposed,
   /// or is rebuilt. Await [JsHostMethodContext.cancelled] when the
@@ -357,13 +359,23 @@ base class JsFeatures {
   final List<JsHostMethod> methods;
 }
 
-/// Resource and execution-queue limits used when creating a QuickJS runtime.
+/// Selects the fixed isolate that owns a native runtime.
+enum JsExecution {
+  /// Execute in the isolate that creates the runtime.
+  currentIsolate,
+
+  /// Execute in a dedicated worker; calls cross an asynchronous boundary.
+  workerIsolate,
+}
+
+/// Resource limits and execution location used when creating a runtime.
 final class JsOptions {
   /// Creates runtime resource and waiting-task limits.
   const JsOptions({
     this.memoryLimitBytes,
     this.stackLimitBytes,
     this.maxPendingTasks = 256,
+    this.execution = JsExecution.currentIsolate,
   });
 
   /// Maximum memory for a single runtime, in bytes.
@@ -387,4 +399,7 @@ final class JsOptions {
   /// JavaScript task causes callers to submit work faster than it can run.
   /// Must be greater than zero. Defaults to `256`.
   final int maxPendingTasks;
+
+  /// Fixed execution location for this runtime and all its contexts.
+  final JsExecution execution;
 }

@@ -121,7 +121,7 @@ final class JsAccessor<T extends Object> {
   /// JavaScript-visible property name.
   final String name;
 
-  /// Called when JS reads the property. JS receives a Promise.
+  /// Called when JS reads the property. Futures become Promises.
   final JsGetter<T>? get;
 
   /// Called when JS writes the property.
@@ -131,7 +131,7 @@ final class JsAccessor<T extends Object> {
   final JsSetter<T>? set;
 }
 
-/// A Promise-returning JavaScript method backed by a Dart callback.
+/// A JavaScript method backed by a synchronous or asynchronous Dart callback.
 final class JsMethod<T extends Object> {
   /// Creates a named JavaScript method backed by [callback].
   const JsMethod(this.name, this.callback);
@@ -239,103 +239,96 @@ _ValidatedJsMembers<T> _validateJsMembers<T extends Object>(
   return _ValidatedJsMembers(values, accessors, methods);
 }
 
+abstract class _JsRuntimeHandle {
+  _JsRuntimeHandle(this._owner) : _runtime = _owner._runtime;
+
+  final JsEngine _owner;
+  final JsJsRuntimeBase _runtime;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
+
+  bool get _isLive =>
+      !_disposed &&
+      identical(_runtime, _owner._runtime) &&
+      !_owner._isTerminal &&
+      _owner._state != JsRuntimeState.restarting;
+
+  /// Whether this Dart handle has been explicitly disposed.
+  bool get disposed => _disposed;
+
+  /// Releases this handle in its owning runtime. Repeated disposal is harmless.
+  /// A replaced runtime has already released its bindings in bulk.
+  Future<void> dispose() {
+    final current = _disposeFuture;
+    if (current != null) return current;
+    final release = _isLive;
+    _disposed = true;
+    return _disposeFuture = release ? _release() : Future<void>.value();
+  }
+
+  Future<void> _release();
+}
+
 /// Runtime-owned handle to a JavaScript constructor binding.
-final class JsClassHandle {
+final class JsClassHandle extends _JsRuntimeHandle {
   JsClassHandle._(
-    this._owner,
+    super.owner,
     this.name,
     this._classId,
     this._callbackNames,
     this._callbackIds,
   );
-
-  final JsEngine _owner;
   final int _classId;
   final List<String> _callbackNames;
   final List<int> _callbackIds;
-  bool _disposed = false;
-  Future<void>? _disposeFuture;
 
   /// Global constructor name used in the owning runtime.
   final String name;
 
-  /// Releases the JS constructor, hidden callbacks, and Dart instance table.
-  Future<void> dispose() {
-    final currentDispose = _disposeFuture;
-    if (currentDispose != null) {
-      return currentDispose;
-    }
-    _disposed = true;
-    return _disposeFuture = _owner._releaseClassBinding(
-      name,
-      _classId,
-      _callbackNames,
-      _callbackIds,
-    );
-  }
-
-  /// Whether this Dart handle has been explicitly disposed.
-  bool get disposed => _disposed;
+  @override
+  Future<void> _release() =>
+      _owner._releaseClassBinding(name, _classId, _callbackNames, _callbackIds);
 }
 
 /// Runtime-owned handle to a JavaScript object proxy.
-final class JsObjectHandle {
+final class JsObjectHandle extends _JsRuntimeHandle {
   JsObjectHandle._(
-    this._owner,
+    super.owner,
     this.name,
     this._stateName,
     this._callbackNames,
     this._callbackIds,
   );
-
-  final JsEngine _owner;
   final String _stateName;
   final List<String> _callbackNames;
   final List<int> _callbackIds;
-  bool _disposed = false;
-  Future<void>? _disposeFuture;
 
   /// Global name used by the object proxy in the owning runtime.
   final String name;
 
-  /// Releases the JS global proxy, hidden method callback globals, and runtime
-  /// callback registry entries.
-  Future<void> dispose() {
-    final currentDispose = _disposeFuture;
-    if (currentDispose != null) {
-      return currentDispose;
-    }
-    _disposed = true;
-    return _disposeFuture = _owner._releaseObjectProxy(
-      name,
-      _stateName,
-      _callbackNames,
-      _callbackIds,
-    );
-  }
-
-  /// Whether this Dart handle has been explicitly disposed.
-  bool get disposed => _disposed;
+  @override
+  Future<void> _release() => _owner._releaseObjectProxy(
+    name,
+    _stateName,
+    _callbackNames,
+    _callbackIds,
+  );
 }
 
 /// Runtime-owned handle to a JavaScript function.
 ///
 /// The Dart side only stores an opaque id. The actual function remains inside
 /// the owning [JsEngine] runtime and is released when that runtime is disposed.
-final class JsFunctionHandle {
-  JsFunctionHandle._(this._owner, this._id);
-
-  final JsEngine _owner;
+final class JsFunctionHandle extends _JsRuntimeHandle {
+  JsFunctionHandle._(super.owner, this._id);
   final int _id;
-  bool _disposed = false;
-  Future<void>? _disposeFuture;
 
   /// Calls the referenced JavaScript function with [args].
   ///
   /// This path preserves synchronous interrupt semantics for long-running
   /// JavaScript. Use [run] when the function returns a Promise.
   Future<Object?> call(List<Object?> args, {Duration? timeout}) {
-    if (_disposed) {
+    if (!_isLive) {
       return Future<Object?>.error(
         JsRuntimeClosedException('QuickJS function handle is disposed'),
       );
@@ -343,9 +336,33 @@ final class JsFunctionHandle {
     return _owner._callFunctionHandle(_id, args, timeout: timeout);
   }
 
-  /// Calls the function synchronously and returns the raw bridge string.
+  /// Calls the function synchronously and converts its result to a Dart value.
+  Object? callSync(List<Object?> args, {Duration? timeout}) {
+    if (!_isLive) {
+      throw JsRuntimeClosedException('QuickJS function handle is disposed');
+    }
+    return _owner._decodeStructuredPayload(
+      _owner._invokeImmediate([
+        _owner._invocation('', args, handle: _id),
+      ], timeout: timeout),
+    );
+  }
+
+  /// Calls immediately without converting the bridge result.
+  String callRawSync(List<Object?> args, {Duration? timeout}) {
+    if (!_isLive) {
+      throw JsRuntimeClosedException('QuickJS function handle is disposed');
+    }
+    return _owner._invokeImmediate(
+      [_owner._invocation('', args, handle: _id)],
+      raw: true,
+      timeout: timeout,
+    );
+  }
+
+  /// Calls through the execution queue and returns the raw bridge string.
   Future<String> callRaw(List<Object?> args, {Duration? timeout}) {
-    if (_disposed) {
+    if (!_isLive) {
       return Future<String>.error(
         JsRuntimeClosedException('QuickJS function handle is disposed'),
       );
@@ -360,7 +377,7 @@ final class JsFunctionHandle {
   /// long synchronous work before returning a Promise or reaching its first
   /// `await`, prefer [call] so the synchronous interrupt path can stop it.
   Future<Object?> run(List<Object?> args, {Duration? timeout}) {
-    if (_disposed) {
+    if (!_isLive) {
       return Future<Object?>.error(
         JsRuntimeClosedException('QuickJS function handle is disposed'),
       );
@@ -370,7 +387,7 @@ final class JsFunctionHandle {
 
   /// Awaits the function result and returns the raw bridge string.
   Future<String> runRaw(List<Object?> args, {Duration? timeout}) {
-    if (_disposed) {
+    if (!_isLive) {
       return Future<String>.error(
         JsRuntimeClosedException('QuickJS function handle is disposed'),
       );
@@ -383,14 +400,8 @@ final class JsFunctionHandle {
   /// Disposing a handle is idempotent. Disposing the owning runtime still
   /// releases all handles in bulk, so this is only needed for long-lived
   /// runtimes that create many short-lived handles.
-  Future<void> dispose() {
-    final currentDispose = _disposeFuture;
-    if (currentDispose != null) {
-      return currentDispose;
-    }
-    _disposed = true;
-    return _disposeFuture = _owner._releaseFunctionHandle(_id);
-  }
+  @override
+  Future<void> _release() => _owner._releaseFunctionHandle(_id);
 }
 
 /// `JsEngine` 实例当前可观察的生命周期状态。
@@ -936,7 +947,7 @@ class JsEngine implements JsPluginHost {
 
   /// 在当前 runtime 中执行 [code]。
   ///
-  /// 调用只会入队，不会在 Flutter UI isolate 中同步执行 JS。
+  /// 调用通过执行队列调度；执行位置由 JsOptions.execution 决定。
   /// [tempGlobals] 会在本次执行期间临时注入到 JS `globalThis`，执行结束后恢复。
   /// Returns QuickJS's raw bridge string without Dart value conversion.
   /// Prefer [eval] unless the exact textual representation is required.
@@ -951,6 +962,15 @@ class JsEngine implements JsPluginHost {
     Map<String, Object?> tempGlobals = const {},
   }) {
     final validName = _validateSourceName(name);
+    if (tempGlobals.isNotEmpty) {
+      return _invokeQueued(
+        [_evalInvocation(code, tempGlobals, validName)],
+        raw: true,
+        awaitResult: false,
+        timeout: timeout,
+        name: validName,
+      );
+    }
     return _enqueue(
       _wrapWithTempGlobals(code, tempGlobals, name: validName),
       timeout: timeout,
@@ -1172,54 +1192,12 @@ return JSON.stringify({ type: 'null' });
     required String name,
   }) async {
     final moduleName = _canonicalModuleName(_validateModuleName(module));
-    final encodedModule = jsonEncode(moduleName);
-    final encodedMethod = jsonEncode(method);
-    final encodedBreadcrumbName = jsonEncode(_moduleCallBreadcrumbName);
-    final encodedArgs = jsonEncode(<Object>[
-      for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
-    ]);
-    return await _evaluateModuleNamespaceValue(
+    final namespace = await _ensureModuleNamespaceGlobal(
       moduleName,
-      '''
-const method = $encodedMethod;
-function breadcrumb(phase) {
-  globalThis[$encodedBreadcrumbName] = {
-    module: $encodedModule,
-    method,
-    phase,
-    timestamp: Date.now()
-  };
-}
-breadcrumb('resolve export ' + $encodedModule + '#' + method);
-const fn = __jsModuleNamespace[method];
-if (typeof fn !== 'function') {
-  throw new TypeError(
-    'QuickJS module export is not a function: ' + $encodedModule + '#' + method
-  );
-}
-let phase = 'inflate arguments';
-try {
-  breadcrumb(phase);
-  const args = $encodedArgs.map((arg) => inflate(arg));
-  phase = 'call ' + $encodedModule + '#' + method;
-  breadcrumb(phase);
-  const value = await fn(...args);
-  phase = 'convert result from ' + $encodedModule + '#' + method;
-  breadcrumb(phase);
-  const converted = convert(value, new WeakSet());
-  phase = 'stringify result from ' + $encodedModule + '#' + method;
-  breadcrumb(phase);
-  return JSON.stringify(converted);
-} catch (error) {
-  breadcrumb('failed during ' + phase);
-  if (error && error.message === 'Maximum call stack size exceeded') {
-    try {
-      error.message = 'QuickJS module call stack overflow during ' + phase;
-    } catch (_) {}
-  }
-  throw error;
-}
-''',
+      timeout: timeout,
+    );
+    return _invokeDecoded(
+      [_invocation(method, args, namespace: namespace, module: moduleName)],
       timeout: timeout,
       name: name,
     );
@@ -1281,8 +1259,9 @@ try {
 
   /// Temporarily injects a Dart function on JavaScript `globalThis`.
   ///
-  /// [name] must be a JavaScript identifier. JavaScript always receives a
-  /// Promise: [callback]'s result resolves it and a thrown error rejects it.
+  /// [name] must be a JavaScript identifier. Current-isolate native callbacks
+  /// return synchronous values directly; Future results become Promises.
+  /// Worker and Web callbacks return Promises across their message boundary.
   /// Injecting the same name replaces and releases the previous callback.
   ///
   /// The injection belongs to the current runtime and is not restored by
@@ -1294,9 +1273,9 @@ try {
     }
     final validName = _validateGlobalName(name);
     final callbackId = _nextCallbackId++;
-    return _bindRuntimeCallback(callbackId, validName, (args) async {
-      return callback(args);
-    }).then((_) async {
+    return _bindRuntimeCallback(callbackId, validName, callback).then((
+      _,
+    ) async {
       final previousId = _injectedFunctionCallbackIds[validName];
       _injectedFunctionCallbackIds[validName] = callbackId;
       if (previousId != null) await _unbindRuntimeCallback(previousId);
@@ -1337,8 +1316,8 @@ try {
   ///
   /// [object.values] become readonly enumerable properties.
   /// [object.accessors] become dynamic getter / setter descriptors.
-  /// [object.methods] become JS functions that return Promises and route calls
-  /// through the runtime callback bridge.
+  /// [object.methods] become JS functions that preserve callback return behavior and route calls
+  /// through the runtime callback bridge; synchronous native callbacks return directly.
   Future<JsObjectHandle> injectObject<T extends Object>(
     String name,
     JsObject<T> object,
@@ -1365,7 +1344,7 @@ try {
           final callbackId = _nextCallbackId++;
           getCallbackName = '__jsObjectProxy_${proxyId}_${methodIndex++}';
           callbackIds.add(callbackId);
-          await _bindRuntimeCallback(callbackId, getCallbackName, (_) async {
+          await _bindRuntimeCallback(callbackId, getCallbackName, (_) {
             return getter(object.target);
           });
           callbackNames.add(getCallbackName);
@@ -1376,9 +1355,10 @@ try {
           final callbackId = _nextCallbackId++;
           setCallbackName = '__jsObjectProxy_${proxyId}_${methodIndex++}';
           callbackIds.add(callbackId);
-          await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
-            await setter(object.target, args.isEmpty ? null : args.first);
-            return null;
+          await _bindRuntimeCallback(callbackId, setCallbackName, (args) {
+            return _voidCallbackResult(
+              setter(object.target, args.isEmpty ? null : args.first),
+            );
           });
           callbackNames.add(setCallbackName);
         }
@@ -1392,7 +1372,7 @@ try {
         final callbackId = _nextCallbackId++;
         final callbackName = '__jsObjectProxy_${proxyId}_${methodIndex++}';
         callbackIds.add(callbackId);
-        await _bindRuntimeCallback(callbackId, callbackName, (args) async {
+        await _bindRuntimeCallback(callbackId, callbackName, (args) {
           return method.callback(object.target, args);
         });
         callbackNames.add(callbackName);
@@ -1454,13 +1434,19 @@ try {
       await _bindRuntimeCallback(
         constructorCallbackId,
         constructorCallbackName,
-        (args) async {
+        (args) {
           if (args.isEmpty || args.first is! num) {
             throw StateError('QuickJS class constructor missing instance id');
           }
           final instanceId = (args.first! as num).toInt();
-          final instance = await definition.create(args.skip(1).toList());
-          instances[instanceId] = instance;
+          final result = definition.create(args.skip(1).toList());
+          if (result is Future<T>) {
+            return result.then<Object?>((instance) {
+              instances[instanceId] = instance;
+              return null;
+            });
+          }
+          instances[instanceId] = result;
           return null;
         },
       );
@@ -1476,7 +1462,7 @@ try {
           callbackIds.add(callbackId);
           getCallbackName = '__jsClass_${classId}_${callbackIndex++}';
           callbackNames.add(getCallbackName);
-          await _bindRuntimeCallback(callbackId, getCallbackName, (args) async {
+          await _bindRuntimeCallback(callbackId, getCallbackName, (args) {
             final instance = _requireClassInstance<T>(classId, args);
             return getter(instance);
           });
@@ -1488,10 +1474,11 @@ try {
           callbackIds.add(callbackId);
           setCallbackName = '__jsClass_${classId}_${callbackIndex++}';
           callbackNames.add(setCallbackName);
-          await _bindRuntimeCallback(callbackId, setCallbackName, (args) async {
+          await _bindRuntimeCallback(callbackId, setCallbackName, (args) {
             final instance = _requireClassInstance<T>(classId, args);
-            await setter(instance, args.length < 2 ? null : args[1]);
-            return null;
+            return _voidCallbackResult(
+              setter(instance, args.length < 2 ? null : args[1]),
+            );
           });
         }
         accessors.add({
@@ -1505,7 +1492,7 @@ try {
         callbackIds.add(callbackId);
         final callbackName = '__jsClass_${classId}_${callbackIndex++}';
         callbackNames.add(callbackName);
-        await _bindRuntimeCallback(callbackId, callbackName, (args) async {
+        await _bindRuntimeCallback(callbackId, callbackName, (args) {
           final instance = _requireClassInstance<T>(classId, args);
           return method.callback(instance, args.skip(1).toList());
         });
@@ -1558,7 +1545,7 @@ try {
     final onConsole = _onConsole;
     if (onConsole != null) {
       final callbackId = _nextCallbackId++;
-      await _bindRuntimeCallback(callbackId, callbackName, (args) async {
+      await _bindRuntimeCallback(callbackId, callbackName, (args) {
         final levelName = args.isNotEmpty ? args[0] : 'log';
         final text = args.length > 1 ? args[1] : '';
         final rawValue = args.length > 2 ? args[2] : null;
@@ -1571,8 +1558,7 @@ try {
           args: rawArgs,
           timestamp: DateTime.now(),
         );
-        await onConsole(event);
-        return null;
+        return _voidCallbackResult(onConsole(event));
       });
     }
     return _wrapInstallConsole(onConsole == null ? null : callbackName);
@@ -1588,6 +1574,7 @@ try {
   Future<void> _installInitialEnvironmentOnCurrentRuntime() async {
     _validateStaticHostConfiguration();
     final sources = <({String name, String source})>[
+      (name: '<quickjs:invocation>', source: _installInvocationCodec()),
       (name: '<quickjs:console>', source: await _prepareConsoleInstall()),
       (name: '<quickjs:text-encoding>', source: _wrapInstallTextEncoding()),
     ];
@@ -1682,25 +1669,24 @@ try {
     }
   }
 
-  Future<Object?> _invokeHostMethod(
-    JsHostMethod method,
-    List<Object?> args,
-  ) async {
+  FutureOr<Object?> _invokeHostMethod(JsHostMethod method, List<Object?> args) {
     final context = _JsHostMethodContext();
     _pendingHostMethodCalls.add(context);
-    final callbackFuture = Future<Object?>.sync(
-      () => method.callback(args, context),
-    );
-    final cancelledFuture = context.cancelled.then<Object?>((_) {
-      throw context.cancellationReason ?? const JsCancelledException();
-    });
     try {
-      return await Future.any<Object?>(<Future<Object?>>[
-        callbackFuture,
-        cancelledFuture,
-      ]);
-    } finally {
+      final result = method.callback(args, context);
+      if (result is Future<Object?>) {
+        return Future.any<Object?>([
+          result,
+          context.cancelled.then<Object?>((_) {
+            throw context.cancellationReason ?? const JsCancelledException();
+          }),
+        ]).whenComplete(() => _pendingHostMethodCalls.remove(context));
+      }
       _pendingHostMethodCalls.remove(context);
+      return result;
+    } catch (_) {
+      _pendingHostMethodCalls.remove(context);
+      rethrow;
     }
   }
 
@@ -1726,102 +1712,242 @@ try {
     Map<String, Object?> tempGlobals = const {},
   }) async {
     final validName = _validateSourceName(name);
-    final encodedSource = jsonEncode(
-      _wrapWithTempGlobals(code, tempGlobals, name: validName),
+    return _decodeStructuredPayload(
+      await _invokeQueued(
+        [_evalInvocation(code, tempGlobals, validName)],
+        awaitResult: false,
+        timeout: timeout,
+        name: validName,
+      ),
     );
-    final encodedValue = await evalRaw(
-      '''
-(() => {
-  const unsupported = (reason) => ({
-    type: 'conversionError',
-    message: 'QuickJS value cannot be converted to a Dart value: ' + reason,
-  });
-  const budget = { nodes: 0, maxNodes: 10000, maxDepth: 32 };
-  const convert = (value, seen, depth = 0) => {
-    if (depth > budget.maxDepth) {
-      return unsupported('object graph is too deep');
-    }
-    if (value === undefined) {
-      return { type: 'undefined' };
-    }
-    if (value === null) {
-      return { type: 'null' };
-    }
-    const valueType = typeof value;
-    if (valueType === 'bigint') {
-      return { type: 'bigint', value: value.toString() };
-    }
-    if (valueType === 'number' || valueType === 'boolean' || valueType === 'string') {
-      return { type: valueType, value };
-    }
-    if (valueType === 'symbol' || valueType === 'function') {
-      return unsupported(valueType);
-    }
-    if (value instanceof ArrayBuffer) {
-      return { type: 'bytes', value: Array.from(new Uint8Array(value)) };
-    }
-    if (value instanceof Uint8Array) {
-      return { type: 'bytes', value: Array.from(value) };
-    }
-    if (valueType !== 'object') {
-      return unsupported(valueType);
-    }
-    // The node budget protects recursive containers. Primitive leaves are
-    // bounded by their owning arrays/objects and should not make a flat scene
-    // description fail merely because its commands have many numeric fields.
-    budget.nodes += 1;
-    if (budget.nodes > budget.maxNodes) {
-      return unsupported('object graph is too large');
-    }
-    if (seen.has(value)) {
-      return unsupported('circular reference');
-    }
-    seen.add(value);
-    try {
-      if (Array.isArray(value)) {
-        const items = [];
-        for (const item of value) {
-          const converted = convert(item, seen, depth + 1);
-          if (converted.type === 'conversionError') {
-            return converted;
-          }
-          items.push(converted);
-        }
-        return { type: 'array', value: items };
-      }
-      const prototype = Object.getPrototypeOf(value);
-      if (prototype === Object.prototype || prototype === null) {
-        const entries = {};
-        for (const key of Object.keys(value)) {
-          const converted = convert(value[key], seen, depth + 1);
-          if (converted.type === 'conversionError') {
-            return converted;
-          }
-          entries[key] = converted;
-        }
-        return { type: 'object', value: entries };
-      }
-      return unsupported(Object.prototype.toString.call(value));
-    } finally {
-      seen.delete(value);
-    }
-  };
-  const value = (0, eval)($encodedSource);
-  return JSON.stringify(convert(value, new WeakSet()));
-})()
-''',
-      timeout: timeout,
-      name: validName,
-    );
-    return _decodeStructuredPayload(encodedValue);
   }
+
+  /// Whether this engine can synchronously execute in the current isolate.
+  bool get supportsSync =>
+      _runtime is JsSyncRuntimeBase &&
+      (_runtime as JsSyncRuntimeBase).supportsSync;
+
+  /// Executes immediately. Worker backends cannot cross their boundary synchronously.
+  String evalRawSync(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+    Map<String, Object?> tempGlobals = const {},
+  }) {
+    final validName = _validateSourceName(name);
+    if (tempGlobals.isNotEmpty) {
+      return _invokeImmediate(
+        [_evalInvocation(code, tempGlobals, validName)],
+        raw: true,
+        timeout: timeout,
+      );
+    }
+    return _executeSync(
+      () => (_runtime as JsSyncRuntimeBase).evaluateSync(
+        _wrapWithTempGlobals(code, tempGlobals, name: validName),
+        timeout: timeout,
+        name: validName,
+      ),
+    );
+  }
+
+  String _executeSync(String Function() action) {
+    final terminal = _terminalError;
+    if (terminal != null) throw terminal;
+    if (_state == JsRuntimeState.restarting) {
+      throw const JsCancelledException('QuickJS runtime is restarting');
+    }
+    if (!supportsSync) {
+      throw UnsupportedError(
+        'Synchronous calls require current-isolate execution',
+      );
+    }
+    if (_syncExecuting) {
+      throw StateError(
+        'Reentrant synchronous JavaScript execution is not supported',
+      );
+    }
+    _syncExecuting = true;
+    final previousState = _state;
+    _state = JsRuntimeState.running;
+    try {
+      return action();
+    } finally {
+      _syncExecuting = false;
+      if (_state == JsRuntimeState.running) _state = previousState;
+    }
+  }
+
+  bool _syncExecuting = false;
+
+  /// Evaluates a synchronous expression and converts its result to a Dart value.
+  Object? evalSync(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+    Map<String, Object?> tempGlobals = const {},
+  }) {
+    final validName = _validateSourceName(name);
+    return _decodeStructuredPayload(
+      _invokeImmediate([
+        _evalInvocation(code, tempGlobals, validName),
+      ], timeout: timeout),
+    );
+  }
+
+  /// Calls a global function immediately; Promise results are rejected.
+  Object? callSync(String method, List<Object?> args, {Duration? timeout}) {
+    return _decodeStructuredPayload(
+      _invokeImmediate([_invocation(method, args)], timeout: timeout),
+    );
+  }
+
+  /// Calls one global repeatedly in one bridge request, preserving order.
+  Future<List<Object?>> callBatch(
+    String method,
+    List<List<Object?>> arguments, {
+    Duration? timeout,
+  }) async {
+    final result = await _invokeDecoded(
+      [for (final args in arguments) _invocation(method, args)],
+      batch: true,
+      timeout: timeout,
+    );
+    return List<Object?>.from(result as List);
+  }
+
+  /// Synchronous batch; stops at the first thrown error and rejects Promises.
+  List<Object?> callBatchSync(
+    String method,
+    List<List<Object?>> arguments, {
+    Duration? timeout,
+  }) {
+    return List<Object?>.from(
+      _decodeStructuredPayload(
+            _invokeImmediate(
+              [for (final args in arguments) _invocation(method, args)],
+              batch: true,
+              timeout: timeout,
+            ),
+          )
+          as List,
+    );
+  }
+
+  Map<String, Object?> _invocation(
+    String method,
+    List<Object?> args, {
+    int? handle,
+    String? namespace,
+    String? module,
+  }) {
+    if (handle == null && method.isEmpty) {
+      throw ArgumentError.value(method, 'method', 'must not be empty');
+    }
+    return {
+      if (handle == null) 'method': method else 'handle': handle,
+      'namespace': ?namespace,
+      'module': ?module,
+      'args': [
+        for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
+      ],
+    };
+  }
+
+  Map<String, Object?> _evalInvocation(
+    String code,
+    Map<String, Object?> globals,
+    String name,
+  ) => {
+    'source': _appendSourceUrl(code, name),
+    'sourceName': name,
+    if (globals.isNotEmpty) 'globals': _encodeTempGlobals(globals),
+  };
+
+  String _invocationJson(
+    List<Map<String, Object?>> calls,
+    bool batch,
+    bool raw,
+  ) => jsonEncode({'calls': calls, 'batch': batch, 'raw': raw});
+
+  String _invokeImmediate(
+    List<Map<String, Object?>> calls, {
+    bool batch = false,
+    bool raw = false,
+    Duration? timeout,
+  }) {
+    final request = _invocationJson(calls, batch, raw);
+    try {
+      return _executeSync(
+        () => _runtime is JsInvocationRuntimeBase
+            ? (_runtime as JsInvocationRuntimeBase).invokeSync(
+                request,
+                timeout: timeout,
+              )
+            : (_runtime as JsSyncRuntimeBase).evaluateSync(
+                _invocationExpression(request, false),
+                timeout: timeout,
+              ),
+      );
+    } catch (error, stack) {
+      Error.throwWithStackTrace(_invocationError(error, calls), stack);
+    }
+  }
+
+  Future<String> _invokeQueued(
+    List<Map<String, Object?>> calls, {
+    bool batch = false,
+    bool raw = false,
+    bool awaitResult = true,
+    Duration? timeout,
+    String name = '<call>',
+  }) {
+    final request = _invocationJson(calls, batch, raw);
+    final result = _enqueue(
+      _runtime is JsInvocationRuntimeBase
+          ? ''
+          : _invocationExpression(request, awaitResult),
+      invocation: request,
+      async: awaitResult,
+      timeout: timeout,
+      name: name,
+    );
+    if (calls.isEmpty || calls.first['sourceName'] == null) return result;
+    return result.catchError((Object error, StackTrace stack) {
+      Error.throwWithStackTrace(_invocationError(error, calls), stack);
+    });
+  }
+
+  Object _invocationError(Object error, List<Map<String, Object?>> calls) {
+    final sourceName = calls.isEmpty ? null : calls.first['sourceName'];
+    if (error is! JsThrownException || sourceName is! String) return error;
+    return _attachSourceMap(
+      error.withSourceMap(null, fileName: error.fileName ?? sourceName),
+      sourceName,
+    );
+  }
+
+  Future<Object?> _invokeDecoded(
+    List<Map<String, Object?>> calls, {
+    bool batch = false,
+    bool awaitResult = true,
+    Duration? timeout,
+    String name = '<call>',
+  }) async => _decodeStructuredPayload(
+    await _invokeQueued(
+      calls,
+      batch: batch,
+      awaitResult: awaitResult,
+      timeout: timeout,
+      name: name,
+    ),
+  );
 
   /// Executes an async JavaScript function body and returns a Dart value.
   ///
   /// The source is wrapped in an async function, so it may use `await` and
-  /// should use `return` to produce a result. The Dart API is asynchronous
-  /// because execution happens in a background isolate or worker; `run`
-  /// additionally waits for the JavaScript Promise to settle and pumps jobs
+  /// should use `return` to produce a result. This API waits for the
+  /// JavaScript Promise to settle and pumps jobs
   /// and timers while it is pending.
   Future<Object?> run(
     String code, {
@@ -1833,19 +1959,12 @@ try {
     String name = '<run>',
     Map<String, Object?> tempGlobals = const {},
   }) async {
-    final payloadJson = await runRaw(
-      '''
-const convert = ${_jsValueConvertFunctionSource()};
-const value = await (async () => {
-$code
-})();
-return JSON.stringify(convert(value, new WeakSet()));
-''',
+    final validName = _validateSourceName(name);
+    return _invokeDecoded(
+      [_evalInvocation(_wrapAsyncFunctionBody(code), tempGlobals, validName)],
       timeout: timeout,
-      name: name,
-      tempGlobals: tempGlobals,
+      name: validName,
     );
-    return _decodeStructuredPayload(payloadJson);
   }
 
   /// Calls a function stored on `globalThis` and returns its awaited result as
@@ -1856,49 +1975,24 @@ return JSON.stringify(convert(value, new WeakSet()));
   /// `app.run` 表示 `globalThis['app.run']`，不会被拆分为嵌套属性路径。
   /// [args] 支持结构化值编解码器可转换的 Dart 值。
   Future<Object?> call(String method, List<Object?> args, {Duration? timeout}) {
-    return run(
-      _wrapGlobalCall(method, args),
+    return _invokeDecoded(
+      [_invocation(method, args)],
       timeout: timeout,
       name: '<call:$method>',
     );
   }
 
-  /// Calls a function stored on `globalThis` and returns QuickJS's raw bridge
-  /// string after awaiting its result.
-  ///
-  /// [method] 仅按 `globalThis[method]` 单个属性解析，不支持嵌套属性路径。
-  /// [args] 支持结构化值编解码器可转换的 Dart 值。
+  /// Calls a global and awaits its unconverted bridge result.
   Future<String> callRaw(
     String method,
     List<Object?> args, {
     Duration? timeout,
-  }) {
-    return runRaw(
-      _wrapGlobalCall(method, args),
-      timeout: timeout,
-      name: '<call:$method>',
-    );
-  }
-
-  String _wrapGlobalCall(String method, List<Object?> args) {
-    if (method.isEmpty) {
-      throw ArgumentError.value(method, 'method', 'must not be empty');
-    }
-    final encodedMethod = jsonEncode(method);
-    final encodedArgs = jsonEncode(<Object>[
-      for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
-    ]);
-    return '''
-const method = $encodedMethod;
-const fn = globalThis[method];
-if (typeof fn !== 'function') {
-  throw new TypeError('QuickJS global is not a function: ' + method);
-}
-const inflate = ${_dartValueInflateFunctionSource()};
-const args = $encodedArgs.map((arg) => inflate(arg));
-return await Reflect.apply(fn, globalThis, args);
-''';
-  }
+  }) => _invokeQueued(
+    [_invocation(method, args)],
+    raw: true,
+    timeout: timeout,
+    name: '<call:$method>',
+  );
 
   Object? _decodeStructuredPayload(String payloadJson) {
     final payload = jsonDecode(payloadJson) as Map<String, Object?>;
@@ -1992,8 +2086,8 @@ return await Reflect.apply(fn, globalThis, args);
       payloadJson = await runRaw(
         '''
 const __jsModuleNamespace = globalThis[$encodedNamespaceName];
-const inflate = ${_dartValueInflateFunctionSource()};
-const convert = ${_jsValueConvertFunctionSource()};
+const inflate = globalThis.__jsInvocationCodec.inflate;
+const convert = globalThis.__jsInvocationCodec.convert;
 try {
   globalThis[$encodedResultName] = (async () => {
 $asyncBody
@@ -2081,13 +2175,14 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     _classInstances.clear();
     _cancelHostMethodCalls(JsRuntimeClosedException());
     _cancelQueued(JsRuntimeClosedException());
-    if (shouldCancelRunning) {
-      unawaited(_runtime.stop());
-    }
-    _disposeFuture = (running ?? Future<void>.value()).then(
-      (_) => _runtime.dispose(),
-      onError: (Object _, StackTrace _) => _runtime.dispose(),
-    );
+    _disposeFuture =
+        Future.wait<void>([
+          if (shouldCancelRunning) _runtime.stop(),
+          ?running,
+        ]).then(
+          (_) => _runtime.dispose(),
+          onError: (Object _, StackTrace _) => _runtime.dispose(),
+        );
     return _disposeFuture!;
   }
 
@@ -2149,6 +2244,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     Duration? timeout,
     String name = '<eval>',
     bool async = false,
+    String? invocation,
   }) {
     final rejection = _queueRejection;
     if (rejection != null) return Future<String>.error(rejection);
@@ -2159,6 +2255,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       timeout,
       name,
       async,
+      invocation: invocation,
     );
     _queue.add(request);
     JsDiag.log(
@@ -2255,32 +2352,39 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       return;
     }
 
-    final running = Future<String>.sync(
-      () => switch (request) {
-        _QueuedModuleEval() => _runtime.evaluateModule(
-          request.code,
-          name: request.name,
-          modules: request.modules,
+    Future<String> execute() => switch (request) {
+      _QueuedEval()
+          when request.invocation != null &&
+              _runtime is JsInvocationRuntimeBase =>
+        (_runtime as JsInvocationRuntimeBase).invoke(
+          request.invocation!,
+          awaitResult: request.async,
           timeout: timeout,
         ),
-        _ =>
-          request.async
-              ? _runtime.evaluateAsync(
-                  request.code,
-                  timeout: timeout,
-                  name: request.name,
-                )
-              : _runtime.evaluate(
-                  request.code,
-                  timeout: timeout,
-                  name: request.name,
-                ),
-      },
-    );
+      _QueuedModuleEval() => _runtime.evaluateModule(
+        request.code,
+        name: request.name,
+        modules: request.modules,
+        timeout: timeout,
+      ),
+      _ =>
+        request.async
+            ? _runtime.evaluateAsync(
+                request.code,
+                timeout: timeout,
+                name: request.name,
+              )
+            : _runtime.evaluate(
+                request.code,
+                timeout: timeout,
+                name: request.name,
+              ),
+    };
+    final running = Completer<String>();
     _state = JsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime
     // 不会被并发重入。
-    _running = running.then<void>(
+    _running = running.future.then<void>(
       request.complete,
       onError: (Object error, StackTrace stackTrace) {
         final effectiveError = _attachSourceMap(error, request.name);
@@ -2335,6 +2439,12 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
           _drainQueue();
         },
       ),
+    );
+    // Publish the running task before FFI can synchronously enter a host callback.
+    unawaited(
+      Future<String>.sync(
+        execute,
+      ).then<void>(running.complete, onError: running.completeError),
     );
   }
 
@@ -2446,64 +2556,39 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     int handleId,
     List<Object?> args, {
     Duration? timeout,
-  }) async {
-    final terminalError = _terminalError;
-    if (terminalError != null) {
-      return Future<Object?>.error(terminalError);
-    }
-    final payload = await _enqueue(
-      _wrapStructuredFunctionHandleCall(handleId, args),
-      timeout: timeout,
-    );
-    return _decodeStructuredPayload(payload);
-  }
+  }) => _invokeDecoded(
+    [_invocation('', args, handle: handleId)],
+    awaitResult: false,
+    timeout: timeout,
+  );
 
   Future<String> _callFunctionHandleRaw(
     int handleId,
     List<Object?> args, {
     Duration? timeout,
-  }) {
-    final terminalError = _terminalError;
-    if (terminalError != null) {
-      return Future<String>.error(terminalError);
-    }
-    return _enqueue(_wrapFunctionHandleCall(handleId, args), timeout: timeout);
-  }
-
+  }) => _invokeQueued(
+    [_invocation('', args, handle: handleId)],
+    raw: true,
+    awaitResult: false,
+    timeout: timeout,
+  );
   Future<Object?> _runFunctionHandle(
     int handleId,
     List<Object?> args, {
     Duration? timeout,
-  }) async {
-    final payload = await _runFunctionHandleRaw(
-      handleId,
-      args,
-      timeout: timeout,
-      structured: true,
-    );
-    return _decodeStructuredPayload(payload);
-  }
+  }) => _invokeDecoded([
+    _invocation('', args, handle: handleId),
+  ], timeout: timeout);
 
   Future<String> _runFunctionHandleRaw(
     int handleId,
     List<Object?> args, {
     Duration? timeout,
-    bool structured = false,
-  }) {
-    final terminalError = _terminalError;
-    if (terminalError != null) {
-      return Future<String>.error(terminalError);
-    }
-    return _enqueue(
-      _wrapAsyncFunctionBody(
-        structured
-            ? _wrapStructuredFunctionHandleCallAwait(handleId, args)
-            : _wrapFunctionHandleCallAwait(handleId, args),
-      ),
-      timeout: timeout,
-      async: true,
-    );
-  }
+  }) => _invokeQueued(
+    [_invocation('', args, handle: handleId)],
+    raw: true,
+    timeout: timeout,
+  );
 
   Future<void> _releaseFunctionHandle(int handleId) {
     if (_isTerminal) {
@@ -2561,7 +2646,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
   Future<void> _bindRuntimeCallback(
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback, {
+    FutureOr<Object?> Function(List<Object?> args) callback, {
     String? debugName,
   }) async {
     await _runtime.bindCallback(callbackId, name, callback);
@@ -2893,60 +2978,7 @@ String _wrapWithTempGlobals(
     return source;
   }
 
-  final encodedSource = jsonEncode(source);
-  final encodedGlobals = jsonEncode(_encodeTempGlobals(tempGlobals));
-  return '''
-(() => {
-  const inflate = (payload) => {
-    switch (payload.type) {
-      case 'null':
-        return null;
-      case 'number':
-      case 'boolean':
-      case 'string':
-        return payload.value;
-      case 'bytes':
-        return new Uint8Array(payload.value);
-      case 'array':
-        return payload.value.map(inflate);
-      case 'object': {
-        const value = {};
-        for (const key of Object.keys(payload.value)) {
-          value[key] = inflate(payload.value[key]);
-        }
-        return value;
-      }
-      case 'date':
-        return new Date(payload.value);
-      default:
-        throw new TypeError('Unknown Dart value payload: ' + payload.type);
-    }
-  };
-  const globals = $encodedGlobals;
-  const missing = Symbol('quickjs.missingGlobal');
-  const previous = new Map();
-  try {
-    for (const key of Object.keys(globals)) {
-      previous.set(
-        key,
-        Object.prototype.hasOwnProperty.call(globalThis, key)
-          ? globalThis[key]
-          : missing
-      );
-      globalThis[key] = inflate(globals[key]);
-    }
-    return (0, eval)($encodedSource);
-  } finally {
-    for (const [key, value] of previous) {
-      if (value === missing) {
-        delete globalThis[key];
-      } else {
-        globalThis[key] = value;
-      }
-    }
-  }
-})()
-''';
+  return 'globalThis.__jsInvocationCodec.evaluate(${jsonEncode({'source': source, 'globals': _encodeTempGlobals(tempGlobals)})})';
 }
 
 String _wrapInstallConsole(String? callbackName) {
@@ -3166,7 +3198,7 @@ String _wrapBindObjectProxy(
   final encodedMethods = jsonEncode(methods);
   return '''
 (() => {
-const inflate = ${_dartValueInflateFunctionSource()};
+const inflate = globalThis.__jsInvocationCodec.inflate;
 const target = Object.create(null);
 const state = { disposed: false };
 const assertLive = () => {
@@ -3230,6 +3262,7 @@ Object.defineProperty(globalThis, $encodedName, {
   enumerable: true,
   writable: true,
 });
+globalThis.__jsInvocationCodec.registerBinding($encodedStateName, state);
 })()
 ''';
 }
@@ -3270,61 +3303,6 @@ String _wrapEvaluateFunctionHandle(String code, {required String name}) {
 ''';
 }
 
-String _wrapFunctionHandleCall(int handleId, List<Object?> args) {
-  final encodedArgs = jsonEncode([
-    for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
-  ]);
-  return '''
-(() => {
-const inflate = ${_dartValueInflateFunctionSource()};
-const registry = globalThis.__jsFunctionHandles;
-if (!registry || typeof registry[$handleId] !== 'function') {
-  throw new Error('QuickJS function handle is not valid');
-}
-const args = $encodedArgs.map(inflate);
-return registry[$handleId](...args);
-})()
-''';
-}
-
-String _wrapFunctionHandleCallAwait(int handleId, List<Object?> args) {
-  final encodedArgs = jsonEncode([
-    for (final arg in args) _encodeDartValue(arg, Set<Object>.identity()),
-  ]);
-  return '''
-const inflate = ${_dartValueInflateFunctionSource()};
-const registry = globalThis.__jsFunctionHandles;
-if (!registry || typeof registry[$handleId] !== 'function') {
-  throw new Error('QuickJS function handle is not valid');
-}
-const args = $encodedArgs.map(inflate);
-return await registry[$handleId](...args);
-''';
-}
-
-String _wrapStructuredFunctionHandleCall(int handleId, List<Object?> args) {
-  return '''
-(() => {
-const convert = ${_jsValueConvertFunctionSource()};
-const value = ${_wrapFunctionHandleCall(handleId, args)};
-return JSON.stringify(convert(value, new WeakSet()));
-})()
-''';
-}
-
-String _wrapStructuredFunctionHandleCallAwait(
-  int handleId,
-  List<Object?> args,
-) {
-  return '''
-const convert = ${_jsValueConvertFunctionSource()};
-const value = await (async () => {
-${_wrapFunctionHandleCallAwait(handleId, args)}
-})();
-return JSON.stringify(convert(value, new WeakSet()));
-''';
-}
-
 String _wrapReleaseFunctionHandle(int handleId) {
   return '''
 (() => {
@@ -3346,11 +3324,12 @@ String _wrapReleaseObjectProxy(
   final encodedCallbackNames = jsonEncode(callbackNames);
   return '''
 (() => {
+const state = globalThis.__jsInvocationCodec.releaseBinding($encodedStateName);
+if (state) state.disposed = true;
 const proxy = globalThis[$encodedName];
-if (proxy && proxy[$encodedStateName]) {
-  proxy[$encodedStateName].disposed = true;
+if (state && proxy && proxy[$encodedStateName] === state) {
+  delete globalThis[$encodedName];
 }
-delete globalThis[$encodedName];
 for (const callbackName of $encodedCallbackNames) {
   delete globalThis[callbackName];
 }
@@ -3381,14 +3360,18 @@ const assertReceiver = (value) => {
   }
   return value[$encodedStateName];
 };
-const waitLive = (value) => {
+const invokeLive = (value, callback) => {
   const state = assertReceiver(value);
-  return state.ready.then(() => state.pending).then(() => {
-    if (state.disposed) {
-      throw new Error('QuickJS class instance is disposed');
-    }
-    return state.id;
-  });
+  const invoke = () => {
+    if (state.disposed) throw new Error('QuickJS class instance is disposed');
+    return callback(state.id);
+  };
+  if (state.ready || state.pending) {
+    const ready = state.ready;
+    const pending = state.pending;
+    return Promise.resolve(ready).then(() => pending).then(invoke);
+  }
+  return invoke();
 };
 const instanceStates = [];
 function JsBoundClass(...args) {
@@ -3401,13 +3384,17 @@ function JsBoundClass(...args) {
     id: instanceId,
     disposed: false,
     ready: null,
-    pending: Promise.resolve(),
+    pending: null,
   };
-  state.ready = globalThis[$encodedConstructorCallbackName](instanceId, ...args)
-    .catch((error) => {
+  const result = globalThis[$encodedConstructorCallbackName](instanceId, ...args);
+  if (result && typeof result.then === 'function') {
+    state.ready = Promise.resolve(result).then(() => {
+      state.ready = null;
+    }, (error) => {
       state.disposed = true;
       throw error;
     });
+  }
   instanceStates.push(state);
   Object.defineProperty(target, $encodedStateName, {
     value: state,
@@ -3427,7 +3414,7 @@ Object.defineProperty(JsBoundClass, $encodedStateName, {
   enumerable: false,
   writable: false,
 });
-const inflate = ${_dartValueInflateFunctionSource()};
+const inflate = globalThis.__jsInvocationCodec.inflate;
 const properties = $encodedProperties;
 for (const key of Object.keys(properties)) {
   Object.defineProperty(JsBoundClass.prototype, key, {
@@ -3445,7 +3432,7 @@ for (const accessor of accessors) {
   };
   if (accessor.getCallback) {
     descriptor.get = function() {
-      return waitLive(this).then((instanceId) =>
+      return invokeLive(this, (instanceId) =>
         globalThis[accessor.getCallback](instanceId)
       );
     };
@@ -3453,14 +3440,13 @@ for (const accessor of accessors) {
   if (accessor.setCallback) {
     descriptor.set = function(value) {
       const state = assertReceiver(this);
-      state.pending = state.pending
-        .then(() => state.ready)
-        .then(() => {
-          if (state.disposed) {
-            throw new Error('QuickJS class instance is disposed');
-          }
-          return globalThis[accessor.setCallback](state.id, value);
+      const result = invokeLive(this, (id) => globalThis[accessor.setCallback](id, value));
+      if (result && typeof result.then === 'function') {
+        const pending = Promise.resolve(result).then(() => {
+          if (state.pending === pending) state.pending = null;
         });
+        state.pending = pending;
+      }
     };
   }
   Object.defineProperty(JsBoundClass.prototype, accessor.name, descriptor);
@@ -3469,7 +3455,7 @@ const methods = $encodedMethods;
 for (const method of methods) {
   Object.defineProperty(JsBoundClass.prototype, method.name, {
     value: function(...args) {
-      return waitLive(this).then((instanceId) =>
+      return invokeLive(this, (instanceId) =>
         globalThis[method.callback](instanceId, ...args)
       );
     },
@@ -3484,8 +3470,13 @@ Object.defineProperty(globalThis, $encodedName, {
   enumerable: true,
   writable: true,
 });
+globalThis.__jsInvocationCodec.registerBinding($encodedStateName, instanceStates);
 })()
 ''';
+}
+
+FutureOr<Object?> _voidCallbackResult(FutureOr<void> result) {
+  return result is Future ? result.then<Object?>((_) => null) : null;
 }
 
 String _wrapReleaseClassBinding(
@@ -3498,19 +3489,132 @@ String _wrapReleaseClassBinding(
   final encodedCallbackNames = jsonEncode(callbackNames);
   return '''
 (() => {
-const constructor = globalThis[$encodedName];
-if (typeof constructor === 'function' && Array.isArray(constructor[$encodedStateName])) {
-  for (const state of constructor[$encodedStateName]) {
-    state.disposed = true;
-  }
+const states = globalThis.__jsInvocationCodec.releaseBinding($encodedStateName);
+if (states) {
+  for (const state of states) state.disposed = true;
 }
-delete globalThis[$encodedName];
+const constructor = globalThis[$encodedName];
+if (states && typeof constructor === 'function' && constructor[$encodedStateName] === states) {
+  delete globalThis[$encodedName];
+}
 for (const callbackName of $encodedCallbackNames) {
   delete globalThis[callbackName];
 }
 })()
 ''';
 }
+
+String _invocationExpression(String request, bool awaitResult) =>
+    'globalThis.__jsInvoke(${jsonEncode(request)},$awaitResult)';
+
+String _installInvocationCodec() =>
+    '''
+(() => {
+  const bindingStates = new Map();
+  function registerBinding(key, state) { bindingStates.set(key, state); }
+  function releaseBinding(key) {
+    const state = bindingStates.get(key);
+    bindingStates.delete(key);
+    return state;
+  }
+  const inflate = ${_dartValueInflateFunctionSource()};
+  const convert = ${_jsValueConvertFunctionSource()};
+  const stringify = JSON.stringify;
+  const parse = JSON.parse;
+  function resolve(call) {
+    if (call.handle !== undefined) {
+      const registry = globalThis.__jsFunctionHandles;
+      const fn = registry && registry[call.handle];
+      if (typeof fn !== 'function') throw new Error('QuickJS function handle is not valid');
+      return [fn, registry];
+    }
+    const receiver = call.namespace ? globalThis[call.namespace] : globalThis;
+    const fn = receiver && receiver[call.method];
+    if (typeof fn !== 'function') {
+      throw new TypeError(call.namespace
+        ? 'QuickJS module export is not a function: ' + call.module + '#' + call.method
+        : 'QuickJS global is not a function: ' + call.method);
+    }
+    return [fn, call.namespace ? undefined : receiver];
+  }
+  function breadcrumb(call, phase) {
+    if (call.module) globalThis[${jsonEncode(_moduleCallBreadcrumbName)}] = {
+      module: call.module, method: call.method, phase, timestamp: Date.now()
+    };
+  }
+  function execute(call) {
+    if (call.source !== undefined) return evaluate(call);
+    let phase = 'resolve export ' + call.module + '#' + call.method;
+    try {
+      breadcrumb(call, phase);
+      const [fn, receiver] = resolve(call);
+      phase = 'inflate arguments'; breadcrumb(call, phase);
+      const args = call.args.map(arg => inflate(arg));
+      phase = 'call ' + call.module + '#' + call.method; breadcrumb(call, phase);
+      return Reflect.apply(fn, receiver, args);
+    } catch (error) {
+      breadcrumb(call, 'failed during ' + phase);
+      throw error;
+    }
+  }
+  function evaluate(call) {
+    const globals = call.globals;
+    if (!globals) return (0, eval)(call.source);
+    const missing = Symbol('quickjs.missingGlobal');
+    const previous = new Map();
+    try {
+      for (const key of Object.keys(globals)) {
+        previous.set(key, Object.prototype.hasOwnProperty.call(globalThis, key)
+          ? globalThis[key] : missing);
+        globalThis[key] = inflate(globals[key]);
+      }
+      return (0, eval)(call.source);
+    } finally {
+      for (const [key, value] of previous) {
+        if (value === missing) delete globalThis[key];
+        else globalThis[key] = value;
+      }
+    }
+  }
+  function finish(value, raw) {
+    return raw ? value : stringify(convert(value, new WeakSet()));
+  }
+  function invoke(requestJson, awaitResult) {
+    const request = parse(requestJson);
+    if (awaitResult) {
+      return (async () => {
+        if (!request.batch) return finish(await execute(request.calls[0]), request.raw);
+        const values = [];
+        const budget = {nodes:1, maxNodes:10000, maxDepth:32};
+        for (const call of request.calls) {
+          const result = convert(await execute(call), new WeakSet(), 1, budget);
+          if (result.type === 'conversionError') return stringify(result);
+          values.push(result);
+        }
+        return stringify({type:'array',value:values});
+      })();
+    }
+    let value;
+    if (request.batch) {
+      const values = [];
+      const budget = {nodes:1, maxNodes:10000, maxDepth:32};
+      for (const call of request.calls) {
+        const result = convert(execute(call), new WeakSet(), 1, budget);
+        if (result.type === 'conversionError') return stringify(result);
+        values.push(result);
+      }
+      return stringify({type:'array',value:values});
+    } else {
+      value = execute(request.calls[0]);
+    }
+    return finish(value, request.raw);
+  }
+  Object.defineProperty(globalThis, '__jsInvocationCodec', {
+    value: Object.freeze({inflate,convert,evaluate,registerBinding,releaseBinding}), enumerable:false
+  });
+  Object.defineProperty(globalThis, '__jsInvoke', {value:invoke, enumerable:false});
+})()
+''';
 
 String _dartValueInflateFunctionSource() {
   return '''
@@ -3546,6 +3650,8 @@ String _dartValueInflateFunctionSource() {
       throw new TypeError('Unknown Dart value payload: ' + payload.type);
   }
 }
+
+
 ''';
 }
 
@@ -3951,10 +4057,18 @@ Object _encodeWithCycleCheck(
 }
 
 final class _QueuedEval {
-  _QueuedEval(this.id, this.code, this.timeout, this.name, this.async);
+  _QueuedEval(
+    this.id,
+    this.code,
+    this.timeout,
+    this.name,
+    this.async, {
+    this.invocation,
+  });
 
   final int id;
   final String code;
+  final String? invocation;
   final Duration? timeout;
   final String name;
   final bool async;

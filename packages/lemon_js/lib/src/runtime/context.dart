@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../backend/backend.dart';
 import '../backend/backend_factory.dart';
@@ -61,6 +62,7 @@ final class JsRuntime {
       memoryLimitBytes: options.memoryLimitBytes,
       stackLimitBytes: options.stackLimitBytes,
       maxPendingTasks: options.maxPendingTasks,
+      execution: options.execution,
     );
     late final _JsContextRuntimeAdapter adapter;
     if (_root case final JsMultiContextRuntimeBase multi) {
@@ -85,6 +87,7 @@ final class JsRuntime {
         plugins: plugins,
         onConsole: onConsole,
       );
+      context._engineInitialized = true;
     } catch (_) {
       _contexts.remove(context);
       rethrow;
@@ -128,11 +131,73 @@ final class JsContext implements JsPluginHost {
   final JsRuntime _owner;
   final _JsContextRuntimeAdapter _adapter;
   late final JsEngine _engine;
+  bool _engineInitialized = false;
   bool _closed = false;
   Future<void>? _disposeFuture;
 
   /// Context 是否已经进入关闭状态。
   bool get closed => _closed;
+
+  /// Whether synchronous calls are available in this context.
+  bool get supportsSync => _engine.supportsSync;
+
+  /// Evaluates immediately in this context and converts the returned value.
+  Object? evalSync(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+    Map<String, Object?> tempGlobals = const {},
+  }) {
+    _ensureOpen();
+    return _engine.evalSync(
+      code,
+      timeout: timeout,
+      name: name,
+      tempGlobals: tempGlobals,
+    );
+  }
+
+  /// Evaluates immediately and returns the raw bridge string.
+  String evalRawSync(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+    Map<String, Object?> tempGlobals = const {},
+  }) {
+    _ensureOpen();
+    return _engine.evalRawSync(
+      code,
+      timeout: timeout,
+      name: name,
+      tempGlobals: tempGlobals,
+    );
+  }
+
+  /// Calls one global repeatedly through one ordered bridge request.
+  Future<List<Object?>> callBatch(
+    String method,
+    List<List<Object?>> arguments, {
+    Duration? timeout,
+  }) {
+    _ensureOpen();
+    return _engine.callBatch(method, arguments, timeout: timeout);
+  }
+
+  /// Calls one global synchronously for a batch of argument lists.
+  List<Object?> callBatchSync(
+    String method,
+    List<List<Object?>> arguments, {
+    Duration? timeout,
+  }) {
+    _ensureOpen();
+    return _engine.callBatchSync(method, arguments, timeout: timeout);
+  }
+
+  /// Calls a global function immediately without waiting for a Promise.
+  Object? callSync(String method, List<Object?> args, {Duration? timeout}) {
+    _ensureOpen();
+    return _engine.callSync(method, args, timeout: timeout);
+  }
 
   /// 同步求值 [code] 并将结构化结果转换为 Dart 值。
   Future<Object?> eval(
@@ -372,7 +437,11 @@ final class JsContext implements JsPluginHost {
   }
 
   Future<void> _dispose() async {
-    await _engine.dispose();
+    if (_engineInitialized) {
+      await _engine.dispose();
+    } else {
+      await _adapter.dispose();
+    }
   }
 
   void _ensureOpen() {
@@ -384,7 +453,11 @@ final class JsContext implements JsPluginHost {
 /// Callback ids are remapped because sibling `JsEngine` facades each start their
 /// local registry at one while the native worker registry is runtime-wide.
 final class _JsContextRuntimeAdapter
-    implements JsJsRuntimeBase, JsInPlaceFeaturesRuntime {
+    implements
+        JsJsRuntimeBase,
+        JsInPlaceFeaturesRuntime,
+        JsSyncRuntimeBase,
+        JsInvocationRuntimeBase {
   _JsContextRuntimeAdapter.shared(this._owner, this._shared, this._contextId)
     : _isolated = null;
 
@@ -398,6 +471,82 @@ final class _JsContextRuntimeAdapter
   final JsJsRuntimeBase? _isolated;
   final Map<int, int> _callbackIds = <int, int>{};
   bool _closed = false;
+
+  @override
+  bool get supportsSync =>
+      _shared is JsSyncMultiContextRuntimeBase ||
+      (_isolated is JsSyncRuntimeBase &&
+          (_isolated as JsSyncRuntimeBase).supportsSync);
+  @override
+  String evaluateSync(
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  }) {
+    _ensureOpen();
+    if (_shared case final JsSyncMultiContextRuntimeBase sync) {
+      return sync.evaluateContextSync(
+        _contextId!,
+        code,
+        timeout: timeout,
+        name: name,
+      );
+    }
+    if (_isolated case final JsSyncRuntimeBase sync) {
+      return sync.evaluateSync(code, timeout: timeout, name: name);
+    }
+    throw UnsupportedError(
+      'Synchronous calls require current-isolate execution',
+    );
+  }
+
+  @override
+  Future<String> invoke(
+    String requestJson, {
+    bool awaitResult = false,
+    Duration? timeout,
+  }) {
+    _ensureOpen();
+    if (_shared case final JsMultiContextInvocationRuntimeBase calls) {
+      return calls.invokeContext(
+        _contextId!,
+        requestJson,
+        awaitResult: awaitResult,
+        timeout: timeout,
+      );
+    }
+    if (_isolated case final JsInvocationRuntimeBase calls) {
+      return calls.invoke(
+        requestJson,
+        awaitResult: awaitResult,
+        timeout: timeout,
+      );
+    }
+    final code =
+        'globalThis.__jsInvoke(${jsonEncode(requestJson)},$awaitResult)';
+    return awaitResult
+        ? evaluateAsync(code, timeout: timeout)
+        : evaluate(code, timeout: timeout);
+  }
+
+  @override
+  String invokeSync(String requestJson, {Duration? timeout}) {
+    _ensureOpen();
+    if (_shared case final JsMultiContextInvocationRuntimeBase calls) {
+      return calls.invokeContextSync(
+        _contextId!,
+        requestJson,
+        timeout: timeout,
+      );
+    }
+    if (_isolated case final JsInvocationRuntimeBase calls) {
+      return calls.invokeSync(requestJson, timeout: timeout);
+    }
+    return evaluateSync(
+      'globalThis.__jsInvoke(${jsonEncode(requestJson)},false)',
+      timeout: timeout,
+    );
+  }
 
   @override
   Future<String> evaluate(
@@ -476,7 +625,7 @@ final class _JsContextRuntimeAdapter
   Future<void> bindCallback(
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
+    FutureOr<Object?> Function(List<Object?> args) callback,
   ) async {
     _ensureOpen();
     final shared = _shared;
@@ -518,9 +667,8 @@ final class _JsContextRuntimeAdapter
 
   @override
   Future<void> stop() async {
-    throw UnsupportedError(
-      'Stopping one shared QuickJS context is not supported; dispose it instead',
-    );
+    // A child owns only its context; cancelling it must leave siblings alive.
+    await dispose();
   }
 
   @override

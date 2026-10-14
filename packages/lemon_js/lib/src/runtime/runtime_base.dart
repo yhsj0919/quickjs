@@ -27,14 +27,14 @@ abstract class JsJsRuntimeBase {
     Duration? timeout,
   });
 
-  /// Binds a Promise-based host callback on JS `globalThis`.
+  /// Binds a host callback; in-isolate native calls preserve values/Futures.
   Future<void> bindCallback(
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
+    FutureOr<Object?> Function(List<Object?> args) callback,
   );
 
-  /// Removes a Promise-based host callback from the runtime registry.
+  /// Removes a host callback from the runtime registry.
   Future<void> unbindCallback(int callbackId);
 
   /// Binds a `{ emit, close, error }` sink on JS `globalThis`.
@@ -69,7 +69,7 @@ abstract interface class JsMultiContextRuntimeBase {
     int contextId,
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
+    FutureOr<Object?> Function(List<Object?> args) callback,
   );
 
   Future<String> evaluateContextAsync(
@@ -95,5 +95,44 @@ abstract interface class JsInPlaceFeaturesRuntime {}
 
 abstract interface class JsTimerRuntimeBase {
   Future<int?> pumpTimers();
+}
+
+/// Synchronous execution on an in-isolate backend.
+abstract interface class JsSyncRuntimeBase {
+  bool get supportsSync;
+  String evaluateSync(String code, {Duration? timeout, String name = '<eval>'});
+}
+
+abstract interface class JsSyncMultiContextRuntimeBase {
+  String evaluateContextSync(
+    int contextId,
+    String code, {
+    Duration? timeout,
+    String name = '<eval>',
+  });
+}
+
+/// Calls the installed codec directly, without compiling source per invocation.
+abstract interface class JsInvocationRuntimeBase {
+  Future<String> invoke(
+    String requestJson, {
+    bool awaitResult = false,
+    Duration? timeout,
+  });
+  String invokeSync(String requestJson, {Duration? timeout});
+}
+
+abstract interface class JsMultiContextInvocationRuntimeBase {
+  Future<String> invokeContext(
+    int contextId,
+    String requestJson, {
+    bool awaitResult = false,
+    Duration? timeout,
+  });
+  String invokeContextSync(
+    int contextId,
+    String requestJson, {
+    Duration? timeout,
+  });
 }
 // ignore_for_file: public_member_api_docs

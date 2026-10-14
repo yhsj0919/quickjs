@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js_context.dart';
-import 'package:lemon_js/src/native/native_worker.dart';
+import 'package:lemon_js/src/native/native_runtime.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -414,7 +414,9 @@ globalThis.describe = async function(value) {
 
   // 公开状态观测应反映 eval 占用 runtime 的过程。
   test('runtime state is running during evaluation', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final evalFuture = engine.eval('''
@@ -433,7 +435,9 @@ globalThis.describe = async function(value) {
 
   // stop 期间公开状态应进入 stopping，恢复后回到 ready。
   test('runtime state is stopping while restart is in progress', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final running = engine.eval('while (true) {}');
@@ -572,7 +576,9 @@ globalThis.describe = async function(value) {
 
   // 长耗时 JS 不能阻塞 Dart isolate 的 timer。
   test('long evaluation does not block the Dart isolate', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
     final stopwatch = Stopwatch()..start();
     final timer = Completer<int>();
@@ -618,7 +624,9 @@ globalThis.describe = async function(value) {
 
   // timeout 从入队开始计算，排队过久的任务不应该再进入 runtime。
   test('queued evaluation can time out before it starts', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final running = engine.eval('''
@@ -640,7 +648,9 @@ globalThis.describe = async function(value) {
 
   // stop 应取消正在执行的 eval，并在后台重建可用 runtime。
   test('stop cancels running evaluation and recovers runtime', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final running = engine.eval('while (true) {}');
@@ -656,7 +666,9 @@ globalThis.describe = async function(value) {
 
   // 多次 stop 应共用同一个停止流程，不能产生悬挂 Future。
   test('repeated stop calls during evaluation complete', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final running = engine.eval('while (true) {}');
@@ -674,7 +686,9 @@ globalThis.describe = async function(value) {
 
   // stop 还必须取消尚未开始的队列任务。
   test('stop cancels queued evaluations', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final running = engine.eval('while (true) {}');
@@ -825,7 +839,9 @@ globalThis.describe = async function(value) {
 
   // stop 进行中提交的新 eval 会等待 runtime 恢复后执行，不能永久 pending。
   test('evaluation queued during stop runs after runtime recovery', () async {
-    final engine = await JsEngine.create();
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.workerIsolate),
+    );
     addTearDown(engine.dispose);
 
     final running = engine.eval('while (true) {}');

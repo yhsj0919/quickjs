@@ -1,0 +1,102 @@
+{
+  "before": {
+    "buildMode": "release",
+    "results": [
+      {
+        "mode": "dart",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 0.066,
+        "p90Us": 0.17,
+        "minUs": 0.033,
+        "maxUs": 0.314
+      },
+      {
+        "mode": "call",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 17.782,
+        "p90Us": 19.616,
+        "minUs": 17.001,
+        "maxUs": 20.021
+      },
+      {
+        "mode": "raw",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 4.093,
+        "p90Us": 4.76,
+        "minUs": 3.686,
+        "maxUs": 5.713
+      },
+      {
+        "mode": "structured",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 34.843,
+        "p90Us": 37.048,
+        "minUs": 34.372,
+        "maxUs": 39.964
+      },
+      {
+        "mode": "temporary",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 126.951,
+        "p90Us": 143.545,
+        "minUs": 123.435,
+        "maxUs": 149.211
+      }
+    ]
+  },
+  "after": {
+    "buildMode": "release",
+    "results": [
+      {
+        "mode": "dart",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 0.056,
+        "p90Us": 0.161,
+        "minUs": 0.035,
+        "maxUs": 0.242
+      },
+      {
+        "mode": "call",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 17.612,
+        "p90Us": 19.408,
+        "minUs": 16.935,
+        "maxUs": 19.777
+      },
+      {
+        "mode": "raw",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 4.129,
+        "p90Us": 4.568,
+        "minUs": 3.867,
+        "maxUs": 5.795
+      },
+      {
+        "mode": "structured",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 17.069,
+        "p90Us": 19.656,
+        "minUs": 16.246,
+        "maxUs": 19.823
+      },
+      {
+        "mode": "temporary",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 24.382,
+        "p90Us": 25.764,
+        "minUs": 23.067,
+        "maxUs": 26.252
+      }
+    ]
+  }
+}

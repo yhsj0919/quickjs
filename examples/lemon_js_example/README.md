@@ -58,6 +58,9 @@ OHOS 版 `shared_preferences` 尚未正式发布到 pub.dev，本 example 已在
 - [混合插件](assets/extensions/hybrid_demo)
 - [WebView 插件 JS 页面](assets/quickjs_ui/webview_plugin_page.mjs)
 - [WebView 插件 Flutter 页面](lib/pages/quickjs_ui/getting_started/quickjs_ui_webview_plugin_page.dart)
+- [虚拟列表与同步 builder 性能基准](lib/list_runtime_benchmark.dart)：独立 Release 入口，运行方法和测量结果见 [列表基准报告](../../docs/list_runtime_benchmark.md)。
+- [列表 item 复用与内存基准](lib/list_retention_benchmark.dart)：独立进程比较往返滚动时的 Widget、State 生命周期和进程 RSS。
+- [核心单次与批量函数调用基准](lib/invocation_benchmark.dart)：比较直接调用、批量调用及 JS→Dart 回调的 Release 成本。
 
 包的最小接入方式请分别查看仓库根目录下 `packages/*/README.md`。
 

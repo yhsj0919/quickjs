@@ -1,0 +1,537 @@
+{
+  "buildMode": "release",
+  "itemCount": 100000,
+  "itemExtent": 48.0,
+  "driver": "8 logical px/vsync, 60 warmup + 480 measured ticks",
+  "runs": [
+    {
+      "mode": "native",
+      "round": 0,
+      "samples": 477,
+      "ui": {
+        "averageMs": 0.23790566037735839,
+        "p90Ms": 0.375,
+        "maxMs": 0.673,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6763291404612164,
+        "p90Ms": 0.848,
+        "maxMs": 1.424,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.9091425576519934,
+        "p90Ms": 2.59,
+        "maxMs": 4.27,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 79.41176470588235,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 6067.599,
+      "renderedFpsEstimate": 78.61429207829984,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 108,
+      "rowBuildTotalMs": 0.312,
+      "rangeEvents": 0
+    },
+    {
+      "mode": "dart-schema",
+      "round": 0,
+      "samples": 449,
+      "ui": {
+        "averageMs": 0.23948552338530088,
+        "p90Ms": 0.353,
+        "maxMs": 0.742,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6903051224944322,
+        "p90Ms": 0.919,
+        "maxMs": 1.478,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.9309242761692655,
+        "p90Ms": 2.696,
+        "maxMs": 5.295,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 79.75188303057155,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5987.414,
+      "renderedFpsEstimate": 74.9906386964389,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 108,
+      "rowBuildTotalMs": 3.787,
+      "rangeEvents": 0
+    },
+    {
+      "mode": "sync-builder",
+      "round": 0,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.25696250000000004,
+        "p90Ms": 0.477,
+        "maxMs": 1.025,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6824583333333334,
+        "p90Ms": 0.828,
+        "maxMs": 4.065,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.9578395833333346,
+        "p90Ms": 2.633,
+        "maxMs": 5.906,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 79.63427223123433,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 6055.269,
+      "renderedFpsEstimate": 79.26980618036953,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 108,
+      "rowBuildTotalMs": 16.835,
+      "rangeEvents": 0
+    },
+    {
+      "mode": "virtual-local",
+      "round": 0,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.22481666666666686,
+        "p90Ms": 0.313,
+        "maxMs": 0.537,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6595020833333327,
+        "p90Ms": 0.823,
+        "maxMs": 1.297,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.8693499999999992,
+        "p90Ms": 2.601,
+        "maxMs": 3.428,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 82.51833740831296,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5825.527,
+      "renderedFpsEstimate": 82.39597893890115,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 0,
+      "rowBuildTotalMs": 0.0,
+      "rangeEvents": 5
+    },
+    {
+      "mode": "virtual-worker",
+      "round": 0,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.2212812500000001,
+        "p90Ms": 0.305,
+        "maxMs": 0.585,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6556812499999995,
+        "p90Ms": 0.817,
+        "maxMs": 1.739,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.8721541666666661,
+        "p90Ms": 2.617,
+        "maxMs": 4.969,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 82.44274809160305,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5801.075,
+      "renderedFpsEstimate": 82.74328464982783,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 0,
+      "rowBuildTotalMs": 0.0,
+      "rangeEvents": 5
+    },
+    {
+      "mode": "virtual-worker",
+      "round": 1,
+      "samples": 479,
+      "ui": {
+        "averageMs": 0.2260041753653446,
+        "p90Ms": 0.321,
+        "maxMs": 0.552,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6621440501043839,
+        "p90Ms": 0.83,
+        "maxMs": 2.343,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.8941816283924848,
+        "p90Ms": 2.559,
+        "maxMs": 3.709,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 81.84298272203698,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5859.792,
+      "renderedFpsEstimate": 81.7435158108001,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 0,
+      "rowBuildTotalMs": 0.0,
+      "rangeEvents": 5
+    },
+    {
+      "mode": "virtual-local",
+      "round": 1,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.23178333333333356,
+        "p90Ms": 0.322,
+        "maxMs": 0.87,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6716833333333334,
+        "p90Ms": 0.882,
+        "maxMs": 1.762,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.894068749999999,
+        "p90Ms": 2.644,
+        "maxMs": 3.996,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 82.27944537559043,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5828.909,
+      "renderedFpsEstimate": 82.34817184485124,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 0,
+      "rowBuildTotalMs": 0.0,
+      "rangeEvents": 5
+    },
+    {
+      "mode": "sync-builder",
+      "round": 1,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.24956666666666655,
+        "p90Ms": 0.46,
+        "maxMs": 0.939,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6562437499999993,
+        "p90Ms": 0.819,
+        "maxMs": 3.244,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.8929104166666673,
+        "p90Ms": 2.559,
+        "maxMs": 5.197,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 83.42345125907616,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5750.629,
+      "renderedFpsEstimate": 83.4691300725538,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 108,
+      "rowBuildTotalMs": 15.46,
+      "rangeEvents": 0
+    },
+    {
+      "mode": "dart-schema",
+      "round": 1,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.23290625000000026,
+        "p90Ms": 0.354,
+        "maxMs": 0.676,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6634875,
+        "p90Ms": 0.824,
+        "maxMs": 1.599,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.8565208333333334,
+        "p90Ms": 2.59,
+        "maxMs": 3.57,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 83.4750347812645,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5782.771,
+      "renderedFpsEstimate": 83.00518903480702,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 108,
+      "rowBuildTotalMs": 3.883,
+      "rangeEvents": 0
+    },
+    {
+      "mode": "native",
+      "round": 1,
+      "samples": 480,
+      "ui": {
+        "averageMs": 0.23353541666666694,
+        "p90Ms": 0.327,
+        "maxMs": 0.559,
+        "overBudget": 0
+      },
+      "raster": {
+        "averageMs": 0.6921812499999997,
+        "p90Ms": 0.906,
+        "maxMs": 1.624,
+        "overBudget": 0
+      },
+      "total": {
+        "averageMs": 1.924660416666667,
+        "p90Ms": 2.656,
+        "maxMs": 4.797,
+        "overBudget": 0
+      },
+      "refreshHz": 75.0,
+      "budgetMs": 13.333333333333334,
+      "driverTickHz": 83.19211215529194,
+      "physicalWidth": 1582.0,
+      "physicalHeight": 853.0,
+      "dpr": 1.25,
+      "viewportWidth": 800.0,
+      "viewportHeight": 600.0,
+      "sampleWindowMs": 5776.798,
+      "renderedFpsEstimate": 83.09101339531,
+      "scrollPixels": 3840.0,
+      "clampedFrames": 0,
+      "rowCallsIncludingWarmup": 108,
+      "rowBuildTotalMs": 0.328,
+      "rangeEvents": 0
+    }
+  ],
+  "invocationBenchmark": {
+    "buildMode": "release",
+    "results": [
+      {
+        "method": "row",
+        "batchSize": 1,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 23.489,
+        "p90Ms": 25.048,
+        "minMs": 23.121,
+        "maxMs": 25.635,
+        "medianUsPerRow": 23.489
+      },
+      {
+        "method": "row",
+        "batchSize": 1,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 29.976,
+        "p90Ms": 31.39,
+        "minMs": 28.724,
+        "maxMs": 31.548,
+        "medianUsPerRow": 29.976
+      },
+      {
+        "method": "row",
+        "batchSize": 20,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 20.165,
+        "p90Ms": 21.665,
+        "minMs": 19.751,
+        "maxMs": 21.96,
+        "medianUsPerRow": 20.165
+      },
+      {
+        "method": "row",
+        "batchSize": 20,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 22.953,
+        "p90Ms": 25.212,
+        "minMs": 21.949,
+        "maxMs": 25.745,
+        "medianUsPerRow": 22.953
+      },
+      {
+        "method": "row",
+        "batchSize": 100,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 19.4,
+        "p90Ms": 20.681,
+        "minMs": 18.893,
+        "maxMs": 21.519,
+        "medianUsPerRow": 19.4
+      },
+      {
+        "method": "row",
+        "batchSize": 100,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 21.245,
+        "p90Ms": 22.46,
+        "minMs": 20.637,
+        "maxMs": 22.489,
+        "medianUsPerRow": 21.245
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 1,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 41.59,
+        "p90Ms": 42.591,
+        "minMs": 40.816,
+        "maxMs": 43.096,
+        "medianUsPerRow": 41.59
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 1,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 50.2,
+        "p90Ms": 52.267,
+        "minMs": 46.997,
+        "maxMs": 53.254,
+        "medianUsPerRow": 50.2
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 20,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 40.051,
+        "p90Ms": 42.163,
+        "minMs": 38.396,
+        "maxMs": 42.591,
+        "medianUsPerRow": 40.051
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 20,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 42.62,
+        "p90Ms": 47.672,
+        "minMs": 41.0,
+        "maxMs": 61.795,
+        "medianUsPerRow": 42.62
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 100,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 37.149,
+        "p90Ms": 38.911,
+        "minMs": 35.353,
+        "maxMs": 39.869,
+        "medianUsPerRow": 37.149
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 100,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 38.644,
+        "p90Ms": 40.847,
+        "minMs": 37.959,
+        "maxMs": 41.012,
+        "medianUsPerRow": 38.644
+      }
+    ]
+  }
+}
