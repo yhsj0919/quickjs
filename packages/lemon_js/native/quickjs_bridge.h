@@ -86,6 +86,11 @@ QJS_BRIDGE_EXPORT char *quickjs_eval_module(QuickjsRuntime *runtime,
                                             const char *source,
                                             const char *name,
                                             const char *modules);
+QJS_BRIDGE_EXPORT void quickjs_runtime_begin_execution(QuickjsRuntime *runtime, int64_t timeout_ms);
+QJS_BRIDGE_EXPORT int quickjs_runtime_end_execution(QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT int quickjs_runtime_pump_jobs(QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT void quickjs_runtime_set_callback_result(
+    QuickjsRuntime *runtime, int success, const char *payload_json);
 QJS_BRIDGE_EXPORT int quickjs_runtime_bind_callback(
     QuickjsRuntime *runtime, int64_t callback_id, const char *name,
     QuickjsHostCallback callback);
@@ -112,6 +117,10 @@ QJS_BRIDGE_EXPORT int quickjs_runtime_bind_sink(QuickjsRuntime *runtime,
                                                 const char *name);
 
 QJS_BRIDGE_EXPORT void quickjs_free_string(char *str);
+QJS_BRIDGE_EXPORT char *quickjs_invoke(QuickjsRuntime *runtime,
+    QuickjsContext *context, const char *request_json, int await_result);
+QJS_BRIDGE_EXPORT void quickjs_async_reset(QuickjsRuntime *runtime,
+    QuickjsContext *context);
 
 #ifdef __cplusplus
 }

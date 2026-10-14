@@ -230,7 +230,7 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
   Future<void> bindCallback(
     int callbackId,
     String name,
-    Future<Object?> Function(List<Object?> args) callback,
+    FutureOr<Object?> Function(List<Object?> args) callback,
   ) async {
     _ensureOpen();
     JSPromise<JSString> callbackAdapter(JSString argsJson) {

@@ -125,7 +125,7 @@ void main() {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 10)),
           );
-          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 1));
         }
         expect(controller.error, isNull);
         expect(controller.node, isNotNull);

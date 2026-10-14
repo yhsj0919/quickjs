@@ -1,0 +1,201 @@
+{
+  "invocation": {
+    "buildMode": "release",
+    "results": [
+      {
+        "method": "row",
+        "batchSize": 1,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 24.165,
+        "p90Ms": 25.31,
+        "minMs": 22.582,
+        "maxMs": 25.454,
+        "medianUsPerRow": 24.165
+      },
+      {
+        "method": "row",
+        "batchSize": 1,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 30.621,
+        "p90Ms": 32.309,
+        "minMs": 29.905,
+        "maxMs": 33.335,
+        "medianUsPerRow": 30.621
+      },
+      {
+        "method": "row",
+        "batchSize": 20,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 20.163,
+        "p90Ms": 21.186,
+        "minMs": 19.115,
+        "maxMs": 21.344,
+        "medianUsPerRow": 20.163
+      },
+      {
+        "method": "row",
+        "batchSize": 20,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 21.405,
+        "p90Ms": 22.853,
+        "minMs": 21.166,
+        "maxMs": 23.703,
+        "medianUsPerRow": 21.405
+      },
+      {
+        "method": "row",
+        "batchSize": 100,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 19.233,
+        "p90Ms": 20.257,
+        "minMs": 18.471,
+        "maxMs": 20.582,
+        "medianUsPerRow": 19.233
+      },
+      {
+        "method": "row",
+        "batchSize": 100,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 20.784,
+        "p90Ms": 22.107,
+        "minMs": 19.926,
+        "maxMs": 22.379,
+        "medianUsPerRow": 20.784
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 1,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 39.676,
+        "p90Ms": 40.868,
+        "minMs": 38.366,
+        "maxMs": 41.245,
+        "medianUsPerRow": 39.676
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 1,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 46.049,
+        "p90Ms": 47.862,
+        "minMs": 44.105,
+        "maxMs": 48.089,
+        "medianUsPerRow": 46.049
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 20,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 36.14,
+        "p90Ms": 37.25,
+        "minMs": 34.684,
+        "maxMs": 38.123,
+        "medianUsPerRow": 36.14
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 20,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 37.739,
+        "p90Ms": 38.526,
+        "minMs": 36.242,
+        "maxMs": 40.192,
+        "medianUsPerRow": 37.739
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 100,
+        "async": false,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 36.147,
+        "p90Ms": 36.917,
+        "minMs": 35.011,
+        "maxMs": 37.389,
+        "medianUsPerRow": 36.147
+      },
+      {
+        "method": "hostRow",
+        "batchSize": 100,
+        "async": true,
+        "rowsPerSample": 1000,
+        "samples": 15,
+        "medianMs": 40.545,
+        "p90Ms": 41.219,
+        "minMs": 38.82,
+        "maxMs": 42.464,
+        "medianUsPerRow": 40.545
+      }
+    ]
+  },
+  "eval": {
+    "buildMode": "release",
+    "results": [
+      {
+        "mode": "dart",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 0.051,
+        "p90Us": 0.113,
+        "minUs": 0.034,
+        "maxUs": 0.226
+      },
+      {
+        "mode": "call",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 17.382,
+        "p90Us": 18.638,
+        "minUs": 16.37,
+        "maxUs": 18.694
+      },
+      {
+        "mode": "raw",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 4.011,
+        "p90Us": 4.641,
+        "minUs": 3.818,
+        "maxUs": 4.951
+      },
+      {
+        "mode": "structured",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 16.81,
+        "p90Us": 17.406,
+        "minUs": 16.069,
+        "maxUs": 17.589
+      },
+      {
+        "mode": "temporary",
+        "evaluationsPerSample": 1000,
+        "samples": 15,
+        "medianUs": 23.623,
+        "p90Us": 25.503,
+        "minUs": 22.148,
+        "maxUs": 26.071
+      }
+    ]
+  }
+}

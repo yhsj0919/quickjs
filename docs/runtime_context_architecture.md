@@ -13,7 +13,7 @@ Worker 及整个 QuickJS 运行时即可加载。
 
 ```text
 JsRuntime
-├─ native worker
+├─ current-isolate executor or explicit native worker
 ├─ JSRuntime
 ├─ memory and stack limits
 ├─ interrupt handler
@@ -103,7 +103,8 @@ Runtime 级 features 不可变且由所有 Context 共享；Context features 只
 - 原生 Worker 命令可通过数值 `contextId` 创建、求值及释放额外 Context。
 - 同级 Context 之间的同步全局求值、ES 模块源码表、模块实例和全局对象互相隔离。
 - 已提供 `JsRuntime.create()` 与 `runtime.createContext()` 生命周期 API，支持同步
-  和 ES 模块求值。原生 Context 共享同一个 Worker/`JSRuntime`；其他后端目前通过
+  和 ES 模块求值。原生 Context 共享同一个 executor/`JSRuntime`，可在当前 isolate 或显式
+  worker 中运行；其他后端目前通过
   隔离 Runtime 的兜底实现保持语义一致。
 - 宿主回调、待处理 Promise、定时器及异步求值均按 Context 隔离；所属 Context
   释放后，迟到的 Dart 响应会被丢弃，剩余 interval/timeout 会被释放。

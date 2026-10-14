@@ -3,10 +3,36 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+typedef JsInvokeNative =
+    Pointer<Utf8> Function(
+      Pointer<JsRuntime>,
+      Pointer<JsContext>,
+      Pointer<Utf8>,
+      Int32,
+    );
+typedef JsInvoke =
+    Pointer<Utf8> Function(
+      Pointer<JsRuntime>,
+      Pointer<JsContext>,
+      Pointer<Utf8>,
+      int,
+    );
+
 /// C 侧 JsRuntime 的不透明指针。
 final class JsRuntime extends Opaque {}
 
 final class JsContext extends Opaque {}
+
+typedef JsRuntimeBeginExecutionNative =
+    Void Function(Pointer<JsRuntime>, Int64);
+typedef JsRuntimeBeginExecution = void Function(Pointer<JsRuntime>, int);
+typedef JsRuntimeEndExecutionNative = Int32 Function(Pointer<JsRuntime>);
+typedef JsRuntimeEndExecution = int Function(Pointer<JsRuntime>);
+
+typedef JsRuntimeSetCallbackResultNative =
+    Void Function(Pointer<JsRuntime>, Int32, Pointer<Utf8>);
+typedef JsRuntimeSetCallbackResult =
+    void Function(Pointer<JsRuntime>, int, Pointer<Utf8>);
 
 typedef JsVersionNative = Pointer<Utf8> Function();
 typedef JsVersion = Pointer<Utf8> Function();
@@ -212,10 +238,11 @@ typedef JsRuntimeBindSink =
 
 /// QuickJS native 动态库的 Dart FFI 绑定。
 ///
-/// 这里只声明 ABI 函数，不持有 runtime 状态；runtime 生命周期由 worker 管理。
+/// ABI bindings shared by current-isolate and worker execution.
 class JsBindings {
   JsBindings(DynamicLibrary lib)
-    : version = lib.lookupFunction<JsVersionNative, JsVersion>(
+    : _library = lib,
+      version = lib.lookupFunction<JsVersionNative, JsVersion>(
         'quickjs_version',
       ),
       runtimeNew = lib.lookupFunction<JsRuntimeNewNative, JsRuntimeNew>(
@@ -332,6 +359,13 @@ class JsBindings {
       );
 
   final JsVersion version;
+  late final JsInvoke invoke = _library
+      .lookupFunction<JsInvokeNative, JsInvoke>('quickjs_invoke');
+  late final void Function(Pointer<JsRuntime>, Pointer<JsContext>) asyncReset =
+      _library.lookupFunction<
+        Void Function(Pointer<JsRuntime>, Pointer<JsContext>),
+        void Function(Pointer<JsRuntime>, Pointer<JsContext>)
+      >('quickjs_async_reset');
   final JsRuntimeNew runtimeNew;
   final JsRuntimeFree runtimeFree;
   final JsContextNew contextNew;
@@ -360,6 +394,26 @@ class JsBindings {
   final JsRuntimeResolveSinkAction runtimeResolveSinkAction;
   final JsRuntimeBindSink runtimeBindSink;
   final JsFreeString freeString;
+
+  late final JsRuntimeBeginExecution runtimeBeginExecution = _library
+      .lookupFunction<JsRuntimeBeginExecutionNative, JsRuntimeBeginExecution>(
+        'quickjs_runtime_begin_execution',
+      );
+  late final JsRuntimeEndExecution runtimeEndExecution = _library
+      .lookupFunction<JsRuntimeEndExecutionNative, JsRuntimeEndExecution>(
+        'quickjs_runtime_end_execution',
+      );
+  late final JsRuntimeEndExecution runtimePumpJobs = _library
+      .lookupFunction<JsRuntimeEndExecutionNative, JsRuntimeEndExecution>(
+        'quickjs_runtime_pump_jobs',
+      );
+
+  late final JsRuntimeSetCallbackResult runtimeSetCallbackResult = _library
+      .lookupFunction<
+        JsRuntimeSetCallbackResultNative,
+        JsRuntimeSetCallbackResult
+      >('quickjs_runtime_set_callback_result');
+  final DynamicLibrary _library;
 
   static DynamicLibrary open() {
     if (Platform.isWindows) {

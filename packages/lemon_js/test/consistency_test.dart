@@ -329,7 +329,10 @@ console.error("error", $i);
 
     test('reinstalls console after restart rebuilds the runtime', () async {
       final events = <JsConsoleEvent>[];
-      final engine = await JsEngine.create(onConsole: events.add);
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+        onConsole: events.add,
+      );
       addTearDown(engine.dispose);
 
       final running = engine
@@ -1701,7 +1704,9 @@ async () => {
     });
 
     test('function handle calls can time out consistently', () async {
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+      );
       addTearDown(engine.dispose);
 
       final loop = await engine.bindFunction('() => { while (true) {} }');
@@ -1727,7 +1732,9 @@ async () => {
     });
 
     test('engine restart cancels function handle calls consistently', () async {
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+      );
       addTearDown(engine.dispose);
 
       final loop = await engine.bindFunction('() => { while (true) {} }');
@@ -3426,6 +3433,7 @@ Object.defineProperty(globalThis, 'app', {
       'reinstalls async host methods after restart rebuilds runtime',
       () async {
         final engine = await JsEngine.create(
+          options: const JsOptions(execution: JsExecution.workerIsolate),
           methods: <JsHostMethod>[
             JsHostMethod(
               name: 'app.double',
@@ -3693,6 +3701,7 @@ globalThis.app = {
       'reinstalls named host features after restart rebuilds runtime',
       () async {
         final engine = await JsEngine.create(
+          options: const JsOptions(execution: JsExecution.workerIsolate),
           features: <JsFeatures>[
             JsFeatures(
               name: 'app-rebuild',
@@ -3828,7 +3837,9 @@ globalThis.versionedModuleValue = value;
         return engine.evalRaw('versionedModuleValue');
       }
 
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+      );
       addTearDown(engine.dispose);
       await engine.loadFeatures(versionedFeatures(1));
       expect(await engine.eval('runtimeFeaturesVersion'), 1);
@@ -3994,7 +4005,9 @@ globalThis.dynamicLoaderValue = value;
     });
 
     test('keeps runtime features across later restart rebuilds', () async {
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+      );
       addTearDown(engine.dispose);
       await engine.loadFeatures(
         const JsFeatures(
@@ -4095,7 +4108,9 @@ globalThis.dynamicLoaderValue = value;
     });
 
     test('rejects runtime features while JavaScript is running', () async {
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+      );
       addTearDown(engine.dispose);
 
       final running = engine.eval('while (true) {}');
@@ -4677,6 +4692,7 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
 
     test('reinstalls host environment after restart rebuilds runtime', () async {
       final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
         features: <JsFeatures>[
           JsFeatures(
             name: 'browser-globals',
@@ -4799,7 +4815,9 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
 
     // stop 鍚庡悓涓€涓?JsEngine 瀹炰緥搴旀仮澶嶄负鍙户缁?eval 鐨勭姸鎬併€?
     test('recovers after stop', () async {
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        options: const JsOptions(execution: JsExecution.workerIsolate),
+      );
       addTearDown(engine.dispose);
 
       final running = engine.eval('while (true) {}');
