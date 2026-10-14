@@ -29,13 +29,17 @@ async function reload() {
   const activeClient = client;
   loaded.value = false;
   errorMessage.value = '';
+  const autoPlay = props.autoPlay;
   await activeClient.request('load', {
     src: new URL(props.src, window.location.href).href,
     pageProps: JSON.parse(JSON.stringify(props.pageProps)),
+    autoPlay,
   });
   if (current !== revision || client !== activeClient) return;
   loaded.value = true;
-  await activeClient.request(props.autoPlay ? 'play' : 'pause');
+  if (props.autoPlay !== autoPlay) {
+    await activeClient.request(props.autoPlay ? 'play' : 'pause');
+  }
 }
 function connect() {
   ++revision;
@@ -61,6 +65,7 @@ function connect() {
           emit('ready');
           reload().catch(report);
         } else if (message.type === 'loaded') {
+          loaded.value = true;
           emit('loaded', message);
         } else if (message.type === 'error') {
           report(new Error(message.error));

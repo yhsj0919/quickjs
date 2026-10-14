@@ -34,6 +34,7 @@ class _PluginPreviewState extends State<_PluginPreview> {
   Map<String, Object?> _props = const {};
   Completer<void>? _loaded;
   Future<void> _commands = Future.value();
+  bool _willActiveSent = false;
   final _features = <JsFeatures>[AxiosFeatures()];
   final _plugins = <JsUiPlugin>[JsUiVideoPlayerPlugin.plugin];
 
@@ -56,6 +57,7 @@ class _PluginPreviewState extends State<_PluginPreview> {
 
   Future<void> _release() async {
     final previous = _controller;
+    _willActiveSent = false;
     if (mounted) {
       setState(() {
         _controller = null;
@@ -64,6 +66,24 @@ class _PluginPreviewState extends State<_PluginPreview> {
       await WidgetsBinding.instance.endOfFrame;
     }
     await previous?.close();
+  }
+
+  Future<void> _activate(JsUiController controller) async {
+    if (_willActiveSent) return;
+    await controller.lifecycle(JsUiLifecycle.resume);
+    if (controller.error != null) throw StateError('${controller.error}');
+    // The plugin owns its activation state. In particular, RenderScreen checks
+    // playing inside this hook, so the host must not set it to true first.
+    await controller.dispatch({'method': 'onPageWillActive'});
+    if (controller.error != null) throw StateError('${controller.error}');
+    _willActiveSent = true;
+  }
+
+  Future<void> _pause(JsUiController controller) async {
+    _willActiveSent = false;
+    await controller.setState({'playing': false});
+    await controller.lifecycle(JsUiLifecycle.pause);
+    if (controller.error != null) throw StateError('${controller.error}');
   }
 
   Future<void> _handle(String json) async {
@@ -81,6 +101,10 @@ class _PluginPreviewState extends State<_PluginPreview> {
         final props = Map<String, Object?>.from(
           (message['pageProps'] ?? {}) as Map,
         );
+        final autoPlay = message['autoPlay'];
+        if (autoPlay != null && autoPlay is! bool) {
+          throw const FormatException('autoPlay must be a boolean');
+        }
         await _release();
         if (!mounted) return;
         final loaded = Completer<void>();
@@ -91,6 +115,9 @@ class _PluginPreviewState extends State<_PluginPreview> {
           _controller = JsUiController();
         });
         await loaded.future.timeout(const Duration(seconds: 60));
+        // onFirstRender is delivered after the JS mount lifecycle completes.
+        if (autoPlay == true) await _activate(_controller!);
+        if (autoPlay == false) await _pause(_controller!);
         _emit({'type': 'loaded', 'src': url.toString()});
       } else if (command == 'unload') {
         await _release();
@@ -101,12 +128,9 @@ class _PluginPreviewState extends State<_PluginPreview> {
         }
         switch (command) {
           case 'play':
-            await controller.lifecycle(JsUiLifecycle.resume);
-            await controller.setState({'playing': true});
-            await controller.dispatch({'method': 'onPageWillActive'});
+            await _activate(controller);
           case 'pause':
-            await controller.setState({'playing': false});
-            await controller.lifecycle(JsUiLifecycle.pause);
+            await _pause(controller);
           case 'dispatch':
             await controller.dispatch(
               Map<String, Object?>.from(message['event']! as Map),
