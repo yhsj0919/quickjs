@@ -199,6 +199,13 @@ Manager 默认提供隔离 KV、网络/Axios 和 Web Crypto。宿主可通过
 
 ## 管理 API
 
+### Core 日志
+
+Manager 可通过 `onConsole: (pluginId, event) { ... }` 接收默认 Core Runtime 的
+`console.log/warn/error`，事件包含级别、文本、参数与接收时间。安装、恢复和重建
+Runtime 后沿用回调；Session 和 Installer 也支持直接传入 `onConsole`。
+自定义 runtimeFactory 需要自行配置其运行时日志接收。该回调暂不包含 JSUI 日志。
+
 ```dart
 final installed = manager.extensions;
 await manager.disable('site.example');

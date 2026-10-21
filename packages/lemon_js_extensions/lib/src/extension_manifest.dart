@@ -350,6 +350,7 @@ final class JsExtensionServiceManifest {
   JsExtensionServiceManifest({
     required this.entry,
     required this.contract,
+    this.init,
     List<String> publicExports = const <String>[],
     List<String> uiExports = const <String>[],
     this.storageMigrationExport,
@@ -363,6 +364,7 @@ final class JsExtensionServiceManifest {
       );
     }
     _requirePackagePath(entry, 'service.entry');
+    if (init != null) _requireIdentifier(init!, 'service.init');
     _requireUnique(publicExports, 'service.publicExports');
     _requireUnique(uiExports, 'service.uiExports');
     final overlap = publicExports.toSet().intersection(uiExports.toSet());
@@ -389,6 +391,7 @@ final class JsExtensionServiceManifest {
       JsExtensionServiceManifest(
         entry: _string(map['entry'], 'service.entry'),
         contract: _string(map['contract'], 'service.contract'),
+        init: _optionalString(map['init'], 'service.init'),
         publicExports: _stringList(
           map['publicExports'],
           'service.publicExports',
@@ -407,6 +410,9 @@ final class JsExtensionServiceManifest {
   /// Service contract implemented by this extension.
   final String contract;
 
+  /// Optional initialization export, called once per service runtime.
+  final String? init;
+
   /// Methods callable by the host application.
   final List<String> publicExports;
 
@@ -423,6 +429,7 @@ final class JsExtensionServiceManifest {
   Map<String, Object?> toMap() => <String, Object?>{
     'entry': entry,
     'contract': contract,
+    if (init != null) 'init': init,
     if (publicExports.isNotEmpty) 'publicExports': publicExports,
     if (uiExports.isNotEmpty) 'uiExports': uiExports,
     if (storageMigrationExport != null)

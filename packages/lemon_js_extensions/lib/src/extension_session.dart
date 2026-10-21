@@ -119,9 +119,16 @@ final class JsExtensionSession {
     this.maxPendingTasks = 64,
     this.callTimeout = const Duration(seconds: 30),
     JsExtensionRuntimeFactory? runtimeFactory,
+    JsConsoleSink? onConsole,
   }) : storage = storage ?? JsSharedPreferencesKvStore(),
        grantedPermissions = Set<String>.unmodifiable(grantedPermissions),
-       _runtimeFactory = runtimeFactory ?? _defaultRuntimeFactory {
+       _runtimeFactory =
+           runtimeFactory ??
+           (({required options, required features}) => _defaultRuntimeFactory(
+             options: options,
+             features: features,
+             onConsole: onConsole,
+           )) {
     if (maxPendingTasks < 1) {
       throw ArgumentError.value(
         maxPendingTasks,
@@ -537,8 +544,13 @@ export default pluginService;
 Future<JsExtensionServiceRuntime> _defaultRuntimeFactory({
   required JsOptions options,
   required List<JsFeatures> features,
+  JsConsoleSink? onConsole,
 }) async => _RuntimeAdapter(
-  await JsEngine.create(options: options, features: features),
+  await JsEngine.create(
+    options: options,
+    features: features,
+    onConsole: onConsole,
+  ),
 );
 
 final class _RuntimeAdapter

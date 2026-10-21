@@ -403,6 +403,7 @@ final class JsExtensionPackage {
         id: manifest.id,
         version: manifest.version,
         entry: namespacedEntry,
+        init: service.init,
         exports: <String>[
           ...service.publicExports,
           ...service.uiExports,

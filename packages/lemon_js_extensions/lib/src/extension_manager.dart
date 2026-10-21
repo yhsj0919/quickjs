@@ -296,6 +296,7 @@ final class JsExtensionManager {
     JsExtensionFeatures? features,
     this.uiPluginsResolver,
     this.runtimeFactory,
+    this.onConsole,
   }) : store = store ?? JsExtensionDefaultStore(),
        constraints = JsExtensionConstraints(constraints),
        features = features ?? JsExtensionFeatures.defaults(),
@@ -341,6 +342,9 @@ final class JsExtensionManager {
 
   /// Optional factory used to create each extension's Core runtime.
   final JsExtensionRuntimeFactory? runtimeFactory;
+
+  /// Receives default Core runtime console events with their extension ID.
+  final void Function(String pluginId, JsConsoleEvent event)? onConsole;
   late final JsExtensionInstaller _installer;
   final Map<String, JsExtensionManagerEntry> _managed =
       <String, JsExtensionManagerEntry>{};
@@ -728,6 +732,9 @@ final class JsExtensionManager {
       callTimeout: callTimeout,
       features: features,
       runtimeFactory: runtimeFactory,
+      onConsole: onConsole == null
+          ? null
+          : (event) => onConsole!(extension.id, event),
     );
     if (stored.record.state == JsExtensionInstallState.disabled) {
       await _registry.disable(extension.id);
@@ -809,6 +816,9 @@ final class JsExtensionManager {
       maxPendingTasks: maxPendingTasks,
       callTimeout: callTimeout,
       runtimeFactory: runtimeFactory,
+      onConsole: onConsole == null
+          ? null
+          : (event) => onConsole!(extension.id, event),
     );
     try {
       await session.migrateStorage(fromVersion, toVersion);

@@ -431,11 +431,15 @@ final class JsUiSession {
         return (changed: false, nextDelay: null);
       }
       if (_pageBinding!.plugin.manifest.exports.contains('poll')) {
-        final changed = _applyPolledResult(
-          await _resolveMutationResult(
-            await _clientCall('poll', <Object?>[_stateVersion]),
-          ),
+        final result = await _resolveMutationResult(
+          await _clientCall('poll', <Object?>[_stateVersion]),
         );
+        final changed = _applyPolledResult(result);
+        if (result is Map && result['pending'] == true) {
+          const pendingDelay = Duration(milliseconds: 50);
+          if (nextDelay == null || nextDelay > pendingDelay)
+            nextDelay = pendingDelay;
+        }
         return (changed: changed, nextDelay: nextDelay);
       }
       await _syncStateFromJs();

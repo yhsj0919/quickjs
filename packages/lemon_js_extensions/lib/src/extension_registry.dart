@@ -180,6 +180,7 @@ final class JsExtensionInstaller {
     int maxPendingTasks = 64,
     Duration callTimeout = const Duration(seconds: 30),
     JsExtensionRuntimeFactory? runtimeFactory,
+    JsConsoleSink? onConsole,
   }) {
     final session = JsExtensionSession(
       extension: extension,
@@ -192,6 +193,7 @@ final class JsExtensionInstaller {
       maxPendingTasks: maxPendingTasks,
       callTimeout: callTimeout,
       runtimeFactory: runtimeFactory,
+      onConsole: onConsole,
     );
     final installed = JsExtensionInstallation(
       extension: extension,

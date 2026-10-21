@@ -59,6 +59,43 @@ void main() {
     );
   });
 
+  test(
+    'service init runs once per runtime and survives manifest round-trip',
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final source = manifestSource.replaceFirst(
+        '"contract": "content-source/v1",',
+        '"contract": "content-source/v1", "init": "start",',
+      );
+      final manifest = JsExtensionManifest.parse(source);
+      expect(
+        JsExtensionManifest.parse(manifest.toJson()).service!.init,
+        'start',
+      );
+      final session = JsExtensionSession(
+        extension: await JsExtension.load(
+          JsExtensionPackage(
+            manifestSource: source,
+            serviceModules: const {
+              'service/main.mjs': '''
+let count = 0;
+export async function start() { count++; }
+export function getHome() { return count; }
+export function submitLogin() { return true; }
+''',
+            },
+            uiModules: const {'ui/authentication.mjs': 'export default {};'},
+          ),
+        ),
+      );
+      addTearDown(session.dispose);
+      expect(await session.callPublic('getHome'), 1);
+      expect(await session.callPublic('getHome'), 1);
+      await session.restart();
+      expect(await session.callPublic('getHome'), 1);
+    },
+  );
+
   test('session availability follows disable enable and disposal', () async {
     final session = JsExtensionSession(
       extension: _hybridExtension(JsExtensionManifest.parse(manifestSource)),

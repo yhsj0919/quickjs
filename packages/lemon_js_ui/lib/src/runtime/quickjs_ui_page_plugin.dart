@@ -249,14 +249,16 @@ export async function mutate(operation, payload, render = true) {
 export function poll(lastVersion) {
   requireRuntimeMethod('snapshot');
   const snapshot = page.snapshot();
+  const pending = page.hasPendingWork?.() === true;
   if (snapshot?.version === lastVersion) {
-    return { changed: false, version: lastVersion };
+    return { changed: false, version: lastVersion, pending };
   }
   requireRuntimeMethod('commit');
   return transportMutation({
     changed: true,
     snapshot,
-    commit: page.commit()
+    commit: page.commit(),
+    pending
   });
 }
 

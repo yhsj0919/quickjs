@@ -81,6 +81,9 @@ export function Page(page) {
     async lifecycle(event) {
       return runLifecycle(event);
     },
+    hasPendingWork() {
+      return drainingEvents;
+    },
     setState(patch) {
       requireMounted(mounted);
       return commitStatePatch(patch);
