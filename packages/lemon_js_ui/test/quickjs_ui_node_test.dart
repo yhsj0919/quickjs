@@ -4260,10 +4260,12 @@ export default Page({
     () async {
       final runtime = JsUiRuntime(maxContexts: 1);
       addTearDown(runtime.dispose);
+      expect(runtime.options.execution, JsExecution.currentIsolate);
       await runtime.init();
 
       final first = JsUiSession(runtime: runtime);
       await first.loadPlugin(_counterPlugin());
+      expect(first.context!.evalSync('1 + 2'), 3);
       final firstContext = first.context;
       await first.dispose();
 
@@ -4277,6 +4279,13 @@ export default Page({
       expect(runtime.activeCount, 1);
     },
   );
+
+  test('owned UI runtime preserves synchronous calls', () async {
+    final session = JsUiSession();
+    addTearDown(session.dispose);
+    await session.loadPlugin(_counterPlugin());
+    expect(session.engine!.evalSync('1 + 2'), 3);
+  });
 
   test('shared runtime reload replaces the page context', () async {
     final runtime = JsUiRuntime(maxContexts: 1);

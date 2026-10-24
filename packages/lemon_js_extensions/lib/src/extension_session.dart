@@ -118,6 +118,7 @@ final class JsExtensionSession {
     JsExtensionFeatures? features,
     this.maxPendingTasks = 64,
     this.callTimeout = const Duration(seconds: 30),
+    this.execution = JsExecution.workerIsolate,
     JsExtensionRuntimeFactory? runtimeFactory,
     JsConsoleSink? onConsole,
   }) : storage = storage ?? JsSharedPreferencesKvStore(),
@@ -192,6 +193,9 @@ final class JsExtensionSession {
 
   /// Core service 单次调用的默认超时时间。
   final Duration callTimeout;
+
+  /// Core service 的执行位置；原生平台默认使用后台 isolate，不影响 UI runtime。
+  final JsExecution execution;
   final JsExtensionRuntimeFactory _runtimeFactory;
 
   JsExtensionSessionState _state = JsExtensionSessionState.inactive;
@@ -399,7 +403,10 @@ final class JsExtensionSession {
     JsExtensionServiceComponent service,
   ) async {
     final runtime = await _runtimeFactory(
-      options: JsOptions(maxPendingTasks: maxPendingTasks),
+      options: JsOptions(
+        maxPendingTasks: maxPendingTasks,
+        execution: execution,
+      ),
       features: <JsFeatures>[
         ...sharedFeatures,
         ...serviceFeatures,

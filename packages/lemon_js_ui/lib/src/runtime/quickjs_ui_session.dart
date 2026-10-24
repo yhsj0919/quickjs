@@ -267,7 +267,10 @@ final class JsUiSession {
   Future<JsEngine> _createOwnedEngine(List<JsFeatures> features) {
     return JsEngine.create(
       onConsole: _onConsole,
-      options: JsOptions(stackLimitBytes: _jsUiStackLimitBytes),
+      options: JsOptions(
+        stackLimitBytes: _jsUiStackLimitBytes,
+        execution: JsExecution.currentIsolate,
+      ),
       features: <JsFeatures>[jsUiHelperFeatures, ...features],
     );
   }

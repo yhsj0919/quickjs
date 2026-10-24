@@ -7,14 +7,14 @@ import 'quickjs_ui_helpers.dart';
 
 /// Application-scoped QuickJS runtime shared by dynamic UI page contexts.
 ///
-/// `init()` starts one native worker and one QuickJS `JSRuntime`. Every lease
+/// `init()` starts one QuickJS `JSRuntime` in the configured isolate. Every lease
 /// creates a fresh `JSContext`, so pages share startup cost and immutable native
 /// runtime infrastructure without sharing globals, modules, callbacks or timers.
 final class JsUiRuntime {
   /// Creates a shared runtime with bounded concurrent page contexts.
   JsUiRuntime({
     this.maxContexts = 2,
-    this.options = const JsOptions(),
+    this.options = const JsOptions(execution: JsExecution.currentIsolate),
     this.features = const <JsFeatures>[],
     this.onConsole,
   }) : assert(maxContexts > 0);
@@ -44,7 +44,7 @@ final class JsUiRuntime {
   /// Number of currently leased page contexts.
   int get activeCount => _active.length;
 
-  /// Starts the shared worker/runtime. Concurrent calls share one future.
+  /// Starts the shared runtime. Concurrent calls share one future.
   Future<void> init() async {
     if (_disposed) throw StateError('JsUiRuntime is disposed');
     await (_initFuture ??= JsRuntime.create(options: options));

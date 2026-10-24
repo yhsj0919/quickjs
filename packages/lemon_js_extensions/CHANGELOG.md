@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## Unreleased
+
+- 默认 crypto 能力同时提供 `node:crypto` 和 `node:buffer` 的 ES Module/CommonJS 模块；WebCrypto 保持原接口，不添加 MD5。
+- Core service 默认在后台 isolate 运行，避免插件同步计算阻塞宿主 UI。
+- Manager、Installer 和 Session 支持 execution 配置，并贯通恢复、重建和存储迁移；自定义工厂收到对应 JsOptions。
+- 新增默认 worker 心跳及显式执行模式的回归测试。
+
 ## 0.3.1
 
 - 支持可选的 `service.init` 初始化导出，每个 Core Runtime 启动时执行一次。

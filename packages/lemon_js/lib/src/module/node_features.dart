@@ -94,11 +94,12 @@ const sha256Constants = [
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-const bytesFrom = (value) => {
+const bytesFrom = (value, encoding = 'utf8') => {
   if (value instanceof JsBuffer) return Array.from(value);
-  if (typeof value === 'string') return encodeUtf8(value);
+  if (typeof value === 'string') return Array.from(JsBuffer.from(value, encoding));
   if (value instanceof ArrayBuffer) return Array.from(new Uint8Array(value));
-  if (ArrayBuffer.isView(value) || Array.isArray(value)) return Array.from(value);
+  if (ArrayBuffer.isView(value)) return Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+  if (Array.isArray(value)) return Array.from(value);
   throw new TypeError('crypto input must be a string, Buffer, ArrayBuffer, or TypedArray');
 };
 
@@ -177,24 +178,75 @@ const sha256 = (input) => {
   return new JsBuffer(out);
 };
 
+const legacyHash = (input, md5) => {
+  const bytes = bytesFrom(input);
+  const size = bytes.length * 8;
+  bytes.push(128);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  const length = [size >>> 0, Math.floor(size / 0x100000000)];
+  for (const word of md5 ? length : length.slice().reverse()) {
+    for (let i = 0; i < 4; i++) bytes.push((word >>> ((md5 ? i : 3 - i) * 8)) & 255);
+  }
+  const hash = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+  if (!md5) hash.push(0xc3d2e1f0);
+  const rotate = (x, n) => (x << n) | (x >>> (32 - n));
+  const shifts = [7,12,17,22, 5,9,14,20, 4,11,16,23, 6,10,15,21];
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const words = [];
+    for (let i = 0; i < 16; i++) {
+      const j = offset + i * 4;
+      words[i] = md5
+        ? bytes[j] | (bytes[j+1]<<8) | (bytes[j+2]<<16) | (bytes[j+3]<<24)
+        : (bytes[j]<<24) | (bytes[j+1]<<16) | (bytes[j+2]<<8) | bytes[j+3];
+    }
+    let [a,b,c,d,e] = hash;
+    for (let i = 0; i < (md5 ? 64 : 80); i++) {
+      let f, k, g;
+      if (md5) {
+        const round = i >>> 4;
+        if (round === 0) { f = (b & c) | (~b & d); g = i; }
+        else if (round === 1) { f = (d & b) | (~d & c); g = (5*i+1)%16; }
+        else if (round === 2) { f = b ^ c ^ d; g = (3*i+5)%16; }
+        else { f = c ^ (b | ~d); g = (7*i)%16; }
+        k = Math.floor(Math.abs(Math.sin(i+1))*0x100000000);
+        const next = (b + rotate((a+f+k+words[g])|0, shifts[round*4+i%4]))|0;
+        a=d; d=c; c=b; b=next;
+      } else {
+        if (i >= 16) words[i] = rotate(words[i-3]^words[i-8]^words[i-14]^words[i-16],1);
+        if (i < 20) { f=(b&c)|(~b&d); k=0x5a827999; }
+        else if (i < 40) { f=b^c^d; k=0x6ed9eba1; }
+        else if (i < 60) { f=(b&c)|(b&d)|(c&d); k=0x8f1bbcdc; }
+        else { f=b^c^d; k=0xca62c1d6; }
+        const next = (rotate(a,5)+f+e+k+words[i])|0;
+        e=d; d=c; c=rotate(b,30); b=a; a=next;
+      }
+    }
+    const result = md5 ? [a,b,c,d] : [a,b,c,d,e];
+    for (let i=0; i<hash.length; i++) hash[i]=(hash[i]+result[i])|0;
+  }
+  const out=[];
+  for (const word of hash) for (let i=0; i<4; i++) out.push((word >>> ((md5 ? i : 3-i)*8))&255);
+  return new JsBuffer(out);
+};
+
 class JsHash {
   constructor(algorithm) {
     this.algorithm = String(algorithm || '').toLowerCase().replace(/[-_]/g, '');
-    if (this.algorithm !== 'sha256') {
-      throw new Error('QuickJS node:crypto only supports sha256 hashes');
+    if (!['md5', 'sha1', 'sha256'].includes(this.algorithm)) {
+      throw new Error('Unsupported hash algorithm: ' + algorithm);
     }
     this._chunks = [];
     this._digested = false;
   }
-  update(data) {
+  update(data, encoding = 'utf8') {
     if (this._digested) throw new Error('Hash digest already called');
-    this._chunks.push(...bytesFrom(data));
+    for (const byte of bytesFrom(data, encoding)) this._chunks.push(byte);
     return this;
   }
   digest(encoding) {
     if (this._digested) throw new Error('Hash digest already called');
     this._digested = true;
-    const result = sha256(this._chunks);
+    const result = this.algorithm === 'sha256' ? sha256(this._chunks) : legacyHash(this._chunks, this.algorithm === 'md5');
     return encoding ? result.toString(encoding) : result;
   }
 }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 自建及共享 UI runtime 显式保留 currentIsolate 默认值，保持必要同步调用兼容；与后台 Core service 通过异步桥接通信。
+
 - 修复 JS 定时器启动异步页面动作后丢失后续状态更新：Page poll 返回未完成动作标记，仅在等待期间继续推进，动作结束且无计时器后停止调度。
 
 ## 0.3.1

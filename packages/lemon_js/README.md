@@ -100,7 +100,22 @@ Rollup 或 webpack 打包，不提供完整 Node.js resolver。
 - `WebCryptoFeatures`：随机数、摘要和 HMAC；
 - `WebSocketFeatures`：原生平台 WebSocket；当前 Flutter Web 不支持此能力；
 - `AxiosFeatures`：向 JS 提供 Axios；
-- `EssentialFeatures()`、`NodeFeatures()`：常用环境兼容能力。
+  - `EssentialFeatures()`、`NodeFeatures()`：常用环境兼容能力。
+
+`NodeFeatures` 提供同步的 `node:crypto` 哈希和 `node:buffer` 编码（也支持 CommonJS）：
+
+```js
+import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
+
+const md5 = createHash('md5').update('你好', 'utf8').digest('hex');
+const encoded = Buffer.from('你好', 'utf8').toString('base64');
+const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+```
+
+哈希支持 MD5、SHA-1、SHA-256；输入/输出编码支持 UTF-8、hex、Base64。
+这是 JS 同步兼容实现，不是原生加速。耗时计算请使用 `JsExecution.workerIsolate`；
+`lemon_js_extensions` 默认启用这两个模块，Core 默认运行在 worker 中。
 
 ```dart
 final engine = await JsEngine.create(

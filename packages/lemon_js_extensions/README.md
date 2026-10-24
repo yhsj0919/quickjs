@@ -199,6 +199,19 @@ Manager 默认提供隔离 KV、网络/Axios 和 Web Crypto。宿主可通过
 
 ## 管理 API
 
+### 执行位置
+
+Core service 默认使用 `JsExecution.workerIsolate`：原生平台的 JS 计算在后台 isolate 执行，不阻塞创建插件的 UI isolate。Manager、Installer.install 和独立 Session 均支持 `execution` 参数；重建、恢复和存储迁移沿用该配置。它不属于插件 manifest 或持久化安装记录，由宿主决定。
+
+```dart
+final manager = JsExtensionManager(
+  constraints: constraints,
+  execution: JsExecution.workerIsolate, // 默认值
+);
+```
+
+需要当前 isolate 的同步宿主回调时，可显式指定 `JsExecution.currentIsolate`，但同步计算也会占用该 isolate。自定义 `runtimeFactory` 会收到包含 execution 的 JsOptions，创建运行时时应原样使用 options。JSUI 的自建渲染 runtime 显式使用 currentIsolate，与 Core worker 通过异步 service 桥接；Core 运行时的默认值不会改变 JSUI 同步调用语义。Web 的执行后端行为不因原生 isolate 选项变成 Dart isolate。
+
 ### Core 日志
 
 Manager 可通过 `onConsole: (pluginId, event) { ... }` 接收默认 Core Runtime 的

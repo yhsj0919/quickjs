@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,26 @@ import 'package:http/testing.dart';
 import 'package:lemon_js_extensions/lemon_js_extensions.dart';
 
 void main() {
+  for (final execution in JsExecution.values) {
+    test('default crypto modules work in ${execution.name}', () async {
+      final engine = await JsEngine.create(
+        options: JsOptions(execution: execution),
+        features: [JsExtensionFeatures.defaults().cryptoFactory!()],
+      );
+      addTearDown(engine.dispose);
+      expect(
+        await engine.runCommonJs('''
+const { createHash } = require('node:crypto');
+const { Buffer } = require('node:buffer');
+module.exports = createHash('md5').update(Buffer.from('YWJj', 'base64')).digest('hex');
+''', name: 'default-crypto.cjs'),
+        '900150983cd24fb0d6963f7d28e17f72',
+      );
+      expect(await engine.eval('typeof crypto.subtle.digest'), 'function');
+      expect(await engine.eval('typeof crypto.subtle.sign'), 'function');
+    });
+  }
+
   test('manager automatically selects a default store', () {
     final manager = JsExtensionManager(
       constraints: const <JsExtensionConstraint>[],
@@ -223,6 +244,7 @@ export function submitLogin() { return true; }
         'submitLogin:1',
       );
       expect(runtimes, hasLength(1));
+      expect(runtimes.single.options.execution, JsExecution.workerIsolate);
       expect(
         runtimes.single.features.where(
           (features) => features.name.startsWith('plugin:'),
@@ -552,6 +574,86 @@ export function submitLogin() { return true; }
       expect(await manager.store.load('site.required'), isNull);
     },
   );
+
+  for (final execution in JsExecution.values) {
+    test('session forwards $execution across restart', () async {
+      final seen = <JsExecution>[];
+      final session = JsExtensionSession(
+        extension: _hybridExtension(JsExtensionManifest.parse(manifestSource)),
+        storage: JsMemoryKvStore(),
+        execution: execution,
+        runtimeFactory: ({required options, required features}) async {
+          seen.add(options.execution);
+          return _FakeRuntime(options, features: features);
+        },
+      );
+      addTearDown(session.dispose);
+      await session.callPublic('getHome');
+      await session.restart();
+      await session.callPublic('getHome');
+      expect(seen, [execution, execution]);
+    });
+
+    test('manager forwards $execution on install and restore', () async {
+      final seen = <JsExecution>[];
+      final store = JsExtensionMemoryStore();
+      JsExtensionManager manager() => JsExtensionManager(
+        store: store,
+        storage: JsMemoryKvStore(),
+        constraints: _extensionConstraints(),
+        execution: execution,
+        runtimeFactory: ({required options, required features}) async {
+          seen.add(options.execution);
+          return _FakeRuntime(options, features: features);
+        },
+      );
+      final first = manager();
+      await first.install(_hybridPackage(manifestSource));
+      await first.call('site.example1', 'getHome');
+      await first.dispose();
+      final restored = manager();
+      addTearDown(restored.dispose);
+      await restored.restore();
+      await restored.call('site.example1', 'getHome');
+      expect(seen, [execution, execution]);
+    });
+  }
+
+  test('default Core worker does not block the caller event loop', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final manifest = jsonDecode(manifestSource) as Map;
+    (manifest['service']['publicExports'] as List).add('busy');
+    final session = JsExtensionSession(
+      extension: await JsExtension.load(
+        JsExtensionPackage(
+          manifestSource: jsonEncode(manifest),
+          serviceModules: {
+            'service/main.mjs': '''
+export function getHome() { return null; }
+export function submitLogin() { return null; }
+export function busy() { const start=Date.now(); while(Date.now()-start<350) {} return true; }
+''',
+          },
+          uiModules: {'ui/authentication.mjs': 'export default {};'},
+        ),
+      ),
+      storage: JsMemoryKvStore(),
+      features: JsExtensionFeatures.none(),
+    );
+    addTearDown(session.dispose);
+    await session.callPublic('getHome');
+    var ticks = 0;
+    final timer = Timer.periodic(
+      const Duration(milliseconds: 10),
+      (_) => ticks++,
+    );
+    try {
+      expect(await session.callPublic('busy'), true);
+      expect(ticks, greaterThan(3));
+    } finally {
+      timer.cancel();
+    }
+  });
 
   test('manager installs, calls by id and restores lazily', () async {
     final store = JsExtensionMemoryStore();

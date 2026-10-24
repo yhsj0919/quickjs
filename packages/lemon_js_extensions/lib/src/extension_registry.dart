@@ -179,6 +179,7 @@ final class JsExtensionInstaller {
     JsExtensionFeatures? features,
     int maxPendingTasks = 64,
     Duration callTimeout = const Duration(seconds: 30),
+    JsExecution execution = JsExecution.workerIsolate,
     JsExtensionRuntimeFactory? runtimeFactory,
     JsConsoleSink? onConsole,
   }) {
@@ -192,6 +193,7 @@ final class JsExtensionInstaller {
       features: features,
       maxPendingTasks: maxPendingTasks,
       callTimeout: callTimeout,
+      execution: execution,
       runtimeFactory: runtimeFactory,
       onConsole: onConsole,
     );

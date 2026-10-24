@@ -121,9 +121,19 @@ final class JsExtensionCapabilityException implements Exception {
 JsFeatures _defaultStorageFeatures(String extensionId, JsKvStore storage) =>
     JsKvStoreFeatures(extensionId: extensionId, storage: storage);
 
-JsFeatures _defaultCryptoFeatures() => WebCryptoFeatures(
-  randomUUID: true,
-  getRandomValues: true,
-  subtleDigest: true,
-  subtleHmac: true,
-);
+JsFeatures _defaultCryptoFeatures() {
+  final webCrypto = WebCryptoFeatures(
+    randomUUID: true,
+    getRandomValues: true,
+    subtleDigest: true,
+    subtleHmac: true,
+  );
+  return JsFeatures(
+    name: 'extension-crypto',
+    scripts: webCrypto.scripts,
+    methods: webCrypto.methods,
+    modules: NodeFeatures().modules
+        .where((module) => module.name == 'buffer' || module.name == 'crypto')
+        .toList(),
+  );
+}

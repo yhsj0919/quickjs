@@ -293,6 +293,7 @@ final class JsExtensionManager {
     JsKvStore? storage,
     this.maxPendingTasks = 64,
     this.callTimeout = const Duration(seconds: 30),
+    this.execution = JsExecution.workerIsolate,
     JsExtensionFeatures? features,
     this.uiPluginsResolver,
     this.runtimeFactory,
@@ -333,6 +334,9 @@ final class JsExtensionManager {
 
   /// 每个扩展 Core service 单次调用的默认超时时间。
   final Duration callTimeout;
+
+  /// 每个扩展 Core service 的执行位置，默认后台 isolate。
+  final JsExecution execution;
 
   /// 注入每个扩展运行时的宿主功能。
   final JsExtensionFeatures features;
@@ -730,6 +734,7 @@ final class JsExtensionManager {
       grantedPermissions: stored.record.grantedPermissions,
       maxPendingTasks: maxPendingTasks,
       callTimeout: callTimeout,
+      execution: execution,
       features: features,
       runtimeFactory: runtimeFactory,
       onConsole: onConsole == null
@@ -815,6 +820,7 @@ final class JsExtensionManager {
       features: features,
       maxPendingTasks: maxPendingTasks,
       callTimeout: callTimeout,
+      execution: execution,
       runtimeFactory: runtimeFactory,
       onConsole: onConsole == null
           ? null

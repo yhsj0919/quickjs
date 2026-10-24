@@ -1,5 +1,11 @@
 # 更新日志 / Changelog
 
+## Unreleased
+
+- Node `createHash` 同步支持 MD5、SHA-1、SHA-256，支持 `update(data, encoding)`。
+- Buffer 支持 UTF-8、hex、Base64 双向转换，修正 emoji 编码与二进制视图哈希输入。
+- 同步哈希仍由 JS 实现，不是原生加速；耗时计算应放在 worker isolate。
+
 ## 0.3.1
 
 - 统一各插件包的发布版本为 `0.3.1`。
