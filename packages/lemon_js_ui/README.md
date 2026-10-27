@@ -54,7 +54,7 @@ PageView({
 
 ```yaml
 dependencies:
-  lemon_js_ui: ^0.3.1
+  lemon_js_ui: ^0.4.0
 ```
 
 ```dart

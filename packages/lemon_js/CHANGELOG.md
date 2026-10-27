@@ -1,10 +1,20 @@
 # 更新日志 / Changelog
 
-## Unreleased
+## 0.4.0
 
-- Node `createHash` 同步支持 MD5、SHA-1、SHA-256，支持 `update(data, encoding)`。
-- Buffer 支持 UTF-8、hex、Base64 双向转换，修正 emoji 编码与二进制视图哈希输入。
-- 同步哈希仍由 JS 实现，不是原生加速；耗时计算应放在 worker isolate。
+- **执行模式变化：** 原生 Future API 默认在后台 worker 执行；同步 API 在调用方当前线程执行，两种入口共享同一个 JS 堆和 Context 状态。需要 Future API 也在当前 isolate 执行时，设置 `JsOptions(execution: JsExecution.currentIsolate)`。
+- 同步调用保留 Dart 宿主回调的同步返回语义，Future 转为 Promise；后台调用通过异步宿主桥接。原生访问通过互斥门串行化并切换当前执行线程的回调路由；后台正在推进 JS 时，同步调用明确报忙，避免并发进入引擎。
+- 修复后台消费 WebSocket 事件时关闭通知被过早释放的竞态；关闭事件被读取后才移除连接，保留消息与关闭通知的顺序。
+- 异步 Promise 等待使用明确的轮询时间间隔，避免零延迟定时器在 Flutter 测试时钟中持续占用同一时刻，阻止导航及事件推进。
+- `JsEngine` / `JsContext` 新增 `supportsSync`、`evalSync`、`evalRawSync`、`callSync`；`JsFunctionHandle` 新增 `callSync` / `callRawSync`。同步入口遇到 Promise 会报值转换错误，不会隐式等待。
+- 新增 `callBatch` / `callBatchSync`，同一全局函数的一批调用只经过一次桥接，按顺序执行，首次失败停止后续项，已完成的副作用不回滚。
+- **调用优化：** 原生函数与插件调用直接进入 runtime 预装的调用执行器；结构化 eval 及临时 globals 的包装层不再逐次生成和编译。用户源码仍逐次编译执行，不缓存字节码或结果；保留队列、超时、取消及 Context 隔离语义。优化范围与历史 Release 数据见 [调用基准](https://github.com/yhsj0919/quickjs/blob/master/docs/invocation_benchmark.md)。
+- Web 复用调用执行器，但不提供原生同步 FFI 能力。同步 API 与执行位置迁移说明见 [执行方式与同步调用](https://github.com/yhsj0919/quickjs/blob/master/docs/runtime_execution.md)。
+- 原生 QuickJS-NG 升级至 v0.17.0；Web 升级至 quickjs-wasi 3.6.3，内置引擎同为 v0.17.0。
+- Web 接通 `stackLimitBytes`（最大 512 KiB）；流结束、取消及 Sink 关闭时释放宿主回调，模块执行返回值与原生端保持一致。
+- 修复 Web 超时终止共享 Worker 后的恢复，重建启动脚本和宿主方法，避免旧 runtime ID 误用；保留结构化异常及流错误消息。
+- Node `createHash` 同步支持 MD5、SHA-1、SHA-256；Buffer 支持 UTF-8、hex、Base64 双向转换，修正 emoji 与二进制视图输入。同步哈希由 JS 实现，耗时计算应放在 worker isolate。
+- 修正 Web 资源更新脚本的包目录；补充同步运行时、Web 桥接、超时恢复、内存与栈限制回归测试。
 
 ## 0.3.1
 

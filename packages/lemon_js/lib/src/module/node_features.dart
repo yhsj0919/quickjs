@@ -365,7 +365,7 @@ String _nodeProcessCoreSource({
 const process = Object.freeze({
   env: Object.assign(Object.create(null), $encodedEnv),
   platform: $encodedPlatform,
-  versions: Object.freeze({ quickjs: '0.15.1' }),
+  versions: Object.freeze({ quickjs: '0.17.0' }),
   cwd() { return $encodedCwd; },
 });
 ''';

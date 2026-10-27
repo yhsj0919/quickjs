@@ -4,7 +4,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$')]
-    [string]$Version = "3.0.2",
+    [string]$Version = "3.6.3",
 
     [ValidatePattern('^https?://')]
     [string]$RegistryBaseUrl = "https://unpkg.com"
@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$Assets = Join-Path $Root "assets\web"
+$Assets = Join-Path $Root "packages\lemon_js\assets\web"
 $PackageBaseUrl = "$($RegistryBaseUrl.TrimEnd('/'))/quickjs-wasi@$Version"
 $StagingRoot = Join-Path (Split-Path -Parent $Assets) ".quickjs-wasi-$([Guid]::NewGuid().ToString('N'))"
 $Downloads = Join-Path $StagingRoot "downloads"

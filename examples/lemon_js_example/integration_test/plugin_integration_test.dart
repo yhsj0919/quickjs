@@ -8,7 +8,7 @@ void main() {
   testWidgets('evaluates JavaScript', (tester) async {
     final engine = await JsEngine.create();
     addTearDown(engine.dispose);
-    expect(engine.engineVersion, '0.15.1');
+    expect(engine.engineVersion, '0.17.0');
     expect(await engine.eval('1 + 2'), '3');
   });
 }

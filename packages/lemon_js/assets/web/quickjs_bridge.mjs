@@ -113,79 +113,77 @@ function decodeWireValue(record, value) {
   return value;
 }
 
+function wrapBridgeObject(vm, object, source) {
+  return vm.withScope((scope) => {
+    const factory = vm.evalCode(source, '<bridge-lifecycle>');
+    return scope.escape(vm.callFunction(factory, vm.undefined, object));
+  });
+}
+
 function createDartStreamHandle(record, streamId) {
   const vm = record.vm;
   const iterable = vm.newObject();
-  const next = vm.newFunction(`__jsStreamNext_${streamId}`, () => {
+  const callbackNames = [`__jsStreamNext_${streamId}`, `__jsStreamReturn_${streamId}`];
+  const release = () => callbackNames.forEach((name) => vm.unregisterHostCallback(name));
+  const streamAction = (action) => () => {
     const deferred = vm.newPromise();
-    let deferredSettled = false;
-    (async () => {
-      if (!streamPullDispatcher) {
-        throw new Error('quickjs: stream pull dispatcher is not registered');
-      }
-      const payloadJson = await streamPullDispatcher({
-        runtimeId: record.id,
-        streamId,
-      });
-      const payload = JSON.parse(payloadJson);
-      if (payload.done) {
-        return createIteratorResult(record, true, undefined);
-      }
-      return createIteratorResult(record, false, decodeWireValue(record, payload.value));
-    })().then((value) => {
-      settleDeferred(deferred, () => deferredSettled, () => {
-        deferredSettled = true;
-      }, () => {
-        resolveDeferredWithHostValue(vm, deferred, value);
-      });
+    let settled = false;
+    const settle = (complete) => settleDeferred(deferred, () => settled, () => {
+      settled = true;
+    }, complete);
+    action().then((value) => {
+      settle(() => resolveDeferredWithHostValue(vm, deferred, value));
     }).catch((error) => {
-      settleDeferred(deferred, () => deferredSettled, () => {
-        deferredSettled = true;
-      }, () => {
-        rejectDeferredWithHostValue(vm, deferred, error);
-      });
+      release();
+      settle(() => rejectDeferredWithHostValue(vm, deferred, error));
     });
     return deferred.handle;
-  });
-  const cancel = vm.newFunction(`__jsStreamReturn_${streamId}`, () => {
-    const deferred = vm.newPromise();
-    let deferredSettled = false;
-    (async () => {
-      if (streamCancelDispatcher) {
-        streamCancelDispatcher({ runtimeId: record.id, streamId });
-      }
+  };
+  const next = vm.newFunction(callbackNames[0], streamAction(async () => {
+    if (!streamPullDispatcher) {
+      throw new Error('quickjs: stream pull dispatcher is not registered');
+    }
+    const payload = JSON.parse(await streamPullDispatcher({ runtimeId: record.id, streamId }));
+    if (payload.done) {
+      release();
       return createIteratorResult(record, true, undefined);
-    })().then((value) => {
-      settleDeferred(deferred, () => deferredSettled, () => {
-        deferredSettled = true;
-      }, () => {
-        resolveDeferredWithHostValue(vm, deferred, value);
-      });
-    }).catch((error) => {
-      settleDeferred(deferred, () => deferredSettled, () => {
-        deferredSettled = true;
-      }, () => {
-        rejectDeferredWithHostValue(vm, deferred, error);
-      });
-    });
-    return deferred.handle;
-  });
-  const asyncIterator = vm.newFunction(
-    `__jsStreamAsyncIterator_${streamId}`,
-    function () {
-      return this.dup();
-    },
-  );
-  const asyncIteratorSymbol = vm.evalCode('Symbol.asyncIterator');
-
+    }
+    return createIteratorResult(record, false, decodeWireValue(record, payload.value));
+  }));
+  const cancel = vm.newFunction(callbackNames[1], streamAction(async () => {
+    release();
+    if (streamCancelDispatcher) {
+      await streamCancelDispatcher({ runtimeId: record.id, streamId });
+    }
+    return createIteratorResult(record, true, undefined);
+  }));
   iterable.setProp('next', next);
   iterable.setProp('return', cancel);
-  vm.setProp(iterable, asyncIteratorSymbol, asyncIterator);
   next.dispose();
   cancel.dispose();
-  asyncIterator.dispose();
-  asyncIteratorSymbol.dispose();
-  return iterable;
+  try {
+    return wrapBridgeObject(vm, iterable, `(raw) => {
+      let closed = false;
+      return {
+        async next() {
+          if (closed) return { done: true };
+          try {
+            const result = await raw.next();
+            if (result.done) closed = true;
+            return result;
+          } catch (error) { closed = true; throw error; }
+        },
+        async return() {
+          if (closed) return { done: true };
+          closed = true;
+          return raw.return();
+        },
+        [Symbol.asyncIterator]() { return this; }
+      };
+    }`);
+  } finally {
+    iterable.dispose();
+  }
 }
 
 function createIteratorResult(record, done, value) {
@@ -193,9 +191,11 @@ function createIteratorResult(record, done, value) {
   const result = vm.newObject();
   const doneHandle = vm.hostToHandle(done);
   result.setProp('done', doneHandle);
+  doneHandle.dispose();
   if (!done) {
     const valueHandle = value instanceof JSValueHandle ? value : vm.hostToHandle(value);
     result.setProp('value', valueHandle);
+    valueHandle.dispose();
   }
   return result;
 }
@@ -444,9 +444,10 @@ export async function quickjsVersion() {
 
 /**
  * @param {number | undefined} memoryLimitBytes
+ * @param {number | undefined} stackLimitBytes WASM stack limit, up to 512 KiB.
  * @returns {Promise<number>}
  */
-export async function runtimeNew(memoryLimitBytes) {
+export async function runtimeNew(memoryLimitBytes, stackLimitBytes) {
   if (!wasmModule) {
     throw new Error('quickjs: WASM not initialized');
   }
@@ -467,6 +468,9 @@ export async function runtimeNew(memoryLimitBytes) {
   };
   if (Number.isFinite(memoryLimitBytes) && memoryLimitBytes > 0) {
     options.memoryLimit = memoryLimitBytes;
+  }
+  if (stackLimitBytes != null) {
+    options.maxStackSize = stackLimitBytes;
   }
   const vm = await QuickJS.create(options);
   const id = nextRuntimeId++;
@@ -524,12 +528,12 @@ export async function runtimeEvalModule(id, source, name, modulesJson) {
       settled.error.dispose();
       return `${exceptionSentinel}${payload}`;
     }
-    return valueToString(vm, settled.value);
+    settled.value.dispose();
+    return 'undefined';
   } catch (err) {
-    if (handle) {
-      handle.dispose();
-    }
     return `${exceptionSentinel}${exceptionToPayload(err)}`;
+  } finally {
+    handle?.dispose();
   }
 }
 
@@ -625,12 +629,13 @@ export function runtimeBindSink(id, sinkId, name) {
     if (args.length > 0) {
       payloadJson = JSON.stringify(encodeWireValue(vm.dump(args[0])));
     }
-    return vm.hostToHandle(sinkActionDispatcher({
-      runtimeId: id,
-      sinkId,
-      action,
-      payloadJson,
-    }));
+    const result = sinkActionDispatcher({ runtimeId: id, sinkId, action, payloadJson });
+    if (action === 'close' || action === 'error') {
+      for (const method of ['Emit', 'Close', 'Error']) {
+        vm.unregisterHostCallback(`__jsSink${method}_${sinkId}`);
+      }
+    }
+    return vm.hostToHandle(result);
   };
   const emit = vm.newFunction(`__jsSinkEmit_${sinkId}`, actionFunction('emit'));
   const close = vm.newFunction(`__jsSinkClose_${sinkId}`, actionFunction('close'));
@@ -639,7 +644,27 @@ export function runtimeBindSink(id, sinkId, name) {
   sinkObject.setProp('close', close);
   sinkObject.setProp('error', error);
   const global = vm.global;
-  global.setProp(name, sinkObject);
+  const wrapped = wrapBridgeObject(vm, sinkObject, `(raw) => {
+    let closed = false;
+    return {
+      emit(value) {
+        if (closed) throw new Error('QuickJS sink is closed');
+        return raw.emit(value);
+      },
+      close() {
+        if (closed) return;
+        closed = true;
+        return raw.close();
+      },
+      error(value) {
+        if (closed) return;
+        closed = true;
+        return raw.error(value);
+      }
+    };
+  }`);
+  global.setProp(name, wrapped);
+  wrapped.dispose();
   emit.dispose();
   close.dispose();
   error.dispose();

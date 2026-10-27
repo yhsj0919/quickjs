@@ -5,7 +5,7 @@ import 'native_runtime.dart';
 
 /// mobile / desktop 平台使用的 FFI backend。
 ///
-/// Runtime 默认在当前 isolate 执行，也可显式使用独立 worker。
+/// Future API 默认在 worker 执行，可显式选择当前 isolate；同步 API 始终在调用方执行。
 class NativeJsBackend implements JsBackend {
   String _engineVersion = 'unknown';
 

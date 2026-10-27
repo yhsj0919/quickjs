@@ -136,3 +136,9 @@ abstract interface class JsMultiContextInvocationRuntimeBase {
   });
 }
 // ignore_for_file: public_member_api_docs
+
+/// A backend whose execution environment can be invalidated externally.
+abstract interface class JsRecoverableRuntimeBase {
+  /// Whether the engine must rebuild this runtime before its next task.
+  bool get needsRebuild;
+}

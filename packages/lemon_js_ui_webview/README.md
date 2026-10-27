@@ -25,9 +25,9 @@ JavaScript 之间建立显式桥接。
 
 ```yaml
 dependencies:
-  lemon_js: ^0.3.1
-  lemon_js_ui: ^0.3.1
-  lemon_js_ui_webview: ^0.3.1
+  lemon_js: ^0.4.0
+  lemon_js_ui: ^0.4.0
+  lemon_js_ui_webview: ^0.4.0
 ```
 
 ```dart

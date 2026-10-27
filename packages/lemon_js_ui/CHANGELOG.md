@@ -1,10 +1,10 @@
 # 更新日志 / Changelog
 
-## Unreleased
+## 0.4.0
 
-- 自建及共享 UI runtime 显式保留 currentIsolate 默认值，保持必要同步调用兼容；与后台 Core service 通过异步桥接通信。
-
-- 修复 JS 定时器启动异步页面动作后丢失后续状态更新：Page poll 返回未完成动作标记，仅在等待期间继续推进，动作结束且无计时器后停止调度。
+- UI 自建及共享 runtime 显式使用 `currentIsolate`，保留同步渲染调用语义；与后台 Core service 通过异步桥接通信。
+- 修复 JS 定时器启动异步页面动作后丢失后续状态更新：仅在存在未完成动作或计时器时继续推进 Page poll。
+- 要求 `lemon_js ^0.4.0`。
 
 ## 0.3.1
 

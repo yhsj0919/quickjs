@@ -12,7 +12,7 @@ Manager 独立拥有安装注册表；`manager.registry` 仅提供查询，不�
 
 ```yaml
 dependencies:
-  lemon_js_extensions: ^0.3.1
+  lemon_js_extensions: ^0.4.0
 ```
 
 ```dart
@@ -210,7 +210,7 @@ final manager = JsExtensionManager(
 );
 ```
 
-需要当前 isolate 的同步宿主回调时，可显式指定 `JsExecution.currentIsolate`，但同步计算也会占用该 isolate。自定义 `runtimeFactory` 会收到包含 execution 的 JsOptions，创建运行时时应原样使用 options。JSUI 的自建渲染 runtime 显式使用 currentIsolate，与 Core worker 通过异步 service 桥接；Core 运行时的默认值不会改变 JSUI 同步调用语义。Web 的执行后端行为不因原生 isolate 选项变成 Dart isolate。
+同步 API 已在调用方当前线程执行，无需改变 worker 配置。如果需要 Future API 也在当前 isolate 执行，可显式指定 `JsExecution.currentIsolate`，此时 Future API 中的同步计算也会占用该 isolate。自定义 `runtimeFactory` 会收到包含 execution 的 JsOptions，创建运行时时应原样使用 options。JSUI 的自建渲染 runtime 显式使用 currentIsolate，与 Core worker 通过异步 service 桥接；Core 运行时的默认值不会改变 JSUI 同步调用语义。Web 的执行后端行为不因原生 isolate 选项变成 Dart isolate。
 
 ### Core 日志
 

@@ -3,6 +3,7 @@
 (function () {
   /** @type {Worker | null} */
   let worker = null;
+  let runtimeGeneration = 0;
   let quickjsVersion = 'unknown';
   let config = null;
   let initializing = null;
@@ -230,12 +231,16 @@
     }
     pending.clear();
     if (worker) {
+      runtimeGeneration++;
+      callbacks.clear();
+      streamBridges.clear();
       worker.terminate();
       worker = null;
     }
   }
 
   globalThis.quickjsNgWeb = {
+    runtimeGeneration() { return runtimeGeneration; },
     /**
      * @param {string} wasmUrl
      * @param {string} bridgeModuleUrl
@@ -251,8 +256,8 @@
       return quickjsVersion;
     },
 
-    async runtimeNew(memoryLimitBytes = 0) {
-      return post('runtimeNew', { memoryLimitBytes });
+    async runtimeNew(memoryLimitBytes = 0, stackLimitBytes) {
+      return post('runtimeNew', { memoryLimitBytes, stackLimitBytes });
     },
 
     /** @param {number} id @param {string} code @param {string} name */

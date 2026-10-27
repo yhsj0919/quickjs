@@ -52,7 +52,7 @@
           break;
         case 'runtimeNew':
           ensureBridge();
-          result = await bridge.runtimeNew(message.memoryLimitBytes);
+          result = await bridge.runtimeNew(message.memoryLimitBytes, message.stackLimitBytes);
           break;
         case 'runtimeEval':
           ensureBridge();

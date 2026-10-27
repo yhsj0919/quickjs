@@ -1,5 +1,9 @@
 # 核心调用优化基准
 
+以下历史数据在 Future API 默认当前 isolate 的版本采集。0.4.0 的 Future API 默认后台执行，
+额外包含 isolate 消息边界；复现历史配置时需显式指定 `JsExecution.currentIsolate`，
+不能将这些旧数据当作新默认执行模式的性能结果。
+
 入口 `examples/lemon_js_example/lib/invocation_benchmark.dart`，在 example 目录运行：
 
 ```powershell

@@ -71,6 +71,8 @@ typedef struct QuickjsEvalInterrupt {
 } QuickjsEvalInterrupt;
 
 struct QuickjsRuntime {
+  volatile int32_t access_lock;
+  int64_t next_host_request_id;
   JSRuntime *rt;
   QuickjsEvalInterrupt execution_interrupt;
   JSContext *ctx;
@@ -98,6 +100,51 @@ static void qjs_free_pending_callbacks(JSContext *ctx,
 static void qjs_free_timers(JSContext *ctx, QuickjsTimer **timers);
 static void qjs_install_timers(JSContext *ctx);
 static void qjs_install_stream_helpers(JSContext *ctx);
+
+int quickjs_runtime_enter(QuickjsRuntime *runtime,
+    QuickjsHostCallback callback, QuickjsHostStreamPull pull,
+    QuickjsHostStreamCancel cancel, QuickjsHostSinkAction sink, int wait) {
+  if (!runtime) return 0;
+  for (;;) {
+#ifdef _WIN32
+    if (InterlockedCompareExchange((volatile LONG *)&runtime->access_lock, 1, 0) == 0) break;
+#else
+    if (__atomic_exchange_n(&runtime->access_lock, 1, __ATOMIC_ACQUIRE) == 0) break;
+#endif
+    if (!wait) return 0;
+#ifdef _WIN32
+    Sleep(1);
+#else
+    struct timespec pause = {0, 1000000};
+    nanosleep(&pause, NULL);
+#endif
+  }
+  runtime->host_callback = callback;
+  runtime->host_stream_pull = pull;
+  runtime->host_stream_cancel = cancel;
+  runtime->host_sink_action = sink;
+  JS_UpdateStackTop(runtime->rt);
+  return 1;
+}
+
+void quickjs_runtime_leave(QuickjsRuntime *runtime) {
+#ifdef _WIN32
+  InterlockedExchange((volatile LONG *)&runtime->access_lock, 0);
+#else
+  __atomic_store_n(&runtime->access_lock, 0, __ATOMIC_RELEASE);
+#endif
+}
+
+int64_t quickjs_runtime_next_request_id(QuickjsRuntime *runtime) {
+  return ++runtime->next_host_request_id;
+}
+
+int quickjs_context_is_alive(QuickjsRuntime *runtime, QuickjsContext *context) {
+  for (QuickjsContext *item = runtime->contexts; item; item = item->next) {
+    if (item == context) return 1;
+  }
+  return 0;
+}
 
 static JSContext *qjs_new_context(QuickjsRuntime *runtime) {
   JSContext *ctx;

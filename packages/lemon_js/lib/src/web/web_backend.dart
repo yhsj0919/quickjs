@@ -71,22 +71,32 @@ class WebJsBackend implements JsBackend {
 
   @override
   Future<JsJsRuntimeBase> createRuntime(JsOptions options) async {
-    final id = (await _host.runtimeNew(options.memoryLimitBytes?.toJS).toDart)
-        .toDartInt;
-    return WebJsJsRuntime(_host, id, options);
+    final id =
+        (await _host
+                .runtimeNew(
+                  options.memoryLimitBytes?.toJS,
+                  options.stackLimitBytes?.toJS,
+                )
+                .toDart)
+            .toDartInt;
+    return WebJsJsRuntime(_host, id);
   }
 }
 
-final class WebJsJsRuntime implements JsJsRuntimeBase {
-  WebJsJsRuntime(this._host, this._id, this._options) {
+final class WebJsJsRuntime
+    implements JsJsRuntimeBase, JsRecoverableRuntimeBase {
+  WebJsJsRuntime(this._host, this._id) {
+    _generation = _host.runtimeGeneration().toDartInt;
     _registerStreamBridgeForCurrentId();
   }
 
   final JsWebHost _host;
-  final JsOptions _options;
-  int _id;
+  final int _id;
+  late final int _generation;
+
+  @override
+  bool get needsRebuild => _generation != _host.runtimeGeneration().toDartInt;
   bool _closed = false;
-  Future<void>? _recovering;
   int _nextSinkActionRequestId = 1;
   final Map<String, Completer<String>> _pendingStreamPulls =
       <String, Completer<String>>{};
@@ -126,7 +136,9 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
     final completer = Completer<String>();
     _pendingStreamPulls[id] = completer;
     _streamRegistry.handlePull(id, streamId.toDartInt);
-    return completer.future.then((payloadJson) => payloadJson.toJS).toJS;
+    return _callbackFutureToJsPromise(
+      completer.future.then((payloadJson) => payloadJson.toJS),
+    );
   }
 
   void _handleStreamCancel(JSNumber streamId) {
@@ -147,7 +159,7 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
       action.toDart,
       payloadJson?.toDart,
     );
-    return completer.future.then((_) => null).toJS;
+    return _callbackFutureToJsPromise(completer.future.then((_) => ''.toJS));
   }
 
   @override
@@ -160,19 +172,7 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
     try {
       return await _evaluateCurrentRuntime(code, timeout: timeout, name: name);
     } catch (error) {
-      if (error is JsException) {
-        rethrow;
-      }
-      final mapped = _mapWebError(error);
-      if (mapped is JsTimeoutException) {
-        // 同步 WASM 无法真正 interrupt 时，JS 层会 terminate worker；这里重建 runtime。
-        await _recoverRuntime();
-      } else if (mapped is JsRuntimeClosedException) {
-        // worker 重启后旧 runtime id 会失效，重建 id 后重试一次当前 eval。
-        await _recoverRuntime();
-        return _evaluateCurrentRuntime(code, timeout: timeout, name: name);
-      }
-      throw mapped;
+      throw _mapWebError(error);
     }
   }
 
@@ -288,7 +288,9 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
       completer.completeError(JsRuntimeClosedException());
     }
     _pendingSinkActions.clear();
-    await _host.runtimeDispose(_id.toJS).toDart;
+    if (!needsRebuild) {
+      await _host.runtimeDispose(_id.toJS).toDart;
+    }
     _closed = true;
   }
 
@@ -296,32 +298,12 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
   Future<void> stop() async {
     _ensureOpen();
     await _host.runtimeStop().toDart;
-    await _recoverRuntime();
   }
 
   void _ensureOpen() {
     if (_closed) {
       throw JsRuntimeClosedException();
     }
-  }
-
-  Future<void> _recoverRuntime() {
-    final current = _recovering;
-    if (current != null) {
-      return current;
-    }
-    // 并发恢复只允许一个 runtimeNew 在路上，避免多个新 id 互相覆盖。
-    final recovering = _host
-        .runtimeNew(_options.memoryLimitBytes?.toJS)
-        .toDart
-        .then((id) {
-          _id = id.toDartInt;
-          _registerStreamBridgeForCurrentId();
-        });
-    _recovering = recovering.whenComplete(() {
-      _recovering = null;
-    });
-    return _recovering!;
   }
 
   Future<String> _evaluateCurrentRuntime(
@@ -344,6 +326,9 @@ final class WebJsJsRuntime implements JsJsRuntimeBase {
 }
 
 Object _mapWebError(Object error) {
+  if (error is JsException) {
+    return error;
+  }
   final message = '$error';
   final sentinelIndex = message.indexOf(_exceptionSentinel);
   if (sentinelIndex >= 0) {

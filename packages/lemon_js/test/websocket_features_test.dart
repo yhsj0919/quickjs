@@ -2,6 +2,7 @@
 library;
 
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lemon_js/lemon_js.dart';
@@ -14,6 +15,9 @@ void main() {
       socket.listen((message) {
         if (message is String) {
           socket.add('echo:$message');
+          if (message == 'close-now') {
+            unawaited(socket.close(1000, 'server done'));
+          }
         } else if (message is List<int>) {
           socket.add(message.map((byte) => byte + 1).toList());
         }
@@ -70,6 +74,26 @@ return await new Promise((resolve, reject) => {
 });
 '''),
       '2,3,4',
+    );
+
+    // The host receives socket completion while the background JS thread is
+    // still processing the preceding message. The queued close must survive.
+    expect(
+      await engine.run('''
+return await new Promise((resolve, reject) => {
+  const ws = new WebSocket('$origin/closing');
+  let received;
+  ws.onopen = () => ws.send('close-now');
+  ws.onmessage = (event) => {
+    received = event.data;
+    const end = Date.now() + 50;
+    while (Date.now() < end) {}
+  };
+  ws.onerror = (event) => reject(new Error(event.message));
+  ws.onclose = (event) => resolve([received, event.code, event.reason].join('/'));
+});
+'''),
+      'echo:close-now/1000/server done',
     );
 
     await expectLater(

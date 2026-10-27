@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-/* 返回当前打包的 QuickJS 版本字符串，例如 "0.15.1"。 */
+/* 返回当前打包的 QuickJS 版本字符串，例如 "0.17.0"。 */
 QJS_BRIDGE_EXPORT const char *quickjs_version(void);
 
 /* Dart 侧只持有这个不透明指针，不直接访问内部 JSRuntime / JSContext。 */
@@ -32,6 +32,15 @@ typedef int64_t (*QuickjsHostSinkAction)(int64_t sink_id, const char *action,
 
 QJS_BRIDGE_EXPORT QuickjsRuntime *quickjs_runtime_new(void);
 QJS_BRIDGE_EXPORT void quickjs_runtime_free(QuickjsRuntime *runtime);
+/* Serializes access to one heap and installs callbacks for the entering isolate.
+ * Background callers may wait; foreground callers fail immediately if busy. */
+QJS_BRIDGE_EXPORT int quickjs_runtime_enter(QuickjsRuntime *runtime,
+    QuickjsHostCallback callback, QuickjsHostStreamPull pull,
+    QuickjsHostStreamCancel cancel, QuickjsHostSinkAction sink, int wait);
+QJS_BRIDGE_EXPORT void quickjs_runtime_leave(QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT int64_t quickjs_runtime_next_request_id(QuickjsRuntime *runtime);
+QJS_BRIDGE_EXPORT int quickjs_context_is_alive(QuickjsRuntime *runtime,
+    QuickjsContext *context);
 
 /*
  * Creates an additional JavaScript context inside an existing runtime.

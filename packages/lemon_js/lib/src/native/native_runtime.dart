@@ -1,4 +1,4 @@
-// Shared execution core with current-isolate and explicit worker transports.
+// Shared native heap with serialized foreground sync and background Future calls.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -69,7 +69,11 @@ const String _debugCrashMessage = 'debugCrash';
 const String _errorMessage = 'error';
 const String _responseMessage = 'response';
 
-typedef _WorkerReady = ({SendPort sendPort, String engineVersion});
+typedef _WorkerReady = ({
+  SendPort sendPort,
+  String engineVersion,
+  int runtimeAddress,
+});
 typedef _JsCallback = FutureOr<Object?> Function(List<Object?> args);
 
 abstract class _NativeTransport {
@@ -97,6 +101,7 @@ final class _WorkerTransport implements _NativeTransport {
   final SendPort sendPort;
   final StreamSubscription<dynamic> errorSubscription, exitSubscription;
   StreamSubscription<dynamic>? responseSubscription;
+  _NativeExecutor? attachedExecutor;
   @override
   final Pointer<Int32> cancelFlag;
   @override
@@ -105,7 +110,18 @@ final class _WorkerTransport implements _NativeTransport {
   void send(Map<String, Object?> message) => sendPort.send(message);
   @override
   void listen(void Function(dynamic) listener) {
-    responseSubscription = receivePort.listen(listener);
+    responseSubscription = receivePort.listen((dynamic message) {
+      if (message is Map) {
+        if (message['contextAddress'] case final int address) {
+          attachedExecutor?.contexts[message['result'] as int] =
+              Pointer<JsContext>.fromAddress(address);
+        }
+        if (message['disposedContextId'] case final int contextId) {
+          attachedExecutor?.contexts.remove(contextId);
+        }
+      }
+      listener(message);
+    });
   }
 
   @override
@@ -114,6 +130,9 @@ final class _WorkerTransport implements _NativeTransport {
     await responseSubscription?.cancel();
     await errorSubscription.cancel();
     await exitSubscription.cancel();
+    attachedExecutor?.closed = true;
+    attachedExecutor?.contexts.clear();
+    attachedExecutor?.releaseCallbacks();
     receivePort.close();
     errorPort.close();
     exitPort.close();
@@ -121,8 +140,12 @@ final class _WorkerTransport implements _NativeTransport {
   }
 }
 
-/// Explicit background-isolate transport for the shared native executor.
-final class NativeJsWorkerRuntime extends _NativeRuntime {
+/// Background Future transport with foreground synchronous access to the same heap.
+final class NativeJsWorkerRuntime extends _NativeRuntime
+    with _SynchronousNativeRuntime {
+  late final _NativeExecutor _syncExecutor;
+  @override
+  _NativeExecutor get _executor => _syncExecutor;
   NativeJsWorkerRuntime._(super.transport);
   static Future<NativeJsWorkerRuntime> create({
     JsOptions options = const JsOptions(),
@@ -152,9 +175,14 @@ final class NativeJsWorkerRuntime extends _NativeRuntime {
         _messageTypeKey: _readyMessage,
         'sendPort': final SendPort sendPort,
         'engineVersion': final String engineVersion,
+        'runtimeAddress': final int runtimeAddress,
       }) {
         if (!ready.isCompleted) {
-          ready.complete((sendPort: sendPort, engineVersion: engineVersion));
+          ready.complete((
+            sendPort: sendPort,
+            engineVersion: engineVersion,
+            runtimeAddress: runtimeAddress,
+          ));
         }
         return;
       }
@@ -190,7 +218,8 @@ final class NativeJsWorkerRuntime extends _NativeRuntime {
     });
 
     try {
-      // worker isolate 持有 DynamicLibrary 和 QuickJS runtime，避免 UI isolate 直接进 FFI。
+      // Worker owns creation/disposal and Future calls. Foreground sync calls
+      // borrow the same native heap through the runtime's exclusive-access gate.
       isolate = await Isolate.spawn(
         _nativeJsWorkerMain,
         <String, Object>{
@@ -223,6 +252,18 @@ final class NativeJsWorkerRuntime extends _NativeRuntime {
           workerReady.engineVersion,
         ),
       );
+      final transport = runtime._transport as _WorkerTransport;
+      runtime._syncExecutor = _NativeExecutor(
+        cancelFlag,
+        (message) =>
+            scheduleMicrotask(() => runtime!._handleWorkerMessage(message)),
+        options,
+        immediateCallback: runtime._invokeImmediateCallback,
+        borrowedRuntime: Pointer<JsRuntime>.fromAddress(
+          workerReady.runtimeAddress,
+        ),
+      );
+      transport.attachedExecutor = runtime._syncExecutor;
       runtime._listenResponses();
       return runtime;
     } catch (error) {
@@ -336,19 +377,6 @@ abstract class _NativeRuntime
     }
   }
 
-  @override
-  String invokeSync(String requestJson, {Duration? timeout}) =>
-      throw UnsupportedError(
-        'Synchronous calls require current-isolate execution',
-      );
-  @override
-  String invokeContextSync(
-    int contextId,
-    String requestJson, {
-    Duration? timeout,
-  }) => throw UnsupportedError(
-    'Synchronous calls require current-isolate execution',
-  );
   bool _closed = false;
   bool _asyncRunning = false;
   bool _portsClosed = false;
@@ -827,7 +855,7 @@ abstract class _NativeRuntime
 
 /// Runs QuickJS directly in the caller isolate.
 final class NativeJsLocalRuntime extends _NativeRuntime
-    implements JsSyncRuntimeBase, JsSyncMultiContextRuntimeBase {
+    with _SynchronousNativeRuntime {
   NativeJsLocalRuntime._(_LocalTransport transport) : super(transport) {
     transport.executor = _NativeExecutor(
       transport.cancelFlag,
@@ -850,8 +878,14 @@ final class NativeJsLocalRuntime extends _NativeRuntime
   }
 
   @override
-  bool get supportsSync => true;
   _NativeExecutor get _executor => (_transport as _LocalTransport).executor;
+}
+
+mixin _SynchronousNativeRuntime on _NativeRuntime
+    implements JsSyncRuntimeBase, JsSyncMultiContextRuntimeBase {
+  @override
+  bool get supportsSync => true;
+  _NativeExecutor get _executor;
   int _invokeImmediateCallback(int id, String argsJson) {
     try {
       final callback = _callbacks[id];
@@ -865,7 +899,7 @@ final class NativeJsLocalRuntime extends _NativeRuntime
       final contextId = _callbackContextIds[id];
       final result = callback(args);
       if (result is Future<Object?>) {
-        final requestId = _executor.nextHostRequestId++;
+        final requestId = _executor.allocateHostRequestId();
         unawaited(_completeImmediateAsync(requestId, contextId, result));
         return requestId;
       }
@@ -892,24 +926,22 @@ final class NativeJsLocalRuntime extends _NativeRuntime
     try {
       final value = await result;
       if (!_isCallbackContextLive(contextId)) return;
-      _resolveCallback(
-        _executor.bindings,
-        _executor.runtime,
-        requestId,
-        true,
-        jsonEncode(_encodeCallbackResult(contextId, value)),
-      );
-      _executor.pumpIdleJobs();
+      _transport.send({
+        _messageTypeKey: _callbackResponseMessage,
+        _messageCallbackRequestIdKey: requestId,
+        _messageSuccessKey: true,
+        _messagePayloadJsonKey: jsonEncode(
+          _encodeCallbackResult(contextId, value),
+        ),
+      });
     } catch (error) {
       if (!_isCallbackContextLive(contextId)) return;
-      _resolveCallback(
-        _executor.bindings,
-        _executor.runtime,
-        requestId,
-        false,
-        '$error',
-      );
-      _executor.pumpIdleJobs();
+      _transport.send({
+        _messageTypeKey: _callbackResponseMessage,
+        _messageCallbackRequestIdKey: requestId,
+        _messageSuccessKey: false,
+        _messagePayloadJsonKey: '$error',
+      });
     }
   }
 
@@ -938,12 +970,14 @@ final class NativeJsLocalRuntime extends _NativeRuntime
         'Reentrant synchronous JavaScript execution is not supported',
       );
     }
-    return _eval(
-      _executor.bindings,
-      _executor.runtime,
-      code,
-      name,
-      timeout?.inMilliseconds,
+    return _executor.access(
+      () => _eval(
+        _executor.bindings,
+        _executor.runtime,
+        code,
+        name,
+        timeout?.inMilliseconds,
+      ),
     );
   }
 
@@ -964,17 +998,19 @@ final class NativeJsLocalRuntime extends _NativeRuntime
         'Reentrant synchronous JavaScript execution is not supported',
       );
     }
-    final context = contextId == null
-        ? nullptr.cast<JsContext>()
-        : _executor.contexts[contextId];
-    if (context == null) throw JsRuntimeClosedException();
-    return _invoke(
-      _executor.bindings,
-      _executor.runtime,
-      context,
-      requestJson,
-      timeout?.inMilliseconds,
-    );
+    return _executor.access(() {
+      final context = contextId == null
+          ? nullptr.cast<JsContext>()
+          : _executor.contextFor(contextId);
+      if (context == null) throw JsRuntimeClosedException();
+      return _invoke(
+        _executor.bindings,
+        _executor.runtime,
+        context,
+        requestJson,
+        timeout?.inMilliseconds,
+      );
+    });
   }
 
   @override
@@ -990,15 +1026,17 @@ final class NativeJsLocalRuntime extends _NativeRuntime
         'Reentrant synchronous JavaScript execution is not supported',
       );
     }
-    final context = _executor.contexts[contextId];
-    if (context == null) throw JsRuntimeClosedException();
-    return _evalContext(
-      _executor.bindings,
-      context,
-      code,
-      name,
-      timeout?.inMilliseconds,
-    );
+    return _executor.access(() {
+      final context = _executor.contextFor(contextId);
+      if (context == null) throw JsRuntimeClosedException();
+      return _evalContext(
+        _executor.bindings,
+        context,
+        code,
+        name,
+        timeout?.inMilliseconds,
+      );
+    });
   }
 }
 
@@ -1036,26 +1074,32 @@ final class _LocalTransport implements _NativeTransport {
   }
 }
 
-/// Owns all QuickJS pointers in the isolate where it is created.
+/// Executes a shared native heap under exclusive access with isolate-local callbacks.
 final class _NativeExecutor {
   _NativeExecutor(
     this.cancelFlag,
-    this.emit,
+    this._emit,
     JsOptions options, {
     this.immediateCallback,
+    Pointer<JsRuntime>? borrowedRuntime,
+    this.waitForAccess = false,
   }) {
     bindings = JsBindings(JsBindings.open());
-    runtime = bindings.runtimeNew();
+    runtime = borrowedRuntime ?? bindings.runtimeNew();
     if (runtime == nullptr) {
       throw StateError('Failed to create QuickJS runtime');
     }
-    if (options.memoryLimitBytes case final int limit) {
+    if (options.memoryLimitBytes case final int limit
+        when borrowedRuntime == null) {
       bindings.runtimeSetMemoryLimit(runtime, limit);
     }
-    if (options.stackLimitBytes case final int limit) {
+    if (options.stackLimitBytes case final int limit
+        when borrowedRuntime == null) {
       bindings.runtimeSetStackLimit(runtime, limit);
     }
-    bindings.runtimeSetCancelFlag(runtime, cancelFlag);
+    if (borrowedRuntime == null) {
+      bindings.runtimeSetCancelFlag(runtime, cancelFlag);
+    }
     hostCallback = NativeCallable<JsHostCallbackNative>.isolateLocal((
       int id,
       Pointer<Utf8> args,
@@ -1068,7 +1112,7 @@ final class _NativeExecutor {
           inHostCallback = false;
         }
       }
-      final requestId = nextHostRequestId++;
+      final requestId = allocateHostRequestId();
       emit({
         _messageTypeKey: _callbackRequestMessage,
         _messageCallbackRequestIdKey: requestId,
@@ -1078,7 +1122,7 @@ final class _NativeExecutor {
       return requestId;
     }, exceptionalReturn: -1);
     hostPull = NativeCallable<JsHostStreamPullNative>.isolateLocal((int id) {
-      final requestId = nextHostRequestId++;
+      final requestId = allocateHostRequestId();
       emit({
         _messageTypeKey: _streamPullRequestMessage,
         _messagePullRequestIdKey: requestId,
@@ -1099,7 +1143,7 @@ final class _NativeExecutor {
       Pointer<Utf8> action,
       Pointer<Utf8> payload,
     ) {
-      final requestId = nextHostRequestId++;
+      final requestId = allocateHostRequestId();
       emit({
         _messageTypeKey: _sinkActionRequestMessage,
         _messageActionRequestIdKey: requestId,
@@ -1111,20 +1155,64 @@ final class _NativeExecutor {
       });
       return requestId;
     }, exceptionalReturn: -1);
-    bindings.runtimeSetStreamHandlers(
-      runtime,
-      hostPull.nativeFunction,
-      hostCancel.nativeFunction,
-      hostSink.nativeFunction,
-    );
+    bindings.runtimeAccess = access;
   }
   final Pointer<Int32> cancelFlag;
-  final void Function(Map<String, Object?>) emit;
+  final void Function(Map<String, Object?>) _emit;
+  final List<Map<String, Object?>> _deferredResponses = [];
+  void emit(Map<String, Object?> message) {
+    if (_accessDepth > 0 && message[_messageTypeKey] == _responseMessage) {
+      _deferredResponses.add(message);
+    } else {
+      _emit(message);
+    }
+  }
+
   final int Function(int, String)? immediateCallback;
   late final JsBindings bindings;
   Pointer<JsRuntime> runtime = nullptr;
   final contexts = <int, Pointer<JsContext>>{};
-  int nextContextId = 1, nextHostRequestId = 1;
+  int nextContextId = 1;
+  final bool waitForAccess;
+  int _accessDepth = 0;
+  int allocateHostRequestId() => bindings.nextRequestId(runtime);
+  Pointer<JsContext>? contextFor(int id) {
+    final context = contexts[id];
+    return context != null && bindings.contextIsAlive(runtime, context) != 0
+        ? context
+        : null;
+  }
+
+  T access<T>(T Function() action) {
+    if (_accessDepth > 0) return action();
+    if (closed || runtime == nullptr) throw JsRuntimeClosedException();
+    if (bindings.runtimeEnter(
+          runtime,
+          hostCallback.nativeFunction,
+          hostPull.nativeFunction,
+          hostCancel.nativeFunction,
+          hostSink.nativeFunction,
+          waitForAccess ? 1 : 0,
+        ) ==
+        0) {
+      throw StateError('QuickJS runtime is busy executing on another thread');
+    }
+    _accessDepth++;
+    try {
+      return action();
+    } finally {
+      _accessDepth--;
+      if (runtime != nullptr) bindings.runtimeLeave(runtime);
+      if (_deferredResponses.isNotEmpty) {
+        final responses = List<Map<String, Object?>>.of(_deferredResponses);
+        _deferredResponses.clear();
+        for (final response in responses) {
+          _emit(response);
+        }
+      }
+    }
+  }
+
   bool closed = false;
   bool inHostCallback = false;
   int activeAsyncCalls = 0;
@@ -1136,7 +1224,7 @@ final class _NativeExecutor {
   Future<void> waitForPoll(int contextId) {
     final completion = Completer<void>();
     final polls = _polls.putIfAbsent(contextId, () => {});
-    polls[completion] = Timer(Duration.zero, () {
+    polls[completion] = Timer(const Duration(milliseconds: 1), () {
       polls.remove(completion);
       if (polls.isEmpty) _polls.remove(contextId);
       completion.complete();
@@ -1163,7 +1251,9 @@ final class _NativeExecutor {
   }
 
   void pumpIdleJobs() {
-    if (!closed && activeAsyncCalls == 0) bindings.runtimePumpJobs(runtime);
+    if (!closed && activeAsyncCalls == 0) {
+      access(() => bindings.runtimePumpJobs(runtime));
+    }
   }
 
   late final NativeCallable<JsHostCallbackNative> hostCallback;
@@ -1181,7 +1271,12 @@ final class _NativeExecutor {
     hostSink.close();
   }
 
-  Future<void> handle(dynamic message) async {
+  Future<void> handle(dynamic message) {
+    if (closed) return _handle(message);
+    return access(() => _handle(message));
+  }
+
+  Future<void> _handle(dynamic message) async {
     if (closed && message is Map && !message.containsKey(_messageIdKey)) return;
     if (message case {
       _messageTypeKey: _callbackResponseMessage,
@@ -1251,7 +1346,12 @@ final class _NativeExecutor {
             }
             final contextId = nextContextId++;
             contexts[contextId] = context;
-            _sendOk(emit, requestId, contextId);
+            _sendOk(
+              emit,
+              requestId,
+              contextId,
+              contextAddress: context.address,
+            );
           case _disposeContextMessage:
             final contextId = message[_messageContextIdKey] as int;
             cancelPolls(contextId);
@@ -1260,7 +1360,7 @@ final class _NativeExecutor {
               throw StateError('Unknown QuickJS context: $contextId');
             }
             bindings.contextFree(context);
-            _sendOk(emit, requestId, null);
+            _sendOk(emit, requestId, null, disposedContextId: contextId);
           case _invokeMessage:
             final contextId = message[_messageContextIdKey] as int?;
             final context = contextId == null
@@ -1495,11 +1595,13 @@ void _nativeJsWorkerMain(Map<String, Object> ports) {
         memoryLimitBytes: ports[_messageMemoryLimitBytesKey] as int?,
         stackLimitBytes: ports[_messageStackLimitBytesKey] as int?,
       ),
+      waitForAccess: true,
     );
     ready.send({
       _messageTypeKey: _readyMessage,
       'sendPort': commands.sendPort,
       'engineVersion': executor.engineVersion,
+      'runtimeAddress': executor.runtime.address,
     });
     commands.listen((dynamic message) async {
       await executor.handle(message);
@@ -1893,10 +1995,14 @@ Future<String> _nativeAsyncEvaluation(
       );
     }
   } on JsTimeoutException {
-    if (isAlive()) bindings.asyncReset(runtime, context);
+    if (isAlive()) {
+      bindings.withAccess(() => bindings.asyncReset(runtime, context));
+    }
     rethrow;
   } on JsCancelledException {
-    if (isAlive()) bindings.asyncReset(runtime, context);
+    if (isAlive()) {
+      bindings.withAccess(() => bindings.asyncReset(runtime, context));
+    }
     rethrow;
   } finally {
     if (resultPtr != nullptr) bindings.freeString(resultPtr);
@@ -1909,21 +2015,25 @@ Pointer<Utf8> _executeAsyncStep(
   int? remainingMs,
   Pointer<Utf8> Function() action,
 ) {
-  if (remainingMs != null && remainingMs <= 0) throw const JsTimeoutException();
-  bindings.runtimeBeginExecution(runtime, remainingMs ?? 0);
-  Pointer<Utf8> result = nullptr;
-  int status;
-  try {
-    result = action();
-  } finally {
-    status = bindings.runtimeEndExecution(runtime);
-  }
-  if (status != 0) {
-    if (result != nullptr) bindings.freeString(result);
-    if (status == 2) throw JsCancelledException();
-    throw const JsTimeoutException();
-  }
-  return result;
+  return bindings.withAccess(() {
+    if (remainingMs != null && remainingMs <= 0) {
+      throw const JsTimeoutException();
+    }
+    bindings.runtimeBeginExecution(runtime, remainingMs ?? 0);
+    Pointer<Utf8> result = nullptr;
+    int status;
+    try {
+      result = action();
+    } finally {
+      status = bindings.runtimeEndExecution(runtime);
+    }
+    if (status != 0) {
+      if (result != nullptr) bindings.freeString(result);
+      if (status == 2) throw JsCancelledException();
+      throw const JsTimeoutException();
+    }
+    return result;
+  });
 }
 
 String _takeResult(JsBindings bindings, Pointer<Utf8> resultPtr) {
@@ -1952,13 +2062,17 @@ String _takeResult(JsBindings bindings, Pointer<Utf8> resultPtr) {
 void _sendOk(
   void Function(Map<String, Object?>) emit,
   int requestId,
-  Object? result,
-) {
+  Object? result, {
+  int? contextAddress,
+  int? disposedContextId,
+}) {
   emit(<String, Object?>{
     _messageTypeKey: _responseMessage,
     _messageIdKey: requestId,
     'ok': true,
     'result': result,
+    'contextAddress': ?contextAddress,
+    'disposedContextId': ?disposedContextId,
   });
 }
 

@@ -1,11 +1,12 @@
 # 更新日志 / Changelog
 
-## Unreleased
+## 0.4.0
 
-- 默认 crypto 能力同时提供 `node:crypto` 和 `node:buffer` 的 ES Module/CommonJS 模块；WebCrypto 保持原接口，不添加 MD5。
-- Core service 默认在后台 isolate 运行，避免插件同步计算阻塞宿主 UI。
-- Manager、Installer 和 Session 支持 execution 配置，并贯通恢复、重建和存储迁移；自定义工厂收到对应 JsOptions。
-- 新增默认 worker 心跳及显式执行模式的回归测试。
+- Core service 默认在后台 isolate 运行；Manager、Installer 和 Session 支持 `execution` 配置，并在恢复、重建和存储迁移时保留配置。
+- 默认 crypto 能力提供 `node:crypto` 与 `node:buffer` 的 ES Module/CommonJS 模块；WebCrypto 接口保持不变，不添加 MD5。
+- Manager、Installer 和 Session 支持 `onConsole`，向宿主转发默认 Core runtime 的 console 日志，安装、恢复和重建后沿用配置。
+- 新增 worker 心跳和显式执行模式回归测试。
+- 要求 `lemon_js ^0.4.0` 与 `lemon_js_ui ^0.4.0`。
 
 ## 0.3.1
 

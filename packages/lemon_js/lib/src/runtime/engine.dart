@@ -1009,6 +1009,8 @@ class JsEngine implements JsPluginHost {
   /// 在当前 runtime 中执行 ES module [source]。
   ///
   /// 静态 import 由已注册 [JsModule] 或 [JsModuleLoader] 按需解析。
+  /// 成功后返回字符串 `undefined`；模块导出通过后续 import 使用。
+  /// 成功后返回字符串 `undefined`；模块导出通过后续 import 使用。
   Future<String> runModule(
     String source, {
 
@@ -1759,7 +1761,7 @@ return JSON.stringify({ type: 'null' });
     }
     if (!supportsSync) {
       throw UnsupportedError(
-        'Synchronous calls require current-isolate execution',
+        'Synchronous calls are not supported by this backend',
       );
     }
     if (_syncExecuting) {
@@ -2173,6 +2175,9 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     final shouldCancelRunning = _runningRequest?.async == true;
     _state = JsRuntimeState.closed;
     _classInstances.clear();
+    if (shouldCancelRunning) {
+      _runningRequest?.completeError(const JsCancelledException());
+    }
     _cancelHostMethodCalls(JsRuntimeClosedException());
     _cancelQueued(JsRuntimeClosedException());
     _disposeFuture =
@@ -2331,7 +2336,7 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
     _runningRequest = request;
     request.cancelQueueTimer();
 
-    final timeout = request.remainingTimeout;
+    var timeout = request.remainingTimeout;
     final startedAt = DateTime.now();
     final idleMs = _lastEvalEndedAt == null
         ? null
@@ -2352,34 +2357,48 @@ Object.defineProperty(globalThis, $encodedNamespaceName, {
       return;
     }
 
-    Future<String> execute() => switch (request) {
-      _QueuedEval()
-          when request.invocation != null &&
-              _runtime is JsInvocationRuntimeBase =>
-        (_runtime as JsInvocationRuntimeBase).invoke(
-          request.invocation!,
-          awaitResult: request.async,
+    Future<String> execute() async {
+      final runtime = _runtime;
+      if (runtime is JsRecoverableRuntimeBase &&
+          (runtime as JsRecoverableRuntimeBase).needsRebuild) {
+        _cancelHostMethodCalls(const JsCancelledException());
+        await runtime.dispose();
+        await _replaceCurrentRuntime();
+        timeout = request.remainingTimeout;
+        if (timeout != null && timeout! <= Duration.zero) {
+          throw const JsTimeoutException();
+        }
+      }
+      return switch (request) {
+        _QueuedEval()
+            when request.invocation != null &&
+                _runtime is JsInvocationRuntimeBase =>
+          (_runtime as JsInvocationRuntimeBase).invoke(
+            request.invocation!,
+            awaitResult: request.async,
+            timeout: timeout,
+          ),
+        _QueuedModuleEval() => _runtime.evaluateModule(
+          request.code,
+          name: request.name,
+          modules: request.modules,
           timeout: timeout,
         ),
-      _QueuedModuleEval() => _runtime.evaluateModule(
-        request.code,
-        name: request.name,
-        modules: request.modules,
-        timeout: timeout,
-      ),
-      _ =>
-        request.async
-            ? _runtime.evaluateAsync(
-                request.code,
-                timeout: timeout,
-                name: request.name,
-              )
-            : _runtime.evaluate(
-                request.code,
-                timeout: timeout,
-                name: request.name,
-              ),
-    };
+        _ =>
+          request.async
+              ? _runtime.evaluateAsync(
+                  request.code,
+                  timeout: timeout,
+                  name: request.name,
+                )
+              : _runtime.evaluate(
+                  request.code,
+                  timeout: timeout,
+                  name: request.name,
+                ),
+      };
+    }
+
     final running = Completer<String>();
     _state = JsRuntimeState.running;
     // _running 代表当前占用 runtime 的任务；完成后再继续 drain，保证单 runtime

@@ -29,7 +29,7 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
   }
 }
 
@@ -466,7 +466,7 @@ void main() {
     await tester.tap(find.textContaining('打开 JSUI 子页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 子页'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('JSUI 子页'), findsOneWidget);
     expect(find.text('parent count: 1'), findsOneWidget);
@@ -478,7 +478,7 @@ void main() {
     await tester.tap(find.textContaining('替换当前 JSUI 子页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('source: jsui-child-replaced'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('JSUI 子页'), findsOneWidget);
     expect(find.text('source: jsui-child-replaced'), findsOneWidget);
@@ -492,22 +492,22 @@ void main() {
     await tester.tap(find.text('返回 JSUI 详情页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 详情页'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
     await _pumpUntilFound(tester, find.textContaining('"from":"jsui-child"'));
 
     expect(find.text('detail count: 1'), findsOneWidget);
     expect(find.textContaining('"from":"jsui-child"'), findsOneWidget);
     expect(find.textContaining('"localCount":41'), findsOneWidget);
 
-    await tester.tap(find.textContaining('打开 JSUI 子页'));
+    await tester.runAsync(() => tester.tap(find.textContaining('打开 JSUI 子页')));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 子页'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
 
     await tester.pageBack();
     await tester.pump();
     await _pumpUntilFound(tester, find.text('JSUI 详情页'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('JSUI 子页'), findsNothing);
     expect(find.text('detail count: 1'), findsOneWidget);
@@ -527,7 +527,7 @@ void main() {
     await tester.tap(find.text('打开原生设置页'));
     await tester.pump();
     await _pumpUntilFound(tester, find.text('原生设置页'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('此页由 JSUI navigationIntent 打开。'), findsOneWidget);
     expect(find.textContaining('itemId: 42'), findsWidgets);

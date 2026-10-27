@@ -18,6 +18,30 @@ typedef JsInvoke =
       int,
     );
 
+typedef JsRuntimeEnterNative =
+    Int32 Function(
+      Pointer<JsRuntime>,
+      Pointer<NativeFunction<JsHostCallbackNative>>,
+      Pointer<NativeFunction<JsHostStreamPullNative>>,
+      Pointer<NativeFunction<JsHostStreamCancelNative>>,
+      Pointer<NativeFunction<JsHostSinkActionNative>>,
+      Int32,
+    );
+typedef JsRuntimeEnter =
+    int Function(
+      Pointer<JsRuntime>,
+      Pointer<NativeFunction<JsHostCallbackNative>>,
+      Pointer<NativeFunction<JsHostStreamPullNative>>,
+      Pointer<NativeFunction<JsHostStreamCancelNative>>,
+      Pointer<NativeFunction<JsHostSinkActionNative>>,
+      int,
+    );
+typedef JsNextRequestIdNative = Int64 Function(Pointer<JsRuntime>);
+typedef JsNextRequestId = int Function(Pointer<JsRuntime>);
+typedef JsContextIsAliveNative =
+    Int32 Function(Pointer<JsRuntime>, Pointer<JsContext>);
+typedef JsContextIsAlive = int Function(Pointer<JsRuntime>, Pointer<JsContext>);
+
 /// C 侧 JsRuntime 的不透明指针。
 final class JsRuntime extends Opaque {}
 
@@ -240,6 +264,25 @@ typedef JsRuntimeBindSink =
 ///
 /// ABI bindings shared by current-isolate and worker execution.
 class JsBindings {
+  late T Function<T>(T Function()) runtimeAccess;
+  T withAccess<T>(T Function() action) => runtimeAccess(action);
+  late final JsRuntimeEnter runtimeEnter = _library
+      .lookupFunction<JsRuntimeEnterNative, JsRuntimeEnter>(
+        'quickjs_runtime_enter',
+      );
+  late final JsRuntimeFree runtimeLeave = _library
+      .lookupFunction<JsRuntimeFreeNative, JsRuntimeFree>(
+        'quickjs_runtime_leave',
+      );
+  late final JsNextRequestId nextRequestId = _library
+      .lookupFunction<JsNextRequestIdNative, JsNextRequestId>(
+        'quickjs_runtime_next_request_id',
+      );
+  late final JsContextIsAlive contextIsAlive = _library
+      .lookupFunction<JsContextIsAliveNative, JsContextIsAlive>(
+        'quickjs_context_is_alive',
+      );
+
   JsBindings(DynamicLibrary lib)
     : _library = lib,
       version = lib.lookupFunction<JsVersionNative, JsVersion>(

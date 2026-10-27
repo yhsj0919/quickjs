@@ -359,12 +359,12 @@ base class JsFeatures {
   final List<JsHostMethod> methods;
 }
 
-/// Selects the fixed isolate that owns a native runtime.
+/// Selects where native Future-based APIs execute. Sync APIs use the caller.
 enum JsExecution {
-  /// Execute in the isolate that creates the runtime.
+  /// Run Future-based APIs in the isolate that creates the runtime.
   currentIsolate,
 
-  /// Execute in a dedicated worker; calls cross an asynchronous boundary.
+  /// Run Future-based APIs in a dedicated worker (the default).
   workerIsolate,
 }
 
@@ -375,7 +375,7 @@ final class JsOptions {
     this.memoryLimitBytes,
     this.stackLimitBytes,
     this.maxPendingTasks = 256,
-    this.execution = JsExecution.currentIsolate,
+    this.execution = JsExecution.workerIsolate,
   });
 
   /// Maximum memory for a single runtime, in bytes.
@@ -387,7 +387,7 @@ final class JsOptions {
   /// Maximum native call stack for a single runtime, in bytes.
   ///
   /// `null` keeps the QuickJS default. Native uses `JS_SetMaxStackSize`; the
-  /// current web backend does not expose an equivalent WASM option yet.
+  /// Web uses the WASM stack limit, with a maximum of 512 KiB.
   final int? stackLimitBytes;
 
   /// Maximum number of tasks allowed to wait in this runtime's execution queue.
@@ -400,6 +400,11 @@ final class JsOptions {
   /// Must be greater than zero. Defaults to `256`.
   final int maxPendingTasks;
 
-  /// Fixed execution location for this runtime and all its contexts.
+  /// Execution location for Future APIs on this runtime and all its contexts.
+  ///
+  /// Defaults to a background worker. Sync APIs always execute in the calling
+  /// isolate against the same JS heap, and fail with [StateError] if another
+  /// thread currently holds the runtime. Web remains Worker-based and does not
+  /// support synchronous calls.
   final JsExecution execution;
 }

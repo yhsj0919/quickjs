@@ -245,7 +245,9 @@ void main() {
   );
 
   test('async invocation preserves context while host Future waits', () async {
-    final runtime = await JsRuntime.create();
+    final runtime = await JsRuntime.create(
+      options: const JsOptions(execution: JsExecution.currentIsolate),
+    );
     addTearDown(runtime.dispose);
     final entered = Completer<void>();
     final answer = Completer<Object?>();

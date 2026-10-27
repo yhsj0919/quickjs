@@ -35,7 +35,7 @@ final List<JsUiPlugin> _customComponentPlugins = <JsUiPlugin>[
     name: 'example:custom-components',
     configure: (registry) {
       registry
-        ..register('AppBar', (context, node) {
+        ..replace('AppBar', (context, node) {
           return Material(
             color: Theme.of(context.buildContext!).colorScheme.primary,
             child: SafeArea(
@@ -75,7 +75,7 @@ final List<JsUiPlugin> _customComponentPlugins = <JsUiPlugin>[
             ),
           );
         })
-        ..register('Card', (context, node) {
+        ..replace('Card', (context, node) {
           final tone = node.props['tone'];
           final scheme = Theme.of(context.buildContext!).colorScheme;
           final color = tone == 'primary'

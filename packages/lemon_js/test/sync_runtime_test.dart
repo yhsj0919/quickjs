@@ -7,6 +7,97 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'Future calls default to the background and sync calls fail fast while busy',
+    () async {
+      expect(const JsOptions().execution, JsExecution.workerIsolate);
+      final started = Completer<void>();
+      final engine = await JsEngine.create(
+        methods: [
+          JsHostMethod.global(
+            name: 'started',
+            callback: (args, _) {
+              if (!started.isCompleted) started.complete();
+              return null;
+            },
+          ),
+        ],
+      );
+      addTearDown(engine.dispose);
+      engine.evalRawSync('globalThis.counter = 1');
+      final running = engine.eval(
+        'started(); const end = Date.now() + 300; while (Date.now() < end) {} ++counter;',
+      );
+      await started.future;
+      var timerRan = false;
+      await Future<void>.delayed(
+        const Duration(milliseconds: 10),
+        () => timerRan = true,
+      );
+      expect(timerRan, isTrue);
+      final stopwatch = Stopwatch()..start();
+      expect(
+        () => engine.evalSync('counter'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('busy'),
+          ),
+        ),
+      );
+      expect(stopwatch.elapsedMilliseconds, lessThan(100));
+      expect(await running, 2);
+      expect(engine.evalSync('counter'), 2);
+    },
+  );
+
+  test('Future calls can explicitly execute in the current isolate', () async {
+    final engine = await JsEngine.create(
+      options: const JsOptions(execution: JsExecution.currentIsolate),
+      methods: [
+        JsHostMethod.global(name: 'hostValue', callback: (args, _) => 7),
+      ],
+    );
+    addTearDown(engine.dispose);
+    // A synchronous Dart callback returns a value directly on this path;
+    // the background path necessarily returns a Promise across isolates.
+    expect(await engine.eval('hostValue() instanceof Promise'), false);
+    expect(await engine.eval('hostValue()'), 7);
+    expect(engine.evalSync('hostValue()'), 7);
+  });
+
+  test(
+    'foreground and background pending callbacks use distinct request IDs',
+    () async {
+      final foreground = Completer<Object?>();
+      final background = Completer<Object?>();
+      final entered = Completer<void>();
+      final engine = await JsEngine.create(
+        methods: [
+          JsHostMethod.global(
+            name: 'host',
+            callback: (args, _) {
+              if (args.single == 'foreground') return foreground.future;
+              entered.complete();
+              return background.future;
+            },
+          ),
+        ],
+      );
+      addTearDown(engine.dispose);
+      engine.evalRawSync('globalThis.foreground = host("foreground")');
+      final result = engine.run(
+        'const value = await host("background"); return value + await foreground;',
+      );
+      await entered.future;
+      foreground.complete(10);
+      background.complete(20);
+      expect(await result, 30);
+      expect(engine.evalSync('1 + 1'), 2);
+    },
+  );
+
+  test(
     'default runtime calls JS and synchronous Dart methods immediately',
     () async {
       final engine = await JsEngine.create(
@@ -42,7 +133,9 @@ void main() {
   test(
     'Future wait yields and resumes with the original closure and context',
     () async {
-      final runtime = await JsRuntime.create();
+      final runtime = await JsRuntime.create(
+        options: const JsOptions(execution: JsExecution.currentIsolate),
+      );
       addTearDown(runtime.dispose);
       final result = Completer<Object?>();
       final entered = Completer<void>();
@@ -196,16 +289,19 @@ void main() {
   );
 
   test(
-    'explicit worker keeps asynchronous calls and rejects sync calls',
+    'worker runtime supports current-thread sync calls on the same heap',
     () async {
       final runtime = await JsRuntime.create(
         options: const JsOptions(execution: JsExecution.workerIsolate),
       );
       addTearDown(runtime.dispose);
       final context = await runtime.createContext();
-      expect(context.supportsSync, isFalse);
+      expect(context.supportsSync, isTrue);
       expect(await context.eval('6 * 7'), 42);
-      expect(() => context.evalSync('1'), throwsUnsupportedError);
+      context.evalRawSync('globalThis.value = 7');
+      expect(await context.eval('value * 6'), 42);
+      await context.eval('value = 9');
+      expect(context.evalSync('value'), 9);
     },
   );
 

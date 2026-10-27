@@ -279,13 +279,16 @@ final class _WebSocketConnection {
 
   Future<Map<String, Object?>> next(JsHostMethodContext context) {
     if (_events.isNotEmpty) {
-      return Future<Map<String, Object?>>.value(_events.removeFirst());
+      final event = _events.removeFirst();
+      if (event['type'] == 'close') onDone();
+      return Future<Map<String, Object?>>.value(event);
     }
     final completer = Completer<Map<String, Object?>>();
     _waiters.add(completer);
     unawaited(
       context.cancelled.then((_) {
         if (_waiters.remove(completer) && !completer.isCompleted) {
+          onDone();
           completer.completeError(
             context.cancellationReason ??
                 StateError('QuickJS WebSocket wait was cancelled'),
@@ -348,12 +351,12 @@ final class _WebSocketConnection {
       'reason': reason,
       'wasClean': code == WebSocketStatus.normalClosure,
     });
-    onDone();
   }
 
   void _addEvent(Map<String, Object?> event) {
     if (_waiters.isNotEmpty) {
       _waiters.removeFirst().complete(event);
+      if (event['type'] == 'close') onDone();
       return;
     }
     _events.add(event);

@@ -13,7 +13,7 @@ void main() {
   test('create and evaluate', () async {
     final engine = await JsEngine.create();
     addTearDown(engine.dispose);
-    expect(engine.engineVersion, '0.15.1');
+    expect(engine.engineVersion, '0.17.0');
     expect(await engine.eval('1 + 2'), 3);
     expect(await engine.evalRaw('1 + 2'), '3');
   });

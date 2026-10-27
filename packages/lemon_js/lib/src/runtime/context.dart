@@ -496,7 +496,7 @@ final class _JsContextRuntimeAdapter
       return sync.evaluateSync(code, timeout: timeout, name: name);
     }
     throw UnsupportedError(
-      'Synchronous calls require current-isolate execution',
+      'Synchronous calls are not supported by this backend',
     );
   }
 

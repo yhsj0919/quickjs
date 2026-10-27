@@ -197,6 +197,8 @@ typedef struct JSThreadState {
 #endif // USE_WORKER
     JSClassID std_file_class_id;
     JSClassID worker_class_id;
+    JSInterruptHandler *prev_interrupt_handler;
+    void *prev_interrupt_opaque;
 } JSThreadState;
 
 static uint64_t os_pending_signals;
@@ -528,8 +530,12 @@ static int get_bool_option(JSContext *ctx, bool *pbool,
     return 0;
 }
 
-static void free_buf(JSRuntime *rt, void *opaque, void *ptr) {
-    js_free_rt(rt, ptr);
+// js_realloc_array_buffer to avoid a name conflict with
+// js_array_buffer_realloc from quickjs.c in the amalgamation build
+static void *js_realloc_array_buffer(JSRuntime *rt, void *opaque, void *ptr,
+                                     size_t size)
+{
+    return js_realloc_rt(rt, ptr, size);
 }
 
 /* load a file as a UTF-8 encoded string or Uint8Array */
@@ -558,7 +564,8 @@ static JSValue js_std_loadFile(JSContext *ctx, JSValueConst this_val,
     if (!buf)
         return JS_NULL;
     if (binary) {
-        ret = JS_NewUint8Array(ctx, buf, buf_len, free_buf, NULL, false);
+        ret = JS_NewUint8Array(ctx, buf, buf_len, js_realloc_array_buffer,
+                               NULL, false);
     } else {
         ret = JS_NewStringLen(ctx, (char *)buf, buf_len);
         js_free(ctx, buf);
@@ -829,13 +836,6 @@ int js_module_check_attributes(JSContext *ctx, void *opaque,
     return ret;
 }
 
-// js_free_array_buffer to avoid a name conflict with js_array_buffer_free
-// from quickjs.c in the amalgamation build
-static void js_free_array_buffer(JSRuntime *rt, void *opaque, void *ptr)
-{
-    js_free_rt(rt, ptr);
-}
-
 enum {
     JS_IMPORT_TYPE_JS,
     JS_IMPORT_TYPE_JSON,
@@ -892,7 +892,9 @@ JSModuleDef *js_module_load(JSContext *ctx, const char *module_name,
     type = js_module_import_type(ctx, attributes);
     if (type < 0)
         return NULL;
-    if (type != JS_IMPORT_TYPE_BYTES)
+    /* the .json suffix only selects the JSON type when no type attribute
+       was given, so that e.g. 'with { type: "text" }' is honored */
+    if (type == JS_IMPORT_TYPE_JS)
         if (js__has_suffix(module_name, ".json"))
             type = JS_IMPORT_TYPE_JSON;
     buf = (char *)load_file(ctx, &buf_len, module_name);
@@ -914,7 +916,8 @@ JSModuleDef *js_module_load(JSContext *ctx, const char *module_name,
         break;
     case JS_IMPORT_TYPE_BYTES:
         val = JS_NewUint8Array(ctx, (uint8_t *)buf, buf_len,
-                               js_free_array_buffer, NULL, /*is_shared*/false);
+                               js_realloc_array_buffer, NULL,
+                               /*is_shared*/false);
         if (!JS_IsException(val)) {
             JSValue abuf = JS_GetTypedArrayBuffer(ctx, val, NULL, NULL, NULL);
             JS_SetImmutableArrayBuffer(abuf, /*immutable*/true);
@@ -1084,7 +1087,13 @@ static JSValue js_std_gc(JSContext *ctx, JSValueConst this_val,
 
 static int interrupt_handler(JSRuntime *rt, void *opaque)
 {
-    return (os_pending_signals >> SIGINT) & 1;
+    JSThreadState *ts = opaque;
+
+    if (1 & (os_pending_signals >> SIGINT))
+        return 1;
+    if (ts->prev_interrupt_handler)
+        return ts->prev_interrupt_handler(rt, ts->prev_interrupt_opaque);
+    return 0;
 }
 
 static JSValue js_evalScript(JSContext *ctx, JSValueConst this_val,
@@ -1147,7 +1156,14 @@ static JSValue js_evalScript(JSContext *ctx, JSValueConst this_val,
     }
     if (!ts->recv_pipe && ++ts->eval_script_recurse == 1) {
         /* install the interrupt handler */
-        JS_SetInterruptHandler(JS_GetRuntime(ctx), interrupt_handler, NULL);
+        ts->prev_interrupt_handler =
+            (JSInterruptHandler *)js_std_cmd(/*GetInterruptHandler*/5, rt);
+        ts->prev_interrupt_opaque =
+            (void *)js_std_cmd(/*GetInterruptOpaque*/6, rt);
+        // FIXME(bnoordhuis) Questionable hack to make the REPL interruptible.
+        // Ideally qjs installs a signal handler + interrupt handler but then
+        // scripts can intercept it with os.signal(SIGINT).
+        JS_SetInterruptHandler(JS_GetRuntime(ctx), interrupt_handler, ts);
     }
     flags = compile_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL;
     if (backtrace_barrier)
@@ -1165,7 +1181,11 @@ static JSValue js_evalScript(JSContext *ctx, JSValueConst this_val,
     JS_FreeCString(ctx, str);
     if (!ts->recv_pipe && --ts->eval_script_recurse == 0) {
         /* remove the interrupt handler */
-        JS_SetInterruptHandler(JS_GetRuntime(ctx), NULL, NULL);
+        JS_SetInterruptHandler(JS_GetRuntime(ctx),
+                               ts->prev_interrupt_handler,
+                               ts->prev_interrupt_opaque);
+        ts->prev_interrupt_handler = NULL;
+        ts->prev_interrupt_opaque = NULL;
         os_pending_signals &= ~((uint64_t)1 << SIGINT);
         /* convert the uncatchable "interrupted" error into a normal error
            so that it can be caught by the REPL */
@@ -1919,7 +1939,7 @@ static const JSCFunctionListEntry js_std_funcs[] = {
     JS_CFUNC_DEF("evalScript", 1, js_evalScript ),
     JS_CFUNC_DEF("loadScript", 1, js_loadScript ),
     JS_CFUNC_DEF("getenv", 1, js_std_getenv ),
-    JS_CFUNC_DEF("setenv", 1, js_std_setenv ),
+    JS_CFUNC_DEF("setenv", 2, js_std_setenv ),
     JS_CFUNC_DEF("unsetenv", 1, js_std_unsetenv ),
     JS_CFUNC_DEF("getenviron", 1, js_std_getenviron ),
 #if !defined(__wasi__)
@@ -4448,7 +4468,7 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_DEF("sleepAsync", 1, js_os_sleepAsync ),
     JS_PROP_STRING_DEF("platform", OS_PLATFORM, 0 ),
     JS_CFUNC_DEF("getcwd", 0, js_os_getcwd ),
-    JS_CFUNC_DEF("chdir", 0, js_os_chdir ),
+    JS_CFUNC_DEF("chdir", 1, js_os_chdir ),
     JS_CFUNC_DEF("mkdir", 1, js_os_mkdir ),
     JS_CFUNC_DEF("readdir", 1, js_os_readdir ),
 #if !defined(_WIN32) && !defined(__wasi__)

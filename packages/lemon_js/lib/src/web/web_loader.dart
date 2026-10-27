@@ -21,7 +21,11 @@ extension type JsWebHost(JSObject _) implements JSObject {
     JSString workerScriptUrl,
   );
   external JSString quickjsVersion();
-  external JSPromise<JSNumber> runtimeNew([JSNumber? memoryLimitBytes]);
+  external JSNumber runtimeGeneration();
+  external JSPromise<JSNumber> runtimeNew([
+    JSNumber? memoryLimitBytes,
+    JSNumber? stackLimitBytes,
+  ]);
   external JSPromise<JSString> runtimeEval(
     JSNumber id,
     JSString code,

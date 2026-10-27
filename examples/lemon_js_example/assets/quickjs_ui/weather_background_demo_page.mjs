@@ -434,7 +434,7 @@ function header(city, state) {
                         intervalMs: 1000,
                         child: DateTimeText({
                             format: 'HH:mm',
-                            style: {color: WHITE, fontSize: 72, fontWeight: 'w300', shadows: TOP_TEXT_SHADOWS},
+                            style: {color: WHITE, fontSize: 64, fontWeight: 'w300', shadows: TOP_TEXT_SHADOWS},
                         }),
                     }),
                     Padding({

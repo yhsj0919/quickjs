@@ -440,8 +440,9 @@ final class JsUiSession {
         final changed = _applyPolledResult(result);
         if (result is Map && result['pending'] == true) {
           const pendingDelay = Duration(milliseconds: 50);
-          if (nextDelay == null || nextDelay > pendingDelay)
+          if (nextDelay == null || nextDelay > pendingDelay) {
             nextDelay = pendingDelay;
+          }
         }
         return (changed: changed, nextDelay: nextDelay);
       }

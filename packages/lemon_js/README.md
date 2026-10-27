@@ -14,7 +14,7 @@ QuickJS，Flutter Web 使用 WASM 与 Web Worker。它提供异步执行、ES Mo
 
 ```yaml
 dependencies:
-  lemon_js: ^0.3.1
+  lemon_js: ^0.4.0
 ```
 
 ```dart
@@ -114,7 +114,7 @@ const decoded = Buffer.from(encoded, 'base64').toString('utf8');
 ```
 
 哈希支持 MD5、SHA-1、SHA-256；输入/输出编码支持 UTF-8、hex、Base64。
-这是 JS 同步兼容实现，不是原生加速。耗时计算请使用 `JsExecution.workerIsolate`；
+这是 JS 同步兼容实现，不是原生加速。耗时计算请使用默认后台执行的 Future API；
 `lemon_js_extensions` 默认启用这两个模块，Core 默认运行在 worker 中。
 
 ```dart
@@ -159,8 +159,13 @@ final result = await engine.callPluginExport(plugin, 'getHome', const []);
 `JsException.kind` 或具体异常类型区分超时、取消、队列已满、runtime 关闭、崩溃、
 内存不足和栈溢出。
 
-原生 runtime 默认在当前 isolate 执行，长同步 JavaScript 会占用该 isolate。
-需要后台执行时，创建参数使用 `JsOptions(execution: JsExecution.workerIsolate)`。
+原生平台的 `eval`、`call`、`run` 等 Future API 默认在后台 worker 执行，
+`evalSync`、`callSync` 等同步 API 在调用方当前线程执行，二者共享同一份 JS 状态。
+如需 Future API 也在当前 isolate 执行，创建时指定
+`JsOptions(execution: JsExecution.currentIsolate)`。后台正在推进 JS 或 Promise jobs 时，
+同步调用会报忙；请等待已有后台操作完成后再调用，或使用 Future API 排队执行。
+JSUI 自建渲染 runtime 显式使用当前 isolate，保持渲染调度兼容；Web 仍使用 Worker，
+不支持同步入口。
 `restart()` 会重建底层 runtime，因此 JS 全局变量和模块临时状态会丢失。
 
 ## 示例与文档
@@ -172,6 +177,6 @@ final result = await engine.callPluginExport(plugin, 'getHome', const []);
 - [Class binding 生命周期](https://github.com/yhsj0919/quickjs/blob/master/docs/class_binding_lifecycle.md)
 - [性能排查](https://github.com/yhsj0919/quickjs/blob/master/docs/performance_troubleshooting.md)
 - [pub 包最小示例](example/main.dart)
-- [执行方式与同步调用](../../docs/runtime_execution.md)
+- [执行方式与同步调用](https://github.com/yhsj0919/quickjs/blob/master/docs/runtime_execution.md)
 
 完整示例保留在 GitHub 仓库，pub 包 README 只覆盖最小接入和主要能力。

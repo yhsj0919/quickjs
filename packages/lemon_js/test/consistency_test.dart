@@ -201,12 +201,30 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('native/web consistency', () {
+    test(
+      'enforces configured stack limit after creation and restart',
+      () async {
+        final engine = await JsEngine.create(
+          options: const JsOptions(stackLimitBytes: 256 * 1024),
+        );
+        addTearDown(engine.dispose);
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await expectLater(
+            engine.eval('(function recur() { return recur(); })()'),
+            throwsA(isA<JsStackOverflowException>()),
+          );
+          expect(await engine.eval('6 * 7'), 42);
+          if (attempt == 0) await engine.restart();
+        }
+      },
+    );
+
     // 鏈€灏忔眰鍊艰涔夊繀椤诲湪 native FFI 鍜?Web WASM 涓婁竴鑷淬€?
     test('evaluates basic JavaScript values', () async {
       final engine = await JsEngine.create();
       addTearDown(engine.dispose);
 
-      expect(engine.engineVersion, '0.15.1');
+      expect(engine.engineVersion, '0.17.0');
       expect(await engine.eval('1 + 2'), 3);
       expect(await engine.eval('"a" + "b"'), 'ab');
       expect(await engine.eval('undefined'), isA<JsUndefined>());
@@ -4422,7 +4440,7 @@ module.exports = [
   process.versions.quickjs
 ].join('|')
 '''),
-        'global-node|enabled|0.15.1',
+        'global-node|enabled|0.17.0',
       );
     });
 
@@ -4760,7 +4778,17 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
 
     // timeout 鍚庡悓涓€涓?JsEngine 瀹炰緥搴旀仮澶嶄负鍙户缁?eval 鐨勭姸鎬併€?
     test('recovers after timeout', () async {
-      final engine = await JsEngine.create();
+      final engine = await JsEngine.create(
+        scripts: const [
+          JsScript(name: 'bootstrap.js', source: 'globalThis.bootValue = 7;'),
+        ],
+        methods: [
+          JsHostMethod.global(
+            name: 'hostValue',
+            callback: (args, context) => 5,
+          ),
+        ],
+      );
       addTearDown(engine.dispose);
 
       await expectLater(
@@ -4772,6 +4800,8 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
       );
 
       expect(await engine.eval('21 * 2'), 42);
+      expect(await engine.eval('bootValue'), 7);
+      expect(await engine.run('return await hostValue();'), 5);
     });
 
     // web 渚?timeout 浼?terminate shared Worker锛涘叾瀹?runtime 涓嬩竴娆?eval 蹇呴』鑷姩鎭㈠銆?
@@ -4800,9 +4830,20 @@ module.exports = first.count + '/' + second.count + '/' + globalThis.hostCommonJ
     });
 
     // native 鍜?web 閮藉簲鎶?memory limit 瓒呴檺鏄犲皠鎴愬悓涓€涓叕寮€閿欒绫诲瀷銆?
+    test('reports insufficient Web bootstrap memory cleanly', () async {
+      await expectLater(
+        JsEngine.create(options: const JsOptions(memoryLimitBytes: 128 * 1024)),
+        throwsA(isA<JsOutOfMemoryException>()),
+      );
+      final engine = await JsEngine.create();
+      addTearDown(engine.dispose);
+      expect(await engine.eval('1 + 1'), 2);
+    }, skip: !kIsWeb);
+
     test('maps memory limit failures consistently', () async {
+      // Allow bootstrap overhead while keeping the large allocation below over budget.
       final engine = await JsEngine.create(
-        options: const JsOptions(memoryLimitBytes: 256 * 1024),
+        options: const JsOptions(memoryLimitBytes: 1024 * 1024),
       );
       addTearDown(engine.dispose);
 

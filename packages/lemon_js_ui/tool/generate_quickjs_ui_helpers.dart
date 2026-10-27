@@ -21,6 +21,7 @@ void main() {
 
 part of 'quickjs_ui_helpers.dart';
 
+/// Embedded JavaScript helpers generated from js/quickjs_ui.js.
 const String jsUiHelperModuleSource = $encodedSource;
 ''';
 

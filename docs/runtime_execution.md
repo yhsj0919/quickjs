@@ -1,42 +1,44 @@
 # Runtime 执行方式
 
-原生平台默认在创建 runtime 的 Dart isolate 中执行 QuickJS。Flutter UI isolate 创建的
-runtime 可以直接同步调用 JS；网络等宿主能力返回 Future 时仍通过 Promise 异步等待。
-执行位置在创建时确定，所有子 Context 跟随 runtime，不在运行期间迁移。
+原生平台按 API 类型选择执行路径：Future API 默认在后台 worker 执行，同步 API 在调用方
+当前线程执行。同一个 runtime 的两种入口共享 JS 堆，保留全局变量、闭包、模块与子 Context
+状态；不会建立两份环境，也不会通过序列化复制状态。
 
 ```dart
 final runtime = await JsRuntime.create();
 final context = await runtime.createContext();
-final value = context.evalSync('1 + 2');
+context.evalRawSync('globalThis.count = 1'); // 当前线程
+await context.eval('++count');              // 默认后台
+final value = context.evalSync('count');    // 2，同一份状态
 
-final worker = await JsRuntime.create(
-  options: const JsOptions(execution: JsExecution.workerIsolate),
+final local = await JsRuntime.create(
+  options: const JsOptions(execution: JsExecution.currentIsolate),
 );
+// local 的 Future API 也在当前 isolate 执行；同步 API 的执行位置保持不变。
 ```
 
 `JsEngine` 与 `JsContext` 提供 `evalSync`、`evalRawSync` 和 `callSync`。
 `JsFunctionHandle` 提供 `callSync` 和 `callRawSync`，用于重复调用保留闭包的函数引用。
-结构化同步调用遇到 Promise 时抛出值转换错误，不等待 Promise。
-同步宿主方法、对象 getter/setter、类构造器与成员方法直接返回；真正返回 Future 的回调
-转为 Promise。worker 内仍遵循 JS 同步语义，但 Dart 调用跨越消息边界，只能异步返回。
+结构化同步调用遇到 Promise 时抛出值转换错误，不等待 Promise。同步执行中的宿主方法、
+对象 getter/setter、类构造器与成员方法直接返回；真正返回 Future 的回调转为 Promise。
+后台执行时，JS 与 Dart 宿主通过异步桥接通信。
 
-现有 `eval`、`call` 等 Future API 继续通过执行队列调度；`run` 等待 JS Promise。
-同步入口立即执行，可在异步操作等待期间使用同一 Context。它不会打断正在运行的 JS；
-宿主回调中同步重入同一 runtime 会明确失败。等待期间其他事件可以改变 Context 中的状态，
-恢复后可观察这些变化，符合正常的异步代码语义。
+同一原生 runtime 只允许一个线程进入 QuickJS。每次进入时选择当前 isolate 的宿主回调，
+更新栈顶，退出后释放访问权；后台请求的完成响应在释放访问权后发送。
+后台正在执行 JS 或推进 Promise jobs 时，同步入口抛出 `StateError`，不会等待后台计算
+结束。要避免争用，可先 await 已提交的后台操作，或使用 Future API 通过队列执行。
+需要在异步等待期间确定性地立即同步访问的场景，可显式选择 `currentIsolate`。
+宿主回调中同步重入同一个 runtime 会明确失败。
 
-Future/Promise 不会自动把同步计算移到后台。长同步计算会占用所属 isolate；
-需要可响应、可由调用方取消的独立计算时显式选择 worker，输入和输出按数据传输。
-当前 isolate 中的无超时死循环会阻止 Dart Timer 或取消代码执行；同步入口可以显式传 timeout，
-由原生 interrupt handler 中断。异步执行的初始同步阶段与 Promise jobs 检查点同样受执行时限约束。
+`JsOptions.execution` 只控制原生 Future API 的执行位置，并由所有子 Context 继承。
+Future API 继续通过队列调度，`run` 等待 JS Promise。默认后台路径中的长 JS 计算不阻塞
+创建 runtime 的 UI isolate；但显式 `currentIsolate` 和所有同步 API 都会占用调用方。
+同步入口可传 timeout，由原生 interrupt handler 中断。超时覆盖后台调用的初始同步阶段与
+Promise jobs 检查点；Context 释放后取消等待，丢弃迟到的宿主结果，其他 Context 继续运行。
 
-Promise 返回所属 Context，保留对象、闭包和模块状态。Context 释放后不接收迟到结果，
-等待中的调用取消，其他 Context 继续运行。原生回调按 executor 注册，不使用 isolate 全局端口，
-同一 isolate 可以同时拥有多个 runtime。
-
-本轮同步入口适用于原生 FFI 后端。Web 仍通过 WASM/Web Worker 执行，
-`supportsSync` 为 false；同步调用明确报告不支持。JSUI 现有批次列表协议尚未迁移，
-后续可以使用函数引用的同步入口实现真正的 Flutter itemBuilder。
+Web 仍通过 WASM/Web Worker 执行，`supportsSync` 为 false，同步入口明确报告不支持。
+`execution` 不会将 Web 调用变成 Dart isolate 调用。JSUI 自建 runtime 显式使用
+`currentIsolate` 保持渲染调度兼容，与默认后台 Core service 通过异步桥接通信。
 
 ## 参数调用与批量调用
 
