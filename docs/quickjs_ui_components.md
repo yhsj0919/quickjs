@@ -53,6 +53,9 @@ export default Page({
 `SizedBox`、`Image` 和 `ListView` 等布局/媒体包装节点支持 `onTap` 与
 `onLongPress`。`ListView` 还支持 `onScroll`，事件包含 `pixels`、
 `minScrollExtent`、`maxScrollExtent`、`viewportDimension` 和 `axis`。
+滚动事件只报告当前滚动组件，不包含内部嵌套列表的通知。非有限数值字段会省略，
+例如循环 `PageView` 的 `maxScrollExtent`，避免 `Infinity`/`NaN` 进入 JS 事件。
+
 
 表单控件由 JS state 控制。`TextField`、`Checkbox`、`Switch`、`Radio` 和
 `DropdownButton` 渲染收到的 Schema 值，并通过 `onChanged` 分发新的 `value`；

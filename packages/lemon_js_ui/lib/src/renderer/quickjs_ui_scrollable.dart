@@ -88,16 +88,20 @@ Widget jsUiWrapScrollNotifications({
   }
   return NotificationListener<ScrollNotification>(
     onNotification: (notification) {
+      if (notification.depth != 0) return false;
       final metrics = notification.metrics;
       context.dispatch(
         onScroll,
         defaultCoalesceKey: jsUiEventKey(node, 'onScroll'),
         kind: JsUiEventKind.sample,
         payload: <String, Object?>{
-          'pixels': metrics.pixels,
-          'minScrollExtent': metrics.minScrollExtent,
-          'maxScrollExtent': metrics.maxScrollExtent,
-          'viewportDimension': metrics.viewportDimension,
+          if (metrics.pixels.isFinite) 'pixels': metrics.pixels,
+          if (metrics.minScrollExtent.isFinite)
+            'minScrollExtent': metrics.minScrollExtent,
+          if (metrics.maxScrollExtent.isFinite)
+            'maxScrollExtent': metrics.maxScrollExtent,
+          if (metrics.viewportDimension.isFinite)
+            'viewportDimension': metrics.viewportDimension,
           'axis': metrics.axis.name,
         },
       );
